@@ -1,0 +1,35 @@
+frontend/
+├── public/                  # Static assets (logos, fonts, etc.)
+│   ├── icons/               # Store custom icons
+│   ├── images/              # Store images
+│   ├── index.html           # Main HTML template
+├── src/                     # Main source code
+│   ├── api/                 # Handles API interactions
+│   │   ├── grpc/            # gRPC client setup
+│   │   │   ├── agentClient.ts # gRPC client for connecting to backend
+│   │   ├── rest/            # If using FastAPI as a mid-end
+│   │   │   ├── apiClient.ts  # HTTP client setup (optional)
+│   ├── components/          # UI components
+│   │   ├── AgentNode.tsx    # Agent node component for ReactFlow
+│   │   ├── Sidebar.tsx      # Sidebar for dragging agents
+│   │   ├── Toolbar.tsx      # Toolbar for additional actions
+│   │   ├── ConnectionLine.tsx # Custom connection lines for graph
+│   ├── hooks/               # Custom React hooks
+│   │   ├── useAgentData.ts  # Fetch and process agent data
+│   │   ├── useGrpc.ts       # Hook to manage gRPC connections
+│   ├── pages/               # Main pages
+│   │   ├── Editor.tsx       # Main ReactFlow-based editor page
+│   │   ├── Dashboard.tsx    # Dashboard with agent insights
+│   ├── store/               # Zustand or Redux for state management
+│   │   ├── agentStore.ts    # Store for managing agent state
+│   ├── styles/              # CSS/styling files (TailwindCSS)
+│   │   ├── global.css       # Global styles
+│   ├── App.tsx              # Main application component
+│   ├── main.tsx             # Entry point for React
+├── tests/                   # Jest/Testing Library tests
+│   ├── components/          # Unit tests for UI components
+│   ├── integration/         # Integration tests
+├── tsconfig.json            # TypeScript configuration
+├── vite.config.ts           # Vite configuration
+├── package.json             # Project dependencies
+└── README.md                # Project documentation
