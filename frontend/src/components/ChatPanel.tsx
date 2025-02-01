@@ -14,23 +14,28 @@ const ChatPanel = () => {
   };
 
   return (
-    <div className="bg-gray-900 text-white p-4 flex flex-col h-full">
+    <div className="chat-panel flex flex-col h-full p-4">
+      {/* Chat Header */}
       <h2 className="text-lg font-bold">Chat</h2>
-      <div className="flex-grow bg-gray-800 p-2 rounded overflow-y-auto">
+
+      {/* Chat Messages */}
+      <div className="chat-messages flex-grow overflow-y-auto">
         {messages.map((msg, index) => (
-          <p key={index} className="text-sm text-gray-400">{msg}</p>
+          <p key={index} className="text-sm text-gray-200">{msg}</p>
         ))}
       </div>
-      <div className="flex mt-2 gap-2">
+
+      {/* Input Field and Send Button */}
+      <div className="chat-input mt-2 flex gap-2">
         <input
           type="text"
           placeholder="Type a message..."
-          className="flex-grow p-2 bg-gray-700 text-white rounded"
+          className="chat-input-box"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
         />
-        <button onClick={sendMessage} className="bg-blue-600 hover:bg-blue-700 p-2 rounded">
+        <button onClick={sendMessage} className="chat-send-btn">
           Send
         </button>
       </div>

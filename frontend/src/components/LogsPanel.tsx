@@ -1,17 +1,44 @@
 import React, { useState } from "react";
+import { FaDownload } from "react-icons/fa";
 
 const LogsPanel = () => {
   const [logs, setLogs] = useState<string[]>([
     "System initialized.",
     "Agent network loaded successfully.",
+    "Connection established with Agent A.",
+    "Running task: Data Sync...",
+    "Task completed successfully.",
+    "Error: Failed to fetch data from external API.",
+    "Retrying...",
   ]);
 
+  const downloadLogs = () => {
+    const logText = logs.join("\n");
+    const blob = new Blob([logText], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "logs.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return (
-    <div className="bg-gray-900 text-white p-4 h-full flex flex-col">
-      <h2 className="text-lg font-bold">Logs</h2>
-      <div className="flex-grow bg-gray-800 p-2 rounded overflow-y-auto">
+    <div className="logs-panel">
+      {/* Logs Header (Fixed) */}
+      <div className="logs-header">
+        <h2>Logs</h2>
+
+        {/* Small Download Icon */}
+        <button onClick={downloadLogs} className="logs-download-btn">
+          <FaDownload />
+        </button>
+      </div>
+
+      {/* Logs Messages (Scrollable & fills remaining space) */}
+      <div className="logs-messages">
         {logs.map((log, index) => (
-          <p key={index} className="text-sm text-gray-400">{log}</p>
+          <p key={index}>{log}</p>
         ))}
       </div>
     </div>

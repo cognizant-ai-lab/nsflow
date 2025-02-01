@@ -4,7 +4,7 @@ import logo from "../assets/icon.jpg"; // Import the logo
 
 const Header: React.FC = () => {
   return (
-    <header className="flex items-center justify-between bg-gray-800 text-white h-14 px-4 shadow-md">
+    <header className="header flex items-center justify-between px-4 shadow-md">
       {/* Left - App Icon */}
       <div className="flex items-center space-x-2">
         <img src={logo} alt="App Icon" className="h-8 w-8" />
@@ -13,13 +13,13 @@ const Header: React.FC = () => {
 
       {/* Middle - Navigation Buttons */}
       <div className="flex space-x-4">
-        <button className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded flex items-center">
+        <button className="header-btn">
           <FaFolderOpen className="mr-2" /> Load From
         </button>
-        <button className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded flex items-center">
+        <button className="header-btn">
           <FaSave className="mr-2" /> Save As
         </button>
-        <button className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded flex items-center">
+        <button className="header-btn">
           <FaDownload className="mr-2" /> Export
         </button>
       </div>

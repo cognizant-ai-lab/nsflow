@@ -14,7 +14,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         return res.json();
       })
       .then((data) => {
-        console.log("Fetched networks:", data.networks);  // ✅ Debugging log
+        console.log("Fetched networks:", data.networks);
         setNetworks(data.networks);
         setLoading(false);
       })
@@ -26,7 +26,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   }, []);
 
   return (
-    <aside className="h-full bg-gray-900 text-white p-4 flex flex-col gap-4">
+    <aside className="h-full sidebar p-4 flex flex-col gap-3 border-r">
       <h2 className="text-lg font-bold">Agent Networks</h2>
 
       {loading && <p>Loading...</p>}
@@ -36,14 +36,14 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         networks.map((network) => (
           <button
             key={network}
-            className="p-2 bg-blue-600 hover:bg-blue-700 rounded cursor-pointer"
+            className="p-2 text-sm bg-blue-700 hover:bg-blue-600 rounded cursor-pointer"
             onClick={() => onSelectNetwork(network)}
           >
             {network}
           </button>
         ))
       ) : (
-        !loading && <p>No networks found.</p>
+        !loading && <p className="text-gray-400">No networks found.</p>
       )}
     </aside>
   );
