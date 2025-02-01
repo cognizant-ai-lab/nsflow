@@ -70,3 +70,41 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+div {
+  box-sizing: border-box;
+}
+
+.resize-x {
+  resize: horizontal;
+  overflow: auto;
+}
+
+.resize-y {
+  resize: vertical;
+  overflow: auto;
+}
+
+/* Resizable panel handles */
+.react-resizable-panel-handle {
+  background-color: #4b5563; /* Gray-700 */
+  transition: background-color 0.2s;
+}
+
+.react-resizable-panel-handle:hover {
+  background-color: #6b7280; /* Gray-500 */
+}
+
+.react-resizable-panel-handle-vertical {
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.react-resizable-panel-handle-horizontal {
+  height: 4px;
+  cursor: ns-resize;
+}
+
+header {
+  border-bottom: 1px solid #2d3748; /* Subtle border */
+}
