@@ -8,7 +8,7 @@ const Header: React.FC = () => {
       {/* Left - App Icon */}
       <div className="flex items-center space-x-2">
         <img src={logo} alt="App Icon" className="h-8 w-8" />
-        <span className="text-lg font-semibold">AgentFlow</span>
+        <span className="text-lg font-semibold">Neuro - Smart Agent Network</span>
       </div>
 
       {/* Middle - Navigation Buttons */}

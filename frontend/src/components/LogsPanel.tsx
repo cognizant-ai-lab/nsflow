@@ -1,16 +1,28 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaDownload } from "react-icons/fa";
 
 const LogsPanel = () => {
   const [logs, setLogs] = useState<string[]>([
     "System initialized.",
     "Agent network loaded successfully.",
-    "Connection established with Agent A.",
-    "Running task: Data Sync...",
-    "Task completed successfully.",
-    "Error: Failed to fetch data from external API.",
-    "Retrying...",
   ]);
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/ws/logs");
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.log) {
+        setLogs((prev) => [...prev, data.log]);
+      }
+    };
+
+    ws.onclose = () => console.log("Logs WebSocket disconnected.");
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const downloadLogs = () => {
     const logText = logs.join("\n");
@@ -25,17 +37,12 @@ const LogsPanel = () => {
 
   return (
     <div className="logs-panel">
-      {/* Logs Header (Fixed) */}
       <div className="logs-header">
         <h2>Logs</h2>
-
-        {/* Small Download Icon */}
         <button onClick={downloadLogs} className="logs-download-btn">
           <FaDownload />
         </button>
       </div>
-
-      {/* Logs Messages (Scrollable & fills remaining space) */}
       <div className="logs-messages">
         {logs.map((log, index) => (
           <p key={index}>{log}</p>

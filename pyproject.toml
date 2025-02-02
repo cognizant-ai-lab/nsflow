@@ -9,4 +9,14 @@ dependencies = [
     "fastapi>=0.115.8",
     "pyhocon>=0.3.61",
     "uvicorn>=0.34.0",
+    "leaf-common",
+    "leaf-server-common",
+    "neuro-san",
+    "websockets>=14.2",
+    "wsproto>=1.2.0",
 ]
+
+[tool.uv.sources]
+leaf-common = { path = "wheels_private/leaf_common-1.2.18-py3-none-any.whl" }
+leaf-server-common = { path = "wheels_private/leaf_server_common-0.1.15-py3-none-any.whl" }
+neuro-san = { path = "wheels_private/neuro_san-0.2.7-py3-none-any.whl" }
