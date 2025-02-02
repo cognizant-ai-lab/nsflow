@@ -22,7 +22,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   useEffect(() => {
     if (!selectedNetwork) return;
 
-    fetch(`http://127.0.0.1:8000/network/${selectedNetwork}`)
+    fetch(`http://127.0.0.1:8000/api/v1/network/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
         const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(data.nodes, data.edges);

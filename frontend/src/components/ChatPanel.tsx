@@ -10,7 +10,7 @@ const ChatPanel = () => {
 
   useEffect(() => {
     // Establish WebSocket connection
-    const ws = new WebSocket("ws://localhost:8000/ws/chat");
+    const ws = new WebSocket("ws://localhost:8000/api/v1/ws/chat");
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

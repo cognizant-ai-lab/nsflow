@@ -8,7 +8,7 @@ const LogsPanel = () => {
   ]);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8000/ws/logs");
+    const ws = new WebSocket("ws://localhost:8000/api/v1/ws/logs");
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

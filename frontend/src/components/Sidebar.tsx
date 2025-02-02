@@ -6,7 +6,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/networks/")
+    fetch("http://127.0.0.1:8000/api/v1/networks/")
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP error! Status: ${res.status}`);
