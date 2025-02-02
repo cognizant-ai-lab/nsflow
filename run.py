@@ -28,9 +28,16 @@ class NsFlowRunner:
         self.config = self.parse_args()
 
         # Set up logging
-        logging.basicConfig(level=logging.INFO)
         self.log_dir = "logs"
         os.makedirs(self.log_dir, exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler(os.path.join(self.log_dir, "runner.log"), mode="a")
+            ]
+        )
 
     def parse_args(self):
         """Parses command-line arguments for configuration."""
@@ -96,11 +103,12 @@ class NsFlowRunner:
 
     def stream_output(self, pipe, log_file, prefix):
         """Stream process output to console and log file."""
-        with open(log_file, "a") as log:
+        with open(log_file, "a", encoding="utf-8") as log:
             for line in iter(pipe.readline, ''):
                 formatted_line = f"{prefix}: {line.strip()}"
                 print(formatted_line)
                 log.write(formatted_line + "\n")
+            # log.flush()
         pipe.close()
 
     def start_neuro_san(self):
@@ -157,7 +165,7 @@ class NsFlowRunner:
     def run(self):
         """Run the Neuro SAN server and FastAPI backend."""
         logging.info("Starting Backend System...")
-        print("\nRun Config:\n" + "\n".join(f"{key}: {value}" for key, value in self.config.items()) + "\n")
+        logging.info("\nRun Config:\n" + "\n".join(f"{key}: {value}" for key, value in self.config.items()) + "\n")
 
         # Set environment variables
         self.set_environment_variables()

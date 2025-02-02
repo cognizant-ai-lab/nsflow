@@ -2,7 +2,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Dict, List
 from neuro_san.session.service_agent_session import ServiceAgentSession
 
 router = APIRouter(prefix="/api/v1/ws")
@@ -13,6 +14,10 @@ logging.basicConfig(level=logging.INFO)
 active_chat_connections: Dict[str, WebSocket] = {}
 active_log_connections: List[WebSocket] = []
 user_sessions: Dict[str, Dict] = {}
+
+def get_timestamp():
+    """Returns current timestamp in ISO format."""
+    return datetime.now(timezone.utc).isoformat()
 
 # WebSocket Route for Chat Communication
 @router.websocket("/chat/{agent_name}")
@@ -40,7 +45,12 @@ async def websocket_chat(websocket: WebSocket, agent_name: str):
             sly_data = message_data.get("sly_data", None)
 
             if user_input:
-                logging.info(f"Received chat message from {client_id} (Agent: {agent_name}): {user_input}")
+                log_entry = {
+                    "timestamp": get_timestamp(),
+                    "message": f"User: {user_input}",
+                    "source": "FastAPI"
+                }
+                await broadcast_log(log_entry)
 
                 chat_request = {
                     "session_id": user_sessions[client_id]["session_id"],
@@ -55,12 +65,16 @@ async def websocket_chat(websocket: WebSocket, agent_name: str):
                 if not user_sessions[client_id]["session_id"]:
                     user_sessions[client_id]["session_id"] = chat_response.get("session_id")
 
-                # response_text = chat_response.get("chat_response", "No response from agent.")
-                # await websocket.send_text(json.dumps({"message": response_text}))
                 asyncio.create_task(background_response_handler(client_id))
 
     except WebSocketDisconnect:
-        logging.info(f"Chat client {client_id} disconnected.")
+        log_entry = {
+            "timestamp": get_timestamp(),
+            "message": f"Chat client {client_id} disconnected.",
+            "source": "FastAPI"
+        }
+        await broadcast_log(log_entry)
+
         active_chat_connections.pop(client_id, None)
         user_sessions.pop(client_id, None)
 
@@ -71,12 +85,24 @@ async def websocket_logs(websocket: WebSocket):
     active_log_connections.append(websocket)
     logging.info("Logs client connected.")
 
+    log_entry = {
+        "timestamp": get_timestamp(),
+        "message": "New log client connected",
+        "source": "FastAPI"
+    }
+    await broadcast_log(log_entry)
+
     try:
         while True:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         active_log_connections.remove(websocket)
-        logging.info("Logs client disconnected.")
+        log_entry = {
+            "timestamp": get_timestamp(),
+            "message": "Logs client disconnected",
+            "source": "FastAPI"
+        }
+        await broadcast_log(log_entry)
 
 # Background Task to Fetch Logs and Send Updates
 async def background_response_handler(client_id: str):
@@ -100,13 +126,13 @@ async def background_response_handler(client_id: str):
         last_logs_length = len(logs)
 
         if new_logs:
-            logging.info(f"New logs received: {new_logs}")
             for log in new_logs:
-                for websocket in active_log_connections:
-                    try:
-                        await websocket.send_text(json.dumps({"log": log}))
-                    except WebSocketDisconnect:
-                        active_log_connections.remove(websocket)
+                log_entry = {
+                    "timestamp": get_timestamp(),
+                    "message": log,
+                    "source": "Neuro-SAN"
+                }
+                await broadcast_log(log_entry)
 
         if chat_response and not response_sent:
             last_response = chat_response.rsplit("assistant: ", 1)[-1]
@@ -121,3 +147,12 @@ async def background_response_handler(client_id: str):
             break
 
         await asyncio.sleep(1)
+
+async def broadcast_log(log_entry):
+    """Send structured log entry to all connected log clients."""
+    logging.info(f"Broadcasting log: {log_entry}")
+    for websocket in active_log_connections:
+        try:
+            await websocket.send_text(json.dumps(log_entry))
+        except WebSocketDisconnect:
+            active_log_connections.remove(websocket)

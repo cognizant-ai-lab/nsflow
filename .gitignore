@@ -10,3 +10,6 @@ registries/*.hocon
 
 # Virtual environments
 .venv
+
+# logs
+logs/*

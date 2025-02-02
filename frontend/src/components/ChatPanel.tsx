@@ -12,21 +12,21 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     if (!selectedNetwork) return;
 
     const wsUrl = `ws://localhost:8000/api/v1/ws/chat/${selectedNetwork}`;
-    console.log(`🔹 Connecting to WebSocket: ${wsUrl}`);
+    console.log(`Connecting to WebSocket: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => console.log("✅ WebSocket Connected");
+    ws.onopen = () => console.log("WebSocket Connected");
     ws.onmessage = (event) => {
-      console.log("📩 WebSocket Message Received:", event.data);
+      console.log("WebSocket Message Received:", event.data);
       const data = JSON.parse(event.data);
       if (data.message) {
         setMessages((prev) => [...prev, `Agent: ${data.message}`]);
       }
     };
 
-    ws.onerror = (err) => console.error("⚠️ WebSocket Error:", err);
-    ws.onclose = () => console.log("❌ WebSocket Disconnected");
+    ws.onerror = (err) => console.error("WebSocket Error:", err);
+    ws.onclose = () => console.log("WebSocket Disconnected");
 
     setSocket(ws);
 
