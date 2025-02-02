@@ -22,24 +22,34 @@ async def websocket_chat(websocket: WebSocket):
     active_chat_connections[client_id] = websocket
     logging.info(f"Chat client {client_id} connected.")
 
-    # Initialize or reuse session
-    if client_id not in user_sessions:
-        user_sessions[client_id] = {
-            "agent_session": ServiceAgentSession(host="localhost", port=30011, agent_name="telco_network_support"),
-            "session_id": None
-        }
-
-    agent_session = user_sessions[client_id]["agent_session"]
-
     try:
         while True:
             data = await websocket.receive_text()
             message_data = json.loads(data)
+
+            if "agent_name" in message_data:
+                # User has selected an agent, update session
+                agent_name = message_data["agent_name"]
+                logging.info(f"User {client_id} selected agent: {agent_name}")
+
+                user_sessions[client_id] = {
+                    "agent_session": ServiceAgentSession(host="localhost", port=30011, agent_name=agent_name),
+                    "session_id": None
+                }
+                await websocket.send_text(json.dumps({"status": "Agent updated", "agent": agent_name}))
+                continue
+
             user_input = message_data.get("message", "")
             sly_data = message_data.get("sly_data", None)
 
             if user_input:
                 logging.info(f"Received chat message from {client_id}: {user_input}")
+
+                # Retrieve user session
+                agent_session = user_sessions.get(client_id, {}).get("agent_session")
+                if not agent_session:
+                    await websocket.send_text(json.dumps({"error": "No agent selected"}))
+                    continue
 
                 chat_request = {
                     "session_id": user_sessions[client_id]["session_id"],
@@ -50,7 +60,7 @@ async def websocket_chat(websocket: WebSocket):
 
                 chat_response = await asyncio.to_thread(agent_session.chat, chat_request)
 
-                # Save session ID if it was initialized
+                # Save session ID if initialized
                 if not user_sessions[client_id]["session_id"]:
                     user_sessions[client_id]["session_id"] = chat_response.get("session_id")
 
@@ -60,7 +70,6 @@ async def websocket_chat(websocket: WebSocket):
         logging.info(f"Chat client {client_id} disconnected.")
         active_chat_connections.pop(client_id, None)
         user_sessions.pop(client_id, None)
-
 
 # WebSocket Route for Log Streaming
 @router.websocket("/logs")

@@ -1,10 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from pyhocon import ConfigFactory
 from pathlib import Path
+import logging
+logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/api/v1")
 
-REGISTRY_DIR = Path("../registries")
+# Get absolute path of the registries directory 
+# If running from backend
+# REGISTRY_DIR = Path(__file__).resolve().parent.parent.parent / "registries"
+
+# If running using python -m run
+REGISTRY_DIR = Path.cwd() / "registries"
 
 def get_manifest_path():
     return REGISTRY_DIR / "manifest.hocon"
@@ -90,4 +97,5 @@ def parse_agent_network(file_path: Path):
 @router.get("/network/{network_name}")
 def get_agent_network(network_name: str):
     file_path = REGISTRY_DIR / f"{network_name}.hocon"
+    logging.info(f"file_path: {file_path}")
     return parse_agent_network(file_path)
