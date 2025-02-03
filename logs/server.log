@@ -1,0 +1,383 @@
+Neuro SAN: tool_registries found: ['airline_policy', 'supply_chain', 'cloud_services']
+Neuro SAN: {"message": "Starting Agent Server on port 30011...", "user_id": "None", "Timestamp": "2025-02-03T06:30:25.935583", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "MainThread"}
+Neuro SAN: {"message": "Shutting down in 924446 requests.", "user_id": "None", "Timestamp": "2025-02-03T06:30:25.935649", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "MainThread"}
+Neuro SAN: {"message": "Agent Server started.", "user_id": "None", "Timestamp": "2025-02-03T06:30:25.940240", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "MainThread"}
+Neuro SAN: {"message": "Received a airline_policy.Chat request for 'Hi' on assistant ", "user_id": "None", "Timestamp": "2025-02-03T06:30:36.743921", "source": "Agent Server", "message_type": "API", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: {"message": "Stats : {'NumProcessing': 1, 'Serving': True, 'Total': 1, 'airline_policy.Chat': 1}", "user_id": "None", "Timestamp": "2025-02-03T06:30:36.743981", "source": "Agent Server", "message_type": "Metrics", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: {"message": "Done with airline_policy.Chat request for 'Hi' on assistant ", "user_id": "None", "Timestamp": "2025-02-03T06:30:36.744172", "source": "Agent Server", "message_type": "API", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: {"message": "Stats : {'NumProcessing': 0, 'Serving': True, 'Total': 1, 'airline_policy.Chat': 1}", "user_id": "None", "Timestamp": "2025-02-03T06:30:36.744195", "source": "Agent Server", "message_type": "Metrics", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: [32;1m[1;3mHello! How can I assist you with your airline-related policy inquiries today?[0m
+Neuro SAN: 
+Neuro SAN: [1m> Finished chain.[0m
+Neuro SAN: {"message": "Received a airline_policy.Chat request for 'can you help me with lost baggage' on assistant 38ac8dfa-a492-47c8-85aa-d800f6d1249f", "user_id": "None", "Timestamp": "2025-02-03T06:30:54.930623", "source": "Agent Server", "message_type": "API", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: {"message": "Stats : {'NumProcessing': 1, 'Serving': True, 'Total': 2, 'airline_policy.Chat': 2}", "user_id": "None", "Timestamp": "2025-02-03T06:30:54.930703", "source": "Agent Server", "message_type": "Metrics", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: {"message": "Done with airline_policy.Chat request for 'can you help me with lost baggage' on assistant 38ac8dfa-a492-47c8-85aa-d800f6d1249f", "user_id": "None", "Timestamp": "2025-02-03T06:30:54.930868", "source": "Agent Server", "message_type": "API", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: {"message": "Stats : {'NumProcessing': 0, 'Serving': True, 'Total': 2, 'airline_policy.Chat': 2}", "user_id": "None", "Timestamp": "2025-02-03T06:30:54.930889", "source": "Agent Server", "message_type": "Metrics", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "ThreadPoolExecutor-1_0"}
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: [32;1m[1;3m
+Neuro SAN: Invoking: `Baggage_Handling` with `{'inquiry': 'can you help me with lost baggage', 'mode': 'determine_responsibility'}`
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [0mCalling Baggage_Handling
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: [32;1m[1;3m
+Neuro SAN: Invoking: `Carry_On_Baggage` with `{'inquiry': 'can you help me with lost baggage', 'mode': 'determine_responsibility'}`
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [0m[32;1m[1;3m
+Neuro SAN: Invoking: `Checked_Baggage` with `{'inquiry': 'can you help me with lost baggage', 'mode': 'determine_responsibility'}`
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [0m[32;1m[1;3m
+Neuro SAN: Invoking: `Bag_Issues` with `{'inquiry': 'can you help me with lost baggage', 'mode': 'determine_responsibility'}`
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [0m[32;1m[1;3m
+Neuro SAN: Invoking: `Special_Items` with `{'inquiry': 'can you help me with lost baggage', 'mode': 'determine_responsibility'}`
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [0m[32;1m[1;3m
+Neuro SAN: Invoking: `Bag_Fee_Calculator` with `{'inquiry': 'can you help me with lost baggage', 'mode': 'determine_responsibility'}`
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [0mCalling Carry_On_Baggage
+Neuro SAN: Calling Checked_Baggage
+Neuro SAN: Calling Bag_Issues
+Neuro SAN: Calling Special_Items
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: Calling Bag_Fee_Calculator
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [1m> Entering new AgentExecutor chain...[0m
+Neuro SAN: [32;1m[1;3mI can only assist with inquiries related to special baggage concerns, such as sports equipment and musical instruments. For the inquiry about lost baggage, I am not equipped to provide assistance.[0m
+Neuro SAN: 
+Neuro SAN: [1m> Finished chain.[0m
+Neuro SAN: [31;1m[1;3mcontent='I can only assist with inquiries related to special baggage concerns, such as sports equipment and musical instruments. For the inquiry about lost baggage, I am not equipped to provide assistance.' additional_kwargs={} response_metadata={}[0m[32;1m[1;3m
+Neuro SAN: Invoking: `URLProvider` with `{'app_name': 'Bag Fee Calculator'}`
+Neuro SAN: responded: I can provide assistance related to baggage fees and manage baggage-related changes during flight schedule updates. However, the inquiry about "lost baggage" does not fall within the scope of the 'Bag Fee Calculator' app. I can provide the URL to the 'Bag Fee Calculator' app for handling baggage fee-related inquiries. Let's proceed with providing that URL.
+Neuro SAN: 
+Neuro SAN: [0mCalling URLProvider
+Neuro SAN: Calling class url_provider.URLProvider
+Neuro SAN: {"message": "Module coded_tools.airline_policy.url_provider: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...
+Neuro SAN: This might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", "user_id": "None", "Timestamp": "2025-02-03T06:31:04.786641", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: {"message": "Could not find code for url_provider", "user_id": "None", "Timestamp": "2025-02-03T06:31:04.786705", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: Tool._arun() got Exception:
+Neuro SAN: Could not find class "URLProvider"
+Neuro SAN: in module "url_provider"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "URLProvider"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent URLProvider
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 93, in build
+Neuro SAN: python_class = resolver.resolve_class_in_module(class_name, module_name)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/leaf_common/config/resolver.py", line 73, in resolve_class_in_module
+Neuro SAN: raise ValueError(str(messages))
+Neuro SAN: ValueError: ["Module coded_tools.airline_policy.url_provider: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...\nThis might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", 'Could not find code for url_provider']
+Neuro SAN: 
+Neuro SAN: The above exception was the direct cause of the following exception:
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/run_context/langchain/langchain_openai_function_tool.py", line 212, in _arun
+Neuro SAN: run = await self.tool_caller.make_tool_function_calls(decision_run)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 187, in make_tool_function_calls
+Neuro SAN: tool_output: Dict[str, Any] = await self.make_one_tool_function_call(component_tool_call)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 227, in make_one_tool_function_call
+Neuro SAN: callable_component_response: List[Any] = await callable_component.build()
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 118, in build
+Neuro SAN: raise ValueError(message) from exception
+Neuro SAN: ValueError:
+Neuro SAN: Could not find class "URLProvider"
+Neuro SAN: in module "url_provider"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "URLProvider"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent URLProvider
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [36;1m[1;3mNone[0m[32;1m[1;3m
+Neuro SAN: Invoking: `ExtractPdf` with `{'app_name': 'Carry On Baggage'}`
+Neuro SAN: responded: I can assist with inquiries related to carry-on baggage, such as ensuring compliance with size, weight, and security regulations, advising on prohibited items, and providing information on premium member-specific benefits. However, handling lost baggage inquiries is outside my area of expertise. To provide accurate information related to carry-on baggage, I will retrieve information regarding the "Carry On Baggage" app and provide you with a URL to access it.
+Neuro SAN: 
+Neuro SAN: [0m[32;1m[1;3m
+Neuro SAN: Invoking: `URLProvider` with `{'app_name': 'Carry On Baggage'}`
+Neuro SAN: responded: I can assist with inquiries related to carry-on baggage, such as ensuring compliance with size, weight, and security regulations, advising on prohibited items, and providing information on premium member-specific benefits. However, handling lost baggage inquiries is outside my area of expertise. To provide accurate information related to carry-on baggage, I will retrieve information regarding the "Carry On Baggage" app and provide you with a URL to access it.
+Neuro SAN: 
+Neuro SAN: [0mCalling URLProvider
+Neuro SAN: Calling class url_provider.URLProvider
+Neuro SAN: {"message": "Module coded_tools.airline_policy.url_provider: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...
+Neuro SAN: This might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", "user_id": "None", "Timestamp": "2025-02-03T06:31:05.370887", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: {"message": "Could not find code for url_provider", "user_id": "None", "Timestamp": "2025-02-03T06:31:05.370932", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: Tool._arun() got Exception:
+Neuro SAN: Could not find class "URLProvider"
+Neuro SAN: in module "url_provider"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "URLProvider"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent URLProvider
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 93, in build
+Neuro SAN: python_class = resolver.resolve_class_in_module(class_name, module_name)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/leaf_common/config/resolver.py", line 73, in resolve_class_in_module
+Neuro SAN: raise ValueError(str(messages))
+Neuro SAN: ValueError: ["Module coded_tools.airline_policy.url_provider: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...\nThis might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", 'Could not find code for url_provider']
+Neuro SAN: 
+Neuro SAN: The above exception was the direct cause of the following exception:
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/run_context/langchain/langchain_openai_function_tool.py", line 212, in _arun
+Neuro SAN: run = await self.tool_caller.make_tool_function_calls(decision_run)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 187, in make_tool_function_calls
+Neuro SAN: tool_output: Dict[str, Any] = await self.make_one_tool_function_call(component_tool_call)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 227, in make_one_tool_function_call
+Neuro SAN: callable_component_response: List[Any] = await callable_component.build()
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 118, in build
+Neuro SAN: raise ValueError(message) from exception
+Neuro SAN: ValueError:
+Neuro SAN: Could not find class "URLProvider"
+Neuro SAN: in module "url_provider"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "URLProvider"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent URLProvider
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: Calling ExtractPdf
+Neuro SAN: Calling class extract_pdf.ExtractPdf
+Neuro SAN: {"message": "Module coded_tools.airline_policy.extract_pdf: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...
+Neuro SAN: This might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", "user_id": "None", "Timestamp": "2025-02-03T06:31:05.371353", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: {"message": "Could not find code for extract_pdf", "user_id": "None", "Timestamp": "2025-02-03T06:31:05.371392", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: Tool._arun() got Exception:
+Neuro SAN: Could not find class "ExtractPdf"
+Neuro SAN: in module "extract_pdf"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "ExtractPdf"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent ExtractPdf
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 93, in build
+Neuro SAN: python_class = resolver.resolve_class_in_module(class_name, module_name)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/leaf_common/config/resolver.py", line 73, in resolve_class_in_module
+Neuro SAN: raise ValueError(str(messages))
+Neuro SAN: ValueError: ["Module coded_tools.airline_policy.extract_pdf: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...\nThis might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", 'Could not find code for extract_pdf']
+Neuro SAN: 
+Neuro SAN: The above exception was the direct cause of the following exception:
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/run_context/langchain/langchain_openai_function_tool.py", line 212, in _arun
+Neuro SAN: run = await self.tool_caller.make_tool_function_calls(decision_run)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 187, in make_tool_function_calls
+Neuro SAN: tool_output: Dict[str, Any] = await self.make_one_tool_function_call(component_tool_call)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 227, in make_one_tool_function_call
+Neuro SAN: callable_component_response: List[Any] = await callable_component.build()
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 118, in build
+Neuro SAN: raise ValueError(message) from exception
+Neuro SAN: ValueError:
+Neuro SAN: Could not find class "ExtractPdf"
+Neuro SAN: in module "extract_pdf"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "ExtractPdf"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent ExtractPdf
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: [33;1m[1;3mNone[0m[36;1m[1;3mNone[0m[32;1m[1;3mI can assist with inquiries related to checked baggage compliance, such as size, weight, security regulations, prohibited items, and gate-checking for oversized items. However, handling lost baggage is not within the scope of the 'Checked Baggage' app. For issues related to lost baggage, passengers would typically need to contact the airline's customer service or baggage claim department directly. If you need assistance with checked baggage regulations or related topics, please let me know![0m
+Neuro SAN: 
+Neuro SAN: [1m> Finished chain.[0m
+Neuro SAN: [33;1m[1;3mcontent="I can assist with inquiries related to checked baggage compliance, such as size, weight, security regulations, prohibited items, and gate-checking for oversized items. However, handling lost baggage is not within the scope of the 'Checked Baggage' app. For issues related to lost baggage, passengers would typically need to contact the airline's customer service or baggage claim department directly. If you need assistance with checked baggage regulations or related topics, please let me know!" additional_kwargs={} response_metadata={}[0m[32;1m[1;3mIt seems that I'm currently unable to provide the URL for the 'Bag Fee Calculator' app. Please check the airline's official website or contact their support for more information on the app and for assistance with lost baggage.[0m
+Neuro SAN: 
+Neuro SAN: [1m> Finished chain.[0m
+Neuro SAN: [36;1m[1;3mcontent="It seems that I'm currently unable to provide the URL for the 'Bag Fee Calculator' app. Please check the airline's official website or contact their support for more information on the app and for assistance with lost baggage." additional_kwargs={} response_metadata={}[0m[32;1m[1;3mFor inquiries related to carry-on baggage, you can find comprehensive information regarding size, weight, security regulations, and other related services by visiting the [Carry On Baggage app](#).[0m
+Neuro SAN: 
+Neuro SAN: [1m> Finished chain.[0m
+Neuro SAN: [36;1m[1;3mcontent='For inquiries related to carry-on baggage, you can find comprehensive information regarding size, weight, security regulations, and other related services by visiting the [Carry On Baggage app](#).' additional_kwargs={} response_metadata={}[0m[32;1m[1;3m
+Neuro SAN: Invoking: `ExtractPdf` with `{'app_name': 'Bag Issues'}`
+Neuro SAN: responded: I can respond to the inquiry related to lost baggage as it falls under the scope of baggage issues, which includes delayed, damaged, lost, or missing baggage. To provide a comprehensive response, I need to read the necessary files from the app's directory to gather information on how we handle lost baggage claims.
+Neuro SAN: 
+Neuro SAN: I'll proceed to extract the PDF contents related to the "Bag Issues" app and provide a URL to the app page for further assistance.
+Neuro SAN: 
+Neuro SAN: [0m[32;1m[1;3m
+Neuro SAN: Invoking: `URLProvider` with `{'app_name': 'Bag Issues'}`
+Neuro SAN: responded: I can respond to the inquiry related to lost baggage as it falls under the scope of baggage issues, which includes delayed, damaged, lost, or missing baggage. To provide a comprehensive response, I need to read the necessary files from the app's directory to gather information on how we handle lost baggage claims.
+Neuro SAN: 
+Neuro SAN: I'll proceed to extract the PDF contents related to the "Bag Issues" app and provide a URL to the app page for further assistance.
+Neuro SAN: 
+Neuro SAN: [0mCalling ExtractPdf
+Neuro SAN: Calling class extract_pdf.ExtractPdf
+Neuro SAN: {"message": "Module coded_tools.airline_policy.extract_pdf: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...
+Neuro SAN: This might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", "user_id": "None", "Timestamp": "2025-02-03T06:31:08.096637", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: {"message": "Could not find code for extract_pdf", "user_id": "None", "Timestamp": "2025-02-03T06:31:08.096683", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: Tool._arun() got Exception:
+Neuro SAN: Could not find class "ExtractPdf"
+Neuro SAN: in module "extract_pdf"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "ExtractPdf"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent ExtractPdf
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 93, in build
+Neuro SAN: python_class = resolver.resolve_class_in_module(class_name, module_name)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/leaf_common/config/resolver.py", line 73, in resolve_class_in_module
+Neuro SAN: raise ValueError(str(messages))
+Neuro SAN: ValueError: ["Module coded_tools.airline_policy.extract_pdf: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...\nThis might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", 'Could not find code for extract_pdf']
+Neuro SAN: 
+Neuro SAN: The above exception was the direct cause of the following exception:
+Neuro SAN: 
+Neuro SAN: Traceback (most recent call last):
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/run_context/langchain/langchain_openai_function_tool.py", line 212, in _arun
+Neuro SAN: run = await self.tool_caller.make_tool_function_calls(decision_run)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 187, in make_tool_function_calls
+Neuro SAN: tool_output: Dict[str, Any] = await self.make_one_tool_function_call(component_tool_call)
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/calling_tool.py", line 227, in make_one_tool_function_call
+Neuro SAN: callable_component_response: List[Any] = await callable_component.build()
+Neuro SAN: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Neuro SAN: File "/Users/228496/Desktop/all_projects/nsflow/.venv/lib/python3.12/site-packages/neuro_san/internals/graph/tools/class_tool.py", line 118, in build
+Neuro SAN: raise ValueError(message) from exception
+Neuro SAN: ValueError:
+Neuro SAN: Could not find class "ExtractPdf"
+Neuro SAN: in module "extract_pdf"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "ExtractPdf"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent ExtractPdf
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
+Neuro SAN: 
+Neuro SAN: 
+Neuro SAN: Calling URLProvider
+Neuro SAN: Calling class url_provider.URLProvider
+Neuro SAN: {"message": "Module coded_tools.airline_policy.url_provider: Couldn't load due to ImportError: No module named 'coded_tools.airline_policy'...
+Neuro SAN: This might be OK if this is *not* an ImportError in the file itself and the code can be found in another directory", "user_id": "None", "Timestamp": "2025-02-03T06:31:08.097130", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: {"message": "Could not find code for url_provider", "user_id": "None", "Timestamp": "2025-02-03T06:31:08.097164", "source": "Agent Server", "message_type": "Other", "run_id": "None", "experiment_id": "None", "request_id": "None", "thread_name": "Unknown"}
+Neuro SAN: Tool._arun() got Exception:
+Neuro SAN: Could not find class "URLProvider"
+Neuro SAN: in module "url_provider"
+Neuro SAN: under AGENT_TOOL_PATH "coded_tools"
+Neuro SAN: for the agent called "URLProvider"
+Neuro SAN: in the agent network "airline_policy".
+Neuro SAN: 
+Neuro SAN: Check these things:
+Neuro SAN: 1.  Is there a typo in your AGENT_TOOL_PATH?
+Neuro SAN: 2.  CodedTools for the agent network are expected to be found in a module
+Neuro SAN: under the path: <AGENT_TOOL_PATH>/<agent_network>/<coded_tool_name>.py
+Neuro SAN: a)  Does your AGENT_TOOL_PATH point to the correct directory?
+Neuro SAN: b)  Does your CodedTool actually live in a module appropriately
+Neuro SAN: named for your agent network?
+Neuro SAN: c)  Does the module in the "class" designation for the agent URLProvider
+Neuro SAN: match what is in the filesystem?
+Neuro SAN: d)  Does the specified class name match what is actually implemented in the file?
