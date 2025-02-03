@@ -220,14 +220,6 @@ input:focus {
 }
 
 
-/* Sidebar */
-.sidebar {
-  background-color: #1f2937;
-  color: #fff;
-  border-right: 1px solid #374151;
-  padding: 1rem;
-}
-
 /* Header Styling */
 .header {
   background-color: #1e293b; /* Dark blue-gray */
@@ -253,6 +245,14 @@ input:focus {
 .header-btn:hover {
   background-color: #6b7280;
   transform: scale(1.05);
+}
+
+/* Sidebar */
+.sidebar {
+  background-color: #1f2937;
+  color: #fff;
+  border-right: 1px solid #374151;
+  padding: 1rem;
 }
 
 /* Chat Panel */

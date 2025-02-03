@@ -11,6 +11,9 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   useEffect(() => {
     if (!selectedNetwork) return;
 
+    // Notify about the selected network
+    setMessages((prev) => [...prev, `Connected to Agent: ${selectedNetwork}`]);
+
     const wsUrl = `ws://localhost:8000/api/v1/ws/chat/${selectedNetwork}`;
     console.log(`Connecting to WebSocket: ${wsUrl}`);
 

@@ -18,7 +18,7 @@ const App: React.FC = () => {
         </div>
 
         <PanelGroup direction="horizontal">
-          <Panel defaultSize={20} minSize={15} maxSize={30}>
+          <Panel defaultSize={10} minSize={5} maxSize={30}>
             <Sidebar onSelectNetwork={setSelectedNetwork} />
           </Panel>
           <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
@@ -34,8 +34,8 @@ const App: React.FC = () => {
             </PanelGroup>
           </Panel>
           <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-          <Panel defaultSize={20} minSize={15} maxSize={30}>
-            {/* ✅ Pass selectedNetwork to ChatPanel */}
+          <Panel defaultSize={25} minSize={15} maxSize={40}>
+            {/* Pass selectedNetwork to ChatPanel */}
             <ChatPanel selectedNetwork={selectedNetwork} />
           </Panel>
         </PanelGroup>
