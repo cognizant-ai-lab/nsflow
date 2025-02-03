@@ -14,7 +14,7 @@ const App: React.FC = () => {
     <ReactFlowProvider>
       <div className="h-screen w-screen bg-gray-900 flex flex-col">
         <div className="h-14">
-          <Header />
+          <Header selectedNetwork={selectedNetwork}/>
         </div>
 
         <PanelGroup direction="horizontal">

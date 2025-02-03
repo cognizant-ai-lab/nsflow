@@ -14,6 +14,7 @@ dependencies = [
     "neuro-san",
     "websockets>=14.2",
     "wsproto>=1.2.0",
+    "nbformat>=5.10.4",
 ]
 
 [tool.uv.sources]

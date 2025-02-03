@@ -17,7 +17,7 @@ user_sessions: Dict[str, Dict] = {}
 
 def get_timestamp():
     """Returns current timestamp in ISO format."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 # WebSocket Route for Chat Communication
 @router.websocket("/chat/{agent_name}")
