@@ -12,4 +12,4 @@ registries/*.hocon
 .venv
 
 # logs
-logs/
+logs

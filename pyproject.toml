@@ -1,7 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "nsflow"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Neuro-SAN powered Smart Agent Network Framework"
+license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -15,9 +20,20 @@ dependencies = [
     "websockets>=14.2",
     "wsproto>=1.2.0",
     "nbformat>=5.10.4",
+    "pyvis>=0.3.2",
+    "typer>=0.15.1",
+    "pydantic>=2.9.2",
+    "asyncio>=3.4.3",
 ]
+
+[project.scripts]
+nsflow = "nsflow.cli:main"  # CLI entry point
 
 [tool.uv.sources]
 leaf-common = { path = "wheels_private/leaf_common-1.2.18-py3-none-any.whl" }
 leaf-server-common = { path = "wheels_private/leaf_server_common-0.1.15-py3-none-any.whl" }
 neuro-san = { path = "wheels_private/neuro_san-0.2.7-py3-none-any.whl" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["nsflow"]
+
