@@ -5,6 +5,7 @@ import AgentFlow from "./components/AgentFlow";
 import Sidebar from "./components/Sidebar";
 import ChatPanel from "./components/ChatPanel";
 import LogsPanel from "./components/LogsPanel";
+import ConfigsPanel from "./components/ConfigsPanel";
 import Header from "./components/Header";
 
 const App: React.FC = () => {
@@ -24,12 +25,21 @@ const App: React.FC = () => {
           <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
           <Panel defaultSize={60} minSize={40}>
             <PanelGroup direction="vertical">
-              <Panel defaultSize={75} minSize={50}>
+              <Panel defaultSize={75} minSize={50} maxSize={85}>
                 <AgentFlow selectedNetwork={selectedNetwork} />
               </Panel>
               <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
-              <Panel defaultSize={25} minSize={15} maxSize={40}>
-                <LogsPanel />
+
+              <Panel defaultSize={25} minSize={15} maxSize={30}>
+                <PanelGroup direction="horizontal">
+                  <Panel defaultSize={50} minSize={30} maxSize={70}>
+                    <LogsPanel />
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
+                  <Panel defaultSize={50} minSize={30} maxSize={70}>
+                    <ConfigsPanel />
+                  </Panel>
+                </PanelGroup>
               </Panel>
             </PanelGroup>
           </Panel>

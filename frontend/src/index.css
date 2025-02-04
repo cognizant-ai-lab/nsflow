@@ -318,3 +318,30 @@ input:focus {
   background-color: #6b7280;
   transform: scale(1.05);
 }
+
+
+.react-flow__edge-path {
+  stroke: white;
+  stroke-width: 2;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+}
+
+.react-flow__handle-top {
+  top: -15px;
+}
+
+.react-flow__handle-bottom {
+  bottom: -15px;
+}
+
+.react-flow__handle-left {
+  left: -15px;
+}
+
+.react-flow__handle-right {
+  right: -15px;
+}

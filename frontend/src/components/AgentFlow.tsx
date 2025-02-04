@@ -10,9 +10,11 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import AgentNode from "./AgentNode";
 import CustomEdge from "./CustomEdge";
+import FloatingEdge from "./FloatingEdge";
 
 const nodeTypes = { agent: AgentNode };
-const edgeTypes = { custom: CustomEdge };
+// const edgeTypes = { custom: CustomEdge };
+const edgeTypes = { floating: FloatingEdge };
 
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -27,7 +29,14 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       .then((data) => {
         const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(data.nodes, data.edges);
         setNodes(arrangedNodes);
-        setEdges(arrangedEdges);
+        setEdges(
+            arrangedEdges.map((edge) => ({
+              ...edge,
+              type: "floating", // ✅ Use floating edges
+              animated: true,
+              markerEnd: { type: "arrowclosed" },
+            }))
+          );
         fitView();
       })
       .catch((err) => console.error("Error loading network:", err));
@@ -97,7 +106,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   
     const positionedEdges = edges.map((edge) => ({
       ...edge,
-      type: "custom",
+      type: "floating",
       animated: true,
       style: { strokeWidth: 2, stroke: "#ffffff" },
     }));
