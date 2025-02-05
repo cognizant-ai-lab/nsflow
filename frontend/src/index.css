@@ -12,6 +12,11 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --coded-tools-bg: #2d3748; /* Dark gray */
+  --coded-tools-hover: #4a5568; /* Slightly lighter gray */
+  --coded-tools-border: #718096; /* Light gray border */
+  --coded-tools-title-bg: #1a202c; /* Title bar background */
+  --coded-tools-checkbox-color: #f7fafc; /* Light text */
 }
 
 body {
@@ -344,4 +349,51 @@ input:focus {
 
 .react-flow__handle-right {
   right: -15px;
+}
+
+.coded-tools-section {
+  background-color: var(--coded-tools-bg);
+  border-top: 1px solid var(--coded-tools-border);
+  padding: 4px 8px;
+  border-radius: 0 0 8px 8px;
+}
+
+.coded-tools-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background-color: var(--coded-tools-title-bg);
+  color: var(--coded-tools-checkbox-color);
+  font-weight: bold;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.coded-tools-toggle:hover {
+  background-color: var(--coded-tools-hover);
+}
+
+.coded-tools-list {
+  background-color: var(--coded-tools-bg);
+  color: var(--coded-tools-checkbox-color);
+  padding: 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.coded-tools-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.coded-tools-item:hover {
+  background-color: var(--coded-tools-hover);
 }
