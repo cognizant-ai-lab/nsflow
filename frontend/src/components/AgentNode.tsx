@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Handle, Position } from "reactflow";
 import {
   FaRobot,
@@ -12,11 +12,17 @@ import {
   FaRegSquare,
 } from "react-icons/fa";
 
-// Randomly select an icon
+// Available icons
 const icons = [FaRobot, FaCogs, FaBrain, FaMicrochip, FaNetworkWired, FaUserSecret];
-const getRandomIcon = () => {
-  const Icon = icons[Math.floor(Math.random() * icons.length)];
-  return <Icon className="text-white text-lg mr-2" />;
+
+// Function to get a persistent icon
+const getPersistentIcon = (data) => {
+  if (data.iconIndex !== undefined) {
+    return icons[data.iconIndex]; // Use the stored index
+  }
+  const randomIndex = Math.floor(Math.random() * icons.length);
+  data.iconIndex = randomIndex; // Store the index for persistence
+  return icons[randomIndex];
 };
 
 const AgentNode = ({ data }) => {
@@ -29,11 +35,14 @@ const AgentNode = ({ data }) => {
     setSelectedTools((prev) => ({ ...prev, [tool]: !prev[tool] }));
   };
 
+  // Use useMemo to avoid re-selecting the icon on every render
+  const Icon = useMemo(() => getPersistentIcon(data), [data]);
+
   return (
     <div className="bg-blue-600 text-white rounded-lg shadow-md w-48">
       {/* Title Bar */}
       <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md">
-        {getRandomIcon()}
+        <Icon className="text-white text-lg mr-2" />
         <span className="text-sm font-bold ml-2">{data.label}</span>
       </div>
 
