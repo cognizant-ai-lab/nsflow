@@ -154,10 +154,10 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       </button>
 
       {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
-      <div className="absolute top-2 right-2 p-2 bg-gray-700 opacity-90 text-white rounded-md shadow-md z-20">
-        <div>
-          <label className="text-xs">Base Radius: {tempBaseRadius}px</label>
-          <input
+      <div className="slider-container">
+        <div className="slider-group">
+            <label>Base Radius: {tempBaseRadius}px</label>
+            <input
             type="range"
             min="10"
             max="300"
@@ -165,12 +165,11 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             onChange={handleSliderChange(setBaseRadius, setTempBaseRadius)}
             onMouseUp={handleSliderRelease(setBaseRadius, tempBaseRadius)}
             onTouchEnd={handleSliderRelease(setBaseRadius, tempBaseRadius)}
-            className="w-full cursor-pointer h-2"
-          />
+            />
         </div>
-        <div className="mt-2">
-          <label className="text-xs">Level Spacing: {tempLevelSpacing}px</label>
-          <input
+        <div className="slider-group">
+            <label>Level Spacing: {tempLevelSpacing}px</label>
+            <input
             type="range"
             min="10"
             max="300"
@@ -178,10 +177,10 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             onChange={handleSliderChange(setLevelSpacing, setTempLevelSpacing)}
             onMouseUp={handleSliderRelease(setLevelSpacing, tempLevelSpacing)}
             onTouchEnd={handleSliderRelease(setLevelSpacing, tempLevelSpacing)}
-            className="w-full cursor-pointer h-2"
-          />
+            />
         </div>
       </div>
+
 
       <ReactFlow
         nodes={nodes}

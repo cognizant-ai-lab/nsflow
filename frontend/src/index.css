@@ -422,3 +422,73 @@ input:focus {
 .coded-tools-list::-webkit-scrollbar-thumb:hover {
   background: var(--coded-tools-hover);
 }
+/* Slider Container (Compact & Less Opaque) */
+.slider-container {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 4px 6px;
+  background-color: rgba(55, 65, 81, 0.75); /* Dark Gray with Lower Opacity */
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  width: 100px; /* Even More Compact */
+  font-size: 8px;
+}
+
+/* Slider Input (Ultra-Thin Track) */
+.slider-container input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  background: transparent; /* Remove default styling */
+}
+
+/* 🔹 Force Ultra-Thin Track for All Browsers */
+.slider-container input[type="range"]::-webkit-slider-runnable-track {
+  height: 1px; /* 🔥 Force Ultra-Thin Line */
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 1px;
+}
+
+.slider-container input[type="range"]::-moz-range-track {
+  height: 1px; /* 🔥 Force Ultra-Thin Line */
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 1px;
+}
+
+/* Adjusting the Thumb (Small & Minimal) */
+.slider-container input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 6px; /* 🛠 Small Thumb */
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-top: -3px; /* 🔹 Center the Thumb Properly */
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.slider-container input[type="range"]::-moz-range-thumb {
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+/* Slider Label (Smaller & Less Bold) */
+.slider-container label {
+  display: block;
+  font-size: 6px;
+  font-weight: 500; /* Slightly Less Bold */
+  margin-bottom: 2px;
+  opacity: 0.6; /* Lighter Opacity */
+}
+
+/* Adjust Margin Between Sliders */
+.slider-container .slider-group {
+  margin-bottom: 3px; /* Very Tight Spacing */
+}
