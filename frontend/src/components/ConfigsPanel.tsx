@@ -91,12 +91,7 @@ const ConfigsPanel = () => {
         {logs.length > 0 ? (
           logs.map((log, index) => (
             <p key={index} className="text-sm text-gray-300">
-              <span className="text-gray-400">[{log.timestamp}]</span>
-              <span className={`font-semibold ${log.source === "Neuro-SAN" ? "text-yellow-500" : "text-blue-500"}`}>
-                {" "}
-                ({log.source})
-              </span>
-              : {log.message}
+              <span className="text-gray-400"> Agent configs</span>
             </p>
           ))
         ) : (

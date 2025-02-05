@@ -351,13 +351,16 @@ input:focus {
   right: -15px;
 }
 
+/* 🔹 Coded Tools Section */
 .coded-tools-section {
   background-color: var(--coded-tools-bg);
   border-top: 1px solid var(--coded-tools-border);
-  padding: 4px 8px;
-  border-radius: 0 0 8px 8px;
+  padding: 6px 10px; /* Increased padding for better spacing */
+  border-radius: 0 0 10px 10px;
+  width: 180px; /* Increased width */
 }
 
+/* 🔹 Dropdown Toggle Button */
 .coded-tools-toggle {
   display: flex;
   align-items: center;
@@ -366,8 +369,9 @@ input:focus {
   background-color: var(--coded-tools-title-bg);
   color: var(--coded-tools-checkbox-color);
   font-weight: bold;
-  padding: 6px;
-  border-radius: 4px;
+  padding: 8px 10px; /* Slightly increased padding */
+  font-size: 14px; /* Increased font size */
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s ease-in-out;
 }
@@ -376,24 +380,45 @@ input:focus {
   background-color: var(--coded-tools-hover);
 }
 
+/* 🔹 Dropdown List */
 .coded-tools-list {
   background-color: var(--coded-tools-bg);
   color: var(--coded-tools-checkbox-color);
-  padding: 6px;
-  border-radius: 4px;
-  margin-top: 4px;
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-style: italic;
+  font-size: 14px; /* Increased font size */
+  max-height: 200px; /* Add max height for scrollable list */
+  overflow-y: auto; /* Enable scrolling if too many items */
 }
 
+/* 🔹 Dropdown Items */
 .coded-tools-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 4px;
+  gap: 8px; /* More spacing between checkbox and text */
+  padding: 6px;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 13px; /* Slightly larger font */
   transition: background 0.2s ease-in-out;
 }
 
 .coded-tools-item:hover {
   background-color: var(--coded-tools-hover);
+}
+
+/* 🔹 Scrollbar Styling */
+.coded-tools-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.coded-tools-list::-webkit-scrollbar-thumb {
+  background: var(--coded-tools-border);
+  border-radius: 4px;
+}
+
+.coded-tools-list::-webkit-scrollbar-thumb:hover {
+  background: var(--coded-tools-hover);
 }
