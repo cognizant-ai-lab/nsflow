@@ -126,6 +126,10 @@ You can handle managed databases, NoSQL databases, and database optimization.
         },
         {
             "name": "security_agent",
+            "llm_config": {
+                "model_name": "nvidia-llama-3.1-405b-instruct",
+                "verbose": true
+            },
             "function": "aaosa_call",
             "instructions": """
 {instructions_prefix}
