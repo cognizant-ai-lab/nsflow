@@ -12,6 +12,11 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --coded-tools-bg: #2d3748; /* Dark gray */
+  --coded-tools-hover: #4a5568; /* Slightly lighter gray */
+  --coded-tools-border: #718096; /* Light gray border */
+  --coded-tools-title-bg: #1a202c; /* Title bar background */
+  --coded-tools-checkbox-color: #f7fafc; /* Light text */
 }
 
 body {
@@ -317,4 +322,173 @@ input:focus {
 .btn:hover {
   background-color: #6b7280;
   transform: scale(1.05);
+}
+
+
+.react-flow__edge-path {
+  stroke: white;
+  stroke-width: 2;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+}
+
+.react-flow__handle-top {
+  top: -15px;
+}
+
+.react-flow__handle-bottom {
+  bottom: -15px;
+}
+
+.react-flow__handle-left {
+  left: -15px;
+}
+
+.react-flow__handle-right {
+  right: -15px;
+}
+
+/* 🔹 Coded Tools Section */
+.coded-tools-section {
+  background-color: var(--coded-tools-bg);
+  border-top: 1px solid var(--coded-tools-border);
+  padding: 6px 10px; /* Increased padding for better spacing */
+  border-radius: 0 0 10px 10px;
+  width: 180px; /* Increased width */
+}
+
+/* 🔹 Dropdown Toggle Button */
+.coded-tools-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background-color: var(--coded-tools-title-bg);
+  color: var(--coded-tools-checkbox-color);
+  font-weight: bold;
+  padding: 8px 10px; /* Slightly increased padding */
+  font-size: 14px; /* Increased font size */
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.coded-tools-toggle:hover {
+  background-color: var(--coded-tools-hover);
+}
+
+/* 🔹 Dropdown List */
+.coded-tools-list {
+  background-color: var(--coded-tools-bg);
+  color: var(--coded-tools-checkbox-color);
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-style: italic;
+  font-size: 14px; /* Increased font size */
+  max-height: 200px; /* Add max height for scrollable list */
+  overflow-y: auto; /* Enable scrolling if too many items */
+}
+
+/* 🔹 Dropdown Items */
+.coded-tools-item {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* More spacing between checkbox and text */
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px; /* Slightly larger font */
+  transition: background 0.2s ease-in-out;
+}
+
+.coded-tools-item:hover {
+  background-color: var(--coded-tools-hover);
+}
+
+/* 🔹 Scrollbar Styling */
+.coded-tools-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.coded-tools-list::-webkit-scrollbar-thumb {
+  background: var(--coded-tools-border);
+  border-radius: 4px;
+}
+
+.coded-tools-list::-webkit-scrollbar-thumb:hover {
+  background: var(--coded-tools-hover);
+}
+/* Slider Container (Compact & Less Opaque) */
+.slider-container {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 4px 6px;
+  background-color: rgba(55, 65, 81, 0.75); /* Dark Gray with Lower Opacity */
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  width: 100px; /* Even More Compact */
+  font-size: 8px;
+}
+
+/* Slider Input (Ultra-Thin Track) */
+.slider-container input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  background: transparent; /* Remove default styling */
+}
+
+/* 🔹 Force Ultra-Thin Track for All Browsers */
+.slider-container input[type="range"]::-webkit-slider-runnable-track {
+  height: 1px; /* 🔥 Force Ultra-Thin Line */
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 1px;
+}
+
+.slider-container input[type="range"]::-moz-range-track {
+  height: 1px; /* 🔥 Force Ultra-Thin Line */
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 1px;
+}
+
+/* Adjusting the Thumb (Small & Minimal) */
+.slider-container input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 6px; /* 🛠 Small Thumb */
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-top: -3px; /* 🔹 Center the Thumb Properly */
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.slider-container input[type="range"]::-moz-range-thumb {
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+/* Slider Label (Smaller & Less Bold) */
+.slider-container label {
+  display: block;
+  font-size: 6px;
+  font-weight: 500; /* Slightly Less Bold */
+  margin-bottom: 2px;
+  opacity: 0.6; /* Lighter Opacity */
+}
+
+/* Adjust Margin Between Sliders */
+.slider-container .slider-group {
+  margin-bottom: 3px; /* Very Tight Spacing */
 }
