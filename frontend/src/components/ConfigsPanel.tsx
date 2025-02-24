@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { FaDownload } from "react-icons/fa";
+import { useApiPort } from "../context/ApiPortContext";
 
 type LogEntry = {
   timestamp: string;
@@ -11,6 +12,7 @@ type LogEntry = {
 const getCurrentTimestamp = () => new Date().toISOString().replace("T", " ").split(".")[0];
 
 const ConfigsPanel = () => {
+  const { apiPort } = useApiPort();
   const [logs, setLogs] = useState<LogEntry[]>([
     { timestamp: getCurrentTimestamp(), source: "Frontend", message: "System initialized." },
     { timestamp: getCurrentTimestamp(), source: "Frontend", message: "Frontend app loaded successfully." },
@@ -18,7 +20,7 @@ const ConfigsPanel = () => {
 
   useEffect(() => {
     // WebSocket for real-time logs
-    const ws = new WebSocket("ws://localhost:8000/api/v1/ws/logs");
+    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs`);
 
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event) => {
@@ -34,7 +36,7 @@ const ConfigsPanel = () => {
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
     // SSE for log history
-    const eventSource = new EventSource("http://localhost:8000/api/v1/ws/logs-stream");
+    const eventSource = new EventSource(`http://localhost:${apiPort}/api/v1/ws/logs-stream`);
 
     eventSource.onmessage = (event) => {
       try {
