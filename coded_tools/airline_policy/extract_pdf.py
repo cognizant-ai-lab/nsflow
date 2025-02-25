@@ -10,7 +10,7 @@ class ExtractPdf(CodedTool):
     Returns a dictionary mapping each PDF file name to its extracted text.
     """
     def __init__(self):
-        self.default_path = ["knowdocs/Help Center _ United Airlines.pdf"]
+        self.default_path = ["knowdocs/Help Center.txt"]
         self.docs_path = {
             "Bag Issues": "knowdocs/baggage/bag-issues",
             "Carry On Baggage": "knowdocs/baggage/carryon",

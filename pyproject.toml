@@ -24,6 +24,7 @@ dependencies = [
     "typer>=0.15.1",
     "pydantic>=2.9.2",
     "asyncio>=3.4.3",
+    "pypdf2>=3.0.1",
 ]
 
 [project.scripts]

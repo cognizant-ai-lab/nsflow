@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import { Clipboard } from "lucide-react"; // Small copy icon
 import { useApiPort } from "../context/ApiPortContext";
 
 type Message = {
@@ -17,6 +19,7 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   ]);
   const [newMessage, setNewMessage] = useState("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [copiedMessage, setCopiedMessage] = useState<number | null>(null); // Stores index of copied message
 
   useEffect(() => {
     if (!selectedNetwork) return;
@@ -39,23 +42,19 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
         if (data.message && typeof data.message === "object") {
           if (data.message.type === "AI") {
-            const aiText = data.message.text; // ✅ Extract AI response text
+            const aiText = data.message.text; // Extract AI response text
 
             setMessages((prev) => {
-              // ✅ Prevent duplicate AI messages
               if (
                 prev.length > 0 &&
                 prev[prev.length - 1].sender === "agent" &&
                 prev[prev.length - 1].text === aiText &&
                 prev[prev.length - 1].network === selectedNetwork
               ) {
-                return prev;
+                return prev; // Prevent duplicates
               }
 
-              return [
-                ...prev,
-                { sender: "agent", text: aiText, network: selectedNetwork },
-              ];
+              return [...prev, { sender: "agent", text: aiText, network: selectedNetwork }];
             });
           } else {
             console.log("Ignoring non-final message:", data.message);
@@ -88,6 +87,13 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     setNewMessage("");
   };
 
+  const copyToClipboard = (text: string, index: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedMessage(index);
+      setTimeout(() => setCopiedMessage(null), 1000); // Show "Copied!" for 1 second
+    });
+  };
+
   return (
     <div className="chat-panel flex flex-col h-full p-4">
       <h2 className="text-lg font-bold">Chat</h2>
@@ -95,7 +101,7 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
         {messages.map((msg, index) => (
           <div
             key={index}
-            className={`p-2 rounded-md text-sm ${
+            className={`relative p-2 rounded-md text-sm ${
               msg.sender === "user"
                 ? "bg-blue-600 text-white self-end"
                 : msg.sender === "agent"
@@ -104,17 +110,49 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
             }`}
           >
             {/* Sender Header */}
-            <div className="font-bold mb-1">
-              {msg.sender === "user"
-                ? "User"
-                : msg.sender === "agent"
-                ? msg.network || "Unknown Agent"
-                : "System"}
+            <div className="font-bold mb-1 flex justify-between items-center">
+              <span>
+                {msg.sender === "user"
+                  ? "User"
+                  : msg.sender === "agent"
+                  ? msg.network || "Unknown Agent"
+                  : "System"}
+              </span>
+              
+              {/* Copy Icon */}
+              <button
+                onClick={() => copyToClipboard(msg.text, index)}
+                className="text-gray-400 hover:text-white ml-2 p-1"
+                title="Copy to clipboard"
+              >
+                <Clipboard size={10} />
+              </button>
             </div>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+            
+            {/* Message Content */}
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={{
+                ul: ({ children }) => <ul className="list-disc ml-4">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal ml-4">{children}</ol>,
+                li: ({ children }) => <li className="ml-2">{children}</li>,
+                p: ({ children }) => <p className="mb-2">{children}</p>,
+              }}
+            >
+              {msg.text}
+            </ReactMarkdown>
+
+            {/* Copied Tooltip */}
+            {copiedMessage === index && (
+              <div className="absolute top-0 right-6 bg-gray-800 text-white text-xs p-1 rounded-md">
+                Copied!
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      {/* Chat Input */}
       <div className="chat-input mt-2 flex gap-2">
         <input
           type="text"
