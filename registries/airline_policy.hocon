@@ -79,7 +79,7 @@ tools or agents. If there are any requirements that need user input, ask them on
 with clear examples of the choices available.
 Provide the users with necessary URLs to help them with their query.
             """,
-            "tools": ["Baggage_Handling", "Flights", "International_Travel"]
+            "tools": ["Baggage_Handling", "Flights", "International_Travel", "Carry_On_Baggage"]
         },
         {
             "name": "Baggage_Handling",

@@ -77,46 +77,43 @@ async def websocket_chat(websocket: WebSocket, agent_name: str):
         active_chat_connections.pop(client_id, None)
         user_sessions.pop(client_id, None)
 
-
 async def handle_streaming_chat(agent_session, client_id, chat_request):
     """Handles streaming chat responses properly in an async function."""
-    loop = asyncio.get_running_loop()
-    
     try:
-        # Run generator function inside a thread
+        # Set up streaming generator
+        loop = asyncio.get_running_loop()
         response_generator = await loop.run_in_executor(None, agent_session.streaming_chat, chat_request)
+        final_response = None
 
-        last_response = None  # Store last response to ensure it's sent
-        async def ensure_final_broadcast():
-            """Ensures final messages are sent before disconnecting."""
-            if last_response and client_id in active_chat_connections:
-                try:
-                    await active_chat_connections[client_id].send_text(json.dumps({"message": last_response}))
-                    await log_event(f"Final response sent: {last_response}", "FastAPI")
-                except WebSocketDisconnect:
-                    active_chat_connections.pop(client_id, None)
+        # Stream responses
+        for response_message in response_generator:
+            if response_message is None:
+                continue  # Skip if response is None
 
-        for response_chunk in response_generator:
-            chat_response = response_chunk.get("response", "")
-            if chat_response:
-                last_response = chat_response  # Save latest response
-                if client_id in active_chat_connections:
-                    try:
-                        await active_chat_connections[client_id].send_text(json.dumps({"message": chat_response}))
-                        await log_event(f"Streaming response sent: {chat_response}", "FastAPI")
-                    except WebSocketDisconnect:
-                        active_chat_connections.pop(client_id, None)
+            response_dict = json.loads(json.dumps(response_message))  # Convert to JSON-compatible dict
+            # Extract AI response from response_dict
+            if (
+                "response" in response_dict
+                and response_dict["response"].get("type") == "AI"
+            ):
+                final_response = response_dict["response"]["text"]
 
-        # Ensure the last message gets broadcasted before WebSocket closes
-        await ensure_final_broadcast()
+        if final_response and client_id in active_chat_connections:
+            try:
+                response_str = json.dumps({"message": {"type": "AI", "text": final_response}})
+                await active_chat_connections[client_id].send_text(response_str)
+                await log_event(f"Streaming response sent: {response_str}", "FastAPI")
+            except WebSocketDisconnect:
+                active_chat_connections.pop(client_id, None)
+            except RuntimeError as e:
+                logging.error(f"Error sending streaming response: {e}")
+                active_chat_connections.pop(client_id, None)
 
-        # Save session ID if it was initialized
-        if not user_sessions[client_id]["session_id"]:
-            user_sessions[client_id]["session_id"] = response_chunk.get("session_id")
+        # Do not close WebSocket here; allow continuous interaction
+        await log_event(f"Streaming chat finished for client: {client_id}", "FastAPI")
 
     except Exception as e:
         logging.error(f"Error in streaming chat: {e}")
-
 
 # WebSocket Route for Log Streaming
 @router.websocket("/logs")

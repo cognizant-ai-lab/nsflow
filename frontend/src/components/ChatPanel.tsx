@@ -6,6 +6,7 @@ import { useApiPort } from "../context/ApiPortContext";
 type Message = {
   sender: "user" | "agent" | "system";
   text: string;
+  network?: string; // Preserve network for each message
 };
 
 const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
@@ -16,14 +17,13 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   ]);
   const [newMessage, setNewMessage] = useState("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
-  const [lastAIResponse, setLastAIResponse] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedNetwork) return;
 
     setMessages((prev) => [
       ...prev,
-      { sender: "system", text: `Connected to Agent: **${selectedNetwork}**` },
+      { sender: "system", text: `Connected to Agent: **${selectedNetwork}**`, network: selectedNetwork },
     ]);
 
     const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${selectedNetwork}`;
@@ -38,11 +38,25 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
         const data = JSON.parse(event.data);
 
         if (data.message && typeof data.message === "object") {
-          const { type, text } = data.message;
+          if (data.message.type === "AI") {
+            const aiText = data.message.text; // ✅ Extract AI response text
 
-          if (type === "AI") {
-            // Store only the last AI response
-            setLastAIResponse(text);
+            setMessages((prev) => {
+              // ✅ Prevent duplicate AI messages
+              if (
+                prev.length > 0 &&
+                prev[prev.length - 1].sender === "agent" &&
+                prev[prev.length - 1].text === aiText &&
+                prev[prev.length - 1].network === selectedNetwork
+              ) {
+                return prev;
+              }
+
+              return [
+                ...prev,
+                { sender: "agent", text: aiText, network: selectedNetwork },
+              ];
+            });
           } else {
             console.log("Ignoring non-final message:", data.message);
           }
@@ -65,18 +79,9 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     };
   }, [selectedNetwork, apiPort]);
 
-  useEffect(() => {
-    if (lastAIResponse) {
-      setMessages((prev) => [
-        ...prev.filter((msg) => msg.sender !== "agent"), // Remove previous AI messages
-        { sender: "agent", text: lastAIResponse },
-      ]);
-    }
-  }, [lastAIResponse]);
-
   const sendMessage = () => {
     if (!newMessage.trim() || !socket) return;
-    setMessages((prev) => [...prev, { sender: "user", text: newMessage }]);
+    setMessages((prev) => [...prev, { sender: "user", text: newMessage, network: selectedNetwork }]);
 
     console.log(`Sending message: ${newMessage}`);
     socket.send(JSON.stringify({ message: newMessage }));
@@ -103,7 +108,7 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
               {msg.sender === "user"
                 ? "User"
                 : msg.sender === "agent"
-                ? selectedNetwork
+                ? msg.network || "Unknown Agent"
                 : "System"}
             </div>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
