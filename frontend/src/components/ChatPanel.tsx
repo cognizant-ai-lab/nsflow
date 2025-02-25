@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm"; // Enables GitHub-Flavored Markdown (tables, checklists, etc.)
+import remarkGfm from "remark-gfm";
 import { useApiPort } from "../context/ApiPortContext";
 
 type Message = {
@@ -16,6 +16,7 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   ]);
   const [newMessage, setNewMessage] = useState("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [lastAIResponse, setLastAIResponse] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedNetwork) return;
@@ -33,12 +34,23 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     ws.onopen = () => console.log("WebSocket Connected");
     ws.onmessage = (event) => {
       console.log("WebSocket Message Received:", event.data);
-      const data = JSON.parse(event.data);
-      if (data.message) {
-        setMessages((prev) => [
-          ...prev,
-          { sender: "agent", text: data.message },
-        ]);
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.message && typeof data.message === "object") {
+          const { type, text } = data.message;
+
+          if (type === "AI") {
+            // Store only the last AI response
+            setLastAIResponse(text);
+          } else {
+            console.log("Ignoring non-final message:", data.message);
+          }
+        } else {
+          console.error("Invalid message format:", data);
+        }
+      } catch (err) {
+        console.error("Error parsing WebSocket message:", err);
       }
     };
 
@@ -53,12 +65,18 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     };
   }, [selectedNetwork, apiPort]);
 
+  useEffect(() => {
+    if (lastAIResponse) {
+      setMessages((prev) => [
+        ...prev.filter((msg) => msg.sender !== "agent"), // Remove previous AI messages
+        { sender: "agent", text: lastAIResponse },
+      ]);
+    }
+  }, [lastAIResponse]);
+
   const sendMessage = () => {
     if (!newMessage.trim() || !socket) return;
-    setMessages((prev) => [
-      ...prev,
-      { sender: "user", text: newMessage },
-    ]);
+    setMessages((prev) => [...prev, { sender: "user", text: newMessage }]);
 
     console.log(`Sending message: ${newMessage}`);
     socket.send(JSON.stringify({ message: newMessage }));
@@ -88,9 +106,7 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
                 ? selectedNetwork
                 : "System"}
             </div>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {msg.text}
-            </ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
           </div>
         ))}
       </div>

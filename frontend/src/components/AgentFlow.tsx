@@ -35,7 +35,9 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     fetch(`http://127.0.0.1:${apiPort}/api/v1/network/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
-        const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(data.nodes, data.edges, baseRadius, levelSpacing);
+        const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
+          data.nodes, data.edges, baseRadius, levelSpacing);
+
         setNodes(arrangedNodes);
         setEdges(
           arrangedEdges.map((edge) => ({
