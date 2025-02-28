@@ -20,6 +20,8 @@ user_sessions: Dict[str, Dict] = {}
 log_buffer: List[Dict] = []
 LOG_BUFFER_SIZE = 100
 
+SERVER_PORT = 30015
+
 def get_timestamp():
     """Returns the current timestamp in ISO format."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -48,7 +50,7 @@ async def websocket_chat(websocket: WebSocket, agent_name: str):
     # Initialize or reuse session
     if client_id not in user_sessions or user_sessions[client_id]["agent_name"] != agent_name:
         user_sessions[client_id] = {
-            "agent_session": GrpcServiceAgentSession(host="localhost", port=30011, agent_name=agent_name),
+            "agent_session": GrpcServiceAgentSession(host="localhost", port=SERVER_PORT, agent_name=agent_name),
             "session_id": None,
             "agent_name": agent_name
         }
@@ -91,13 +93,14 @@ async def handle_streaming_chat(agent_session, client_id, chat_request):
                 continue  # Skip if response is None
 
             response_dict = json.loads(json.dumps(response_message))  # Convert to JSON-compatible dict
+            await log_event(f"{response_dict}", "NeuroSan")
             # Extract AI response from response_dict
             if (
                 "response" in response_dict
                 and response_dict["response"].get("type") == "AI"
             ):
                 final_response = response_dict["response"]["text"]
-
+        
         if final_response and client_id in active_chat_connections:
             try:
                 response_str = json.dumps({"message": {"type": "AI", "text": final_response}})
@@ -129,46 +132,6 @@ async def websocket_logs(websocket: WebSocket):
         active_log_connections.remove(websocket)
         await log_event("Logs client disconnected", "FastAPI")
 
-# Background Task to Fetch Logs and Send Updates
-async def background_response_handler(client_id: str):
-    """Handles responses from the agent session."""
-    if client_id not in user_sessions:
-        logging.warning(f"No session found for {client_id}")
-        return
-
-    agent_session = user_sessions[client_id]["agent_session"]
-    session_id = user_sessions[client_id]["session_id"]
-
-    last_logs_length = 0
-    response_sent = False
-
-    while True:
-        logs_request = {"session_id": session_id}
-        logs_response = await asyncio.to_thread(agent_session.logs, logs_request)
-        logs = logs_response.get("logs", [])
-        chat_response = logs_response.get("chat_response")
-
-        new_logs = logs[last_logs_length:]
-        last_logs_length = len(logs)
-
-        if new_logs:
-            for log in new_logs:
-                await log_event(log, "Neuro-SAN")
-
-        if chat_response and not response_sent:
-            last_response = chat_response.rsplit("assistant: ", 1)[-1]
-            if client_id in active_chat_connections:
-                try:
-                    await active_chat_connections[client_id].send_text(json.dumps({"message": last_response}))
-                    response_sent = True
-                except WebSocketDisconnect:
-                    active_chat_connections.pop(client_id, None)
-
-        if response_sent:
-            break
-
-        await asyncio.sleep(1)
-
 async def broadcast_log(log_entry):
     """Broadcast logs to all connected clients."""
     logging.info(f"Broadcasting log: {log_entry}")
@@ -180,19 +143,31 @@ async def broadcast_log(log_entry):
 
 @router.get("/connectivity/{agent_name}")
 async def get_agent_connectivity(agent_name: str):
-    """Fetch agent connectivity details using Neuro-SAN's `connectivity` method."""
+    """Fetch agent connectivity details using NeuroSan's `connectivity` method."""
     try:
-        agent_session = GrpcServiceAgentSession(host="localhost", port=30011, agent_name=agent_name)
+        agent_session = GrpcServiceAgentSession(host="localhost", port=SERVER_PORT, agent_name=agent_name)
         connectivity_response = agent_session.connectivity({})
         return {"connectivity": connectivity_response.get("connectivity_info", [])}
     except Exception as e:
         logging.error(f"Error fetching connectivity for agent {agent_name}: {str(e)}")
         return {"error": str(e)}
 
+@router.get("/function/{agent_name}")
+async def get_agent_connectivity(agent_name: str):
+    """Fetch agent function details using NeuroSan's `function` method."""
+    try:
+        agent_session = GrpcServiceAgentSession(host="localhost", port=SERVER_PORT, agent_name=agent_name)
+        function_response = agent_session.function({})
+        return {"function": function_response.get("function", [])}
+    except Exception as e:
+        logging.error(f"Error fetching function for agent {agent_name}: {str(e)}")
+        return {"error": str(e)}
+
 @router.get("/logs-stream")
 async def stream_logs(request: Request):
     """HTTP/2 SSE (Server-Sent-Event) endpoint for streaming logs."""
     async def event_generator():
+        await log_event("New SSE log client connected", "FastAPI")
         last_sent_index = len(log_buffer)
         while not await request.is_disconnected():
             if last_sent_index < len(log_buffer):

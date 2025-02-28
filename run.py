@@ -18,10 +18,10 @@ class NsFlowRunner:
 
         # Default Configuration
         self.ns_server_host = "localhost"
-        self.ns_server_port = 30011
+        self.ns_server_port = 30015
         self.ns_agent_name = "airline_policy"
         self.api_host = "localhost"
-        self.api_port = 8000
+        self.api_port = 8005
         self.api_log_level = "info"
         self.thinking_file = "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt"
 
