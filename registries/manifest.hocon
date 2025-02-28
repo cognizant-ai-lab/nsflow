@@ -15,4 +15,5 @@
     "airline_policy.hocon": true,
     "supply_chain.hocon": true,
     "cloud_services.hocon": true,
+    "ds_smart_home.hocon": true,
 }

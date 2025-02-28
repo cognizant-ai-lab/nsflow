@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { FaUserCircle, FaFolderOpen, FaSave, FaDownload } from "react-icons/fa";
 import logo from "../assets/icon.jpg";
+import { useApiPort } from "../context/ApiPortContext";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
+  const { apiPort } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -25,7 +27,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       return;
     }
 
-    const response = await fetch(`http://127.0.0.1:8000/api/v1/export/notebook/${selectedNetwork}`);
+    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/export/notebook/${selectedNetwork}`);
     if (!response.ok) {
       alert("Failed to generate notebook.");
       return;
@@ -47,7 +49,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       return;
     }
 
-    const response = await fetch(`http://127.0.0.1:8000/api/v1/export/agent_network/${selectedNetwork}`);
+    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/export/agent_network/${selectedNetwork}`);
     if (!response.ok) {
       alert("Failed to download agent network.");
       return;
