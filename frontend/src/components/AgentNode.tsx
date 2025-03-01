@@ -15,14 +15,12 @@ import {
 // Available icons
 const icons = [FaRobot, FaCogs, FaBrain, FaMicrochip, FaNetworkWired, FaUserSecret];
 
-// Function to get a persistent icon
-const getPersistentIcon = (data) => {
-  if (data.iconIndex !== undefined) {
-    return icons[data.iconIndex]; // Use the stored index
+const getIconIndex = (key: string) => {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = key.charCodeAt(i) + ((hash << 5) - hash); // Simple hash function
   }
-  const randomIndex = Math.floor(Math.random() * icons.length);
-  data.iconIndex = randomIndex; // Store the index for persistence
-  return icons[randomIndex];
+  return Math.abs(hash) % icons.length; // Ensure a valid index
 };
 
 const AgentNode = ({ data }) => {
@@ -36,10 +34,18 @@ const AgentNode = ({ data }) => {
   };
 
   // Use useMemo to avoid re-selecting the icon on every render
-  const Icon = useMemo(() => getPersistentIcon(data), [data]);
+  const Icon = useMemo(() => {
+    const index = getIconIndex(data.id || data.label); // Use a stable identifier
+    return icons[index];
+  }, [data.id, data.label]);
 
   return (
-    <div className="bg-blue-600 text-white rounded-lg shadow-md w-48">
+    // <div className="bg-blue-600 text-white rounded-lg shadow-md w-48">
+    <div
+      className={`p-3 rounded-lg shadow-md text-white w-48 transition-all ${
+        data.isActive ? "bg-yellow-500 border-2 border-yellow-300 scale-105 shadow-xl" : "bg-blue-600"
+      }`}
+    >
       {/* Title Bar */}
       <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md">
         <Icon className="text-white text-lg mr-2" />

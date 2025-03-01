@@ -21,6 +21,10 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
 
+  // ** State for highlighting active agents & edges **
+  const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
+  const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
+
   // ** State for actual values (used in API calls) **
   const [baseRadius, setBaseRadius] = useState(140);
   const [levelSpacing, setLevelSpacing] = useState(160);
@@ -39,8 +43,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           data.nodes, data.edges, baseRadius, levelSpacing);
 
         setNodes(arrangedNodes);
-        setEdges(
-          arrangedEdges.map((edge) => ({
+        setEdges(arrangedEdges.map((edge) => ({
             ...edge,
             type: "floating",
             animated: true,
@@ -51,6 +54,57 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       })
       .catch((err) => console.error("Error loading network:", err));
   }, [selectedNetwork, baseRadius, levelSpacing]); // API call only on final values
+
+  useEffect(() => {
+    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs`);
+  
+    ws.onopen = () => console.log("Logs WebSocket Connected.");
+    ws.onmessage = (event) => {
+      try {
+        // Validate the outer JSON message
+        if (!isValidJson(event.data)) {
+          console.error("Invalid JSON received:", event.data);
+          return;
+        }
+  
+        const data = JSON.parse(event.data);
+        if (data.message && isValidJson(data.message)) {
+          const logMessage = JSON.parse(data.message);
+  
+          if (logMessage.otrace) {
+            const newActiveAgents = new Set(logMessage.otrace);
+            setActiveAgents(newActiveAgents);
+  
+            // ** Generate active edges from the agent sequence **
+            if (logMessage.otrace.length > 1) {
+              const newActiveEdges = new Set<string>();
+              for (let i = 0; i < logMessage.otrace.length - 1; i++) {
+                newActiveEdges.add(`${logMessage.otrace[i]}-${logMessage.otrace[i + 1]}`);
+              }
+              setActiveEdges(newActiveEdges);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket log message:", error);
+      }
+    };
+  
+    ws.onclose = () => console.log("Logs WebSocket Disconnected");
+  
+    return () => ws.close();
+  }, [apiPort]);
+  
+  // ✅ Utility function to validate JSON
+  const isValidJson = (str: string): boolean => {
+    try {
+      JSON.parse(str);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+  
 
   // ** Updates the actual values only when scrubbing stops **
   const handleSliderChange = (setter, setTempSetter) => (event) => {
@@ -187,8 +241,18 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
 
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={nodes.map((node) => ({
+          ...node,
+          data: { ...node.data, isActive: activeAgents.has(node.id) },
+        }))}
+        edges={edges.map((edge) => ({
+          ...edge,
+          animated: activeEdges.has(`${edge.source}-${edge.target}`),
+          style: {
+            strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 3 : 1,
+            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? "#ffcc00" : "#ffffff",
+          },
+        }))}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
@@ -196,7 +260,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         edgeTypes={edgeTypes}
       >
         <Background />
-        <MiniMap />
+        {/* <MiniMap /> */}
         <Controls />
       </ReactFlow>
     </div>

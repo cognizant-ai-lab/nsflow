@@ -35,35 +35,9 @@ const ConfigsPanel = () => {
     };
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
-    // SSE for log history
-    const eventSource = new EventSource(`http://localhost:${apiPort}/api/v1/ws/logs-stream`);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data: LogEntry = JSON.parse(event.data);
-        if (data.timestamp && data.message) {
-          setLogs((prev) => {
-            // Avoid duplicate logs
-            if (!prev.some((log) => log.timestamp === data.timestamp && log.message === data.message)) {
-              return [...prev, data];
-            }
-            return prev;
-          });
-        }
-      } catch (error) {
-        console.error("Error parsing SSE log:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.error("SSE connection error.");
-      eventSource.close();
-    };
-
     // Cleanup function
     return () => {
       ws.close();
-      eventSource.close();
     };
   }, []);
 
