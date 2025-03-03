@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { FaDownload } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
 
@@ -65,11 +65,7 @@ const ConfigsPanel = () => {
       </div>
       <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md">
         {logs.length > 0 ? (
-          logs.map((log, index) => (
-            <p key={index} className="text-sm text-gray-300">
               <span className="text-gray-400"> Agent configs</span>
-            </p>
-          ))
         ) : (
           <p className="text-gray-400">No logs available.</p>
         )}

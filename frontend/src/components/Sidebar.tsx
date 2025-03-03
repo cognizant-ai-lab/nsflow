@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApiPort } from "../context/ApiPortContext"; // Import global state
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
@@ -16,7 +16,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         setLoading(false);
       })
       .catch((err) => {
-        setError("Failed to load agent networks.");
+        setError(`Failed to load agent networks.${err}`);
         setLoading(false);
       });
   }, [apiPort]);

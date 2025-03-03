@@ -1,11 +1,19 @@
-import { getBezierPath, useNodes } from "reactflow";
+import { getBezierPath, useNodes, EdgeProps, Node } from "reactflow";
 import { getEdgeParams } from "../utils/utils";
 
-const FloatingEdge = ({ id, source, target, markerEnd, style }) => {
+// Define a type for the node with required properties
+interface CustomNode extends Node {
+  width: number;
+  height: number;
+}
+
+// Explicitly type the FloatingEdge component using ReactFlow's EdgeProps
+const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, style }) => {
   const nodes = useNodes();
 
-  const sourceNode = nodes.find((node) => node.id === source);
-  const targetNode = nodes.find((node) => node.id === target);
+  // Ensure we correctly type sourceNode and targetNode
+  const sourceNode = nodes.find((node) => node.id === source) as CustomNode | undefined;
+  const targetNode = nodes.find((node) => node.id === target) as CustomNode | undefined;
 
   if (!sourceNode || !targetNode) {
     return null;
