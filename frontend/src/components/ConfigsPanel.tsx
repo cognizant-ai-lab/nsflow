@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { FaDownload } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
 
@@ -35,35 +35,9 @@ const ConfigsPanel = () => {
     };
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
-    // SSE for log history
-    const eventSource = new EventSource(`http://localhost:${apiPort}/api/v1/ws/logs-stream`);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data: LogEntry = JSON.parse(event.data);
-        if (data.timestamp && data.message) {
-          setLogs((prev) => {
-            // Avoid duplicate logs
-            if (!prev.some((log) => log.timestamp === data.timestamp && log.message === data.message)) {
-              return [...prev, data];
-            }
-            return prev;
-          });
-        }
-      } catch (error) {
-        console.error("Error parsing SSE log:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.error("SSE connection error.");
-      eventSource.close();
-    };
-
     // Cleanup function
     return () => {
       ws.close();
-      eventSource.close();
     };
   }, []);
 
@@ -91,11 +65,7 @@ const ConfigsPanel = () => {
       </div>
       <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md">
         {logs.length > 0 ? (
-          logs.map((log, index) => (
-            <p key={index} className="text-sm text-gray-300">
               <span className="text-gray-400"> Agent configs</span>
-            </p>
-          ))
         ) : (
           <p className="text-gray-400">No logs available.</p>
         )}

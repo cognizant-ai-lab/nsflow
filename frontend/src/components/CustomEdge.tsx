@@ -1,4 +1,3 @@
-import React from "react";
 import { BaseEdge, EdgeProps, getBezierPath } from "reactflow";
 
 const sanitizeCoord = (coord: number) => (isNaN(coord) ? 0 : coord);
@@ -31,7 +30,7 @@ const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY }: EdgeProps) => {
     targetY,
   });
 
-  const edgePath = Array.isArray(edgeData) ? edgeData[0] : edgeData;
+  let edgePath = Array.isArray(edgeData) ? edgeData[0] : edgeData;
 
   // Validate the edge path
   if (!edgePath || typeof edgePath !== "string" || edgePath.includes("NaN")) {

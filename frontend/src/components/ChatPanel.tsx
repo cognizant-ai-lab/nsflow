@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -133,10 +133,42 @@ const ChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
               components={{
-                ul: ({ children }) => <ul className="list-disc ml-4">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal ml-4">{children}</ol>,
+                // Headings (H1 - H6)
+                h1: ({ children }) => <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-xl font-semibold mt-3 mb-2">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-lg font-semibold mt-2 mb-1">{children}</h3>,
+                h4: ({ children }) => <h4 className="text-base font-medium mt-2 mb-1">{children}</h4>,
+                h5: ({ children }) => <h5 className="text-sm font-medium mt-1 mb-1">{children}</h5>,
+                h6: ({ children }) => <h6 className="text-xs font-medium mt-1 mb-1">{children}</h6>,
+
+                // Lists
+                ul: ({ children }) => <ul className="list-disc ml-6">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal ml-6">{children}</ol>,
                 li: ({ children }) => <li className="ml-2">{children}</li>,
-                p: ({ children }) => <p className="mb-2">{children}</p>,
+
+                // Paragraphs
+                p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
+
+                // Blockquotes
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">{children}</blockquote>
+                ),
+
+                // Code Blocks (Inline)
+                code: ({ children }) => (
+                  <code className="bg-gray-800 text-yellow-300 px-1 rounded">{children}</code>
+                ),
+
+                // Preformatted Multi-line Code Blocks
+                pre: ({ children }) => (
+                  <pre className="bg-gray-900 text-gray-300 p-3 rounded-md overflow-x-auto">{children}</pre>
+                ),
+
+                // Strong/Bold
+                strong: ({ children }) => <strong className="font-bold text-gray-200">{children}</strong>,
+
+                // Italics
+                em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
               }}
             >
               {msg.text}

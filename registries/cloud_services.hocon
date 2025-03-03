@@ -127,7 +127,7 @@ You can handle managed databases, NoSQL databases, and database optimization.
         {
             "name": "security_agent",
             "llm_config": {
-                "model_name": "nvidia-llama-3.1-405b-instruct",
+                "model_name": "nvidia-llama-3.1-70b-instruct",
                 "verbose": true
             },
             "function": "aaosa_call",
@@ -154,7 +154,7 @@ You can handle cloud service compliance.
         {
             "name": "threat_detection_agent",
             "llm_config": {
-                "model_name": "nvidia-llama-3.1-405b-instruct",
+                "model_name": "nvidia-llama-3.1-70b-instruct",
                 "verbose": true
             },
             "function": "aaosa_call",

@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { FaDownload } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
 
 type LogEntry = {
   timestamp: string;
   message: string;
-  source: string; // Identifies log source: FastAPI, Neuro-SAN, or Frontend
+  source: string; // Identifies log source: FastAPI, NeuroSan, or Frontend
 };
 
 // Get formatted timestamp
@@ -35,35 +35,9 @@ const LogsPanel = () => {
     };
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
-    // SSE for log history
-    const eventSource = new EventSource(`http://localhost:${apiPort}/api/v1/ws/logs-stream`);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data: LogEntry = JSON.parse(event.data);
-        if (data.timestamp && data.message) {
-          setLogs((prev) => {
-            // Avoid duplicate logs
-            if (!prev.some((log) => log.timestamp === data.timestamp && log.message === data.message)) {
-              return [...prev, data];
-            }
-            return prev;
-          });
-        }
-      } catch (error) {
-        console.error("Error parsing SSE log:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.error("SSE connection error.");
-      eventSource.close();
-    };
-
     // Cleanup function
     return () => {
       ws.close();
-      eventSource.close();
     };
   }, []);
 
@@ -94,7 +68,7 @@ const LogsPanel = () => {
           logs.map((log, index) => (
             <p key={index} className="text-sm text-gray-300">
               <span className="text-gray-400">[{log.timestamp}]</span>
-              <span className={`font-semibold ${log.source === "Neuro-SAN" ? "text-yellow-500" : "text-blue-500"}`}>
+              <span className={`font-semibold ${log.source === "NeuroSan" ? "text-yellow-500" : "text-blue-500"}`}>
                 {" "}
                 ({log.source})
               </span>

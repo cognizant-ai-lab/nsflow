@@ -1,11 +1,13 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
-  MiniMap,
   useEdgesState,
   useNodesState,
   useReactFlow,
+  Node,
+  Edge,
+  EdgeMarkerType,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import AgentNode from "./AgentNode";
@@ -15,11 +17,28 @@ import { useApiPort } from "../context/ApiPortContext";
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
 
+// Define an interface for extended nodes (used in the layout)
+interface ExtendedNode extends Node {
+  style?: {
+    width?: number;
+    height?: number;
+  };
+  data: any;
+  children: ExtendedNode[];
+  parent?: ExtendedNode;
+  depth: number;
+  position: { x: number; y: number };
+}
+
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiPort } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
+
+  // ** State for highlighting active agents & edges **
+  const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
+  const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
   // ** State for actual values (used in API calls) **
   const [baseRadius, setBaseRadius] = useState(140);
@@ -36,32 +55,99 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       .then((res) => res.json())
       .then((data) => {
         const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
-          data.nodes, data.edges, baseRadius, levelSpacing);
+          data.nodes,
+          data.edges,
+          baseRadius,
+          levelSpacing
+        );
 
-        setNodes(arrangedNodes);
+        setNodes(arrangedNodes as Node<any>[]);
         setEdges(
-          arrangedEdges.map((edge) => ({
+          arrangedEdges.map((edge: Edge) => ({
             ...edge,
             type: "floating",
             animated: true,
-            markerEnd: { type: "arrowclosed" },
+            markerEnd: "arrowclosed" as EdgeMarkerType,
           }))
         );
         fitView();
       })
       .catch((err) => console.error("Error loading network:", err));
-  }, [selectedNetwork, baseRadius, levelSpacing]); // API call only on final values
+  }, [selectedNetwork, baseRadius, levelSpacing]);
 
-  // ** Updates the actual values only when scrubbing stops **
-  const handleSliderChange = (setter, setTempSetter) => (event) => {
+  useEffect(() => {
+    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs`);
+
+    ws.onopen = () => console.log("Logs WebSocket Connected.");
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        // Validate the outer JSON message
+        if (!isValidJson(event.data)) {
+          console.error("Invalid JSON received:", event.data);
+          return;
+        }
+
+        const data = JSON.parse(event.data);
+        if (data.message && isValidJson(data.message)) {
+          const logMessage = JSON.parse(data.message);
+          if (logMessage.otrace) {
+            // Ensure the otrace array is treated as an array of strings.
+            const newActiveAgents = new Set<string>(logMessage.otrace);
+            setActiveAgents(newActiveAgents);
+
+            // ** Generate active edges from the agent sequence **
+            if (logMessage.otrace.length > 1) {
+              const newActiveEdges = new Set<string>();
+              for (let i = 0; i < logMessage.otrace.length - 1; i++) {
+                newActiveEdges.add(`${logMessage.otrace[i]}-${logMessage.otrace[i + 1]}`);
+              }
+              setActiveEdges(newActiveEdges);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket log message:", error);
+      }
+    };
+
+    ws.onclose = () => console.log("Logs WebSocket Disconnected");
+
+    return () => ws.close();
+  }, [apiPort]);
+
+  // Utility function to validate JSON
+  const isValidJson = (str: string): boolean => {
+    try {
+      JSON.parse(str);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  // ** Updates the temporary value on slider change **
+  const handleSliderChange = (
+    _setter: React.Dispatch<React.SetStateAction<number>>, // unused; prefix with _ to indicate so
+    setTempSetter: React.Dispatch<React.SetStateAction<number>>
+  ) => (event: React.ChangeEvent<HTMLInputElement>) => {
     setTempSetter(Number(event.target.value));
   };
 
-  const handleSliderRelease = (setter, value) => () => {
-    setter(value); // API call only when slider is released
+  // ** Updates the actual value when scrubbing stops **
+  const handleSliderRelease = (
+    setter: React.Dispatch<React.SetStateAction<number>>,
+    value: number
+  ) => () => {
+    setter(value);
   };
 
-  const hierarchicalRadialLayout = (nodes, edges, BASE_RADIUS, LEVEL_SPACING) => {
+  // ** A hierarchical radial layout for nodes **
+  const hierarchicalRadialLayout = (
+    nodes: any[],
+    edges: any[],
+    BASE_RADIUS: number,
+    LEVEL_SPACING: number
+  ): { nodes: ExtendedNode[]; edges: any[] } => {
     if (!Array.isArray(nodes) || !Array.isArray(edges)) {
       console.error("Invalid nodes or edges:", nodes, edges);
       return { nodes: [], edges: [] };
@@ -70,11 +156,14 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     console.log("Received nodes and edges:", { nodes, edges });
 
     // **🔧 Dynamic node size calculation**
-    const nodeDimensions = nodes.map(node => ({
+    const nodeDimensions = nodes.map((node) => ({
       width: node.style?.width || 100,
       height: node.style?.height || 50,
     }));
-    const NODE_SIZE = Math.max(...nodeDimensions.map(n => n.width), ...nodeDimensions.map(n => n.height));
+    const NODE_SIZE = Math.max(
+      ...nodeDimensions.map((n) => n.width),
+      ...nodeDimensions.map((n) => n.height)
+    );
     const PADDING = NODE_SIZE * 0.4;
 
     console.log(`📏 NODE_SIZE: ${NODE_SIZE}, PADDING: ${PADDING}`);
@@ -85,45 +174,54 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       return { nodes, edges };
     }
 
-    const nodeMap = new Map(
-      nodes.map((node) => [node.id, { ...node, children: [], depth: -1, position: { x: 0, y: 0 } }])
+    // Create a map of ExtendedNodes.
+    const nodeMap = new Map<string, ExtendedNode>(
+      nodes.map((node: any) => [
+        node.id,
+        {...node,children: [],depth: -1,position: { x: 0, y: 0 },} as ExtendedNode,])
     );
 
-    edges.forEach(({ source, target }) => {
+    // Build parent-child relationships.
+    edges.forEach(({ source, target }: { source: string; target: string }) => {
       if (nodeMap.has(target) && nodeMap.has(source)) {
-        nodeMap.get(target).parent = nodeMap.get(source);
-        nodeMap.get(source).children.push(nodeMap.get(target));
+        const parentNode = nodeMap.get(source)!;
+        const childNode = nodeMap.get(target)!;
+        childNode.parent = parentNode;
+        parentNode.children.push(childNode);
       }
     });
 
-    const setDepth = (node, depth = 0) => {
+    // Set depth for each node recursively.
+     const setDepth = (node: ExtendedNode, depth: number = 0): void => {
       node.depth = depth;
-      node.children.forEach((child) => setDepth(child, depth + 1));
+       node.children.forEach((child: ExtendedNode) => setDepth(child, depth + 1));
     };
-    setDepth(nodeMap.get(rootNode.id));
+     setDepth(nodeMap.get(rootNode.id)!);
 
-    const levelMap = new Map();
+    // Organize nodes by depth level.
+    const levelMap = new Map<number, ExtendedNode[]>();
     Array.from(nodeMap.values()).forEach((node) => {
       if (!levelMap.has(node.depth)) levelMap.set(node.depth, []);
-      levelMap.get(node.depth).push(node);
+      levelMap.get(node.depth)!.push(node);
     });
 
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
-    rootNode.position = { x: centerX, y: centerY };
+    // Set the root node's position at the center.
+    nodeMap.get(rootNode.id)!.position = { x: centerX, y: centerY };
 
+    // Arrange nodes for each level (depth).
     levelMap.forEach((nodesAtLevel, depth) => {
       if (depth === 0) return;
 
       const parentNodes = levelMap.get(depth - 1) || [];
       const angleStep = (2 * Math.PI) / Math.max(nodesAtLevel.length, 3);
 
-      nodesAtLevel.forEach((node, index) => {
+      nodesAtLevel.forEach((node: ExtendedNode, index: number) => {
         const parent = node.parent || parentNodes[Math.floor(index / 2)];
         const parentX = parent.position.x;
         const parentY = parent.position.y;
         const radius = BASE_RADIUS + depth * LEVEL_SPACING;
-
         const angle = index * angleStep;
         node.position = {
           x: parentX + radius * Math.cos(angle),
@@ -149,19 +247,25 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       <button
         className="absolute top-2 left-2 p-1 text-xs bg-blue-500 opacity-80 hover:bg-blue-600 text-white rounded-md shadow-md transition-all z-20"
         onClick={() => {
-          const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(nodes, edges, baseRadius, levelSpacing);
+          const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
+            nodes,
+            edges,
+            baseRadius,
+            levelSpacing
+          );
           setNodes(arrangedNodes);
           setEdges(arrangedEdges);
           fitView();
-        }}>
+        }}
+      >
         Auto Arrange
       </button>
 
       {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
       <div className="slider-container">
         <div className="slider-group">
-            <label>Base Radius: {tempBaseRadius}px</label>
-            <input
+          <label>Base Radius: {tempBaseRadius}px</label>
+          <input
             type="range"
             min="10"
             max="300"
@@ -169,11 +273,11 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             onChange={handleSliderChange(setBaseRadius, setTempBaseRadius)}
             onMouseUp={handleSliderRelease(setBaseRadius, tempBaseRadius)}
             onTouchEnd={handleSliderRelease(setBaseRadius, tempBaseRadius)}
-            />
+          />
         </div>
         <div className="slider-group">
-            <label>Level Spacing: {tempLevelSpacing}px</label>
-            <input
+          <label>Level Spacing: {tempLevelSpacing}px</label>
+          <input
             type="range"
             min="10"
             max="300"
@@ -181,14 +285,23 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             onChange={handleSliderChange(setLevelSpacing, setTempLevelSpacing)}
             onMouseUp={handleSliderRelease(setLevelSpacing, tempLevelSpacing)}
             onTouchEnd={handleSliderRelease(setLevelSpacing, tempLevelSpacing)}
-            />
+          />
         </div>
       </div>
 
-
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={nodes.map((node) => ({
+          ...node,
+          data: { ...node.data, isActive: activeAgents.has(node.id) },
+        }))}
+        edges={edges.map((edge) => ({
+          ...edge,
+          animated: activeEdges.has(`${edge.source}-${edge.target}`),
+          style: {
+            strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 3 : 1,
+            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? "#ffcc00" : "#ffffff",
+          },
+        }))}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
@@ -196,7 +309,6 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         edgeTypes={edgeTypes}
       >
         <Background />
-        <MiniMap />
         <Controls />
       </ReactFlow>
     </div>
