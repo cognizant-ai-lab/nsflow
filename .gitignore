@@ -15,3 +15,6 @@ registries/*.hocon
 # logs
 logs
 tree.txt
+
+# Containers
+Dockerfile

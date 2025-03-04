@@ -14,7 +14,8 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12"
 readme = "README.md"
 authors = [
-    { name = "Deepak" }]
+    { name = "Deepak" }
+    ]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -23,7 +24,7 @@ classifiers = [
     #   3 - Alpha
     #   4 - Beta
     #   5 - Production/Stable
-    "Development Status :: 4 -Beta",
+    "Development Status :: 4 - Beta",
 
     "Intended Audience :: Developers",
 
@@ -52,12 +53,13 @@ where = ["."]
 # namespaces = false
 # Note: package_data is not useful here for packaging up non-python files.
 #       See MANIFEST.in instead.
-exclude = ["tests*", "frontend*", "coded_tools*", "registries*",
+exclude = ["tests*", "nsflow/frontend*", "coded_tools*", "registries*",
  "generated_notebooks*", "knowdocs*", "logs*", "wheels_private*"]
 
 [tool.setuptools_scm]
 fallback_version = "0.0.1"
 
 [project.urls]
+Homepage = "https://github.com/leaf-ai/nsflow"
 Repository = "https://github.com/leaf-ai/nsflow"
 

@@ -1,0 +1,9 @@
+# Include all package files except frontend
+graft nsflow
+prune nsflow/frontend  # Exclude frontend
+prune nsflow/logs
+prune logs
+prune generated_notebooks
+prune knowdocs
+prune wheels_private
+prune registries
