@@ -59,7 +59,10 @@ app.include_router(router)
 #     return {"message": "Welcome to SAN backend!"}
 
 # Serve Frontend on `/`
-frontend_dist_path = os.path.join(os.path.dirname(__file__), "build_fe", "dist")
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+# Move up to `nsflow/`
+project_root = os.path.dirname(backend_dir)  
+frontend_dist_path = os.path.join(project_root, "prebuilt_frontend", "dist")
 if not DEV_MODE and os.path.exists(frontend_dist_path):
     logging.info(f"Serving frontend from {frontend_dist_path}")
     app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
