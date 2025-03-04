@@ -13,16 +13,18 @@ logging.basicConfig(level=logging.INFO)
 # Load environment variables from .env
 root_dir = os.getcwd()
 env_path = os.path.join(root_dir, ".env")
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-    logging.info(f"Loaded environment variables from {env_path}")
-else:
-    logging.warning(f"No .env file found at {env_path}. Using default values.")
+# Load environment variables only if not already loaded
+if "DEV_MODE" not in os.environ:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        logging.info(f"Loaded environment variables from {env_path}")
+    else:
+        logging.warning(f"No .env file found at {env_path}. Using default values.")
 
 # Get configurations from the environment
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
-API_PORT = int(os.getenv("API_PORT", 4173))  # Default production port
-DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"  # Use "8005" if `--dev` is set
+API_PORT = int(os.getenv("API_PORT", 4173))
+DEV_MODE = os.getenv("DEV_MODE", "").strip().lower() == "true"
 LOG_LEVEL = os.getenv("API_LOG_LEVEL", "info")
 
 if DEV_MODE:
@@ -58,11 +60,13 @@ app.include_router(router)
 # def read_root():
 #     return {"message": "Welcome to SAN backend!"}
 
-# Serve Frontend on `/`
+
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 # Move up to `nsflow/`
 project_root = os.path.dirname(backend_dir)  
 frontend_dist_path = os.path.join(project_root, "prebuilt_frontend", "dist")
+logging.info(f"frontend_dist_path: {frontend_dist_path}")
+# Serve Frontend on `/` when
 if not DEV_MODE and os.path.exists(frontend_dist_path):
     logging.info(f"Serving frontend from {frontend_dist_path}")
     app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")

@@ -32,6 +32,7 @@ classifiers = [
     # "License :: XXX :: XXX"
 ]
 
+dynamic = ["dependencies"]
 
 [tool.setuptools.dynamic]
 # Specify the dependencies for the library from what is given in requirements.txt

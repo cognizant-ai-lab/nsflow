@@ -1,9 +1,12 @@
 # Include all package files except frontend
-graft nsflow
-prune nsflow/frontend  # Exclude frontend
-prune nsflow/logs
-prune logs
-prune generated_notebooks
-prune knowdocs
-prune wheels_private
-prune registries
+
+recursive-include nsflow *
+recursive-exclude nsflow/frontend *
+recursive-exclude nsflow/logs *
+recursive-exclude logs *
+recursive-exclude tests *
+recursive-exclude generated_notebooks *
+recursive-exclude knowdocs *
+recursive-exclude wheels_private *
+recursive-exclude registries *
+recursive-exclude coded_tools *

@@ -20,7 +20,7 @@ echo "Running Python build..."
 cd "$PROJECT_ROOT" || { echo "Error: Could not navigate to project root."; exit 1; }
 
 # Allows users to pass additional build arguments
-python -m build "$@"
+python -m build --wheel "$@"
 
 # Step 4: Verify the contents of the built wheel
 echo "Verifying wheel contents..."
