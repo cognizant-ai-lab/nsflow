@@ -54,6 +54,8 @@ class NsFlowRunner:
 
         # Parse CLI args
         self.config = self.parse_args()
+        if self.config["dev"]:
+            os.environ["DEV_MODE"] = "True"
 
     def load_env_variables(self):
         """Load .env file from project root and set variables."""

@@ -24,10 +24,11 @@ if "DEV_MODE" not in os.environ:
 # Get configurations from the environment
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
 API_PORT = int(os.getenv("API_PORT", 4173))
-DEV_MODE = os.getenv("DEV_MODE", "").strip().lower() == "true"
+DEV_MODE = os.getenv("DEV_MODE", "False").strip().lower() == "true"
 LOG_LEVEL = os.getenv("API_LOG_LEVEL", "info")
 
 if DEV_MODE:
+    logging.info(f"DEV_MODE: {DEV_MODE}")
     API_PORT = 8005  # Switch to port 8005 in dev mode
     logging.info("Running in **DEV MODE** - Using FastAPI on port 8005")
 

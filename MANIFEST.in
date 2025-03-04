@@ -10,3 +10,4 @@ recursive-exclude knowdocs *
 recursive-exclude wheels_private *
 recursive-exclude registries *
 recursive-exclude coded_tools *
+include .env.example
