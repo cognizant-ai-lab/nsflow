@@ -7,6 +7,7 @@ import threading
 import socket
 import logging
 import time
+from dotenv import load_dotenv
 
 class NsFlowRunner:
     """Manages the Neuro SAN server and FastAPI backend."""
@@ -16,20 +17,32 @@ class NsFlowRunner:
         self.server_process = None
         self.fastapi_process = None
 
+        # Ensure correct paths
+        self.root_dir = os.getcwd()
+        logging.info(f"root: {self.root_dir}")
+
+        # Load environment variables from .env
+        self.load_env_variables()
+
         # Default Configuration
-        self.ns_server_host = "localhost"
-        self.ns_server_port = 30015
-        self.ns_agent_name = "airline_policy"
-        self.api_host = "localhost"
-        self.api_port = 8005
-        self.api_log_level = "info"
+        self.ns_server_host = os.getenv("NS_SERVER_HOST", "localhost")
+        self.ns_server_port = int(os.getenv("NS_SERVER_PORT", 30015))
+        self.api_host = os.getenv("API_HOST", "localhost")
+        self.api_port = int(os.getenv("API_PORT", 4173))
+        self.api_log_level = os.getenv("API_LOG_LEVEL", "info")
         self.thinking_file = "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt"
 
-        self.config = self.parse_args()
+
+        # Ensure all paths are resolved relative to `self.root_dir`
+        self.agent_manifest_file = os.getenv("AGENT_MANIFEST_FILE", 
+                                             os.path.join(self.root_dir, "registries", "manifest.hocon"))
+        self.agent_tool_path = os.getenv("AGENT_TOOL_PATH", 
+                                         os.path.join(self.root_dir, "coded_tools"))
+
+        self.log_dir = os.path.join(self.root_dir, "logs")
+        os.makedirs(self.log_dir, exist_ok=True)
 
         # Set up logging
-        self.log_dir = "logs"
-        os.makedirs(self.log_dir, exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(message)s",
@@ -38,6 +51,18 @@ class NsFlowRunner:
                 logging.FileHandler(os.path.join(self.log_dir, "runner.log"), mode="a")
             ]
         )
+
+        # Parse CLI args
+        self.config = self.parse_args()
+
+    def load_env_variables(self):
+        """Load .env file from project root and set variables."""
+        env_path = os.path.join(self.root_dir, ".env")
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            logging.info(f"Loaded environment variables from {env_path}")
+        else:
+            logging.warning(f"No .env file found at {env_path}. \nUsing defaults.\n")
 
     def parse_args(self):
         """Parses command-line arguments for configuration."""
@@ -53,6 +78,8 @@ class NsFlowRunner:
                             help="FastAPI server port")
         parser.add_argument('--log-level', type=str, default=self.api_log_level, 
                             help="Log level for FastAPI")
+        parser.add_argument('--dev', action='store_true', 
+                            help="Use dev port for FastAPI")
         parser.add_argument('--demo-mode', action='store_true', 
                             help="Run in demo mode with default Neuro SAN settings")
 
@@ -60,15 +87,15 @@ class NsFlowRunner:
 
     def set_environment_variables(self):
         """Set required environment variables."""
-        os.environ["PYTHONPATH"] = os.getcwd()
+        os.environ["PYTHONPATH"] = self.root_dir
 
         if self.config["demo_mode"]:
             os.environ.pop("AGENT_MANIFEST_FILE", None)
             os.environ.pop("AGENT_TOOL_PATH", None)
             print("Running in **Demo Mode** - Using default neuro-san settings")
         else:
-            os.environ["AGENT_MANIFEST_FILE"] = "./registries/manifest.hocon"
-            os.environ["AGENT_TOOL_PATH"] = "./coded_tools"
+            os.environ["AGENT_MANIFEST_FILE"] = self.agent_manifest_file
+            os.environ["AGENT_TOOL_PATH"] = self.agent_tool_path
 
         logging.info(f"AGENT_MANIFEST_FILE: {os.getenv('AGENT_MANIFEST_FILE')}")
         logging.info(f"AGENT_TOOL_PATH: {os.getenv('AGENT_TOOL_PATH')}")
@@ -130,9 +157,10 @@ class NsFlowRunner:
 
         # Check if the port is available, otherwise find the next free one
         # self.config["api_port"] = self.find_available_port(self.config["api_port"])
-
+        if self.config["dev"]:
+            self.config["api_port"] = 8005
         command = [
-            sys.executable, "-m", "uvicorn", "backend.main:app",
+            sys.executable, "-m", "uvicorn", "nsflow.backend.main:app",
             "--host", self.config["api_host"],
             "--port", str(self.config["api_port"]),
             "--log-level", self.config["log_level"],
@@ -180,7 +208,7 @@ class NsFlowRunner:
         time.sleep(3)  # Allow some time for Neuro SAN to initialize
 
         self.start_fastapi()
-        logging.info("NsFlowRunner is now running.")
+        logging.info("NSFlow is now running.")
 
         # Wait for both processes
         self.server_process.wait()

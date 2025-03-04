@@ -9,16 +9,26 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tempPort, setTempPort] = useState(apiPort);
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:${apiPort}/api/v1/networks/`)
-      .then((res) => res.json())
-      .then((data) => {
+    setTempPort(apiPort);
+  }, [apiPort]);
+
+  useEffect(() => {
+    const fetchNetworks = async () => {
+      setLoading(true);
+      setError(""); // Reset error
+      try {
+        const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/networks/`);
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        const data = await response.json();
         setNetworks(data.networks);
+      } catch (err) {
+        setError(`Failed to load agent networks. ${err}`);
+      } finally {
         setLoading(false);
-      })
-      .catch((err) => {
-        setError(`Failed to load agent networks.${err}`);
-        setLoading(false);
-      });
+      }
+    };
+
+    fetchNetworks();
   }, [apiPort]);
 
   return (

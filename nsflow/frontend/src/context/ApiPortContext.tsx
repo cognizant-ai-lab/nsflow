@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext } from "react";
 
-const DEFAULT_PORT = 8005;
+const DEFAULT_PORT = 4173;
 
 type ApiPortContextType = {
   apiPort: number;

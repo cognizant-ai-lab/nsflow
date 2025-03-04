@@ -39,7 +39,6 @@ build:
 	@cp -r frontend/dist/. $(FRONTEND_BUILD_PATH)
 	@echo '==== Completed Building Frontend ===='
 	@echo "=== Building Backend ==="
-	cd backend 
 	uv lock 
 	uv build $(args)
 	@echo '==== Completed Building Backend ===='
