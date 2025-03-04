@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Set frontend build path
-FRONTEND_BUILD_PATH="nsflow/prebuilt_frontend"
+# Set paths
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRONTEND_SRC_PATH="$PROJECT_ROOT/nsflow/frontend"
+FRONTEND_BUILD_PATH="$PROJECT_ROOT/nsflow/prebuilt_frontend"
 
 # Function to clean directories
 clean_dirs() {
@@ -23,16 +25,16 @@ add_init_files() {
 
 # Build frontend
 echo "=== Building Frontend ==="
-cd nsflow/frontend || { echo "Error: Could not navigate to 'frontend' directory."; exit 1; }
+pushd "$FRONTEND_SRC_PATH" || { echo "Error: Could not navigate to frontend directory."; exit 1; }
 
 CI='' yarn build 2>&1 || { echo -e "\nBuild failed."; exit 1; }
 
-cd ../..  # Move back to project root
+popd  # Return to the original directory
 
 # Clean and move frontend build files
 clean_dirs "$FRONTEND_BUILD_PATH"
 echo "Moving build files to $FRONTEND_BUILD_PATH..."
-cp -r nsflow/frontend/dist/. "$FRONTEND_BUILD_PATH"
+cp -r "$FRONTEND_SRC_PATH/dist/." "$FRONTEND_BUILD_PATH"
 
 # Add __init__.py to all directories inside frontend build
 add_init_files "$FRONTEND_BUILD_PATH"
