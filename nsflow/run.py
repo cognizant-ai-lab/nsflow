@@ -157,8 +157,6 @@ class NsFlowRunner:
 
         # Check if the port is available, otherwise find the next free one
         # self.config["api_port"] = self.find_available_port(self.config["api_port"])
-        if self.config["dev"]:
-            self.config["api_port"] = 8005
         command = [
             sys.executable, "-m", "uvicorn", "nsflow.backend.main:app",
             "--host", self.config["api_host"],
@@ -192,6 +190,8 @@ class NsFlowRunner:
 
     def run(self):
         """Run the Neuro SAN server and FastAPI backend."""
+        if self.config["dev"]:
+            self.config["api_port"] = 8005
         logging.info("Starting Backend System...")
         logging.info("\nRun Config:\n" + "\n".join(f"{key}: {value}" for key, value in self.config.items()) + "\n")
 
