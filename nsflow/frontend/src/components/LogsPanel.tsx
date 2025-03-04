@@ -19,6 +19,13 @@ const LogsPanel = () => {
   ]);
 
   useEffect(() => {
+    if (!apiPort) return; // Prevents WebSocket from connecting before port is set
+
+    setLogs((prevLogs) => [
+      ...prevLogs,
+      { timestamp: getCurrentTimestamp(), source: "Frontend", message: `Connected to API on port ${apiPort}` },
+    ]);
+
     // WebSocket for real-time logs
     const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs`);
 
@@ -39,7 +46,7 @@ const LogsPanel = () => {
     return () => {
       ws.close();
     };
-  }, []);
+  }, [apiPort]);
 
   const downloadLogs = () => {
     const logText = logs

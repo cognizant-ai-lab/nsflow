@@ -2,6 +2,7 @@
 __pycache__/
 *.py[oc]
 build/
+build_fe/
 dist/
 wheels/
 wheels_private/
@@ -13,3 +14,4 @@ registries/*.hocon
 
 # logs
 logs
+tree.txt
