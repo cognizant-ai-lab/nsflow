@@ -39,7 +39,7 @@ cd "$PROJECT_ROOT"
 # Clean and move frontend build files
 clean_dirs "$FRONTEND_BUILD_PATH"
 echo "Moving build files to $FRONTEND_BUILD_PATH..."
-cp -r "$FRONTEND_SRC_PATH/dist/." "$FRONTEND_BUILD_PATH"
+cp -r "$FRONTEND_SRC_PATH/dist/." "$FRONTEND_BUILD_PATH/dist"
 
 # Add __init__.py to all directories inside frontend build
 add_init_files "$FRONTEND_BUILD_PATH"
