@@ -1,9 +1,13 @@
 #!/bin/bash
 
-# Set paths
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Move up one directory to set correct project root
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND_SRC_PATH="$PROJECT_ROOT/nsflow/frontend"
 FRONTEND_BUILD_PATH="$PROJECT_ROOT/nsflow/prebuilt_frontend"
+
+echo "PROJECT_ROOT: $PROJECT_ROOT"
+echo "FRONTEND_SRC_PATH: $FRONTEND_SRC_PATH"
+echo "FRONTEND_BUILD_PATH: $FRONTEND_BUILD_PATH"
 
 # Function to clean directories
 clean_dirs() {
@@ -25,11 +29,12 @@ add_init_files() {
 
 # Build frontend
 echo "=== Building Frontend ==="
-pushd "$FRONTEND_SRC_PATH" || { echo "Error: Could not navigate to frontend directory."; exit 1; }
+cd "$FRONTEND_SRC_PATH" || { echo "Error: Could not navigate to frontend directory."; exit 1; }
 
 CI='' yarn build 2>&1 || { echo -e "\nBuild failed."; exit 1; }
 
-popd  # Return to the original directory
+# Return to the project root
+cd "$PROJECT_ROOT"
 
 # Clean and move frontend build files
 clean_dirs "$FRONTEND_BUILD_PATH"
