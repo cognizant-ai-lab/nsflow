@@ -36,7 +36,7 @@ API_PORT = int(os.getenv("API_PORT", "4173"))
 
 
 @asynccontextmanager
-async def lifespan():
+async def lifespan(_app: FastAPI):
     """Handles the startup and shutdown of the FastAPI application."""
     logging.info("FastAPI is starting up...")
     try:
