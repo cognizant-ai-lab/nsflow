@@ -1,11 +1,12 @@
 import os
-import uvicorn
 import logging
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
+
 from nsflow.backend.api.router import router
 
 logging.basicConfig(level=logging.INFO)
@@ -17,23 +18,25 @@ env_path = os.path.join(root_dir, ".env")
 if "DEV_MODE" not in os.environ:
     if os.path.exists(env_path):
         load_dotenv(env_path)
-        logging.info(f"Loaded environment variables from {env_path}")
+        logging.info("Loaded environment variables from: %s", env_path)
     else:
-        logging.warning(f"No .env file found at {env_path}. Using default values.")
+        logging.warning("No .env file found at %s. Using default values.", env_path)
 
 # Get configurations from the environment
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
-API_PORT = int(os.getenv("API_PORT", 4173))
 DEV_MODE = os.getenv("DEV_MODE", "False").strip().lower() == "true"
 LOG_LEVEL = os.getenv("API_LOG_LEVEL", "info")
-
 if DEV_MODE:
-    logging.info(f"DEV_MODE: {DEV_MODE}")
-    API_PORT = 8005  # Switch to port 8005 in dev mode
-    logging.info("Running in **DEV MODE** - Using FastAPI on port 8005")
+    logging.info("DEV_MODE: %s", DEV_MODE)
+    os.environ["API_PORT"] = "8005"
+    logging.info("Running in **DEV MODE** - Using FastAPI on default dev port.")
+else:
+    logging.info("Running in **DEV MODE** - Using FastAPI on default dev port.")
+API_PORT = int(os.getenv("API_PORT", "4173"))
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan():
     """Handles the startup and shutdown of the FastAPI application."""
     logging.info("FastAPI is starting up...")
     try:
@@ -64,12 +67,12 @@ app.include_router(router)
 
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 # Move up to `nsflow/`
-project_root = os.path.dirname(backend_dir)  
+project_root = os.path.dirname(backend_dir)
 frontend_dist_path = os.path.join(project_root, "prebuilt_frontend", "dist")
-logging.info(f"frontend_dist_path: {frontend_dist_path}")
+logging.info("frontend_dist_path: %s", frontend_dist_path)
 # Serve Frontend on `/` when
 if not DEV_MODE and os.path.exists(frontend_dist_path):
-    logging.info(f"Serving frontend from {frontend_dist_path}")
+    logging.info("Serving frontend from: %s", frontend_dist_path)
     app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
 else:
     logging.info("DEV MODE: Skipping frontend serving.")

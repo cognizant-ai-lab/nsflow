@@ -1,10 +1,8 @@
+import logging
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pathlib import Path
 import nbformat as nbf
-from pyhocon import ConfigFactory
-import json
-import logging
 
 router = APIRouter(prefix="/api/v1/export")
 
@@ -26,15 +24,12 @@ def generate_notebook(agent_network: str) -> Path:
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Agent network '{agent_network}' not found.")
 
-    # Read and parse HOCON file
-    config = ConfigFactory.parse_file(str(file_path))
-    
     # Create Jupyter notebook cells
     cells = []
 
     # Markdown Header
     cells.append(nbf.v4.new_markdown_cell(f"# Agent Network: {agent_network}"))
-    
+
     # Install dependencies
     cells.append(nbf.v4.new_code_cell(
         "## Uncomment and run the following line if pyhocon and pyvis are not installed\n"
@@ -83,10 +78,10 @@ def generate_notebook(agent_network: str) -> Path:
 
     # Save notebook to disk
     notebook_filename = NOTEBOOK_DIR / f"{agent_network}.ipynb"
-    with open(notebook_filename, "w") as f:
+    with open(notebook_filename, "w", encoding="utf-8") as f:
         nbf.write(notebook, f)
 
-    logging.info(f"Generated notebook: {notebook_filename}")
+    logging.info("Generated notebook: %s", notebook_filename)
     return notebook_filename
 
 

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException
-from pyhocon import ConfigFactory
 from pathlib import Path
 import logging
+from fastapi import APIRouter, HTTPException
+from pyhocon import ConfigFactory
 
 logging.basicConfig(level=logging.INFO)
 
@@ -10,8 +10,13 @@ router = APIRouter(prefix="/api/v1")
 # Define the registries directory
 REGISTRY_DIR = Path.cwd() / "registries"
 
+
 def get_manifest_path():
+    """
+    Get the manifest.hocon path
+    """
     return REGISTRY_DIR / "manifest.hocon"
+
 
 def list_available_networks():
     """Lists available networks from the manifest file."""
@@ -28,10 +33,12 @@ def list_available_networks():
 
     return {"networks": networks}
 
+
 @router.get("/networks/")
 def get_networks():
     """Returns a list of available agent networks."""
     return list_available_networks()
+
 
 def parse_agent_network(file_path: Path):
     """Parses an agent network from a HOCON configuration file."""
@@ -88,7 +95,7 @@ def parse_agent_network(file_path: Path):
                 "children": child_nodes,
                 "dropdown_tools": dropdown_tools
             },
-            "position": {"x": 100, "y": 100},  
+            "position": {"x": 100, "y": 100},
         })
 
         agent_details[agent_id] = {
@@ -112,9 +119,10 @@ def parse_agent_network(file_path: Path):
 
     return {"nodes": nodes, "edges": edges, "agent_details": agent_details}
 
+
 @router.get("/network/{network_name}")
 def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
     file_path = REGISTRY_DIR / f"{network_name}.hocon"
-    logging.info(f"file_path: {file_path}")
+    logging.info("file_path: %s", file_path)
     return parse_agent_network(file_path)
