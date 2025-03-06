@@ -171,7 +171,7 @@ class NsFlowRunner:
         self.fastapi_process = self.start_process(command, "FastAPI", os.path.join(self.log_dir, "api.log"))
         logging.info("FastAPI started on port: %s", self.config['api_port'])
 
-    def signal_handler(self):
+    def signal_handler(self, signum, frame):
         """Handle termination signals for cleanup."""
         logging.info("\nTermination signal received. Stopping all processes...")
 
@@ -197,7 +197,7 @@ class NsFlowRunner:
             self.config["api_port"] = 8005
         logging.info("Starting Backend System...")
         log_config_blob = "\n".join(f"{key}: {value}" for key, value in self.config.items())
-        logging.info("\nRun Config:\n %s \n", log_config_blob)
+        logging.info("\nRun Config:\n%s\n", log_config_blob)
 
         # Set environment variables
         self.set_environment_variables()
