@@ -1,6 +1,6 @@
 # NSFlow - A FastAPI based client for NeuroSan
 
-NSFlow is a framework that enables users to explore, visualize, and interact with smart agent networks. It integrates **Neuro-SAN** for intelligent agent-based interactions.
+NSFlow is a framework that enables users to explore, visualize, and interact with smart agent networks. It integrates **NeuroSan** for intelligent agent-based interactions.
 
 ![Project Logo](docs/snapshot01.png)
 
@@ -30,7 +30,7 @@ python -m nsflow run
 ```
 
 By default, this will start:
-- **backend** (FastAPI + Neuro-SAN) here: `http://127.0.0.1:4173/docs` or `http://127.0.0.1:4173/redoc`
+- **backend** (FastAPI + NeuroSan) here: `http://127.0.0.1:4173/docs` or `http://127.0.0.1:4173/redoc`
 - **frontend** (React) here: `http://127.0.0.1:4173`
 
 ---
