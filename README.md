@@ -9,7 +9,7 @@ NSFlow is a framework that enables users to explore, visualize, and interact wit
 
 NSFlow can be installed and run in **three different ways:**
 
-### **1️⃣ Run with NSFlow CLI**
+### **1️⃣ Run NSFlow using git repo**
 To simplify execution, NSFlow provides a CLI command to start both the backend and frontend simultaneously.
 
 #### **Step 1: Clone the repository**
@@ -17,7 +17,7 @@ To simplify execution, NSFlow provides a CLI command to start both the backend a
 git clone https://github.com/leaf-ai/nsflow.git
 ```
 
-#### **Step 2: Install NSFlow as a Package**
+#### **Step 2: Install NSFlow dependencies**
 ```bash
 python -m venv .venv
 source .venv/bin/activate
