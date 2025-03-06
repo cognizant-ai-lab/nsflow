@@ -5,8 +5,10 @@ recursive-exclude nsflow/frontend *
 recursive-exclude nsflow/logs *
 recursive-exclude logs *
 recursive-exclude tests *
+recursive-exclude docs *
 recursive-exclude generated_notebooks *
 recursive-exclude knowdocs *
 recursive-exclude wheels_private *
 recursive-exclude registries *
 recursive-exclude coded_tools *
+include .env.example

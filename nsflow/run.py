@@ -9,6 +9,7 @@ import logging
 import time
 from dotenv import load_dotenv
 
+# pylint: disable=too-many-instance-attributes
 class NsFlowRunner:
     """Manages the Neuro SAN server and FastAPI backend."""
 
@@ -19,24 +20,24 @@ class NsFlowRunner:
 
         # Ensure correct paths
         self.root_dir = os.getcwd()
-        logging.info(f"root: {self.root_dir}")
+        logging.info("root: %s", self.root_dir)
 
         # Load environment variables from .env
         self.load_env_variables()
 
         # Default Configuration
         self.ns_server_host = os.getenv("NS_SERVER_HOST", "localhost")
-        self.ns_server_port = int(os.getenv("NS_SERVER_PORT", 30015))
+        self.ns_server_port = int(os.getenv("NS_SERVER_PORT", "30015"))
         self.api_host = os.getenv("API_HOST", "localhost")
-        self.api_port = int(os.getenv("API_PORT", 4173))
+        self.api_port = int(os.getenv("API_PORT", "4173"))
         self.api_log_level = os.getenv("API_LOG_LEVEL", "info")
         self.thinking_file = "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt"
 
 
         # Ensure all paths are resolved relative to `self.root_dir`
-        self.agent_manifest_file = os.getenv("AGENT_MANIFEST_FILE", 
+        self.agent_manifest_file = os.getenv("AGENT_MANIFEST_FILE",
                                              os.path.join(self.root_dir, "registries", "manifest.hocon"))
-        self.agent_tool_path = os.getenv("AGENT_TOOL_PATH", 
+        self.agent_tool_path = os.getenv("AGENT_TOOL_PATH",
                                          os.path.join(self.root_dir, "coded_tools"))
 
         self.log_dir = os.path.join(self.root_dir, "logs")
@@ -54,15 +55,17 @@ class NsFlowRunner:
 
         # Parse CLI args
         self.config = self.parse_args()
+        if self.config["dev"]:
+            os.environ["DEV_MODE"] = "True"
 
     def load_env_variables(self):
         """Load .env file from project root and set variables."""
         env_path = os.path.join(self.root_dir, ".env")
         if os.path.exists(env_path):
             load_dotenv(env_path)
-            logging.info(f"Loaded environment variables from {env_path}")
+            logging.info("Loaded environment variables from: %s", env_path)
         else:
-            logging.warning(f"No .env file found at {env_path}. \nUsing defaults.\n")
+            logging.warning("No .env file found at %s. \nUsing defaults.\n", env_path)
 
     def parse_args(self):
         """Parses command-line arguments for configuration."""
@@ -76,11 +79,11 @@ class NsFlowRunner:
                             help="Host address for the Fastapi API")
         parser.add_argument('--api-port', type=int, default=self.api_port,
                             help="FastAPI server port")
-        parser.add_argument('--log-level', type=str, default=self.api_log_level, 
+        parser.add_argument('--log-level', type=str, default=self.api_log_level,
                             help="Log level for FastAPI")
-        parser.add_argument('--dev', action='store_true', 
+        parser.add_argument('--dev', action='store_true',
                             help="Use dev port for FastAPI")
-        parser.add_argument('--demo-mode', action='store_true', 
+        parser.add_argument('--demo-mode', action='store_true',
                             help="Run in demo mode with default Neuro SAN settings")
 
         return vars(parser.parse_args())
@@ -97,8 +100,8 @@ class NsFlowRunner:
             os.environ["AGENT_MANIFEST_FILE"] = self.agent_manifest_file
             os.environ["AGENT_TOOL_PATH"] = self.agent_tool_path
 
-        logging.info(f"AGENT_MANIFEST_FILE: {os.getenv('AGENT_MANIFEST_FILE')}")
-        logging.info(f"AGENT_TOOL_PATH: {os.getenv('AGENT_TOOL_PATH')}")
+        logging.info("AGENT_MANIFEST_FILE: %s", os.getenv('AGENT_MANIFEST_FILE'))
+        logging.info("AGENT_TOOL_PATH: %s", os.getenv('AGENT_TOOL_PATH'))
 
     def find_available_port(self, start_port):
         """Find the next available port starting from `start_port`."""
@@ -106,7 +109,7 @@ class NsFlowRunner:
         while True:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 if s.connect_ex(("127.0.0.1", port)) != 0:
-                    logging.info(f"Using available port: {port}")
+                    logging.info("Using available port: %s", port)
                     return port
             port += 1
 
@@ -114,13 +117,13 @@ class NsFlowRunner:
         """Start a subprocess and capture logs."""
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if self.is_windows else 0
 
-        with open(log_file, "w") as log:
+        with open(log_file, "w", encoding="utf-8") as log:
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        text=True, bufsize=1, universal_newlines=True,
                                        preexec_fn=None if self.is_windows else os.setpgrp,
                                        creationflags=creation_flags)
 
-        logging.info(f"Started {process_name} with PID {process.pid}")
+        logging.info("Started %s with PID %s", process_name, process.pid)
 
         # Start log streaming in a thread
         threading.Thread(target=self.stream_output, args=(process.stdout, log_file, process_name)).start()
@@ -149,7 +152,7 @@ class NsFlowRunner:
             "--port", str(self.config["server_port"])
         ]
         self.server_process = self.start_process(command, "Neuro SAN", os.path.join(self.log_dir, "server.log"))
-        logging.info(f"Neuro SAN server started on port {self.config['server_port']}.")
+        logging.info("Neuro SAN server started on port: %s", self.config['server_port'])
 
     def start_fastapi(self):
         """Start FastAPI backend."""
@@ -166,21 +169,21 @@ class NsFlowRunner:
         ]
 
         self.fastapi_process = self.start_process(command, "FastAPI", os.path.join(self.log_dir, "api.log"))
-        logging.info(f"FastAPI started on port {self.config['api_port']}.")
+        logging.info("FastAPI started on port: %s", self.config['api_port'])
 
     def signal_handler(self, signum, frame):
         """Handle termination signals for cleanup."""
         logging.info("\nTermination signal received. Stopping all processes...")
 
         if self.server_process:
-            logging.info(f"Stopping Neuro SAN (PID {self.server_process.pid})...")
+            logging.info("Stopping Neuro SAN (PID: %s)...", self.server_process.pid)
             if self.is_windows:
                 self.server_process.terminate()
             else:
                 os.killpg(os.getpgid(self.server_process.pid), signal.SIGKILL)
 
         if self.fastapi_process:
-            logging.info(f"Stopping FastAPI (PID {self.fastapi_process.pid})...")
+            logging.info("Stopping FastAPI (PID: %s)...", self.fastapi_process.pid)
             if self.is_windows:
                 self.fastapi_process.terminate()
             else:
@@ -193,7 +196,8 @@ class NsFlowRunner:
         if self.config["dev"]:
             self.config["api_port"] = 8005
         logging.info("Starting Backend System...")
-        logging.info("\nRun Config:\n" + "\n".join(f"{key}: {value}" for key, value in self.config.items()) + "\n")
+        log_config_blob = "\n".join(f"{key}: {value}" for key, value in self.config.items())
+        logging.info("\nRun Config:\n%s\n", log_config_blob)
 
         # Set environment variables
         self.set_environment_variables()

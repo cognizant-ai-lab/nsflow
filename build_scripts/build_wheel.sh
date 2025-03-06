@@ -6,6 +6,12 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Project Root: $PROJECT_ROOT"
 
+# Verify test coverage
+echo ">>Test Coverage"
+pytest --cov-report term-missing --cov=nsflow
+rm .coverage
+echo ">>End of Test Coverage"
+
 # Step 1: Clean up unwanted files
 echo "Cleaning up old build artifacts..."
 find "$PROJECT_ROOT" -name "__pycache__" -type d -exec rm -rf {} +
@@ -28,7 +34,7 @@ echo "Verifying wheel contents..."
 WHEEL_FILE=$(ls -t "$PROJECT_ROOT/dist/"*.whl | head -n 1)
 if [[ -f "$WHEEL_FILE" ]]; then
     echo "Built Wheel: $WHEEL_FILE"
-    unzip -l "$WHEEL_FILE" | grep -E "frontend|backend"
+    zipinfo -ls "$WHEEL_FILE"
 else
     echo "Error: Wheel build failed."
     exit 1

@@ -8,6 +8,7 @@ wheels/
 wheels_private/
 registries/*.hocon
 *.egg-info
+.pytest_cache/
 
 # Virtual environments
 .venv
@@ -15,3 +16,7 @@ registries/*.hocon
 # logs
 logs
 tree.txt
+
+# keep the dist for prebuilt_frontend
+!nsflow/prebuilt_frontend/dist/
+!nsflow/prebuilt_frontend/dist/**
