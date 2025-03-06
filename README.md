@@ -2,7 +2,7 @@
 
 NSFlow is a framework that enables users to explore, visualize, and interact with smart agent networks. It integrates **Neuro-SAN** for intelligent agent-based interactions.
 
-![Project Logo](frontend/src/assets/snapshot01.png)
+![Project Logo](docs/snapshot01.png)
 
 ---
 ## **Installation & Running NSFlow**
