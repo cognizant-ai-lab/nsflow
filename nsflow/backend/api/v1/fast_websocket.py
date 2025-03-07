@@ -16,7 +16,7 @@ ns_api = NsGrpcServiceApi()
 @router.websocket("/chat/{agent_name}")
 async def websocket_chat(websocket: WebSocket, agent_name: str):
     """WebSocket route for chat communication."""
-    await ns_api.handle_chat_websocket(websocket, agent_name)
+    await ns_api.handle_chat_websocket_nosid(websocket, agent_name)
 
 
 @router.websocket("/logs")

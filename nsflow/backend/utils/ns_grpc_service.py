@@ -86,6 +86,36 @@ class NsGrpcServiceApi:
             self.active_chat_connections.pop(client_id, None)
             self.user_sessions.pop(client_id, None)
 
+    async def handle_chat_websocket_nosid(self, websocket: WebSocket, agent_name: str):
+        """Handles WebSocket chat communication without session_id."""
+        await websocket.accept()
+        client_id = str(websocket.client)
+        self.active_chat_connections[client_id] = websocket
+        await self.log_event(f"Chat client {client_id} connected to agent: {agent_name}", "FastAPI")
+
+        # Initialize agent session without session_id
+        agent_session = GrpcServiceAgentSession(host="localhost", port=self.SERVER_PORT, agent_name=agent_name)
+
+        try:
+            while True:
+                data = await websocket.receive_text()
+                message_data = json.loads(data)
+                user_input = message_data.get("message", "")
+                sly_data = message_data.get("sly_data", None)
+
+                if user_input:
+                    await self.log_event(f"User input: {user_input}", "FastAPI")
+                    chat_request = {"user_input": user_input}
+                    if sly_data:
+                        chat_request["sly_data"] = json.loads(sly_data)
+
+                    # Start streaming responses
+                    asyncio.create_task(self.handle_streaming_chat(agent_session, client_id, chat_request))
+
+        except WebSocketDisconnect:
+            await self.log_event(f"Chat client {client_id} disconnected.", "FastAPI")
+            self.active_chat_connections.pop(client_id, None)
+
     async def handle_streaming_chat(self, agent_session, client_id, chat_request):
         """Handles streaming chat responses asynchronously."""
         try:
