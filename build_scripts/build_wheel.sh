@@ -15,6 +15,8 @@ echo ">>End of Test Coverage"
 # Step 1: Clean up unwanted files
 echo "Cleaning up old build artifacts..."
 find "$PROJECT_ROOT" -name "__pycache__" -type d -exec rm -rf {} +
+find "$PROJECT_ROOT" -name ".ipynb_checkpoints" -type d -exec rm -rf {} +
+find "$PROJECT_ROOT" -name ".hypothesis" -type d -exec rm -rf {} + 
 find "$PROJECT_ROOT" -name ".DS_Store" -type f -delete
 
 # Step 2: Remove old build directories

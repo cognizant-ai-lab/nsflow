@@ -1,3 +1,5 @@
+# nsflow/backend/api/v1/fast_websocket.py
+
 """
 This is the FastAPI endpoints for streaming_chat, logs, connectivity & function
 """
