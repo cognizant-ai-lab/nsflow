@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import { FaDownload } from "react-icons/fa";
 import { Clipboard } from "lucide-react";
 import { useChatContext } from "../context/ChatContext";
 
@@ -22,9 +23,33 @@ const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
     });
   };
 
+  const downloadMessages = () => {
+    const logText = internalChatMessages
+      .map((msg) => `${msg.sender}: ${msg.text}`)
+      .join("\n");
+
+    const blob = new Blob([logText], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "internal_chat_logs.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return (
     <div className="chat-panel flex flex-col h-full p-4">
-      <h2 className="text-lg font-bold">{title}</h2>
+      {/* Title with Download Button */}
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="text-lg font-bold">{title}</h2>
+        <button
+          onClick={downloadMessages}
+          className="text-gray-400 hover:text-white p-1"
+          title="Download Messages"
+        >
+          <FaDownload size={18} />
+        </button>
+      </div>
 
       {/* Scrollable chat messages container */}
       <div className="flex-grow overflow-y-auto p-2 space-y-2 bg-gray-900 rounded-md max-h-[70vh]">
