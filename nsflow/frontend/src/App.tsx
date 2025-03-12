@@ -6,9 +6,9 @@ import Sidebar from "./components/Sidebar";
 // import ChatPanel from "./components/ChatPanel";
 import TabbedChatPanel from "./components/TabbedChatPanel";
 import LogsPanel from "./components/LogsPanel";
-import ConfigsPanel from "./components/ConfigsPanel";
+import InfoPanel from "./components/InfoPanel";
 import Header from "./components/Header";
-import { ApiPortProvider } from "./context/ApiPortContext"; // Import the provider
+import { ApiPortProvider } from "./context/ApiPortContext";
 import { ChatProvider } from "./context/ChatContext";
 
 const App: React.FC = () => {
@@ -35,14 +35,14 @@ const App: React.FC = () => {
                   </Panel>
                   <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
 
-                  <Panel defaultSize={25} minSize={15} maxSize={30}>
+                  <Panel defaultSize={30} minSize={20} maxSize={40}>
                     <PanelGroup direction="horizontal">
                       <Panel defaultSize={50} minSize={30} maxSize={70}>
                         <LogsPanel />
                       </Panel>
                       <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                      <Panel defaultSize={50} minSize={30} maxSize={70}>
-                        <ConfigsPanel />
+                      <Panel defaultSize={20} minSize={15} maxSize={30}>
+                        <InfoPanel />
                       </Panel>
                     </PanelGroup>
                   </Panel>
@@ -51,7 +51,7 @@ const App: React.FC = () => {
               <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
               <Panel defaultSize={25} minSize={15} maxSize={40}>
                 {/* Pass selectedNetwork to ChatPanel */}
-                <TabbedChatPanel selectedNetwork={selectedNetwork} />
+                <TabbedChatPanel />
               </Panel>
             </PanelGroup>
           </div>

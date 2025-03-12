@@ -3,73 +3,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { Clipboard } from "lucide-react";
-import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
-// Global WebSocket storage to persist connections
-const activeSockets: Record<string, WebSocket> = {};
-
 const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
-  const { apiPort } = useApiPort();
-  const { activeNetwork, internalChatMessages, addInternalChatMessage } = useChatContext();
+  const { internalChatMessages } = useChatContext();
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Auto-scroll reference
-  const lastMessageRef = useRef<string | null>(null);
-
-//   useEffect(() => {
-//     if (!activeNetwork) return;
-
-//     const socketKey = `internal-${apiPort}-${activeNetwork}`;
-
-//     // If socket already exists and is open, use it
-//     if (activeSockets[socketKey] && activeSockets[socketKey].readyState === WebSocket.OPEN) {
-//       console.log("Using existing Internal Chat WebSocket:", socketKey);
-//       return;
-//     }
-
-//     const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`;
-//     console.log(`Creating new Internal Chat WebSocket: ${wsUrl}`);
-
-//     const ws = new WebSocket(wsUrl);
-//     activeSockets[socketKey] = ws; // Store WebSocket globally
-
-//     ws.onopen = () => console.log("Internal Chat WebSocket Connected:", socketKey);
-//     ws.onmessage = (event) => {
-//       try {
-//         const data = JSON.parse(event.data);
-
-//         if (data.message && typeof data.message === "object") {
-//           const otrace = data.message.otrace;
-//           const chatText = data.message.text?.trim();
-
-//           // Ignore messages where otrace or text is null
-//           if (!chatText || !otrace.length) return;
-
-//           // Prevent duplicate messages (compare with lastMessageRef)
-//           if (lastMessageRef.current === chatText) {
-//             console.log("Duplicate message ignored");
-//             return;
-//           }
-
-//           // Update lastMessageRef to track last received message
-//           lastMessageRef.current = chatText;
-
-//           // Ensure the message updates UI
-//           addInternalChatMessage({ sender: otrace.join(" : "), text: chatText, network: activeNetwork });
-          
-//         }
-//       } catch (err) {
-//         console.error("Error parsing WebSocket message:", err);
-//       }
-//     };
-
-//     ws.onerror = (err) => console.error("WebSocket Error:", err);
-//     ws.onclose = () => console.log("Internal Chat WebSocket Disconnected:", socketKey);
-
-//     return () => {
-//       console.log("Internal Chat WebSocket remains active:", socketKey);
-//     };
-//   }, [activeNetwork, apiPort]);
 
   useEffect(() => {
     // Auto-scroll to latest message

@@ -90,14 +90,17 @@ const TabbedChatPanel = () => {
   return (
     <div className="tabbed-chat-panel flex flex-col h-full p-4">
       {/* Tabs */}
-      <div className="tabs flex border-b border-gray-700">
+      <div className="tabs flex border-b border-gray-700 h-10">
         {["chat", "internal", "config"].map((tab) => (
           <button
             key={tab}
+            title={tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : "Configuration"}
             onClick={() => setActiveTab(tab as "chat" | "internal" | "config")}
-            className={`p-2 px-4 ${
-              activeTab === tab ? "bg-gray-800 text-white font-bold" : "bg-gray-700 text-gray-300"
-            }`}
+            className={`p-2 px-4 transition-all duration-200 ${
+                activeTab === tab
+                  ? "bg-gray-800 text-white font-bold border-t-2 border-l-2 border-r-2 border-gray-700 rounded-t-lg"
+                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              }`}
           >
             {tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : "Config"}
           </button>

@@ -3,57 +3,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { Clipboard } from "lucide-react"; // Small copy icon
-import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
-// Global WebSocket storage to persist connections
-const activeSockets: Record<string, WebSocket> = {};
-
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
-  const { apiPort } = useApiPort();
   const { activeNetwork, chatMessages, addChatMessage, chatWs } = useChatContext();
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Reference for auto-scroll
-
-  // useEffect(() => {
-  //   if (!activeNetwork) return;
-
-  //   const socketKey = `chat-${apiPort}-${activeNetwork}`;
-
-  //   // If socket already exists and is open, use it
-  //   if (activeSockets[socketKey] && activeSockets[socketKey].readyState === WebSocket.OPEN) {
-  //     console.log("Using existing WebSocket connection:", socketKey);
-  //     return;
-  //   }
-
-  //   const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`;
-  //   console.log(`Creating new WebSocket connection: ${wsUrl}`);
-
-  //   const ws = new WebSocket(wsUrl);
-  //   activeSockets[socketKey] = ws; // Store socket globally
-
-  //   ws.onopen = () => console.log("WebSocket Connected:", socketKey);
-  //   ws.onmessage = (event) => {
-  //     console.log("WebSocket Message Received:", event.data);
-  //     try {
-  //       const data = JSON.parse(event.data);
-  //       if (data.message && typeof data.message === "object" && data.message.type === "AI") {
-  //         const aiText = data.message.text;
-  //         addChatMessage({ sender: "agent", text: aiText, network: activeNetwork });
-  //       }
-  //     } catch (err) {
-  //       console.error("Error parsing WebSocket message:", err);
-  //     }
-  //   };
-
-  //   ws.onerror = (err) => console.error("WebSocket Error:", err);
-  //   ws.onclose = () => console.log("WebSocket Disconnected:", socketKey);
-
-  //   return () => {
-  //     console.log("WebSocket remains active:", socketKey);
-  //   };
-  // }, [activeNetwork, apiPort]);
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -62,10 +18,6 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
-    // const socketKey = `chat-${apiPort}-${activeNetwork}`;
-    
-    // const ws = activeSockets[socketKey];
-
     if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
       console.error("WebSocket not connected. Unable to send message.");
       return;
@@ -155,16 +107,20 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       </div>
 
       {/* Chat Input (Fixed) */}
-      <div className="chat-input mt-2 flex gap-2">
-        <input
-          type="text"
-          placeholder="Type a message..."
-          className="chat-input-box bg-gray-700 text-white p-2 rounded-md flex-grow"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+      <div className="chat-input mt-2 flex gap-2 items-end">
+        <textarea
+            placeholder="Type a message..."
+            className="chat-input-box bg-gray-700 text-white p-2 rounded-md flex-grow resize-y min-h-12 max-h-32 overflow-y-auto"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault(); // Prevents new line from being added
+                sendMessage();
+              }
+            }}
         />
-        <button onClick={sendMessage} className="chat-send-btn bg-blue-600 text-white p-2 rounded-md">
+        <button onClick={sendMessage} className="chat-send-btn bg-blue-600 text-white px-4 py-2 p-2 rounded-md h-auto">
           Send
         </button>
       </div>
