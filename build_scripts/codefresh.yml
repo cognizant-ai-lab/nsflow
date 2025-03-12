@@ -1,0 +1,95 @@
+# version: '1.0'
+# steps:
+#   clone-repo:
+#     type: git-clone
+#     title: "Clone ${{CF_REPO_NAME}} repo"
+#     repo: "${{CF_REPO_OWNER}}/${{CF_REPO_NAME}}"
+#     git: github
+#     revision: "${{CF_REVISION}}"
+ 
+#   set_variables:
+#     title: "Setup default variables"
+#     image: alpine:3.15.0
+#     commands:
+#       # set the wheel package name which is the
+#       # the repo name, but with underscores instead of dashes
+#       - cf_export PACKAGE_NAME=`echo ${{CF_REPO_NAME}} | sed s/-/_/g`
+      
+#   create_temp_git_creds_from_vault:
+#     title: "Get ephemeral GitHub creds"
+#     description: "Get temporary git credentials from vault server.
+#                   Create credential for use in docker secret with_creds_requirements"
+#     type: "freestyle"
+#     image: "vault:1.12.0"
+#     working_directory: ${{CF_VOLUME_PATH}}/${{CF_REPO_NAME}}
+
+#     # Disable all caching for this step to ensure the requirements file
+#     # is always up to date. This step is very quick so the time hit
+#     # is minimal.
+#     # disable docker local cache
+#     no_cache: true
+#     # disable codefresh additional caching mechanisms
+#     no_cf_cache: true
+
+#     commands:
+#       # Specifically use a temp directory outside the container we want to build
+#       # so as not to accidentally copy sensitive credentials inside of it.
+#       - export TEMP_DIR_OUTSIDE_CONTAINER=${{CF_VOLUME_PATH}}/tmp/${{CF_BUILD_ID}}
+#       - mkdir -p ${TEMP_DIR_OUTSIDE_CONTAINER}
+#       - export WITH_CREDS_REQUIREMENTS=${TEMP_DIR_OUTSIDE_CONTAINER}/with_creds_requirements.txt
+#       - cp requirements-private.txt ${WITH_CREDS_REQUIREMENTS}
+#       - cf_export WITH_CREDS_REQUIREMENTS
+
+#       # Login to Vault only once
+#       - >-
+#           vault login -address=${{VAULT}} -method=github token=${{VAULT_LOGIN}}
+#           | grep -Ev "(token |token_accessor)"
+
+#       # Get the ephemeral token for public repos
+#       - EPHEMERAL_TOKEN=$(vault read -address=${{VAULT}} -field=token /github-secrets/token/repo-read)
+#       - EPHEMERAL_LEAF_SOURCE_CREDENTIALS="x-access-token:${EPHEMERAL_TOKEN}"
+#       - >-
+#           sed -i "s/\${LEAF_SOURCE_CREDENTIALS}/${EPHEMERAL_LEAF_SOURCE_CREDENTIALS}/g"
+#           ${WITH_CREDS_REQUIREMENTS}
+
+#       # Get the ephemeral token for private repos
+#       - EPHEMERAL_TOKEN=$(vault read -address=${{VAULT}} -field=token /github-private-secrets/token/repo-read)
+#       - EPHEMERAL_LEAF_SOURCE_CREDENTIALS="x-access-token:${EPHEMERAL_TOKEN}"
+#       - >-
+#           sed -i "s/\${LEAF_PRIVATE_SOURCE_CREDENTIALS}/${EPHEMERAL_LEAF_SOURCE_CREDENTIALS}/g"
+#           ${WITH_CREDS_REQUIREMENTS}
+
+  
+#   build_wheel:
+#     title: Build wheel file
+#     # We'll move to python 3.12 soon, but using 3.10 currently
+#     image: 634208487213.dkr.ecr.us-west-2.amazonaws.com/python-and-git:3.10-2.46.0
+#     shell: bash
+#     description: Build wheel file for distribution
+#     working_directory: ${{CF_REPO_NAME}}
+#     commands:
+#       # pip install everything
+#       - pip install -r requirements-build.txt
+#       - pip install -r ${WITH_CREDS_REQUIREMENTS}
+#       - pip install -r requirements.txt
+#       # now build the wheel file
+#       - python -m build --wheel
+#       - mkdir -p ${{CF_VOLUME_PATH}}/${{CF_BUILD_ID}}
+#       - cd dist && mv ${PACKAGE_NAME}*.whl ${{CF_VOLUME_PATH}}/${{CF_BUILD_ID}}
+
+#   upload_to_S3:
+#     title: Upload Wheel to S3 (only at github Release)
+#     # doc for aws-s3 step https://codefresh.io/steps/step/aws-s3
+#     type: aws-s3
+#     arguments:
+#       REGION: us-west-2
+#       BUCKET: ${{UNILEAF_WHEEL_BUCKET}}
+#       S3_INTEGRATION: amazon
+#       S3_PREFIX: ${{PACKAGE_NAME}}/
+#       SOURCE: ${{CF_VOLUME_PATH}}/${{CF_BUILD_ID}}
+#     when:
+#       condition:
+#         all:
+#           # This is idiomatic Codefresh for detecting if ${{CF_RELEASE_TAG}} has a value. We only want to deploy
+#           # on Github release triggers, and this variable gets populated only for Github releases.
+#           deploy_tagged_builds_only: 'includes("${{CF_RELEASE_TAG}}", "{{CF_RELEASE_TAG}}") == false'
