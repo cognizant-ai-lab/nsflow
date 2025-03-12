@@ -9,17 +9,17 @@ import { useChatContext } from "../context/ChatContext";
 // Global WebSocket storage to persist connections
 const activeSockets: Record<string, WebSocket> = {};
 
-const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
+const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
   const { apiPort } = useApiPort();
-  const { internalChatMessages, addInternalChatMessage } = useChatContext();
+  const { activeNetwork, internalChatMessages, addInternalChatMessage } = useChatContext();
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Auto-scroll reference
   const lastMessageRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!selectedNetwork) return;
+    if (!activeNetwork) return;
 
-    const socketKey = `internal-${apiPort}-${selectedNetwork}`;
+    const socketKey = `internal-${apiPort}-${activeNetwork}`;
 
     // If socket already exists and is open, use it
     if (activeSockets[socketKey] && activeSockets[socketKey].readyState === WebSocket.OPEN) {
@@ -27,7 +27,7 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
       return;
     }
 
-    const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${selectedNetwork}`;
+    const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`;
     console.log(`Creating new Internal Chat WebSocket: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
@@ -55,7 +55,7 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
           lastMessageRef.current = chatText;
 
           // Ensure the message updates UI
-          addInternalChatMessage({ sender: otrace.join(" : "), text: chatText, network: selectedNetwork });
+          addInternalChatMessage({ sender: otrace.join(" : "), text: chatText, network: activeNetwork });
           
         }
       } catch (err) {
@@ -69,7 +69,7 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
     return () => {
       console.log("Internal Chat WebSocket remains active:", socketKey);
     };
-  }, [selectedNetwork, apiPort]);
+  }, [activeNetwork, apiPort]);
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -85,7 +85,7 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
 
   return (
     <div className="chat-panel flex flex-col h-full p-4">
-      <h2 className="text-lg font-bold">Internal Chat</h2>
+      <h2 className="text-lg font-bold">{title}</h2>
 
       {/* Scrollable chat messages container */}
       <div className="flex-grow overflow-y-auto p-2 space-y-2 bg-gray-900 rounded-md max-h-[70vh]">

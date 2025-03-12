@@ -12,6 +12,8 @@ type ChatContextType = {
   internalChatMessages: Message[];
   addChatMessage: (msg: Message) => void;
   addInternalChatMessage: (msg: Message) => void;
+  activeNetwork: string;
+  setActiveNetwork: (network: string) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -23,6 +25,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [internalChatMessages, setInternalChatMessages] = useState<Message[]>([
     { sender: "system", text: "Internal Chat Logs" },
   ]);
+  const [activeNetwork, setActiveNetwork] = useState<string>("");
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
   const addInternalChatMessage = (msg: Message) => {
@@ -30,7 +33,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <ChatContext.Provider value={{ chatMessages, internalChatMessages, addChatMessage, addInternalChatMessage }}>
+    <ChatContext.Provider value={{ 
+      chatMessages, 
+      internalChatMessages, 
+      addChatMessage, 
+      addInternalChatMessage, 
+      activeNetwork, 
+      setActiveNetwork 
+     }}>
       {children}
     </ChatContext.Provider>
   );

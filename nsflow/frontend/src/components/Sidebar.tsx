@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { useApiPort } from "../context/ApiPortContext"; // Import global state
+import { useApiPort } from "../context/ApiPortContext";
+import { useChatContext } from "../context/ChatContext";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { apiPort, setApiPort } = useApiPort(); // Access API port from context
+  const { setActiveNetwork } = useChatContext(); // For both chat and internal chat
   const [tempPort, setTempPort] = useState(apiPort);
 
   useEffect(() => {
@@ -30,6 +32,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
     fetchNetworks();
   }, [apiPort]);
+
+  const handleNetworkSelection = (network: string) => {
+    onSelectNetwork(network);
+    setActiveNetwork(network); // Ensure both WebSockets start automatically
+  };
 
   return (
     <aside className="h-full sidebar p-4 flex flex-col gap-3 border-r">
@@ -60,7 +67,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         <button
           key={network}
           className="p-2 text-sm bg-blue-700 hover:bg-blue-600 rounded cursor-pointer"
-          onClick={() => onSelectNetwork(network)}
+          onClick={() => handleNetworkSelection(network)}
         >
           {network}
         </button>

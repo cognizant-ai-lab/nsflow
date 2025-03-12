@@ -9,17 +9,17 @@ import { useChatContext } from "../context/ChatContext";
 // Global WebSocket storage to persist connections
 const activeSockets: Record<string, WebSocket> = {};
 
-const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: string; title?: string }) => {
+const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { apiPort } = useApiPort();
-  const { chatMessages, addChatMessage } = useChatContext();
+  const { activeNetwork, chatMessages, addChatMessage } = useChatContext();
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Reference for auto-scroll
 
   useEffect(() => {
-    if (!selectedNetwork) return;
+    if (!activeNetwork) return;
 
-    const socketKey = `${apiPort}-${selectedNetwork}`;
+    const socketKey = `${apiPort}-${activeNetwork}`;
 
     // If socket already exists and is open, use it
     if (activeSockets[socketKey] && activeSockets[socketKey].readyState === WebSocket.OPEN) {
@@ -27,7 +27,7 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
       return;
     }
 
-    const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${selectedNetwork}`;
+    const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`;
     console.log(`Creating new WebSocket connection: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
@@ -40,7 +40,7 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
         const data = JSON.parse(event.data);
         if (data.message && typeof data.message === "object" && data.message.type === "AI") {
           const aiText = data.message.text;
-          addChatMessage({ sender: "agent", text: aiText, network: selectedNetwork });
+          addChatMessage({ sender: "agent", text: aiText, network: activeNetwork });
         }
       } catch (err) {
         console.error("Error parsing WebSocket message:", err);
@@ -53,7 +53,7 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
     return () => {
       console.log("WebSocket remains active:", socketKey);
     };
-  }, [selectedNetwork, apiPort]);
+  }, [activeNetwork, apiPort]);
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -62,7 +62,7 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
-    const socketKey = `${apiPort}-${selectedNetwork}`;
+    const socketKey = `${apiPort}-${activeNetwork}`;
     const ws = activeSockets[socketKey];
 
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -70,7 +70,7 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
       return;
     }
 
-    addChatMessage({ sender: "user", text: newMessage, network: selectedNetwork });
+    addChatMessage({ sender: "user", text: newMessage, network: activeNetwork });
 
     console.log(`Sending message: ${newMessage}`);
     ws.send(JSON.stringify({ message: newMessage }));
