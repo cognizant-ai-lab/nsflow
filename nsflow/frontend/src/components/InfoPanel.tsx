@@ -38,7 +38,7 @@ const InfoPanel = () => {
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
           >
-            <SiFastapi className="mr-2" /> FastAPI Specs
+            <SiFastapi className="mr-2" /> FastAPI (OpenAPI) Specs
           </a>
 
           {/* Documentation (Placeholder) */}

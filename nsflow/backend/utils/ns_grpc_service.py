@@ -86,6 +86,7 @@ class NsGrpcServiceApi:
         await self.broadcast_internal_chat(internal_chat_entry)
 
     async def broadcast_internal_chat(self, internal_chat_entry):
+        """Broadcast the internal chat messages to websocket"""
         for websocket in self.active_internal_chat_connections:
             try:
                 await websocket.send_text(json.dumps(internal_chat_entry))

@@ -18,7 +18,7 @@ def get_networks():
     return agent_utils.list_available_networks()
 
 
-@router.get("/network/{network_name}", responses={200: {"description": "Agent Network found"}, 
+@router.get("/network/{network_name}", responses={200: {"description": "Agent Network found"},
                                                   404: {"description": "Agent Network not found"}})
 def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
@@ -29,7 +29,7 @@ def get_agent_network(network_name: str):
     return agent_utils.parse_agent_network(file_path)
 
 
-@router.get("/connectivity/{network_name}", responses={200: {"description": "Connectivity Info"}, 
+@router.get("/connectivity/{network_name}", responses={200: {"description": "Connectivity Info"},
                                                        404: {"description": "HOCON file not found"}})
 def get_connectivity_info(network_name: str):
     """Retrieves connectivity details from an HOCON network configuration file."""

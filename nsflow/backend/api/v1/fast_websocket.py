@@ -22,7 +22,7 @@ async def websocket_chat(websocket: WebSocket, agent_name: str):
 
 
 @router.websocket("/internalchat/{agent_name}")
-async def websocket_chat(websocket: WebSocket, agent_name: str):
+async def websocket_internal_chat(websocket: WebSocket, agent_name: str):
     """WebSocket route for internal chat communication."""
     await ns_api.handle_internal_chat_websocket(websocket, agent_name)
 
