@@ -14,7 +14,7 @@ clean_dirs() {
     local dir="$1"
     echo "Cleaning destination directory: $dir"
     if [ -d "$dir" ]; then
-        rm -rf "$dir"/*
+        find "$dir" -type f -delete
     else
         mkdir -p "$dir"
     fi
