@@ -14,6 +14,10 @@ type ChatContextType = {
   addInternalChatMessage: (msg: Message) => void;
   activeNetwork: string;
   setActiveNetwork: (network: string) => void;
+  chatWs: WebSocket | null;
+  internalChatWs: WebSocket | null;
+  setChatWs: (ws: WebSocket) => void;
+  setInternalChatWs: (ws: WebSocket) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -26,6 +30,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     { sender: "system", text: "Internal Chat Logs" },
   ]);
   const [activeNetwork, setActiveNetwork] = useState<string>("");
+  const [chatWs, setChatWs] = useState<WebSocket | null>(null);
+  const [internalChatWs, setInternalChatWs] = useState<WebSocket | null>(null);
+
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
   const addInternalChatMessage = (msg: Message) => {
@@ -39,7 +46,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       addChatMessage, 
       addInternalChatMessage, 
       activeNetwork, 
-      setActiveNetwork 
+      setActiveNetwork,
+      chatWs,
+      setChatWs,
+      internalChatWs,
+      setInternalChatWs,
      }}>
       {children}
     </ChatContext.Provider>
