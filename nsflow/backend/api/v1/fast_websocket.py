@@ -1,3 +1,5 @@
+# nsflow/backend/api/v1/fast_websocket.py
+
 """
 This is the FastAPI endpoints for streaming_chat, logs, connectivity & function
 """
@@ -17,6 +19,12 @@ ns_api = NsGrpcServiceApi()
 async def websocket_chat(websocket: WebSocket, agent_name: str):
     """WebSocket route for chat communication."""
     await ns_api.handle_chat_websocket(websocket, agent_name)
+
+
+@router.websocket("/internalchat/{agent_name}")
+async def websocket_internal_chat(websocket: WebSocket, agent_name: str):
+    """WebSocket route for internal chat communication."""
+    await ns_api.handle_internal_chat_websocket(websocket, agent_name)
 
 
 @router.websocket("/logs")

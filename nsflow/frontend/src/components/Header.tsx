@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { FaUserCircle, FaFolderOpen, FaSave, FaDownload } from "react-icons/fa";
-import logo from "../assets/icon.jpg";
+import { LuLeafyGreen  } from "react-icons/lu";
 import { useApiPort } from "../context/ApiPortContext";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
@@ -69,7 +69,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
     <header className="header flex items-center justify-between px-4 shadow-md relative z-50 bg-gray-900 h-14">
       {/* Left - App Icon */}
       <div className="flex items-center space-x-2">
-        <img src={logo} alt="App Icon" className="h-8 w-8" />
+        <LuLeafyGreen className="h-8 w-8 text-blue-400" />
         <span className="text-lg font-semibold text-white">Neuro AI - Smart Agent Network</span>
       </div>
 
@@ -89,7 +89,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
             onClick={() => setExportDropdown(!exportDropdown)}
           >
             <FaDownload className="mr-2" /> Export{" "}
-            <span className={`ml-2 mr-2 transition-transform duration-200 ${exportDropdown ? "rotate-180" : "rotate-0"}`}>
+            <span className={`ml-2 mr-2 transition-transform duration-200 ${exportDropdown ? "rotate-90" : "rotate-0"}`}>
               ▶
             </span>
           </button>

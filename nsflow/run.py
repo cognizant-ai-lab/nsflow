@@ -9,6 +9,7 @@ import logging
 import time
 from dotenv import load_dotenv
 
+
 # pylint: disable=too-many-instance-attributes
 class NsFlowRunner:
     """Manages the Neuro SAN server and FastAPI backend."""
@@ -32,7 +33,6 @@ class NsFlowRunner:
         self.api_port = int(os.getenv("API_PORT", "4173"))
         self.api_log_level = os.getenv("API_LOG_LEVEL", "info")
         self.thinking_file = "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt"
-
 
         # Ensure all paths are resolved relative to `self.root_dir`
         self.agent_manifest_file = os.getenv("AGENT_MANIFEST_FILE",
@@ -117,7 +117,7 @@ class NsFlowRunner:
         """Start a subprocess and capture logs."""
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if self.is_windows else 0
 
-        with open(log_file, "w", encoding="utf-8") as log:
+        with open(log_file, "w", encoding="utf-8") as log:  # noqa: F841
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        text=True, bufsize=1, universal_newlines=True,
                                        preexec_fn=None if self.is_windows else os.setpgrp,
@@ -217,6 +217,7 @@ class NsFlowRunner:
         # Wait for both processes
         self.server_process.wait()
         self.fastapi_process.wait()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

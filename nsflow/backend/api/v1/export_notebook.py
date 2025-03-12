@@ -95,7 +95,7 @@ async def export_notebook(agent_network: str):
         raise e
 
 
-@router.get("/agent_network/{agent_network}")
+@router.get("/agent_network/{agent_network}", responses={404: {"description": "Agent network not found"}})
 async def export_agent_network(agent_network: str):
     """Endpoint to download the HOCON file of the selected agent network."""
     file_path = REGISTRY_DIR / f"{agent_network}.hocon"

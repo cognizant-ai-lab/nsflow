@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nsflow"
-version = "0.4.5"
+version = "0.5.0"
 description = "A Neuro-San powered Smart Agent Network Framework"
 keywords = ["NsFlow", "NeuroSan", "agent-network"]
 license = { file = "LICENSE" }

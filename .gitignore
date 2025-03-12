@@ -9,6 +9,7 @@ wheels_private/
 registries/*.hocon
 *.egg-info
 .pytest_cache/
+.hypothesis/
 
 # Virtual environments
 .venv

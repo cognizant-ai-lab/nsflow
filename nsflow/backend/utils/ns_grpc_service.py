@@ -2,7 +2,7 @@ import json
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.session.grpc_service_agent_session import GrpcServiceAgentSession
 
@@ -18,6 +18,7 @@ class NsGrpcServiceApi:
 
     def __init__(self):
         self.active_chat_connections: Dict[str, WebSocket] = {}
+        self.active_internal_chat_connections: List[WebSocket] = []
         self.active_log_connections: List[WebSocket] = []
         self.user_sessions: Dict[str, Dict] = {}
         self.log_buffer: List[Dict] = []
@@ -48,22 +49,14 @@ class NsGrpcServiceApi:
                 self.active_log_connections.remove(websocket)
 
     async def handle_chat_websocket(self, websocket: WebSocket, agent_name: str):
-        """Handles WebSocket chat communication."""
+        """Handles WebSocket chat communication without session_id."""
         await websocket.accept()
         client_id = str(websocket.client)
         self.active_chat_connections[client_id] = websocket
         await self.log_event(f"Chat client {client_id} connected to agent: {agent_name}", "FastAPI")
 
-        # Initialize session if not already available
-        if client_id not in self.user_sessions or self.user_sessions[client_id]["agent_name"] != agent_name:
-            self.user_sessions[client_id] = {
-                "agent_session": GrpcServiceAgentSession(
-                    host="localhost", port=self.SERVER_PORT, agent_name=agent_name),
-                "session_id": None,
-                "agent_name": agent_name
-            }
-
-        agent_session = self.user_sessions[client_id]["agent_session"]
+        # Initialize agent session without session_id
+        agent_session = GrpcServiceAgentSession(host="localhost", port=self.SERVER_PORT, agent_name=agent_name)
 
         try:
             while True:
@@ -74,7 +67,7 @@ class NsGrpcServiceApi:
 
                 if user_input:
                     await self.log_event(f"User input: {user_input}", "FastAPI")
-                    chat_request = {"session_id": self.user_sessions[client_id]["session_id"], "user_input": user_input}
+                    chat_request = {"user_input": user_input}
                     if sly_data:
                         chat_request["sly_data"] = json.loads(sly_data)
 
@@ -84,7 +77,34 @@ class NsGrpcServiceApi:
         except WebSocketDisconnect:
             await self.log_event(f"Chat client {client_id} disconnected.", "FastAPI")
             self.active_chat_connections.pop(client_id, None)
-            self.user_sessions.pop(client_id, None)
+
+    async def internal_chat_event(self, message: Dict[str, Any]):
+        """Logs events & sends them to WebSocket clients."""
+        internal_chat_entry = {"message": message}
+
+        # Broadcast logs to WebSocket clients
+        await self.broadcast_internal_chat(internal_chat_entry)
+
+    async def broadcast_internal_chat(self, internal_chat_entry):
+        """Broadcast the internal chat messages to websocket"""
+        for websocket in self.active_internal_chat_connections:
+            try:
+                await websocket.send_text(json.dumps(internal_chat_entry))
+            except WebSocketDisconnect:
+                self.active_internal_chat_connections.remove(websocket)
+
+    async def handle_internal_chat_websocket(self, websocket: WebSocket, agent_name: str):
+        """Handles WebSocket chat communication without session_id."""
+        await websocket.accept()
+        self.active_internal_chat_connections.append(websocket)
+        await self.internal_chat_event(f"New internal chat client connected to: {agent_name}")
+
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except WebSocketDisconnect:
+            self.active_internal_chat_connections.remove(websocket)
+            await self.internal_chat_event(f"Internal chat client disconnected from: {agent_name}")
 
     async def handle_streaming_chat(self, agent_session, client_id, chat_request):
         """Handles streaming chat responses asynchronously."""
@@ -92,6 +112,7 @@ class NsGrpcServiceApi:
             loop = asyncio.get_running_loop()
             response_generator = await loop.run_in_executor(None, agent_session.streaming_chat, chat_request)
             final_response = None
+            internal_chat = None
             otrace = None
 
             # Stream responses
@@ -99,10 +120,7 @@ class NsGrpcServiceApi:
                 if response_message is None:
                     continue
 
-                response_dict = json.loads(json.dumps(response_message))  # Convert to JSON-compatible dict
-                # Send all logs from NeuroSan
-                # await self.log_event(f"{response_dict}", "NeuroSan")
-                # Extract AI response from response_dict
+                response_dict = json.loads(json.dumps(response_message))
 
                 # Extract AI response & origin trace
                 if "response" in response_dict:
@@ -111,9 +129,12 @@ class NsGrpcServiceApi:
                     if response_dict["response"].get("type") in ["AGENT", "AGENT_TOOL_RESULT"]:
                         otrace = response_dict["response"].get("origin", [])
                         otrace = [i.get("tool") for i in otrace]
+                        internal_chat = response_dict["response"].get("text", "")
 
                 otrace_str = json.dumps({"otrace": otrace})
+                internal_chat_str = {"otrace": otrace, "text": internal_chat}
                 await self.log_event(f"{otrace_str}", "NeuroSan")
+                await self.internal_chat_event(internal_chat_str)
 
             if final_response and client_id in self.active_chat_connections:
                 try:
@@ -140,7 +161,7 @@ class NsGrpcServiceApi:
 
         try:
             while True:
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
         except WebSocketDisconnect:
             self.active_log_connections.remove(websocket)
             await self.log_event("Logs client disconnected", "FastAPI")
