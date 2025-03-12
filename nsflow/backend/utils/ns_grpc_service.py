@@ -2,7 +2,7 @@ import json
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.session.grpc_service_agent_session import GrpcServiceAgentSession
 
@@ -78,7 +78,7 @@ class NsGrpcServiceApi:
             await self.log_event(f"Chat client {client_id} disconnected.", "FastAPI")
             self.active_chat_connections.pop(client_id, None)
 
-    async def internal_chat_event(self, message: str):
+    async def internal_chat_event(self, message: Dict[str, Any]):
         """Logs events & sends them to WebSocket clients."""
         internal_chat_entry = {"message": message}
 
@@ -92,18 +92,18 @@ class NsGrpcServiceApi:
             except WebSocketDisconnect:
                 self.active_internal_chat_connections.remove(websocket)
 
-    async def handle_internal_chat_websocket(self, websocket: WebSocket):
+    async def handle_internal_chat_websocket(self, websocket: WebSocket, agent_name: str):
         """Handles WebSocket chat communication without session_id."""
         await websocket.accept()
         self.active_internal_chat_connections.append(websocket)
-        await self.internal_chat_event("New internal chat client connected")
+        await self.internal_chat_event(f"New internal chat client connected to: {agent_name}")
 
         try:
             while True:
                 await asyncio.sleep(1)
         except WebSocketDisconnect:
             self.active_internal_chat_connections.remove(websocket)
-            await self.internal_chat_event("Internal chat client disconnected")
+            await self.internal_chat_event(f"Internal chat client disconnected from: {agent_name}")
 
     async def handle_streaming_chat(self, agent_session, client_id, chat_request):
         """Handles streaming chat responses asynchronously."""
@@ -131,9 +131,9 @@ class NsGrpcServiceApi:
                         internal_chat = response_dict["response"].get("text", "")
 
                 otrace_str = json.dumps({"otrace": otrace})
-                internal_chat_str = json.dumps({"message": {"otrace": otrace, "text": internal_chat}})
+                internal_chat_str = {"otrace": otrace, "text": internal_chat}
                 await self.log_event(f"{otrace_str}", "NeuroSan")
-                await self.internal_chat_event(f"{internal_chat_str}")
+                await self.internal_chat_event(internal_chat_str)
 
             if final_response and client_id in self.active_chat_connections:
                 try:

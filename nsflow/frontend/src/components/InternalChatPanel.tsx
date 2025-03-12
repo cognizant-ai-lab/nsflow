@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -6,33 +6,57 @@ import { Clipboard } from "lucide-react";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
+// Global WebSocket storage to persist connections
+const activeSockets: Record<string, WebSocket> = {};
+
 const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiPort } = useApiPort();
   const { internalChatMessages, addInternalChatMessage } = useChatContext();
-  const [socket, setSocket] = useState<WebSocket | null>(null);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Auto-scroll reference
+  const lastMessageRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!selectedNetwork) return;
 
+    const socketKey = `internal-${apiPort}-${selectedNetwork}`;
+
+    // If socket already exists and is open, use it
+    if (activeSockets[socketKey] && activeSockets[socketKey].readyState === WebSocket.OPEN) {
+      console.log("Using existing Internal Chat WebSocket:", socketKey);
+      return;
+    }
+
     const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${selectedNetwork}`;
-    console.log(`Connecting to WebSocket: ${wsUrl}`);
+    console.log(`Creating new Internal Chat WebSocket: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
+    activeSockets[socketKey] = ws; // Store WebSocket globally
 
-    ws.onopen = () => console.log("Internal Chat WebSocket Connected.");
+    ws.onopen = () => console.log("Internal Chat WebSocket Connected:", socketKey);
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.message && typeof data.message === "object") {
-          const { otrace } = data.message;
-          const chatText = data.text || "No message text.";
 
-          // Add message only if it's new
-          addInternalChatMessage({ sender: "internal", text: chatText, otrace });
-        } else {
-          console.error("Invalid internal chat message format:", data);
+        if (data.message && typeof data.message === "object") {
+          const otrace = data.message.otrace;
+          const chatText = data.message.text?.trim();
+
+          // Ignore messages where otrace or text is null
+          if (!chatText || !otrace.length) return;
+
+          // Prevent duplicate messages (compare with lastMessageRef)
+          if (lastMessageRef.current === chatText) {
+            console.log("Duplicate message ignored");
+            return;
+          }
+
+          // Update lastMessageRef to track last received message
+          lastMessageRef.current = chatText;
+
+          // Ensure the message updates UI
+          addInternalChatMessage({ sender: otrace.join(" : "), text: chatText, network: selectedNetwork });
+          
         }
       } catch (err) {
         console.error("Error parsing WebSocket message:", err);
@@ -40,10 +64,11 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
     };
 
     ws.onerror = (err) => console.error("WebSocket Error:", err);
-    ws.onclose = () => console.log("Internal Chat WebSocket Disconnected.");
+    ws.onclose = () => console.log("Internal Chat WebSocket Disconnected:", socketKey);
 
-    setSocket(ws);
-    return () => ws.close();
+    return () => {
+      console.log("Internal Chat WebSocket remains active:", socketKey);
+    };
   }, [selectedNetwork, apiPort]);
 
   useEffect(() => {
@@ -68,7 +93,7 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
           <div key={index} className="relative p-2 rounded-md text-sm bg-gray-700 text-gray-100">
             {/* Sender Header */}
             <div className="font-bold mb-1 flex justify-between items-center">
-              <span>Internal Chat</span>
+              <span>{msg.sender}</span> {/* Fix Otrace display */}
 
               {/* Copy Icon */}
               <button
@@ -86,7 +111,9 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
               components={{
                 p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
                 blockquote: ({ children }) => (
-                  <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">{children}</blockquote>
+                  <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">
+                    {children}
+                  </blockquote>
                 ),
                 code: ({ children }) => (
                   <code className="bg-gray-800 text-yellow-300 px-1 rounded">{children}</code>
@@ -100,13 +127,6 @@ const InternalChatPanel = ({ selectedNetwork }: { selectedNetwork: string }) => 
             >
               {msg.text}
             </ReactMarkdown>
-
-            {/* Display OTRACE (Agent Path) */}
-            {msg.otrace && (
-              <div className="text-xs text-gray-400 italic mt-1">
-                {`OTrace: ${msg.otrace.join(" → ")}`}
-              </div>
-            )}
 
             {/* Copied Tooltip */}
             {copiedMessage === index && (

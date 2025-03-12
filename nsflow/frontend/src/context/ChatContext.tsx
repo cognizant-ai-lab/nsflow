@@ -25,7 +25,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   ]);
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
-  const addInternalChatMessage = (msg: Message) => setInternalChatMessages((prev) => [...prev, msg]);
+  const addInternalChatMessage = (msg: Message) => {
+    setInternalChatMessages((prev) => [...prev, { ...msg}]);
+  };
 
   return (
     <ChatContext.Provider value={{ chatMessages, internalChatMessages, addChatMessage, addInternalChatMessage }}>

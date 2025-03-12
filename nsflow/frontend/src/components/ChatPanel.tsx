@@ -6,25 +6,34 @@ import { Clipboard } from "lucide-react"; // Small copy icon
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
+// Global WebSocket storage to persist connections
+const activeSockets: Record<string, WebSocket> = {};
+
 const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: string; title?: string }) => {
   const { apiPort } = useApiPort();
   const { chatMessages, addChatMessage } = useChatContext();
   const [newMessage, setNewMessage] = useState("");
-  const [socket, setSocket] = useState<WebSocket | null>(null);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Reference for auto-scroll
 
   useEffect(() => {
     if (!selectedNetwork) return;
 
-    addChatMessage({ sender: "system", text: `Connected to Agent: **${selectedNetwork}**`, network: selectedNetwork });
+    const socketKey = `${apiPort}-${selectedNetwork}`;
+
+    // If socket already exists and is open, use it
+    if (activeSockets[socketKey] && activeSockets[socketKey].readyState === WebSocket.OPEN) {
+      console.log("Using existing WebSocket connection:", socketKey);
+      return;
+    }
 
     const wsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${selectedNetwork}`;
-    console.log(`Connecting to WebSocket: ${wsUrl}`);
+    console.log(`Creating new WebSocket connection: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
+    activeSockets[socketKey] = ws; // Store socket globally
 
-    ws.onopen = () => console.log("WebSocket Connected");
+    ws.onopen = () => console.log("WebSocket Connected:", socketKey);
     ws.onmessage = (event) => {
       console.log("WebSocket Message Received:", event.data);
       try {
@@ -39,10 +48,11 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
     };
 
     ws.onerror = (err) => console.error("WebSocket Error:", err);
-    ws.onclose = () => console.log("WebSocket Disconnected");
+    ws.onclose = () => console.log("WebSocket Disconnected:", socketKey);
 
-    setSocket(ws);
-    return () => ws.close();
+    return () => {
+      console.log("WebSocket remains active:", socketKey);
+    };
   }, [selectedNetwork, apiPort]);
 
   useEffect(() => {
@@ -51,11 +61,19 @@ const ChatPanel = ({ selectedNetwork, title = "Chat" }: { selectedNetwork: strin
   }, [chatMessages]);
 
   const sendMessage = () => {
-    if (!newMessage.trim() || !socket) return;
+    if (!newMessage.trim()) return;
+    const socketKey = `${apiPort}-${selectedNetwork}`;
+    const ws = activeSockets[socketKey];
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket not connected. Unable to send message.");
+      return;
+    }
+
     addChatMessage({ sender: "user", text: newMessage, network: selectedNetwork });
 
     console.log(`Sending message: ${newMessage}`);
-    socket.send(JSON.stringify({ message: newMessage }));
+    ws.send(JSON.stringify({ message: newMessage }));
     setNewMessage("");
   };
 
