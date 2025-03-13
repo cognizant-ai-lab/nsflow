@@ -1,8 +1,6 @@
 # nsflow/backend/api/v1/agent_flows.py
 
-import os
 import logging
-from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from nsflow.backend.utils.agent_network_utils import AgentNetworkUtils
 
@@ -22,7 +20,7 @@ def get_networks():
                                                   404: {"description": "Agent Network not found"}})
 def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
-    file_path = Path(os.path.join(agent_utils.registry_dir, f"{network_name}.hocon"))
+    file_path = agent_utils.get_network_file_path(network_name)
     logging.info("file_path: %s", file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Network name '{network_name}' not found.")
@@ -33,7 +31,7 @@ def get_agent_network(network_name: str):
                                                        404: {"description": "HOCON file not found"}})
 def get_connectivity_info(network_name: str):
     """Retrieves connectivity details from an HOCON network configuration file."""
-    file_path = Path(os.path.join(agent_utils.registry_dir, f"{network_name}.hocon"))
+    file_path = agent_utils.get_network_file_path(network_name)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"HOCON file '{network_name}.hocon' not found.")
     return agent_utils.extract_connectivity_info(file_path)
@@ -43,7 +41,7 @@ def get_connectivity_info(network_name: str):
                                                         404: {"description": "HOCON file not found"}})
 def get_networkconfig(network_name: str):
     """Retrieves the entire details from an HOCON network configuration file."""
-    file_path = Path(os.path.join(agent_utils.registry_dir, f"{network_name}.hocon"))
+    file_path = agent_utils.get_network_file_path(network_name)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"HOCON file '{network_name}.hocon' not found.")
     return agent_utils.load_hocon_config(file_path)
