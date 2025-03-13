@@ -7,7 +7,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nsflow"
-version = "0.5.0"
 description = "A Neuro-San powered Smart Agent Network Framework"
 keywords = ["NsFlow", "NeuroSan", "agent-network"]
 license = { file = "LICENSE" }
@@ -32,7 +31,7 @@ classifiers = [
     # "License :: XXX :: XXX"
 ]
 
-dynamic = ["dependencies"]
+dynamic = ["version", "dependencies"]
 
 [tool.setuptools.dynamic]
 # Specify the dependencies for the library from what is given in requirements.txt
