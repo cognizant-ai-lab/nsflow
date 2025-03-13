@@ -37,3 +37,13 @@ def get_connectivity_info(network_name: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"HOCON file '{network_name}.hocon' not found.")
     return agent_utils.extract_connectivity_info(file_path)
+
+
+@router.get("/networkconfig/{network_name}", responses={200: {"description": "Connectivity Info"},
+                                                       404: {"description": "HOCON file not found"}})
+def get_connectivity_info(network_name: str):
+    """Retrieves the entire details from an HOCON network configuration file."""
+    file_path = Path(os.path.join(agent_utils.registry_dir, f"{network_name}.hocon"))
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"HOCON file '{network_name}.hocon' not found.")
+    return agent_utils.load_hocon_config(file_path)

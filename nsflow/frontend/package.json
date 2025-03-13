@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "d3": "^7.9.0",
+    "hocon-parser": "^1.0.1",
+    "js-yaml": "^4.1.0",
     "lucide-react": "^0.476.0",
     "react": "^18.3.1",
     "react-dnd": "^16.0.1",
