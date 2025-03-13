@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaPlusSquare, FaMinusSquare, FaSearch } from "react-icons/fa";
+import { FaPlusSquare, FaMinusSquare, FaSearch, FaTimes } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
 import { convertToTree, toggleNode, setExpandCollapseAll, filterTree, TreeNode } from "../utils/hoconViewer";
 
@@ -49,6 +49,12 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     }
   };
 
+  // Clear search and restore full tree
+  const clearSearch = () => {
+    setSearchTerm("");
+    setFilteredTree(configTree);
+  };
+
   return (
     <div className="p-4 border border-gray-700 rounded-md bg-gray-900 text-white h-full flex flex-col">
       <h2 className="text-lg font-bold mb-2">Config: {selectedNetwork}</h2>
@@ -63,6 +69,14 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
           onChange={handleSearch}
           className="bg-transparent text-white w-full focus:outline-none"
         />
+        {searchTerm && (
+          <button
+            className="absolute right-14 text-gray-400 hover:text-white"
+            onClick={clearSearch}
+          >
+            <FaTimes />
+          </button>
+        )}
       </div>
 
       {/* Expand/Collapse ALL Toggle */}
