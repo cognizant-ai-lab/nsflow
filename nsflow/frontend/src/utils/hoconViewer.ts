@@ -53,4 +53,26 @@ export type TreeNode = {
       children: node.children ? setExpandCollapseAll(node.children, expand) : undefined,
     }));
   };
+
+  export const filterTree = (tree: TreeNode[], query: string): TreeNode[] => {
+    return tree
+      .map((node) => {
+        if (
+          node.key.toLowerCase().includes(query) ||
+          (node.value && JSON.stringify(node.value).toLowerCase().includes(query))
+        ) {
+          return { ...node, expanded: true };
+        }
+  
+        if (node.children) {
+          const filteredChildren = filterTree(node.children, query);
+          if (filteredChildren.length > 0) {
+            return { ...node, children: filteredChildren, expanded: true };
+          }
+        }
+  
+        return null;
+      })
+      .filter(Boolean) as TreeNode[];
+  };  
   

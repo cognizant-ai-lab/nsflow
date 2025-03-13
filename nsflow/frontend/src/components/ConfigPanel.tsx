@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { FaPlusSquare, FaMinusSquare } from "react-icons/fa";
+import { FaPlusSquare, FaMinusSquare, FaSearch } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
-import { convertToTree, toggleNode, setExpandCollapseAll, TreeNode } from "../utils/hoconViewer";
+import { convertToTree, toggleNode, setExpandCollapseAll, filterTree, TreeNode } from "../utils/hoconViewer";
 
 const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiPort } = useApiPort();
   const [configTree, setConfigTree] = useState<TreeNode[]>([]);
+  const [filteredTree, setFilteredTree] = useState<TreeNode[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     if (!selectedNetwork) return;
@@ -15,25 +17,53 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
     fetch(`http://127.0.0.1:${apiPort}/api/v1/networkconfig/${selectedNetwork}`)
       .then((res) => res.json())
-      .then((data) => setConfigTree(convertToTree(data)))
+      .then((data) => {
+        const tree = convertToTree(data);
+        setConfigTree(tree);
+        setFilteredTree(tree);
+      })
       .catch((err) => setError(err.message));
   }, [selectedNetwork]);
 
   // Expand/Collapse a specific node
   const handleToggle = (uniqueKey: string) => {
-    setConfigTree((prevTree) => toggleNode(prevTree, uniqueKey));
+    setFilteredTree((prevTree) => toggleNode(prevTree, uniqueKey));
   };
 
   // Expand/Collapse **all** nodes
   const handleExpandCollapseAll = () => {
     const newExpandState = !isExpanded; // Toggle state
-    setConfigTree((prevTree) => setExpandCollapseAll(prevTree, newExpandState));
+    setFilteredTree((prevTree) => setExpandCollapseAll(prevTree, newExpandState));
     setIsExpanded(newExpandState);
+  };
+
+  // Handle search input and filter results
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value.toLowerCase();
+    setSearchTerm(query);
+
+    if (query.trim() === "") {
+      setFilteredTree(configTree);
+    } else {
+      setFilteredTree(filterTree(configTree, query));
+    }
   };
 
   return (
     <div className="p-4 border border-gray-700 rounded-md bg-gray-900 text-white h-full flex flex-col">
       <h2 className="text-lg font-bold mb-2">Config: {selectedNetwork}</h2>
+
+      {/* Search Box */}
+      <div className="mb-2 flex items-center bg-gray-800 px-3 py-2 rounded-md">
+        <FaSearch className="text-gray-400 mr-2" />
+        <input
+          type="text"
+          placeholder="Search config..."
+          value={searchTerm}
+          onChange={handleSearch}
+          className="bg-transparent text-white w-full focus:outline-none"
+        />
+      </div>
 
       {/* Expand/Collapse ALL Toggle */}
       <div className="mb-2">
@@ -57,10 +87,10 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
       <div className="flex-grow bg-gray-800 rounded-md text-sm p-2 overflow-y-auto max-h-[65vh]">
         {error ? (
           <p className="text-red-500">{error}</p>
-        ) : configTree.length > 0 ? (
-          <TreeView tree={configTree} onToggle={handleToggle} />
+        ) : filteredTree.length > 0 ? (
+          <TreeView tree={filteredTree} onToggle={handleToggle} />
         ) : (
-          <p>Loading...</p>
+          <p>No matches found</p>
         )}
       </div>
     </div>
