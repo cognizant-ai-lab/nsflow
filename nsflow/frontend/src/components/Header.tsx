@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { FaUserCircle, FaFolderOpen, FaSave, FaDownload } from "react-icons/fa";
-import { LuLeafyGreen  } from "react-icons/lu";
+import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
@@ -69,7 +69,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
     <header className="header flex items-center justify-between px-4 shadow-md relative z-50 bg-gray-900 h-14">
       {/* Left - App Icon */}
       <div className="flex items-center space-x-2">
-        <LuLeafyGreen className="h-8 w-8 text-blue-400" />
+        <ImPower className="h-8 w-8 text-blue-400" />
         <span className="text-lg font-semibold text-white">Neuro AI - Multi-Agent Accelerator Client</span>
       </div>
 

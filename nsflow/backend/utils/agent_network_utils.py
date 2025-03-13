@@ -51,12 +51,22 @@ class AgentNetworkUtils:
 
         return {"networks": networks}
 
+    @staticmethod
+    def load_hocon_config(file_path: Path):
+        """Load a HOCON file from the given directory and parse it."""
+
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="Config file not found")
+
+        try:
+            config = ConfigFactory.parse_file(str(file_path))
+            return config
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}")
+
     def parse_agent_network(self, file_path: Path):
         """Parses an agent network from a HOCON configuration file."""
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail=f"HOCON file '{file_path.name}' not found.")
-
-        config = ConfigFactory.parse_file(str(file_path))
+        config = self.load_hocon_config(file_path)
 
         nodes = []
         edges = []

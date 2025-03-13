@@ -46,7 +46,7 @@ const TabbedChatPanel = () => {
       lastActiveNetworkRef.current = activeNetwork;
     }
 
-    // 🔹 Setup WebSocket for Chat Panel
+    // Setup WebSocket for Chat Panel
     const chatWsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`;
     console.log("Connecting Chat WebSocket:", chatWsUrl);
     const newChatWs = new WebSocket(chatWsUrl);
@@ -66,7 +66,7 @@ const TabbedChatPanel = () => {
     newChatWs.onclose = () => console.log(">> Chat WebSocket Disconnected");
     setChatWs(newChatWs);
 
-    // 🔹 Setup WebSocket for Internal Chat Panel
+    // Setup WebSocket for Internal Chat Panel
     const internalWsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`;
     console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
     const newInternalWs = new WebSocket(internalWsUrl);
@@ -123,7 +123,7 @@ const TabbedChatPanel = () => {
       <div className="flex-grow">
         {activeTab === "chat" && <ChatPanel />}
         {activeTab === "internal" && <InternalChatPanel />}
-        {activeTab === "config" && <ConfigPanel />}
+        {activeTab === "config" && <ConfigPanel selectedNetwork={activeNetwork} />}
       </div>
     </div>
   );
