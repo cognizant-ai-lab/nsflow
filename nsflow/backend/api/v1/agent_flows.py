@@ -40,8 +40,8 @@ def get_connectivity_info(network_name: str):
 
 
 @router.get("/networkconfig/{network_name}", responses={200: {"description": "Connectivity Info"},
-                                                       404: {"description": "HOCON file not found"}})
-def get_connectivity_info(network_name: str):
+                                                        404: {"description": "HOCON file not found"}})
+def get_networkconfig(network_name: str):
     """Retrieves the entire details from an HOCON network configuration file."""
     file_path = Path(os.path.join(agent_utils.registry_dir, f"{network_name}.hocon"))
     if not file_path.exists():

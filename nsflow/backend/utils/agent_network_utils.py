@@ -62,7 +62,7 @@ class AgentNetworkUtils:
             config = ConfigFactory.parse_file(str(file_path))
             return config
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}")
+            raise HTTPException(status_code=500, detail=f'Error parsing HOCON: {str(e)}') from e
 
     def parse_agent_network(self, file_path: Path):
         """Parses an agent network from a HOCON configuration file."""
@@ -101,7 +101,7 @@ class AgentNetworkUtils:
             if isinstance(tool.get("function"), dict) and "parameters" not in tool["function"]:
                 return tool
             # check for 'command' key
-            if not tool.get("command", None): 
+            if not tool.get("command", None):
                 return tool
         return None
 
