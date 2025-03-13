@@ -6,7 +6,7 @@ import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
 // Global WebSocket storage to persist connections
-const activeSockets: Record<string, WebSocket> = {};
+// const activeSockets: Record<string, WebSocket> = {};
 
 const TabbedChatPanel = () => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "config">("chat");
