@@ -17,73 +17,85 @@ const TabbedChatPanel = () => {
     addInternalChatMessage,
     setChatWs,
     setInternalChatWs,
+    chatWs,
+    internalChatWs,
    } = useChatContext();
+  const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!activeNetwork) return;
 
-    // 🔹 Setup WebSocket for Chat Panel
-    const chatSocketKey = `chat-${apiPort}-${activeNetwork}`;
-    if (!activeSockets[chatSocketKey] || activeSockets[chatSocketKey].readyState !== WebSocket.OPEN) {
-      const chatWs = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`);
-      activeSockets[chatSocketKey] = chatWs;
-      setChatWs(chatWs)
-      console.log("Connecting Chat WebSocket:", chatSocketKey);
-
-      chatWs.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.message && typeof data.message === "object" && data.message.type === "AI") {
-            addChatMessage({ sender: "agent", text: data.message.text, network: activeNetwork });
-          }
-        } catch (err) {
-          console.error("Error parsing Chat WebSocket message:", err);
-        }
-      };
-
-      chatWs.onopen = () => console.log(">> Chat WebSocket Connected");
-      chatWs.onclose = () => console.log(">> Chat WebSocket Disconnected");
+    // Close old WebSockets before creating new ones
+    if (chatWs) {
+      console.log("Closing previous Chat WebSocket...");
+      chatWs.close();
     }
+    if (internalChatWs) {
+      console.log("Closing previous Internal Chat WebSocket...");
+      internalChatWs.close();
+    }
+
+    // Send system message for network switch only once
+    if (lastActiveNetworkRef.current !== activeNetwork) {
+      addChatMessage({
+        sender: "system",
+        text: `Connected to Agent: **${activeNetwork}**`,
+        network: activeNetwork,
+      });
+      lastActiveNetworkRef.current = activeNetwork;
+    }
+
+    // 🔹 Setup WebSocket for Chat Panel
+    const chatWsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`;
+    console.log("Connecting Chat WebSocket:", chatWsUrl);
+    const newChatWs = new WebSocket(chatWsUrl);
+
+    newChatWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.message && typeof data.message === "object" && data.message.type === "AI") {
+          addChatMessage({ sender: "agent", text: data.message.text, network: activeNetwork });
+        }
+      } catch (err) {
+        console.error("Error parsing Chat WebSocket message:", err);
+      }
+    };
+
+    newChatWs.onopen = () => console.log(">> Chat WebSocket Connected");
+    newChatWs.onclose = () => console.log(">> Chat WebSocket Disconnected");
+    setChatWs(newChatWs);
 
     // 🔹 Setup WebSocket for Internal Chat Panel
-    const internalSocketKey = `internal-${apiPort}-${activeNetwork}`;
-    if (!activeSockets[internalSocketKey] || activeSockets[internalSocketKey].readyState !== WebSocket.OPEN) {
-      const internalWs = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`);
-      activeSockets[internalSocketKey] = internalWs;
-      setInternalChatWs(internalWs);
+    const internalWsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`;
+    console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
+    const newInternalWs = new WebSocket(internalWsUrl);
 
-      internalWs.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-    
-            if (data.message && typeof data.message === "object") {
-              const otrace = data.message.otrace;
-              const chatText = data.message.text?.trim();
-              // Ignore messages where otrace or text is null
-              if (!chatText || !otrace.length) return;
-              // Prevent duplicate messages (compare with lastMessageRef)
-              if (lastMessageRef.current === chatText) {
-                console.log("Duplicate message ignored");
-                return;
-              }
-              // Update lastMessageRef to track last received message
-              lastMessageRef.current = chatText;
-              // Ensure the message updates UI
-              addInternalChatMessage({ sender: otrace.join(" : "), text: chatText, network: activeNetwork });
-              
-            }
-          } catch (err) {
-            console.error("Error parsing Internal Chat WebSocket message:", err);
+    newInternalWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.message && typeof data.message === "object") {
+          const otrace = data.message.otrace;
+          const chatText = data.message.text?.trim();
+          if (!chatText || !otrace.length) return;
+          if (lastMessageRef.current === chatText) {
+            console.log("Duplicate message ignored");
+            return;
           }
-      };
+          lastMessageRef.current = chatText;
+          addInternalChatMessage({ sender: otrace.join(" : "), text: chatText, network: activeNetwork });
+        }
+      } catch (err) {
+        console.error("Error parsing Internal Chat WebSocket message:", err);
+      }
+    };
 
-      internalWs.onopen = () => console.log(">> Internal Chat WebSocket Connected");
-      internalWs.onclose = () => console.log(">> Internal Chat WebSocket Disconnected");
-    }
+    newInternalWs.onopen = () => console.log(">> Internal Chat WebSocket Connected");
+    newInternalWs.onclose = () => console.log(">> Internal Chat WebSocket Disconnected");
+    setInternalChatWs(newInternalWs);
 
     return () => {
-      console.log("WebSockets remain active across all tabs.");
+      console.log("WebSockets for old network are closed.");
     };
   }, [activeNetwork, apiPort]);
 

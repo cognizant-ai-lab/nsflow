@@ -128,6 +128,7 @@ You can handle managed databases, NoSQL databases, and database optimization.
             "name": "security_agent",
             "llm_config": {
                 "model_name": "nvidia-llama-3.1-70b-instruct",
+                "base_url": "http://localhost:8000/v1",
                 "verbose": true
             },
             "function": "aaosa_call",
@@ -155,6 +156,7 @@ You can handle cloud service compliance.
             "name": "threat_detection_agent",
             "llm_config": {
                 "model_name": "nvidia-llama-3.1-70b-instruct",
+                "base_url": "http://localhost:8000/v1",
                 "verbose": true
             },
             "function": "aaosa_call",
@@ -225,6 +227,11 @@ You can handle cost optimization management.
         }
         {
             "name": "pricing_agent",
+            "llm_config": {
+                "model_name": "nvidia-llama-3.1-70b-instruct",
+                "base_url": "http://localhost:8000/v1",
+                "verbose": true
+            },
             "function": "aaosa_call",
             "instructions": """
 {instructions_prefix}
@@ -236,6 +243,11 @@ You can handle cloud pricing management.
         }
         {
             "name": "invoice_agent",
+            "llm_config": {
+                "model_name": "nvidia-llama-3.1-70b-instruct",
+                "base_url": "http://localhost:8000/v1",
+                "verbose": true
+            },
             "function": "aaosa_call",
             "instructions": """
 {instructions_prefix}

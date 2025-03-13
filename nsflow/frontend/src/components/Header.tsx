@@ -70,7 +70,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       {/* Left - App Icon */}
       <div className="flex items-center space-x-2">
         <LuLeafyGreen className="h-8 w-8 text-blue-400" />
-        <span className="text-lg font-semibold text-white">Neuro AI - Smart Agent Network</span>
+        <span className="text-lg font-semibold text-white">Neuro AI - Multi-Agent Accelerator Client</span>
       </div>
 
       {/* Middle - Navigation Buttons */}

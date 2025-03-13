@@ -65,6 +65,11 @@ class AgentNetworkUtils:
 
         tools = config.get("tools", [])
 
+        # Ensure all tools have a "command" key
+        for tool in tools:
+            if "command" not in tool:
+                tool["command"] = ""
+
         # Build lookup dictionary for agents
         for tool in tools:
             agent_id = tool.get("name", "unknown_agent")
@@ -85,7 +90,8 @@ class AgentNetworkUtils:
         for tool in tools:
             if isinstance(tool.get("function"), dict) and "parameters" not in tool["function"]:
                 return tool
-            if not tool.get("command"):
+            # check for 'command' key
+            if not tool.get("command", None): 
                 return tool
         return None
 
