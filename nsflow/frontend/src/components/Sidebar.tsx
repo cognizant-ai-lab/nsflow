@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
@@ -7,8 +7,14 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { apiPort, setApiPort } = useApiPort(); // Access API port from context
-  const { setActiveNetwork } = useChatContext(); // For both chat and internal chat
+  const { activeNetwork, setActiveNetwork } = useChatContext(); // For both chat and internal chat
   const [tempPort, setTempPort] = useState(apiPort);
+  const networksEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Auto-scroll to latest network
+    networksEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [networks]);
 
   useEffect(() => {
     setTempPort(apiPort);
@@ -55,23 +61,34 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         />
         <button
           onClick={() => setApiPort(tempPort)}
-          className="w-full mt-2 p-1 bg-blue-600 hover:bg-blue-500 text-white rounded"
+          className="w-full mt-2 p-1 bg-blue-500 hover:bg-blue-500 text-white rounded"
         >
           Connect
         </button>
       </div>
 
-      {loading && <p>Loading...</p>}
-      {error && <p className="text-red-500">{error}</p>}
-      {networks.map((network) => (
-        <button
-          key={network}
-          className="p-2 text-sm bg-blue-700 hover:bg-blue-600 rounded cursor-pointer"
-          onClick={() => handleNetworkSelection(network)}
-        >
-          {network}
-        </button>
-      ))}
+      
+      {/* Scrollable networks container */}
+      <div className="flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
+        {loading && <p>Loading...</p>}
+        {error && <p className="text-red-500">{error}</p>}
+        {networks.map((network) => (
+          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100">
+            <button
+              className={`w-full text-left p-1 text-sm rounded cursor-pointer transition-all 
+                ${
+                  activeNetwork === network
+                    ? "bg-orange-400 text-white font-bold" // Highlight active network
+                    : "bg-blue-700 hover:bg-blue-600"
+                }`}
+              onClick={() => handleNetworkSelection(network)}
+            >
+              {network}
+            </button>
+          </div>
+        ))}
+        <div ref={networksEndRef} /> {/* Auto-scroll reference */}
+      </div>
     </aside>
   );
 };
