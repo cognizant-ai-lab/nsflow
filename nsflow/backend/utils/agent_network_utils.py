@@ -67,7 +67,6 @@ class AgentNetworkUtils:
     @staticmethod
     def load_hocon_config(file_path: Path):
         """Load a HOCON file from the given directory and parse it."""
-
         if not file_path.exists() or not file_path.is_file():
             raise HTTPException(status_code=404, detail="Config file not found")
 
@@ -124,15 +123,19 @@ class AgentNetworkUtils:
 
         child_nodes = []
         dropdown_tools = []
+        sub_networks = []  # Track sub-network tools
 
         for tool_name in data.agent.get("tools", []):
-            if tool_name in data.node_lookup:
+            if tool_name.startswith("/"):  # Identify sub-network tools
+                sub_networks.append(tool_name.lstrip("/"))  # Remove leading `/`
+            elif tool_name in data.node_lookup:
                 child_agent = data.node_lookup[tool_name]
                 if child_agent.get("class", "No class") == "No class":
                     child_nodes.append(tool_name)
                 else:
                     dropdown_tools.append(tool_name)
 
+        # Add the agent node
         data.nodes.append({
             "id": agent_id,
             "type": "agent",
@@ -141,7 +144,8 @@ class AgentNetworkUtils:
                 "depth": data.depth,
                 "parent": data.parent,
                 "children": child_nodes,
-                "dropdown_tools": dropdown_tools
+                "dropdown_tools": dropdown_tools,
+                "sub_networks": sub_networks,  # Store sub-networks separately
             },
             "position": {"x": 100, "y": 100},
         })
@@ -151,9 +155,11 @@ class AgentNetworkUtils:
             "command": data.agent.get("command", "No command"),
             "class": data.agent.get("class", "No class"),
             "function": data.agent.get("function"),
-            "dropdown_tools": dropdown_tools
+            "dropdown_tools": dropdown_tools,
+            "sub_networks": sub_networks,  # Add sub-network info
         }
 
+        # Add edges and recursively process normal child nodes
         for child_id in child_nodes:
             data.edges.append({
                 "id": f"{agent_id}-{child_id}",
@@ -172,6 +178,29 @@ class AgentNetworkUtils:
                 depth=data.depth + 1
             )
             self.process_agent(child_agent_data)
+
+        # Process sub-network tools as separate green nodes
+        for sub_network in sub_networks:
+            data.nodes.append({
+                "id": sub_network,
+                "type": "sub-network",  # Differentiate node type
+                "data": {
+                    "label": sub_network,
+                    "depth": data.depth + 1,
+                    "parent": agent_id,
+                    "color": "green",  # Mark sub-network nodes as green
+                },
+                "position": {"x": 200, "y": 200},
+            })
+
+            # Connect sub-network tool to its parent agent
+            data.edges.append({
+                "id": f"{agent_id}-{sub_network}",
+                "source": agent_id,
+                "target": sub_network,
+                "animated": True,
+                "color": "green",  # Mark sub-network edges as green
+            })
 
     def extract_connectivity_info(self, file_path: Path):
         """Extracts connectivity details from an HOCON network configuration file."""
