@@ -76,7 +76,7 @@ cd frontend; yarn install
 #### **Step 3: Start the Backend & Frontend on separately**
 Backend:
 ```bash
-cd .. # Back to project root
+cd ..
 python -m nsflow.run --dev
 ```
 
@@ -99,11 +99,11 @@ Note:
 - run `sh build_scripts/build_frontend.sh` to create the above dist if it is not present
 
 ```bash
-cd .. # Back to project root
+cd ..
 python -m nsflow.run
 ```
 
 - **frontend** will be available at: `http://127.0.0.1:4173`
 - **backend** will be available at: `http://127.0.0.1:4173/docs`
-- 
+
 ---
