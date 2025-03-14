@@ -154,10 +154,8 @@ You ensure seamless online operations.
             "instructions": """
 You develop and execute marketing strategies to promote products and drive traffic both online and in stores.
 You ensure promotions are effectively communicated to customers.
-You also help with insurance queries using the insurance_agents tool.
             """,
             "command": "{aaosa_command}"
-            "tools": ["/insurance_agents"]
         }
     ]
 }
