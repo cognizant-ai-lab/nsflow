@@ -6,7 +6,7 @@ build_fe/
 dist/
 wheels/
 wheels_private/
-registries/*.hocon
+# registries/*.hocon
 *.egg-info
 .pytest_cache/
 .hypothesis/

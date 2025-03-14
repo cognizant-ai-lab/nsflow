@@ -12,6 +12,8 @@ logging.basicConfig(level=logging.INFO)
 ROOT_DIR = os.getcwd()
 REGISTRY_DIR = os.path.join(ROOT_DIR, "registries")
 CODED_TOOLS_DIR = os.path.join(ROOT_DIR, "coded_tools")
+FIXTURES_DIR = os.path.join(ROOT_DIR, "tests", "fixtures")
+TEST_NETWORK = os.path.join(FIXTURES_DIR, "test_network.hocon")
 
 
 @dataclass
@@ -31,10 +33,21 @@ class AgentNetworkUtils:
 
     def __init__(self):
         self.registry_dir = REGISTRY_DIR
+        self.fixtures_dir = FIXTURES_DIR
 
     def get_manifest_path(self):
         """Returns the manifest.hocon path."""
         return Path(self.registry_dir) / "manifest.hocon"
+
+    def get_test_manifest_path(self):
+        """Returns the manifest.hocon path."""
+        return Path(self.fixtures_dir) / "manifest.hocon"
+
+    def get_network_file_path(self, network_name: str) -> Path:
+        """Returns the correct path for a given network name."""
+        if network_name == "test_network":
+            return Path(os.path.join(self.fixtures_dir, f"{network_name}.hocon"))
+        return Path(os.path.join(self.registry_dir, f"{network_name}.hocon"))
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
@@ -62,7 +75,7 @@ class AgentNetworkUtils:
             config = ConfigFactory.parse_file(str(file_path))
             return config
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}")
+            raise HTTPException(status_code=500, detail=f'Error parsing HOCON: {str(e)}') from e
 
     def parse_agent_network(self, file_path: Path):
         """Parses an agent network from a HOCON configuration file."""
@@ -101,7 +114,7 @@ class AgentNetworkUtils:
             if isinstance(tool.get("function"), dict) and "parameters" not in tool["function"]:
                 return tool
             # check for 'command' key
-            if not tool.get("command", None): 
+            if not tool.get("command", None):
                 return tool
         return None
 

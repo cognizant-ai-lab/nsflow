@@ -41,8 +41,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
   // ** State for actual values (used in API calls) **
-  const [baseRadius, setBaseRadius] = useState(140);
-  const [levelSpacing, setLevelSpacing] = useState(160);
+  const [baseRadius, setBaseRadius] = useState(110);
+  const [levelSpacing, setLevelSpacing] = useState(125);
 
   // ** State for temporary values while scrubbing **
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);

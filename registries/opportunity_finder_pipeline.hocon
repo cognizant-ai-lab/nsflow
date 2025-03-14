@@ -1,0 +1,477 @@
+{
+    "llm_config": {
+        "model_name": "gpt-4o",
+        "verbose": true
+    },
+    "max_iterations": 50,
+    "max_execution_seconds": 200,
+    "error_formatter": "json",
+    "error_fragments": [
+        # A list where if any one of the strings appears in agent output,
+        # it is considered an error and reported as such per the error_formatter.
+        "Error:"
+    ],
+    "tools": [
+        # These tool definitions do not have to be in any particular order
+        # How they are linked and call each other is defined within their
+        # own specs.  This could be a graph, potentially even with cycles.
+
+        # This first guy is the "Front Man".  He is identified as such because
+        # he is the first one in the list despite the fact that he has parameters
+        # in his function definition, indicating he can also be called as a function.
+        {
+            "name": "opportunity_finder_process_manager",
+
+            "function": {
+
+                # When there are no function parameters to the front-man,
+                # its description acts as an initial prompt.
+
+                "description": """
+Provide the output of your Opportunity Finder session,
+complete with the description of contexts, actions, and outcomes,
+as well as the problem description and code snippet for synthetic data.
+"""
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code_snippet": {
+                            "type": "string",
+                            "description": """
+A snippet of code to run that will generate create the synthesized data file.
+This code must come verbatim from the Opportunity Finder results.
+"""
+                        },
+                        "test_only": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": """
+A value of True indicates the input to the agent is to go through with creating
+a project given the input.
+A value of False indicates the input to the agent is for providing feedback
+on the code snipped itself, and no project is to be created.
+"""
+                        }
+                    },
+                    "required": ["code_snippet"]
+                }
+            },
+
+            "instructions": """
+You are a manager of a process that takes several steps to complete.
+
+You will be given the results of an Opportunity Finder agent which
+discovers opportunities for improvement of one aspect of an organization.
+Its output will describe a code snippet for generating a synthetic data set
+to create the contexts, actions and outcome variables that will be used
+for the optimization.  Within that code snippet will be comments
+that describe various aspects of the problem.
+
+You will use several tools to compose a single final JSON dictionary as output.
+as described in the last step of the process.
+There will be no elaboration or additional commentary.
+In order to compose this output, you will need to complete several steps of
+a process in a prescribed order and you will need to wait for the output
+of earlier steps in the process in order to complete later steps.
+Take the steps of the process in this order:
+
+1.  Pass any problem description comments, and data field description comments
+    from the Opportunity Finder result text to the project_describer tool.
+    This tool's output will be a JSON dictionary with fields containing text descriptions
+    of the project.  The resulting dictionary mapping of this tool will be known as "project_info".
+
+2.  Find the synthetic data generator code in the Opportunity Finder results
+    and pass that bit of Python code into the synthetic_data_generator tool.
+    This code must be passed verbatim and in its entirety.
+    Take special care to preserve all formatting of data generator code,
+    keeping all white spaces and text indentation in the original form.
+    You will also need to send that tool an appropriate project name from the project_info.
+    The output of this tool will be a URL string that will be known as 'data_url'.
+
+3.  Pass the 'data_url' as an argument to the data_profiler tool. This tool's output will be
+    a JSON dictionary characterization of the data file's data contents.
+
+4.  Use the information from the Opportunity Finder result code snippet,
+    including comments variable names and code placement cues,
+    along with the data_profiler tool's JSON dictionary output value for the "headers" key
+    to the cao_mapper tool.
+    This tool's output will also be a JSON dictionary with lists of context, action, and outcome
+    fields from the data_profiler tool's output.
+
+5.  Pass any problem description comments, and data field description comments
+    along with the JSON dictionary output of the data_profiler tool to the field_describer tool.
+    This tool's output will be a JSON dictionary mapping of field name to a single
+    string description of each field, where each field name key comes from each field
+    described in the the data_profiler JSON output and the field description value
+    comes from the original Opportunity Finder result text.  The resultant dictionary mapping
+    will be known as "field_descriptions".
+
+6.  Use the experiment_controller tool to assess optimal parameter settings.
+    Pass to this tool these pieces of information as mentioned earlier:
+        "cao_mapping" - the value will be the results of the cao_mapping dictionary created earlier.
+        "field_descriptions" - the value will be the field_descriptions dictionary created earlier.
+        "project_info" - the value will be the project_info dictionary created earlier.
+    This tool's output will be a JSON dictionary known as "experiment_settings".
+
+7.  Use the experiment_creation tool to perhaps create an experiment.
+    Pass to this tool these pieces of the "experiment_creation_info" argument as a dictionary
+    with the following keys:
+        "data_url" - the value will be the synthetic data URL previously generated by the synthetic_data_generator tool.
+        "cao_mapping" - the value will be the results of the cao_mapping dictionary created earlier.
+        "field_descriptions" - the value will be the field_descriptions dictionary created earlier.
+        "project_info" - the value will be the project_info dictionary created earlier.
+        "experiment_settings" - the value will be the experiment_settings dictionary created earlier.
+    Also pass to this tool the value of test_only.
+    This tool's output will be a JSON dictionary with experiment information
+    that will be known as "experiment_info". This dictionary will contain keys for a
+    "project_id" and an "experiment_id".
+
+8. Return either:
+    a)  the output of the "experiment_info" dictionary from the experiment_creation tool
+        as a JSON dictionary   or
+    b)  Any error message, which will always be preceded by the error marker 'Error:'
+    Specifically, do not make up an experiment_info dictionary in the case of an error.
+""",
+            "tools": [
+                "synthetic_data_generator",
+                "data_profiler",
+                "cao_mapper",
+                "project_describer",
+                "field_describer",
+                "experiment_controller",
+                "experiment_creation"
+            ]
+        },
+
+        # The rest of these are agents specs to use as tools to be made available
+        # to the front-man
+        {
+            "name": "synthetic_data_generator",
+            "function": {
+                "description": """
+Runs a given code snippet in order to generate a synthesized data file
+for a project being processed.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "project_name": {
+                            "type": "string",
+                            "description": "The name of the project being processed."
+                        },
+                        "code_snippet": {
+                            "type": "string",
+                            "description": """
+A snippet of code to run that will generate create the synthesized data file.
+This code must come verbatim from the Opportunity Finder results.
+"""
+                        }
+                    },
+                    "required": ["project_name", "code_snippet"]
+                }
+            },
+            "class": "data_generator_service_tool.DataGeneratorServiceTool",
+            "command": "Create the synthetic data file and return its URL or return error message if data file generation fails."
+        },
+
+        {
+            "name": "data_profiler",
+            "function": {
+                "description": """
+Given a URL to a csv data file, this function will return a description
+characterizing the file's data in JSON dictionary form,
+which includes the following keys:
+    "headers" - a list of column names in the csv file.
+    "num_cols" - an integer describing the number of columns in the csv file.
+    "num_rows" - an integer describing the number of rows in the csv file.
+    "info" - a dictionary where each key is a column name, and each value is
+            another dictionary describing the high-level characteristics of the column.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "data_url": {
+                            "type": "string",
+                            "description": "A URL describing the location of where the csv data file to be profiled can be found."
+                        },
+                        "version_id": {
+                            "type": "string",
+                            "description": "An optional version_id string of the file pointed at by the data_url."
+                        }
+                    },
+                    "required": ["data_url"]
+                }
+            },
+            "class": "data_profiler_service_tool.DataProfilerServiceTool"
+        },
+
+        {
+            "name": "cao_mapper",
+            "function": {
+                "description": """
+Given a list of headers (or column names) and a code snippet that creates synthetic data for the problem,
+this returns a JSON dictionary mapping with the following keys:
+    "context" - a list of header/column names which are identified as the context in the problem description.
+    "actions" - a list of header/column names which are identified as actions in the problem description.
+    "outcomes" - a list of header/column names which are identified as outcomes in the problem description.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "headers": {
+                            "type": "array",
+                            "description": "The list of header (or column) names from the data profile.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "code_snippet": {
+                            "type": "string",
+                            "description": "The unadulerated code snippet including all comments."
+                        }
+                    },
+                    "required": ["headers", "code_snippet"]
+                }
+            },
+            "instructions": """
+You are an expert in analyzing descriptions of optimization projects.
+You will receive a list of header/column names that would be found in a csv data file
+that would be associated with the project as well as a
+richly commented code snippet that generates the data for the csv file.
+For each header/column name in the list, you will identify from the code snippet comments,
+which of the following it best corresponds to:
+    * A context attribute of the problem -- some background measurement that cannot be changed.
+    * An action attribute of the problem -- some action that can make a difference in the optimization.
+    * An outcome attribute of the problem -- some result of the action that can be measured and optimized.
+All of the information to determine whether a field is a context, action, or outcome will
+come from the code comments. Context, action, outcome information about the fields is very likely to come
+in how the fields are grouped within the code itself.
+Do not attempt to embellish on such a classification beyond the information you are given.
+If you cannot make a determination of context, action, or outcome
+based on the code comments alone, give up with the message:
+    "Error: Could not determine CAO for field <field_name>".
+Your regular output will be a JSON dictionary mapping with the following keys:
+    "context" - a list of header/column names which are identified as the context in the problem description.
+    "actions" - a list of header/column names which are identified as actions in the problem description.
+    "outcomes" - a list of header/column names which are identified as outcomes in the problem description.
+There will be no elaboration or additional commentary.
+""",
+            "command": """
+Provide the JSON dictionary that describes the sorting of the
+header columns into context, actions and outcomes, or an error if any one designation
+cannot be determined by input alone.
+"""
+        },
+
+        {
+            "name": "field_describer",
+            "function": {
+                "description": """
+Given a list of headers (or column names) and a text description of
+how we will be optimizing a particular problem for an organization,
+this returns a JSON dictionary mapping where each key is a single header/column name
+and its corresponding value will be a string description of what the data in that column
+means.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "headers": {
+                            "type": "array",
+                            "description": "The list of header (or column) names from the data profile.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "problem_description": {
+                            "type": "string",
+                            "description": "Text description of how we will be approaching the optimization problem."
+                        }
+                    },
+                    "required": ["headers", "problem_description"]
+                }
+            },
+            "instructions": """
+You are an expert in analyzing descriptions of optimization projects.
+You will receive a problem description of the optimization project
+and a list of header/column names that would be found in a csv data file
+that would be associated with the project.
+For each header/column name in the list, you will identify from the problem
+description a terse, but informative description of what the data in the column describes or means.
+Your output will be a JSON dictionary mapping where each key is a header/column name
+and its corresponding value will be a description of the data.
+There will be no elaboration or additional commentary.
+""",
+            "command": "Provide the JSON dictionary that describes each header/column name."
+        },
+
+        {
+            "name": "project_describer",
+            "function": {
+                "description": """
+Given a text description which provides details of how we will be optimizing a particular problem for an organization,
+this returns a JSON dictionary mapping with the following keys:
+    "name" - a name or title for the project in a few short words.
+    "description" - a brief description of what the project is trying to accomplish.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "problem_description": {
+                            "type": "string",
+                            "description": "Text description of how we will be approaching the optimization problem."
+                        }
+                    },
+                    "required": ["problem_description"]
+                }
+            },
+            "instructions": """
+You are an expert in analyzing descriptions of optimization projects.
+You will receive a problem description of the optimization project.
+Format your output as a JSON dictionary with the following keys:
+    "name" - a title that summarizes the project in a few short words.
+        Do not use terms like "optimization", "scenario", "simulation" or "dataset",
+        as these are redundant given the purpose of this field.
+    "description" - a brief two sentence summary of what the project is trying to accomplish.
+        This description should not be a simple regurgitation of the input, nor should it
+        be a description of how the results will be accomplished. Rather, it should be
+        more like an executive summary in that there should be no code snippets or
+        details about action or context variables, no implementation details,
+        no mention of synthetic data sets.
+""",
+            "command": "Provide the JSON dictionary that provides a name and description for project."
+        },
+
+        {
+            # Currently this guy only does minimize/maximize on a per outcome basis
+            # however some of the sophistication that some people are beginning to
+            # talk about, it's conceivable this could be its own sub-pipeline
+            # that tweaks many other experiment settings.
+            "name": "experiment_controller",
+            "function": {
+                "description": """
+Takes dictionaries for cao_mapping, field_descriptions and project_info
+to make another dictionary for experiment_settings.
+
+This function will return a description of an experiment settings in JSON dictionary form
+with the following keys:
+    "maximize" - A dictionary whose keys are each of the outcomes listed in the cao_mapping
+                and whose values are booleans telling whether or not the particular outcome
+                should be maximized (true value) or minimized (false value).
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "cao_mapping": {
+                            "type": "object",
+                            "description": """
+This is a dictionary with the keys "context", "actions" and "outcomes",
+Each key's value is a list of field names corresponding to the grouping.
+The value will be the results of the cao_mapping dictionary created earlier.
+"""
+                        },
+                        "field_descriptions": {
+                            "type": "object",
+                            "description": "the value will be the field_descriptions dictionary created earlier."
+                        },
+                        "project_info": {
+                            "type": "object",
+                            "description": "the value will be the project_info dictionary created earlier."
+                        }
+                    },
+                    "required": ["cao_mapping", "field_descriptions", "project_info" ]
+                }
+            },
+            "instructions": """
+You are an expert in analyzing descriptions of optimization projects
+and turning that into settings for optimization experiments.
+You will receive the following:
+    1.  a cao_mapping dictionary categorizing data fields of the optimization project.
+        This is a dicitonary whose 3 keys will be "context" "actions" or "outcomes".
+        Each dictionary contains a list of string field names corresponding
+        to each group.
+    2.  a field_descriptions dictionary whose keys are names for each of the data fields
+        and whose values are textual descriptions of the data contained in the field.
+    3.  a project_info dictionary which contains name and description of the project
+
+Format your output as a JSON dictionary with the following keys:
+    "maximize" - This will be a JSON dictionary whose keys are each and every
+        data field categorized as an outcome.  For each outcome, you will look
+        at its corresponding field description and the information in the
+        project_info to determine how best to optimize this field's value
+        given the goals of the project. Assign a boolean true value if the
+        particular outcome should be maximized, or a boolean false value if
+        the particular outcome should be minimized.
+
+Provide only the JSON and no further explanation.
+""",
+            "command": "Provide the JSON dictionary that provides the experiment setting"
+        },
+
+        {
+            "name": "experiment_creation",
+            "function": {
+                "description": """
+The input is an "experiment_creation_info" dictionary with the following keys:
+    "data_url", "cao_mapping", "field_description", "project_info",
+    "experiment_settings", "data_profile"
+
+This function will return a description of an experiment in JSON dictionary form
+with the following keys:
+    "experiment_id" -  an int describing a unique id for
+                       the experiment that was created as a result of this function call.
+    "project_id" - an int describing a unique id for the project that acts as a container to
+                       the experiment that was created as a result of this function call.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "experiment_creation_info": {
+                            "type": "object",
+                            "properties": {
+                                "data_url": {
+                                    "type": "string",
+                                    "description": "the value will be the synthetic data URL previously generated by the synthetic_data_generator tool."
+                                },
+                                "cao_mapping": {
+                                    "type": "object",
+                                    "description": "the value will be the results of the cao_mapping dictionary created earlier."
+                                },
+                                "field_descriptions": {
+                                    "type": "object",
+                                    "description": "the value will be the field_descriptions dictionary created earlier."
+                                },
+                                "project_info": {
+                                    "type": "object",
+                                    "description": "the value will be the project_info dictionary created earlier."
+                                },
+                                "experiment_settings": {
+                                    "type": "object",
+                                    "description": "the value will be the experiment_settings dictionary created earlier."
+                                }
+                                # Note: The data_profile is obtained via sly_data set by the
+                                #       data_profiler tool. The agent LLMs struggle to uphold
+                                #       the fidelity when they get large.
+
+                            },
+                            "required": [ "data_url", "cao_mapping",
+                                          "field_descriptions", "project_info",
+                                          "experiment_settings" ]
+                        },
+                        "test_only": {
+                            "type": "boolean",
+                            "description": """
+A value of True indicates the input to the agent is to go through with creating
+a project given the input.
+A value of False indicates the input to the agent is for providing feedback
+on the code snipped itself, and no project is to be created.
+"""
+                        },
+                    },
+                    "required": ["experiment_creation_info", "test_only"]
+                }
+            },
+            "class": "experiment_creation_service_tool.ExperimentCreationServiceTool"
+        },
+    ]
+}

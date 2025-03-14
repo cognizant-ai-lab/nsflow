@@ -1,9 +1,21 @@
+import { useEffect, useState } from "react";
 import { FaGithub, FaBookOpen, FaInfoCircle } from "react-icons/fa";
 import { SiFastapi } from "react-icons/si";
 import { useApiPort } from "../context/ApiPortContext";
 
 const InfoPanel = () => {
   const { apiPort } = useApiPort();
+  const [version, setVersion] = useState<string>("Loading...");
+
+  useEffect(() => {
+    fetch(`http://127.0.0.1:${apiPort}/api/v1/version`)
+      .then((res) => res.json())
+      .then((data) => setVersion(data.version))
+      .catch((err) => {
+        console.error("Failed to fetch version:", err);
+        setVersion("Unknown");
+      });
+  }, [apiPort]);
 
   return (
     <div className="info-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
@@ -18,7 +30,7 @@ const InfoPanel = () => {
           
           {/* App Version */}
         <div className="flex items-center text-gray-400">
-          <FaInfoCircle className="mr-2" /> App Version: <span className="ml-1 text-white">0.5.0</span>
+          <FaInfoCircle className="mr-2" /> Version: <span className="ml-1 text-white">{version}</span>
         </div>
 
           {/* GitHub Link */}
