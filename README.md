@@ -69,16 +69,18 @@ Make sure you have **Python 3.12** and **Node.js (with Yarn)** installed.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-private.txt
 cd frontend; yarn install
 ```
 
-#### **Step 3: Start the Backend**
+#### **Step 3: Start the Backend & Frontend on separately**
+Backend:
 ```bash
 cd .. # Back to project root
 python -m nsflow.run --dev
 ```
 
-#### **Step 4: Start the Frontend**
+Frontend:
 On another terminal window
 ```bash
 cd frontend
@@ -89,4 +91,19 @@ By default:
 - **backend** will be available at: `http://127.0.0.1:8005`
 - **frontend** will be available at: `http://127.0.0.1:5173`
 
+**OR**
+
+#### **Step 3: Start the prebuilt Frontend served with Backend**
+Note: 
+- Ensure that `./nsflow/prebuilt_frontend/dist` dir exists in your project
+- run `sh build_scripts/build_frontend.sh` to create the above dist if it is not present
+
+```bash
+cd .. # Back to project root
+python -m nsflow.run
+```
+
+- **frontend** will be available at: `http://127.0.0.1:4173`
+- **backend** will be available at: `http://127.0.0.1:4173/docs`
+- 
 ---
