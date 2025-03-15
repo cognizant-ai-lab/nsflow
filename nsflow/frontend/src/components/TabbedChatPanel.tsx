@@ -5,6 +5,7 @@ import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { FaRegStopCircle } from "react-icons/fa";
+import { ImBin2 } from "react-icons/im";
 import { useChatControls } from "../hooks/useChatControls";
 
 // Global WebSocket storage to persist connections
@@ -102,11 +103,6 @@ const TabbedChatPanel = () => {
     };
   }, [activeNetwork, apiPort]);
 
-  const handleClearChat = () => {
-    stopWebSocket();  // Close current WebSocket connections
-    clearChat();      // Reset chat history
-  };
-
   return (
     <div className="tabbed-chat-panel flex flex-col h-full p-4">
       {/* Tabs */}
@@ -132,13 +128,24 @@ const TabbedChatPanel = () => {
         {activeTab === "chat" && <ChatPanel />}
         {/* Stop Chat Button (Bottom Right) */}
         {(activeTab === "chat" || activeTab === "internal") && (
-          <div className="fixed right-9 bottom-56 z-10">
+          <div className="fixed right-16 bottom-56 z-10">
             <button
-              onClick={handleClearChat}
-              className="bg-white-700 hover:bg-orange-500 text-white p-1 rounded-md"
+              onClick={stopWebSocket}
+              className="bg-white-700 hover:bg-orange-300 text-white p-1 rounded-md"
               title="Stop Chat"
             >
-              <FaRegStopCircle size={14} />
+              <FaRegStopCircle size={12} />
+            </button>
+          </div>
+        )}
+        {(activeTab === "chat" || activeTab === "internal") && (
+          <div className="fixed right-9 bottom-56 z-10">
+            <button
+              onClick={clearChat}
+              className="bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
+              title="Clear Chat"
+            >
+              <ImBin2 size={12} />
             </button>
           </div>
         )}

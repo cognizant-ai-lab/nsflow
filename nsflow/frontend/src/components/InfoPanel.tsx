@@ -5,16 +5,34 @@ import { useApiPort } from "../context/ApiPortContext";
 
 const InfoPanel = () => {
   const { apiPort } = useApiPort();
-  const [version, setVersion] = useState<string>("Loading...");
+  const [versions, setVersions] = useState<{ nsflow: string; neuroSan: string }>({
+    nsflow: "Loading...",
+    neuroSan: "Loading...",
+  });
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:${apiPort}/api/v1/version`)
-      .then((res) => res.json())
-      .then((data) => setVersion(data.version))
-      .catch((err) => {
-        console.error("Failed to fetch version:", err);
-        setVersion("Unknown");
+    const fetchVersion = async (packageName: string) => {
+      try {
+        const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/version/${packageName}`);
+        const data = await response.json();
+        return data.version;
+      } catch (err) {
+        console.error(`Failed to fetch version for ${packageName}:`, err);
+        return "Unknown";
+      }
+    };
+
+    const fetchVersions = async () => {
+      const nsflowVersion = await fetchVersion("nsflow");
+      const neuroSanVersion = await fetchVersion("neuro-san");
+
+      setVersions({
+        nsflow: nsflowVersion,
+        neuroSan: neuroSanVersion,
       });
+    };
+
+    fetchVersions();
   }, [apiPort]);
 
   return (
@@ -28,10 +46,15 @@ const InfoPanel = () => {
         <div className="space-y-2">
           <p className="font-bold text-gray-400">Resources:</p>
           
-          {/* App Version */}
-        <div className="flex items-center text-gray-400">
-          <FaInfoCircle className="mr-2" /> Version: <span className="ml-1 text-white">{version}</span>
-        </div>
+          {/* Versions Display */}
+          <div className="flex items-center text-gray-400">
+            <FaInfoCircle className="mr-2" /> <span>Client v.</span> 
+            <span className="ml-1 text-white">{versions.nsflow}</span>
+          </div>
+          <div className="flex items-center text-gray-400">
+            <FaInfoCircle className="mr-2" /> <span>NeuroSan v.</span> 
+            <span className="ml-1 text-white">{versions.neuroSan}</span>
+          </div>
 
           {/* GitHub Link */}
           <a
