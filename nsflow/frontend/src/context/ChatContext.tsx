@@ -29,7 +29,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     { sender: "system", text: "Welcome to the chat!" },
   ]);
   const [internalChatMessages, setInternalChatMessages] = useState<Message[]>([
-    { sender: "system", text: "Internal Chat Logs" },
+    { sender: "system", text: "Welcome to internal chat log" },
   ]);
   const [activeNetwork, setActiveNetwork] = useState<string>("");
   const [chatWs, setChatWs] = useState<WebSocket | null>(null);

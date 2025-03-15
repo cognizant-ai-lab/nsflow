@@ -7,14 +7,7 @@ import { Clipboard } from "lucide-react"; // Small copy icon
 import { useChatContext } from "../context/ChatContext";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
-  const { activeNetwork, chatMessages, addChatMessage, 
-    setChatWs,
-    setInternalChatWs,
-    chatWs,
-    internalChatWs,
-    setChatMessages,
-    setInternalChatMessages,
-   } = useChatContext();
+  const { activeNetwork, chatMessages, addChatMessage, chatWs} = useChatContext();
 
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
@@ -58,27 +51,6 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  };
-
-  const stopWebSocket = () => {
-    console.log("Stopping chat session...");
-
-    if (chatWs) {
-      chatWs.close();
-      setChatWs(null);
-    }
-    if (internalChatWs) {
-      internalChatWs.close();
-      setInternalChatWs(null);
-    }
-    clearChat();
-  };
-
-  const clearChat = () => {
-    console.log("Clearing chat history...");
-    setChatMessages([]);
-    setInternalChatMessages([]);
-    addChatMessage({ sender: "system", text: "Welcome to the chat", network: activeNetwork });
   };
 
   return (
@@ -158,17 +130,6 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           </div>
         ))}
         <div ref={messagesEndRef} /> {/* Auto-scroll reference */}
-      </div>
-
-      {/* Stop Chat Button (Bottom Right) */}
-      <div className="fixed right-9 bottom-56 z-10">
-        <button
-          onClick={stopWebSocket}
-          className="bg-white-700 hover:bg-orange-500 text-white p-1 rounded-md"
-          title="Stop Chat"
-        >
-          <FaRegStopCircle size={14} />
-        </button>
       </div>
 
       {/* Chat Input (Fixed) */}

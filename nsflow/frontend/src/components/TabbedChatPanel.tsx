@@ -4,6 +4,7 @@ import InternalChatPanel from "./InternalChatPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { FaRegStopCircle } from "react-icons/fa";
 
 // Global WebSocket storage to persist connections
 // const activeSockets: Record<string, WebSocket> = {};
@@ -19,6 +20,8 @@ const TabbedChatPanel = () => {
     setInternalChatWs,
     chatWs,
     internalChatWs,
+    setChatMessages,
+    setInternalChatMessages,
    } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
@@ -99,6 +102,28 @@ const TabbedChatPanel = () => {
     };
   }, [activeNetwork, apiPort]);
 
+  const stopWebSocket = () => {
+    console.log("Stopping chat session...");
+
+    if (chatWs) {
+      chatWs.close();
+      setChatWs(null);
+    }
+    if (internalChatWs) {
+      internalChatWs.close();
+      setInternalChatWs(null);
+    }
+    clearChat();
+  };
+
+  const clearChat = () => {
+    console.log("Clearing chat history...");
+    setChatMessages([]);
+    setInternalChatMessages([]);
+    addChatMessage({ sender: "system", text: "Welcome to the chat", network: activeNetwork });
+    addInternalChatMessage({ sender: "system", text: "Welcome to internal chat log", network: activeNetwork });
+  };
+
   return (
     <div className="tabbed-chat-panel flex flex-col h-full p-4">
       {/* Tabs */}
@@ -122,6 +147,16 @@ const TabbedChatPanel = () => {
       {/* Content */}
       <div className="flex-grow">
         {activeTab === "chat" && <ChatPanel />}
+        {/* Stop Chat Button (Bottom Right) */}
+          <div className="fixed right-9 bottom-56 z-10">
+            <button
+              onClick={stopWebSocket}
+              className="bg-white-700 hover:bg-orange-500 text-white p-1 rounded-md"
+              title="Stop Chat"
+            >
+              <FaRegStopCircle size={14} />
+            </button>
+          </div>
         {activeTab === "internal" && <InternalChatPanel />}
         {activeTab === "config" && <ConfigPanel selectedNetwork={activeNetwork} />}
       </div>
