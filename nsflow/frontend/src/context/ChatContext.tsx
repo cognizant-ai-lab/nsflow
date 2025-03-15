@@ -12,6 +12,8 @@ type ChatContextType = {
   internalChatMessages: Message[];
   addChatMessage: (msg: Message) => void;
   addInternalChatMessage: (msg: Message) => void;
+  setChatMessages: (messages: Message[]) => void;
+  setInternalChatMessages: (messages: Message[]) => void;
   activeNetwork: string;
   setActiveNetwork: (network: string) => void;
   chatWs: WebSocket | null;
@@ -44,7 +46,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       chatMessages, 
       internalChatMessages, 
       addChatMessage, 
-      addInternalChatMessage, 
+      addInternalChatMessage,
+      setChatMessages, 
+      setInternalChatMessages,
       activeNetwork, 
       setActiveNetwork,
       chatWs,
