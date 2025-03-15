@@ -4,12 +4,6 @@ import InternalChatPanel from "./InternalChatPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
-import { FaRegStopCircle } from "react-icons/fa";
-import { ImBin2 } from "react-icons/im";
-import { useChatControls } from "../hooks/useChatControls";
-
-// Global WebSocket storage to persist connections
-// const activeSockets: Record<string, WebSocket> = {};
 
 const TabbedChatPanel = () => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "config">("chat");
@@ -23,7 +17,6 @@ const TabbedChatPanel = () => {
     chatWs,
     internalChatWs,
    } = useChatContext();
-  const { stopWebSocket, clearChat } = useChatControls();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
@@ -126,29 +119,6 @@ const TabbedChatPanel = () => {
       {/* Content */}
       <div className="flex-grow">
         {activeTab === "chat" && <ChatPanel />}
-        {/* Stop Chat Button (Bottom Right) */}
-        {(activeTab === "chat" || activeTab === "internal") && (
-          <div className="fixed right-16 bottom-56 z-10">
-            <button
-              onClick={stopWebSocket}
-              className="bg-white-700 hover:bg-orange-300 text-white p-1 rounded-md"
-              title="Stop Chat"
-            >
-              <FaRegStopCircle size={12} />
-            </button>
-          </div>
-        )}
-        {(activeTab === "chat" || activeTab === "internal") && (
-          <div className="fixed right-9 bottom-56 z-10">
-            <button
-              onClick={clearChat}
-              className="bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
-              title="Clear Chat"
-            >
-              <ImBin2 size={12} />
-            </button>
-          </div>
-        )}
         {activeTab === "internal" && <InternalChatPanel />}
         {activeTab === "config" && <ConfigPanel selectedNetwork={activeNetwork} />}
       </div>
