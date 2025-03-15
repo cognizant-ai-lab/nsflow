@@ -18,8 +18,8 @@ type ChatContextType = {
   setActiveNetwork: (network: string) => void;
   chatWs: WebSocket | null;
   internalChatWs: WebSocket | null;
-  setChatWs: (ws: WebSocket) => void;
-  setInternalChatWs: (ws: WebSocket) => void;
+  setChatWs: (ws: WebSocket | null) => void;
+  setInternalChatWs: (ws: WebSocket | null) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
