@@ -7,7 +7,7 @@ import { Clipboard } from "lucide-react"; // Small copy icon
 import { useChatContext } from "../context/ChatContext";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
-  const { activeNetwork, chatMessages, addChatMessage, chatWs} = useChatContext();
+  const { activeNetwork, chatMessages, addChatMessage, chatWs } = useChatContext();
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Reference for auto-scroll
