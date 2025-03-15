@@ -1,13 +1,15 @@
 import { useEffect, useState, useRef } from "react";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { useChatControls } from "../hooks/useChatControls";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { apiPort, setApiPort } = useApiPort(); // Access API port from context
-  const { activeNetwork, setActiveNetwork } = useChatContext(); // For both chat and internal chat
+  const { activeNetwork, setActiveNetwork } = useChatContext(); 
+  const { stopWebSocket, clearChat } = useChatControls();
   const [tempPort, setTempPort] = useState(apiPort);
   const networksEndRef = useRef<HTMLDivElement>(null);
 
@@ -40,8 +42,14 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   }, [apiPort]);
 
   const handleNetworkSelection = (network: string) => {
+    if (network === activeNetwork) return; // Prevent unnecessary reloading
+
+    console.log(`Switching to network: ${network}`);
+
+    stopWebSocket();  // Close current WebSocket connections
+    clearChat();      // Reset chat history
+    setActiveNetwork(network); // Set new active network
     onSelectNetwork(network);
-    setActiveNetwork(network); // Ensure both WebSockets start automatically
   };
 
   return (

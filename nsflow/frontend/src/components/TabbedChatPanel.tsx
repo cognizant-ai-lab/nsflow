@@ -5,6 +5,7 @@ import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { FaRegStopCircle } from "react-icons/fa";
+import { useChatControls } from "../hooks/useChatControls";
 
 // Global WebSocket storage to persist connections
 // const activeSockets: Record<string, WebSocket> = {};
@@ -20,9 +21,8 @@ const TabbedChatPanel = () => {
     setInternalChatWs,
     chatWs,
     internalChatWs,
-    setChatMessages,
-    setInternalChatMessages,
    } = useChatContext();
+  const { stopWebSocket, clearChat } = useChatControls();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
@@ -102,26 +102,9 @@ const TabbedChatPanel = () => {
     };
   }, [activeNetwork, apiPort]);
 
-  const stopWebSocket = () => {
-    console.log("Stopping chat session...");
-
-    if (chatWs) {
-      chatWs.close();
-      setChatWs(null);
-    }
-    if (internalChatWs) {
-      internalChatWs.close();
-      setInternalChatWs(null);
-    }
-    clearChat();
-  };
-
-  const clearChat = () => {
-    console.log("Clearing chat history...");
-    setChatMessages([]);
-    setInternalChatMessages([]);
-    addChatMessage({ sender: "system", text: "Welcome to the chat", network: activeNetwork });
-    addInternalChatMessage({ sender: "system", text: "Welcome to internal chat log", network: activeNetwork });
+  const handleClearChat = () => {
+    stopWebSocket();  // Close current WebSocket connections
+    clearChat();      // Reset chat history
   };
 
   return (
@@ -148,15 +131,17 @@ const TabbedChatPanel = () => {
       <div className="flex-grow">
         {activeTab === "chat" && <ChatPanel />}
         {/* Stop Chat Button (Bottom Right) */}
+        {(activeTab === "chat" || activeTab === "internal") && (
           <div className="fixed right-9 bottom-56 z-10">
             <button
-              onClick={stopWebSocket}
+              onClick={handleClearChat}
               className="bg-white-700 hover:bg-orange-500 text-white p-1 rounded-md"
               title="Stop Chat"
             >
               <FaRegStopCircle size={14} />
             </button>
           </div>
+        )}
         {activeTab === "internal" && <InternalChatPanel />}
         {activeTab === "config" && <ConfigPanel selectedNetwork={activeNetwork} />}
       </div>
