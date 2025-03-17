@@ -36,24 +36,23 @@ const InfoPanel = () => {
   }, [apiPort]);
 
   return (
-    <div className="info-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
+    <div className="logs-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
       <div className="logs-header flex justify-between items-center mb-2">
         <h2 className="text-white text-lg">Info</h2>
       </div>
-
-      <div className="logs-messages max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md">
+      <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md">
         {/* Resources */}
         <div className="space-y-2">
           <p className="font-bold text-gray-400">Resources:</p>
           
           {/* Versions Display */}
           <div className="flex items-center text-gray-400">
-            <FaInfoCircle className="mr-2" /> <span>Client v.</span> 
-            <span className="ml-1 text-white">{versions.nsflow}</span>
-          </div>
-          <div className="flex items-center text-gray-400">
             <FaInfoCircle className="mr-2" /> <span>NeuroSan v.</span> 
             <span className="ml-1 text-white">{versions.neuroSan}</span>
+          </div>
+          <div className="flex items-center text-gray-400">
+            <FaInfoCircle className="mr-2" /> <span>Client v.</span> 
+            <span className="ml-1 text-white">{versions.nsflow}</span>
           </div>
 
           {/* GitHub Link */}

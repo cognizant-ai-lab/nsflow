@@ -137,18 +137,18 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       {/* Stop Chat Button (Bottom Right) */}
       <div className="flex justify-end space-x-2 mt-1">
         <button
-          onClick={stopWebSocket}
-          className="bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
-          title="Stop Chat"
-        >
-          <FaRegStopCircle size={12} />
-        </button>
-        <button
           onClick={clearChat}
-          className="bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
+          className="bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
           title="Clear Chat"
         >
           <ImBin2 size={12} />
+        </button>
+        <button
+          onClick={stopWebSocket}
+          className="bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
+          title="Stop Chat"
+        >
+          <FaRegStopCircle size={12} />
         </button>
       </div>
 
