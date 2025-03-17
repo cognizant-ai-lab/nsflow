@@ -2,12 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import { FaDownload } from "react-icons/fa";
+import { FaDownload, FaRegStopCircle } from "react-icons/fa";
+import { ImBin2 } from "react-icons/im";
+import { useChatControls } from "../hooks/useChatControls";
 import { Clipboard } from "lucide-react"; // Small copy icon
 import { useChatContext } from "../context/ChatContext";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { activeNetwork, chatMessages, addChatMessage, chatWs } = useChatContext();
+  const { stopWebSocket, clearChat } = useChatControls();
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Reference for auto-scroll
@@ -131,11 +134,29 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
         <div ref={messagesEndRef} /> {/* Auto-scroll reference */}
       </div>
 
+      {/* Stop Chat Button (Bottom Right) */}
+      <div className="flex justify-end space-x-2 mt-1">
+        <button
+          onClick={clearChat}
+          className="bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
+          title="Clear Chat"
+        >
+          <ImBin2 size={12} />
+        </button>
+        <button
+          onClick={stopWebSocket}
+          className="bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
+          title="Stop Chat"
+        >
+          <FaRegStopCircle size={12} />
+        </button>
+      </div>
+
       {/* Chat Input (Fixed) */}
       <div className="chat-input mt-2 flex gap-2 items-end">
         <textarea
             placeholder="Type a message..."
-            className="chat-input-box bg-gray-700 text-white p-2 rounded-md flex-grow resize-y min-h-12 max-h-32 overflow-y-auto"
+            className="chat-input-box bg-gray-700 text-white p-2 rounded-md flex-grow resize-y min-h-20 max-h-40 overflow-y-auto"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => {
@@ -145,7 +166,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               }
             }}
         />
-        <button onClick={sendMessage} className="chat-send-btn bg-blue-600 text-white px-4 py-2 p-2 rounded-md h-auto">
+        <button onClick={sendMessage} className="chat-send-btn bg-blue-600 text-white px-4 py-2 p-2 rounded-md min-h-[60px] h-auto">
           Send
         </button>
       </div>

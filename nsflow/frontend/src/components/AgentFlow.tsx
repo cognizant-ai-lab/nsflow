@@ -155,7 +155,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
     console.log("Received nodes and edges:", { nodes, edges });
 
-    // **🔧 Dynamic node size calculation**
+    // **Dynamic node size calculation**
     const nodeDimensions = nodes.map((node) => ({
       width: node.style?.width || 100,
       height: node.style?.height || 50,
@@ -166,7 +166,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     );
     const PADDING = NODE_SIZE * 0.4;
 
-    console.log(`📏 NODE_SIZE: ${NODE_SIZE}, PADDING: ${PADDING}`);
+    console.log(`NODE_SIZE: ${NODE_SIZE}, PADDING: ${PADDING}`);
 
     const rootNode = nodes.find((node) => !edges.some((edge) => edge.target === node.id));
     if (!rootNode) {

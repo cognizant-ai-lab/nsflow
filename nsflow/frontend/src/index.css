@@ -159,6 +159,7 @@ input:focus {
   outline: none;
 }
 
+/* Info Panel*/
 /* Logs Panel: Ensures full height */
 .logs-panel {
   background-color: #1e293b !important;
