@@ -108,14 +108,29 @@ class AgentNetworkUtils:
         return {"nodes": nodes, "edges": edges, "agent_details": agent_details}
 
     def find_front_man(self, tools):
-        """Finds the front-man agent from the tools list."""
+        """Finds the front-man agent from the tools list.
+        1. First, check if an agent has a function **without parameters**.
+        2. If all agents have parameters, **fallback to the first agent** in the HOCON file.
+        """
+        front_men: List[str] = []
+        # Try to find an agent with a function **without parameters**
         for tool in tools:
             if isinstance(tool.get("function"), dict) and "parameters" not in tool["function"]:
-                return tool
-            # check for 'command' key
-            if not tool.get("command", None):
-                return tool
-        return None
+                front_men.append(tool)
+
+        # If no such agent is found, fallback to the **first agent in HOCON**
+        if tools:
+            front_men.append(tools[0])
+
+        if len(front_men) == 0:
+            raise ValueError("No front-man found. "
+                             "One entry's function must not have any parameters defined to be the front man")
+
+        if len(front_men) > 1:
+            raise ValueError(f"Found more than 1 front-man: {front_men}")
+
+        front_man = front_men[0]
+        return front_man
 
     def process_agent(self, data: AgentData):
         """Recursively processes each agent in the network, capturing hierarchy details."""

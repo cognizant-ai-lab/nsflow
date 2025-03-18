@@ -25,4 +25,6 @@
     "opportunity_finder_pipeline.hocon": true,
     "agent_network_generator.hocon": true,
     "gtc.hocon": true,
+    "airbnb.hocon": true,
+    "website_search.hocon": true,
 }
