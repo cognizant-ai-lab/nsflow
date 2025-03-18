@@ -13,6 +13,7 @@
     # Currently we list each hocon file we want to serve as a key with a boolean value.
     # Eventually we might have a dictionary value with server specifications for each.
     "airline_policy.hocon": true,
+    "smart_home_onf.hocon": true,
     "supply_chain.hocon": true,
     "cloud_services.hocon": true,
     "ds_smart_home.hocon": true,
@@ -24,4 +25,6 @@
     "opportunity_finder_pipeline.hocon": true,
     "agent_network_generator.hocon": true,
     "gtc.hocon": true,
+    "airbnb.hocon": true,
+    "website_search.hocon": true,
 }
