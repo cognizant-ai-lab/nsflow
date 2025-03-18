@@ -126,9 +126,6 @@ class AgentNetworkUtils:
             raise ValueError("No front-man found. "
                              "One entry's function must not have any parameters defined to be the front man")
 
-        if len(front_men) > 1:
-            raise ValueError(f"Found more than 1 front-man: {front_men}")
-
         front_man = front_men[0]
         return front_man
 
