@@ -22,11 +22,12 @@ git clone https://github.com/leaf-ai/nsflow.git
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-private.txt
 ```
 
 #### **Step 3: Run Everything with a Single Command**
 ```bash
-python -m nsflow run
+python -m nsflow.run
 ```
 
 By default, this will start:
