@@ -15,6 +15,9 @@ wheels_private/
 # Virtual environments
 .venv
 
+# env variables
+.env
+
 # logs
 logs
 tree.txt

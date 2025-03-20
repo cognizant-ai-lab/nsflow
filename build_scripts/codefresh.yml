@@ -71,7 +71,7 @@ steps:
       # pip install everything
       - pip install -r requirements-build.txt
       # - pip install -r ${WITH_CREDS_REQUIREMENTS}
-      - pip install -r requirements.txt
+      # - pip install -r requirements.txt
       # now build the wheel file
       - python -m build --wheel
       - mkdir -p ${{CF_VOLUME_PATH}}/${{CF_BUILD_ID}}
