@@ -118,6 +118,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                 p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
                 strong: ({ children }) => <strong className="font-bold text-gray-200">{children}</strong>,
                 em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
+                // Links should open in a new tab
+                a: ({ children, href }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                    {children}
+                  </a>
+                ),
               }}
             >
               {msg.text}

@@ -1,7 +1,9 @@
 import json
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 from typing import Dict, List, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.session.grpc_service_agent_session import GrpcServiceAgentSession
@@ -12,11 +14,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 class NsGrpcServiceApi:
     """Encapsulates gRPC session management & WebSocket interactions."""
-
-    SERVER_PORT = 30015
     LOG_BUFFER_SIZE = 100
 
     def __init__(self):
+        self.root_dir = os.getcwd()
+        self.load_env_variables()
+        self.SERVER_HOST = os.getenv("NS_SERVER_HOST", "localhost")
+        self.SERVER_PORT = int(os.getenv("NS_SERVER_PORT", "30015"))
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.active_internal_chat_connections: List[WebSocket] = []
         self.active_log_connections: List[WebSocket] = []
@@ -56,7 +60,7 @@ class NsGrpcServiceApi:
         await self.log_event(f"Chat client {client_id} connected to agent: {agent_name}", "FastAPI")
 
         # Initialize agent session without session_id
-        agent_session = GrpcServiceAgentSession(host="localhost", port=self.SERVER_PORT, agent_name=agent_name)
+        agent_session = GrpcServiceAgentSession(host=self.SERVER_HOST, port=self.SERVER_PORT, agent_name=agent_name)
 
         try:
             while True:
@@ -165,3 +169,12 @@ class NsGrpcServiceApi:
         except WebSocketDisconnect:
             self.active_log_connections.remove(websocket)
             await self.log_event("Logs client disconnected", "FastAPI")
+
+    def load_env_variables(self):
+        """Load .env file from project root and set variables."""
+        env_path = os.path.join(self.root_dir, ".env")
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            logging.info("Loaded environment variables from: %s", env_path)
+        else:
+            logging.warning("No .env file found at %s. \nUsing defaults.\n", env_path)
