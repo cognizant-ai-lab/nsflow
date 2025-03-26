@@ -4,7 +4,7 @@ from PyPDF2 import PdfReader
 from neuro_san.interfaces.coded_tool import CodedTool
 
 
-class ExtractPdf(CodedTool):
+class ExtractDocs(CodedTool):
     """
     CodedTool implementation extracts text from all PDFs in the given directory. 
     Returns a dictionary mapping each PDF file name to its extracted text.

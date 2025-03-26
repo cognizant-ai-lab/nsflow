@@ -26,8 +26,8 @@ Gather paperwork
 Some countries don’t allow pets to travel at all. Others have strict rules for rabies vaccines. Make sure you have all your paperwork and proof of
 vaccination in order before you leave.
 Booking pet tickets
-All you have to do is select “Travel with a pet” as a traveler during booking on united.com. Or, you can go to My Trips to add a pet to an existing
-trip. You cannot add a pet to your trip on the United app.
+All you have to do is select “Travel with a pet” as a traveler during booking on airline.com. Or, you can go to My Trips to add a pet to an existing
+trip. You cannot add a pet to your trip on the Airline app.
 Book now
 For tickets purchased before 4/26/24, there is a $125 fee each way for traveling with your pet. There is also a $125 fee for
 each layover of more than four hours for flights within the U.S. and more than 24 hours internationally. You cannot use
@@ -44,7 +44,7 @@ Checking in
 Check in for your flight at the ticket counter. You’ll need both your own and your pet’s confirmation numbers, which you can find in your email or
 in My Trips. We’ll also give you a special bag tag for your pet’s carrier.
 Pet relief areas
-Many airports have places you can take your pet to use the bathroom while you’re there. Use the airport maps feature on the United app to see
+Many airports have places you can take your pet to use the bathroom while you’re there. Use the airport maps feature on the Airline app to see
 where they’re located.
 Please note, therapy and emotional support cats and dogs must fly as pets, not service animals. They must follow all rules outlined in this policy both at
 the airport and on the plane.
