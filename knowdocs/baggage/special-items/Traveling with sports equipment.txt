@@ -91,8 +91,8 @@ We don’t accept kayaks and canoes on our flights.
 Kiteboards
 You can bring one kiteboard or one bag containing kiteboarding equipment as a checked bag. The kiteboard must be well padded or packed in a case to avoid scratching. Kiteboards must also meet the following dimensions:
 
-115 total inches (length + width + height) if you’re flying on United
-80 total inches (length + width + height) if you’re flying on United Express
+115 total inches (length + width + height) if you’re flying on Airline
+80 total inches (length + width + height) if you’re flying on Airline Express
 If your flight has an extra bag limit, kiteboards aren’t accepted unless you’re traveling to Costa Rica.
 
 Life jackets
@@ -105,8 +105,8 @@ Surfboards, wakeboards and paddleboards
 You can bring surfboards, wakeboards and paddleboards if they’re packed in board bags and:
 
 Weigh less than 100 pounds (45.3 kg)
-115 total inches (length + width + height) if you’re flying on United
-Measure less than 80 inches (203 cm) if you’re flying on United Express
+115 total inches (length + width + height) if you’re flying on Airline
+Measure less than 80 inches (203 cm) if you’re flying on Airline Express
 The skeg or fin must be removed or padded.
 If you’re flying to or from California, we’ll waive oversized bag charges for up to two of these items. If you’re connecting or have a layover in California, you aren’t eligible for this benefit.
 
@@ -115,12 +115,12 @@ If your flight has an extra bag limit, surfboards, wakeboards and paddleboards a
 Wave ski
 You can bring one wave ski or one bag containing equipment used in wave skiing as a checked bag. The wave ski must be padded or packed to avoid scratching. Wave skis must also meet the following dimensions:
 
-115 total inches (length + width + height) if you’re flying on United
-80 total inches (length + width + height) if you’re flying on United Express
+115 total inches (length + width + height) if you’re flying on Airline
+80 total inches (length + width + height) if you’re flying on Airline Express
 If your flight has an extra bag limit, wave skis aren’t accepted.
 
 Windsurfing
-You can bring one set of windsurfing equipment if you’re flying on United. That set can have:
+You can bring one set of windsurfing equipment if you’re flying on Airline. That set can have:
 
 One windsurfing board (less than 115 in or 292 cm total)
 One boom
@@ -129,7 +129,7 @@ One sail
 Necessary hardware for these items
 This equipment should weigh less than 99.9 pounds (45.3 kg) and should be checked as a special item. It must be padded and enclosed in a package that will protect it from scratches, dents and other damage during normal handling.
 
-You can’t bring windsurfing equipment on United Express flights or if there’s an extra bag limit on your flight.
+You can’t bring windsurfing equipment on Airline Express flights or if there’s an extra bag limit on your flight.
 
 
 
