@@ -10,7 +10,8 @@
 # Public repos
 # git+https://${LEAF_SOURCE_CREDENTIALS}@github.com/leaf-ai/leaf-common.git@1.2.20
 # git+https://${LEAF_PRIVATE_SOURCE_CREDENTIALS}@github.com/leaf-ai/leaf-server-common.git@0.1.15
+# git+https://${LEAF_SOURCE_CREDENTIALS}@github.com/leaf-ai/neuro-san.git@0.5.6
 
-wheels_private/leaf_common-1.2.18-py3-none-any.whl
-wheels_private/leaf_server_common-0.1.15-py3-none-any.whl
-wheels_private/neuro_san-0.4.6-py3-none-any.whl
+wheels_private/leaf_common-1.2.20-py3-none-any.whl
+wheels_private/leaf_server_common-0.1.17-py3-none-any.whl
+wheels_private/neuro_san-0.5.8-py3-none-any.whl

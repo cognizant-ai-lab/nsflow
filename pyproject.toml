@@ -9,7 +9,14 @@ build-backend = "setuptools.build_meta"
 name = "nsflow"
 description = "A Neuro-San powered Smart Agent Network Framework"
 keywords = ["NsFlow", "NeuroSan", "agent-network"]
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
+
+# Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+# By 2026-Feb-18, you need to update your project and remove deprecated calls
+# or your builds will no longer be supported.
+# See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        
+# license = { file = "LICENSE" }
 requires-python = ">=3.12"
 readme = "README.md"
 authors = [
