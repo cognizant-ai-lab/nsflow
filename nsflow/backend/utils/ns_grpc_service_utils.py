@@ -25,7 +25,7 @@ user_sessions: Dict[str, Dict[str, Any]] = {}
 
 
 # pylint: disable=too-many-instance-attributes
-class NsGrpcServiceApi:
+class NsGrpcServiceUtils:
     """
     Encapsulates gRPC session management and WebSocket interactions for a NeuroSAN agent.
     Manages:
