@@ -1,15 +1,17 @@
-
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from typing import Dict, Any
 import logging
 import json
+
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
 from google.protobuf.json_format import MessageToDict
 
 from nsflow.backend.models.chat_request_model import ChatRequestModel
-from nsflow.backend.utils.ns_grpc_streaming_chat_utils import NsGrpcStreamingChatUtils
+from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
 
 router = APIRouter(prefix="/api/v1")
-grpc_utils = NsGrpcStreamingChatUtils()
+
+grpc_service_utils = NsGrpcServiceUtils()
 
 
 @router.post("/streaming_chat/{agent_name}")
@@ -23,7 +25,7 @@ async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, reques
     """
 
     try:
-        response_generator = await grpc_utils.stream_chat(
+        response_generator = await grpc_service_utils.stream_chat(
             agent_name=agent_name,
             chat_request=chat_request.model_dump(),
             request=request
@@ -40,3 +42,26 @@ async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, reques
     except Exception as e:
         logging.exception("Failed to stream chat response")
         raise HTTPException(status_code=500, detail="Streaming chat failed")
+
+
+@router.get("/list")
+async def get_concierge_list(request: Request):
+    """
+    GET handler for concierge list API.
+    Extracts forwarded metadata from headers and uses the utility class to call gRPC.
+
+    :param request: The FastAPI Request object, used to extract headers.
+    :return: JSON response from gRPC service.
+    """
+    try:
+        # Extract metadata from headers
+        metadata: Dict[str, Any] = grpc_service_utils.get_metadata(request)
+
+        # Delegate to utility function
+        result = grpc_service_utils.list_concierge(metadata)
+
+        return JSONResponse(content=result)
+
+    except Exception:
+        logging.exception("Failed to retrieve concierge list")
+        raise HTTPException(status_code=500, detail="Failed to retrieve concierge list")
