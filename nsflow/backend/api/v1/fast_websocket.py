@@ -20,15 +20,6 @@ async def websocket_chat(websocket: WebSocket, agent_name: str):
     await ns_api.handle_chat_websocket(websocket)
 
 
-# # HTTP Streaming Chat Endpoint
-# # This is similar to what we have for websocket.
-# # All we need to do to implement this is to replace websocket header
-# # and websocket's send_text mechanism with a request header and response
-# @router.post("/streaming_chat/{agent_name}")
-# async def http_streaming_chat(agent_name: str, request: Request):
-#     return await ns_api.http_streaming_chat(agent_name, request)
-
-
 @router.websocket("/internalchat/{agent_name}")
 async def websocket_internal_chat(websocket: WebSocket, agent_name: str):
     """WebSocket route for internal chat communication."""
