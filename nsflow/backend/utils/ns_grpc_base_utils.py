@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 from typing import Dict, Any
 from dotenv import load_dotenv
@@ -29,6 +28,7 @@ class NsGrpcBaseUtils:
     }
 
     def __init__(self,
+                 agent_name: str,
                  forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA,
                  host: str = None,
                  port: int = None):
@@ -36,6 +36,7 @@ class NsGrpcBaseUtils:
         self.load_env_variables()
         self.server_host = host or os.getenv("NS_SERVER_HOST", "localhost")
         self.server_port = port or int(os.getenv("NS_SERVER_PORT", "30015"))
+        self.agent_name = agent_name
         self.forwarded_request_metadata = forwarded_request_metadata.split(" ")
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -71,8 +72,8 @@ class NsGrpcBaseUtils:
         """
         grpc_session: AsyncAgentSession = \
             AsyncGrpcServiceAgentSession(
-                host="localhost",
-                port=self.port,
+                host=self.server_host,
+                port=self.server_port,
                 metadata=metadata,
                 agent_name=self.agent_name)
         return grpc_session
@@ -84,8 +85,8 @@ class NsGrpcBaseUtils:
         """
         grpc_session: ConciergeSession = \
             GrpcConciergeSession(
-                host="localhost",
-                port=self.port,
+                host=self.server_host,
+                port=self.server_port,
                 metadata=metadata)
         return grpc_session
 

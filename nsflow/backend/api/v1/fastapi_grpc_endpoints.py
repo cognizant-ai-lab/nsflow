@@ -11,8 +11,6 @@ from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
 
 router = APIRouter(prefix="/api/v1")
 
-grpc_service_utils = NsGrpcServiceUtils()
-
 
 @router.post("/streaming_chat/{agent_name}")
 async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, request: Request):
@@ -23,7 +21,7 @@ async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, reques
     :param request: FastAPI Request with JSON body and headers.
     :return: StreamingResponse that yields JSON lines.
     """
-
+    grpc_service_utils = NsGrpcServiceUtils(agent_name=agent_name)
     try:
         response_generator = await grpc_service_utils.stream_chat(
             agent_name=agent_name,
@@ -40,8 +38,8 @@ async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, reques
         return StreamingResponse(json_line_stream(), media_type="application/json-lines")
 
     except Exception as e:
-        logging.exception("Failed to stream chat response")
-        raise HTTPException(status_code=500, detail="Streaming chat failed")
+        logging.exception("Failed to stream chat response: %s", e)
+        raise HTTPException(status_code=500, detail="Streaming chat failed") from e
 
 
 @router.get("/list")
@@ -53,6 +51,7 @@ async def get_concierge_list(request: Request):
     :param request: The FastAPI Request object, used to extract headers.
     :return: JSON response from gRPC service.
     """
+    grpc_service_utils = NsGrpcServiceUtils(agent_name=None)
     try:
         # Extract metadata from headers
         metadata: Dict[str, Any] = grpc_service_utils.get_metadata(request)
@@ -62,6 +61,6 @@ async def get_concierge_list(request: Request):
 
         return JSONResponse(content=result)
 
-    except Exception:
-        logging.exception("Failed to retrieve concierge list")
-        raise HTTPException(status_code=500, detail="Failed to retrieve concierge list")
+    except Exception as e:
+        logging.exception("Failed to retrieve concierge list: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve concierge list") from e

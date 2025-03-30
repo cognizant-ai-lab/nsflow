@@ -1,6 +1,5 @@
 
 import json
-import asyncio
 import logging
 from typing import Dict, List, Any
 
@@ -14,6 +13,7 @@ from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 # pylint: disable=too-many-instance-attributes
 class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
@@ -36,7 +36,10 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
         :param websocket: The WebSocket connection instance.
         :param forwarded_request_metadata: List of metadata keys to extract from incoming headers.
         """
-        super().__init__(forwarded_request_metadata=" ".join(forwarded_request_metadata))
+        super().__init__(
+            agent_name=agent_name,
+            forwarded_request_metadata=" ".join(forwarded_request_metadata)
+            )
         self.agent_name = agent_name
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}

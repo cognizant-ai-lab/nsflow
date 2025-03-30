@@ -4,6 +4,7 @@ from typing import Dict, Generator, Any
 
 import grpc
 from google.protobuf.json_format import Parse
+# pylint: disable=no-name-in-module
 from neuro_san.api.grpc.agent_pb2 import ChatRequest
 from neuro_san.session.async_grpc_service_agent_session import AsyncGrpcServiceAgentSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
@@ -55,5 +56,5 @@ class NsGrpcServiceUtils(NsGrpcBaseUtils):
             request_data: Dict[str, Any] = {}
             return grpc_session.list(request_data)
         except Exception as e:
-            self.logger.exception("Failed to fetch concierge list")
+            self.logger.exception("Failed to fetch concierge list: %s", e)
             raise
