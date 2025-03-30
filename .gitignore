@@ -6,6 +6,8 @@ build_fe/
 dist/
 wheels/
 wheels_private/
+.ipynb_checkpoints/
+
 # registries/*.hocon
 *.egg-info
 .pytest_cache/
@@ -21,6 +23,8 @@ wheels_private/
 # logs
 logs
 tree.txt
+test.ipynb
+test.json
 
 # keep the dist for prebuilt_frontend
 !nsflow/prebuilt_frontend/dist/

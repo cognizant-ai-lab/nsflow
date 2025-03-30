@@ -76,7 +76,9 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   }, [selectedNetwork, baseRadius, levelSpacing]);
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs`);
+    if (!selectedNetwork) return;
+    
+    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs/${selectedNetwork}`);
 
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event: MessageEvent) => {
@@ -113,7 +115,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
     return () => ws.close();
-  }, [apiPort]);
+  }, [selectedNetwork, apiPort]);
 
   // Utility function to validate JSON
   const isValidJson = (str: string): boolean => {

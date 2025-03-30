@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaDownload } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
+import { useChatContext } from "../context/ChatContext";
 
 type LogEntry = {
   timestamp: string;
@@ -17,9 +18,12 @@ const LogsPanel = () => {
     { timestamp: getCurrentTimestamp(), source: "Frontend", message: "System initialized." },
     { timestamp: getCurrentTimestamp(), source: "Frontend", message: "Frontend app loaded successfully." },
   ]);
+  const { 
+    activeNetwork,
+   } = useChatContext();
 
   useEffect(() => {
-    if (!apiPort) return; // Prevents WebSocket from connecting before port is set
+    if (!apiPort || !activeNetwork) return; // Prevents WebSocket from connecting before port is set
 
     setLogs((prevLogs) => [
       ...prevLogs,
@@ -27,8 +31,8 @@ const LogsPanel = () => {
     ]);
 
     // WebSocket for real-time logs
-    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs`);
-
+    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs/${activeNetwork}`);
+    
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event) => {
       try {
@@ -46,7 +50,7 @@ const LogsPanel = () => {
     return () => {
       ws.close();
     };
-  }, [apiPort]);
+  }, [activeNetwork, apiPort]);
 
   const downloadLogs = () => {
     const logText = logs
