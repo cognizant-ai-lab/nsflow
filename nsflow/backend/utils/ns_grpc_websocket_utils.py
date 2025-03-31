@@ -8,7 +8,7 @@ from google.protobuf.json_format import MessageToDict
 
 from neuro_san.service.agent_server import DEFAULT_FORWARDED_REQUEST_METADATA
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
-from nsflow.backend.utils.websocket_logs_registry import get_logs_manager
+from nsflow.backend.utils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
 
 # Logging setup
@@ -45,7 +45,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}
 
-        self.logs_manager = get_logs_manager(agent_name)
+        self.logs_manager = LogsRegistry.register(agent_name)
 
     # Using Dan's implementation, need to refactor later
     def formulate_chat_request(self, user_input: str,
