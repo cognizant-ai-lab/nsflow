@@ -1,4 +1,4 @@
-# websocket_logs_manager.py
+
 """
 Manages real-time log and internal chat streaming via WebSocket connections.
 

@@ -7,6 +7,7 @@ dist/
 wheels/
 wheels_private/
 .ipynb_checkpoints/
+*.ipynb
 
 # registries/*.hocon
 *.egg-info

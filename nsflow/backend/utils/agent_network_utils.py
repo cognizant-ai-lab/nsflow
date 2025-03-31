@@ -97,7 +97,7 @@ class AgentNetworkUtils:
             agent_id = tool.get("name", "unknown_agent")
             node_lookup[agent_id] = tool
 
-        front_man = self.find_front_man(tools)
+        front_man = self.find_front_man(file_path)
 
         if not front_man:
             raise HTTPException(status_code=400, detail="No front-man agent found in network.")
@@ -107,12 +107,20 @@ class AgentNetworkUtils:
 
         return {"nodes": nodes, "edges": edges, "agent_details": agent_details}
 
-    def find_front_man(self, tools):
+    def find_front_man(self, file_path: Path):
         """Finds the front-man agent from the tools list.
         1. First, check if an agent has a function **without parameters**.
         2. If all agents have parameters, **fallback to the first agent** in the HOCON file.
         """
         front_men: List[str] = []
+        config = self.load_hocon_config(file_path)
+        tools = config.get("tools", [])
+
+        # Ensure all tools have a "command" key
+        for tool in tools:
+            if "command" not in tool:
+                tool["command"] = ""
+
         # Try to find an agent with a function **without parameters**
         for tool in tools:
             if isinstance(tool.get("function"), dict) and "parameters" not in tool["function"]:
