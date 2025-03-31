@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FaDownload } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
@@ -18,9 +18,13 @@ const LogsPanel = () => {
     { timestamp: getCurrentTimestamp(), source: "Frontend", message: "System initialized." },
     { timestamp: getCurrentTimestamp(), source: "Frontend", message: "Frontend app loaded successfully." },
   ]);
-  const { 
-    activeNetwork,
-   } = useChatContext();
+  const { activeNetwork} = useChatContext();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Auto-scroll to latest message
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   useEffect(() => {
     if (!apiPort || !activeNetwork) return; // Prevents WebSocket from connecting before port is set
@@ -89,6 +93,7 @@ const LogsPanel = () => {
         ) : (
           <p className="text-gray-400">No logs available.</p>
         )}
+        <div ref={messagesEndRef} />
       </div>
     </div>
   );

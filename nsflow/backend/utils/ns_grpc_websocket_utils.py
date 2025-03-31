@@ -133,6 +133,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
             final_response = None
             internal_chat = None
             otrace = None
+            token_accounting: Dict[str, Any] = {}
 
             # Stream each message to the WebSocket
             async for sub_generator in result_generator:
@@ -144,13 +145,17 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
                             final_response = result_dict["response"]["text"]
                         otrace = result_dict["response"].get("origin", [])
                         otrace = [i.get("tool") for i in otrace]
+                        if result_dict["response"].get("type") == "AGENT":
+                            token_accounting = result_dict["response"].get("structure", token_accounting)
                     if result_dict["response"].get("type") in ["AGENT", "AGENT_TOOL_RESULT"]:
                         internal_chat = result_dict["response"].get("text", "")
 
                     otrace_str = json.dumps({"otrace": otrace})
                     internal_chat_str = {"otrace": otrace, "text": internal_chat}
+                    token_accounting_str = json.dumps({"token_accounting": token_accounting})
                     await self.logs_manager.log_event(f"{otrace_str}", "NeuroSan")
                     await self.logs_manager.internal_chat_event(internal_chat_str)
+
 
             # send everything after result_dict is complete instead of sending along the process
             if final_response:
@@ -158,6 +163,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
                     response_str = json.dumps({"message": {"type": "AI", "text": final_response}})
                     await websocket.send_text(response_str)
                     await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "FastAPI")
+                    await self.logs_manager.log_event(f"{token_accounting_str}", "NeuroSan")
                 except WebSocketDisconnect:
                     self.active_chat_connections.pop(client_id, None)
                 except RuntimeError as e:
