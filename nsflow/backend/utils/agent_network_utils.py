@@ -225,10 +225,8 @@ class AgentNetworkUtils:
     def extract_connectivity_info(self, file_path: Path):
         """Extracts connectivity details from an HOCON network configuration file."""
         logging.info("utils file_path: %s", file_path)
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail=f"HOCON file '{file_path.name}' not found.")
 
-        config = ConfigFactory.parse_file(str(file_path))
+        config = self.load_hocon_config(file_path)
         tools = config.get("tools", [])
 
         connectivity = []
@@ -252,3 +250,15 @@ class AgentNetworkUtils:
             processed_tools.add(tool_name)
 
         return {"connectivity": connectivity}
+    
+    def extract_coded_tool_class(self, file_path: Path):
+        config = self.load_hocon_config(file_path)
+        tools = config.get("tools", [])
+        coded_tool_classes: List[str] = []
+        for tool in tools:
+            class_name = tool.get("class", None)
+            if class_name:
+                coded_tool_classes.append(class_name)
+        return coded_tool_classes
+
+

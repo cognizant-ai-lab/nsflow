@@ -40,7 +40,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
             agent_name=agent_name,
             forwarded_request_metadata=" ".join(forwarded_request_metadata)
             )
-        self.agent_name = agent_name
+        # self.agent_name = agent_name
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}

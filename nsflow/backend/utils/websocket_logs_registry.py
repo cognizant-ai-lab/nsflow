@@ -8,7 +8,7 @@ This allows consistent reuse of log managers across different components
 from typing import Dict
 from nsflow.backend.utils.websocket_logs_manager import WebsocketLogsManager
 
-
+# pylint: disable=too-few-public-methods
 class LogsRegistry:
     """
     Registry for shared WebsocketLogsManager instances.
