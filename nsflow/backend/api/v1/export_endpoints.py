@@ -10,6 +10,7 @@ router = APIRouter(prefix="/api/v1/export")
 ROOT_DIR = Path.cwd()
 REGISTRY_DIR = ROOT_DIR / "registries"
 
+
 @router.get("/notebook/{agent_network}")
 async def export_notebook(agent_network: str):
     """Endpoint to generate and return a downloadable Jupyter Notebook for an agent network."""
@@ -18,7 +19,7 @@ async def export_notebook(agent_network: str):
         notebook_path = notebook_generator.generate_notebook(agent_network)
         return FileResponse(notebook_path, media_type="application/octet-stream", filename=notebook_path.name)
     except HTTPException as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/agent_network/{agent_network}", responses={404: {"description": "Agent network not found"}})

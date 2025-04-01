@@ -1,10 +1,38 @@
 
-from graphviz import Graph
 from collections import deque
+from graphviz import Graph
 
 
+# pylint: disable=too-few-public-methods
 class NotebookUtils:
+    """
+    Utility class for building and visualizing an agent network graph in a Jupyter Notebook.
+
+    This class takes a structured connectivity dictionary (e.g., from a HOCON config or parsed JSON),
+    and generates a Graphviz `Graph` object for display. It supports visual configuration such as
+    layout direction, spacing, shapes, fonts, node colors by level, and filtering of coded tools.
+
+    The resulting graph can be rendered inline in notebooks or exported as a .png/.dot file.
+
+    Configuration options can be passed via the `graph_config` dictionary:
+        - rankdir: Layout direction ("TB", "LR", "BT", "RL")
+        - nodesep: Horizontal spacing between nodes
+        - ranksep: Vertical spacing between levels
+        - splines: Line styling between nodes ("polyline", "curved", etc.)
+        - shape: Node shape ("box", "ellipse", etc.)
+        - fontname: Font used for node labels
+        - fontsize: Font size used in the graph
+        - node_width: Width of nodes
+        - node_height: Height of nodes
+        - level_colors: List of fill colors for different levels
+        - coded_tool_classes: List of prefix strings to exclude from graph (e.g., ["extract_docs", "url_provider"])
+        - render_png: Whether to render the output as PNG (True) or leave as raw DOT (False)
+    """
     def __init__(self, graph_config=None):
+        """
+        Initialize the NotebookUtils with optional visual customization.
+        :param graph_config: A dictionary of graph display options (see class docstring).
+        """
         default_config = {
             "rankdir": "TB",
             # Horizontal spacing between nodes
@@ -30,7 +58,15 @@ class NotebookUtils:
         }
         self.config = {**default_config, **(graph_config or {})}
 
+    # pylint: disable=too-many-locals
     def build_graph(self, root_node_name, network_data):
+        """
+        Build a Graphviz graph from the given agent network data.
+        :param root_node_name: The root or entry point node of the network (e.g. "Airline 360 Assistant").
+        :param network_data: Dictionary with a `connectivity` key containing a list of dicts, each with
+                             an "origin" and a "tools" list (representing downstream dependencies).
+        :return: A `graphviz.Graph` object representing the agent network graph.
+        """
         coded_prefixes = self.config["coded_tool_classes"]
         graph_map = {
             item["origin"]: [

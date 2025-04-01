@@ -156,7 +156,6 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
                     await self.logs_manager.log_event(f"{otrace_str}", "NeuroSan")
                     await self.logs_manager.internal_chat_event(internal_chat_str)
 
-
             # send everything after result_dict is complete instead of sending along the process
             if final_response:
                 try:

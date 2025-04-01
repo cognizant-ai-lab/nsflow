@@ -250,8 +250,9 @@ class AgentNetworkUtils:
             processed_tools.add(tool_name)
 
         return {"connectivity": connectivity}
-    
+
     def extract_coded_tool_class(self, file_path: Path):
+        """Extract all the coded tool classes in a list"""
         config = self.load_hocon_config(file_path)
         tools = config.get("tools", [])
         coded_tool_classes: List[str] = []
@@ -260,5 +261,3 @@ class AgentNetworkUtils:
             if class_name:
                 coded_tool_classes.append(class_name)
         return coded_tool_classes
-
-

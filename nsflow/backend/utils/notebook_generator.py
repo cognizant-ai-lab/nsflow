@@ -3,6 +3,7 @@ from pathlib import Path
 import nbformat as nbf
 
 
+# pylint: disable=too-few-public-methods
 class NotebookGenerator:
     """
     Class responsible for generating Jupyter notebooks to interact with agent networks.
@@ -33,8 +34,10 @@ class NotebookGenerator:
         cells.append(nbf.v4.new_markdown_cell(
             "## Notes: \n"
             "- Ensure that the fastapi server is running in the background\n"
-            "- To interact with the agent networks, ensure that you have sufficient access to the APIs for the required provider and their LLMs\n"
-            "- For a list of default providers and llms, refer to neuro-san/neuro_san/internals/run_context/langchain/default_llm_info.hocon"
+            "- To interact with the agent networks, ensure that you have sufficient "
+            "access to the APIs for the required provider and their LLMs\n"
+            "- For a list of default providers and llms, refer to "
+            "neuro-san/neuro_san/internals/run_context/langchain/default_llm_info.hocon"
         ))
 
         cells.append(nbf.v4.new_markdown_cell(
@@ -152,7 +155,8 @@ class NotebookGenerator:
             "    \"chat_filter\": {}\n"
             "}\n\n"
 
-            "result_dict = await call_streaming_chat(agent_name=agent_network, api_url=api_url, chat_request=chat_request)\n"
+            "result_dict = await call_streaming_chat(agent_name=agent_network, \n"
+            "                                        api_url=api_url, chat_request=chat_request)\n"
             "response = result_dict.get(\"response\")\n"
             "chat_context = response.get(\"chat_context\")\n"
             "display(JSON(response))"
@@ -169,7 +173,6 @@ class NotebookGenerator:
         cells.append(nbf.v4.new_markdown_cell(
             "## End of Notebook"
         ))
-
 
         # Create a new notebook
         notebook = nbf.v4.new_notebook()
