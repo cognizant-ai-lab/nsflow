@@ -28,4 +28,5 @@
     "gtc.hocon": true,
     "airbnb.hocon": true,
     "website_search.hocon": true,
+    "python_coach.hocon": true,
 }

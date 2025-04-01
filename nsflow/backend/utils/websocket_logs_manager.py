@@ -35,6 +35,7 @@ class WebsocketLogsManager:
         self.agent_name = agent_name
         self.active_log_connections: List[WebSocket] = []
         self.active_internal_chat_connections: List[WebSocket] = []
+        self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}")
         self.log_buffer: List[Dict] = []
 
     def get_timestamp(self):
@@ -52,11 +53,20 @@ class WebsocketLogsManager:
         """
         log_entry = {"timestamp": self.get_timestamp(),
                      "message": message,
-                     "source": source}
-        logging.info("%s: %s", source, message)
+                     "source": source,
+                     "agent": self.agent_name}
+        # Check if this is a duplicate of the most recent log message (ignoring timestamp)
+        if self.log_buffer:
+            last_entry = self.log_buffer[-1]
+            if last_entry["message"] == log_entry["message"] and last_entry["source"] == log_entry["source"]:
+                # Skip duplicate log
+                return
+        # Log the message
+        self.logger.info("%s: %s", source, message)
         self.log_buffer.append(log_entry)
         if len(self.log_buffer) > self.LOG_BUFFER_SIZE:
             self.log_buffer.pop(0)
+        # Broadcast to connected clients
         await self.broadcast_to_websocket(log_entry, self.active_log_connections)
 
     async def internal_chat_event(self, message: Dict[str, Any]):

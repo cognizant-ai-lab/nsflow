@@ -40,7 +40,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
             agent_name=agent_name,
             forwarded_request_metadata=" ".join(forwarded_request_metadata)
             )
-        self.agent_name = agent_name
+        # self.agent_name = agent_name
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}
@@ -155,7 +155,6 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
                     token_accounting_str = json.dumps({"token_accounting": token_accounting})
                     await self.logs_manager.log_event(f"{otrace_str}", "NeuroSan")
                     await self.logs_manager.internal_chat_event(internal_chat_str)
-
 
             # send everything after result_dict is complete instead of sending along the process
             if final_response:

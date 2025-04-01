@@ -9,10 +9,10 @@ from typing import Dict
 from nsflow.backend.utils.websocket_logs_manager import WebsocketLogsManager
 
 
+# pylint: disable=too-few-public-methods
 class LogsRegistry:
     """
     Registry for shared WebsocketLogsManager instances.
-    
     Provides a way to access or create logs managers scoped by `agent_name`,
     ensuring shared broadcasting of logs and internal chat messages.
     """

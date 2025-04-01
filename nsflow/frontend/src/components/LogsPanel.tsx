@@ -5,6 +5,7 @@ import { useChatContext } from "../context/ChatContext";
 
 type LogEntry = {
   timestamp: string;
+  agent: string;
   message: string;
   source: string; // Identifies log source: FastAPI, NeuroSan, or Frontend
 };
@@ -15,8 +16,8 @@ const getCurrentTimestamp = () => new Date().toISOString().replace("T", " ").spl
 const LogsPanel = () => {
   const { apiPort } = useApiPort();
   const [logs, setLogs] = useState<LogEntry[]>([
-    { timestamp: getCurrentTimestamp(), source: "Frontend", message: "System initialized." },
-    { timestamp: getCurrentTimestamp(), source: "Frontend", message: "Frontend app loaded successfully." },
+    { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "System initialized." },
+    { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "Frontend app loaded successfully." },
   ]);
   const { activeNetwork} = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -31,7 +32,7 @@ const LogsPanel = () => {
 
     setLogs((prevLogs) => [
       ...prevLogs,
-      { timestamp: getCurrentTimestamp(), source: "Frontend", message: `Connected to API on port ${apiPort}` },
+      { timestamp: getCurrentTimestamp(), agent: `${activeNetwork}`, source: "Frontend", message: `Connected to API on port ${apiPort}` },
     ]);
 
     // WebSocket for real-time logs
@@ -58,7 +59,7 @@ const LogsPanel = () => {
 
   const downloadLogs = () => {
     const logText = logs
-      .map((log) => `[${log.timestamp}] (${log.source}) ${log.message}`)
+      .map((log) => `[${log.timestamp}]:${log.agent}:${log.source}:${log.message}`)
       .join("\n");
 
     const blob = new Blob([logText], { type: "text/plain" });
@@ -83,6 +84,7 @@ const LogsPanel = () => {
           logs.map((log, index) => (
             <p key={index} className="text-sm text-gray-300">
               <span className="text-gray-400">[{log.timestamp}]</span>
+              <span className="text-green-400">: {log.agent}</span>
               <span className={`font-semibold ${log.source === "NeuroSan" ? "text-yellow-500" : "text-blue-500"}`}>
                 {" "}
                 ({log.source})
