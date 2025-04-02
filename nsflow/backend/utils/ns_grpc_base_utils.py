@@ -9,6 +9,7 @@ from neuro_san.interfaces.async_agent_session import AsyncAgentSession
 from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 from neuro_san.session.async_grpc_service_agent_session import AsyncGrpcServiceAgentSession
+from neuro_san.session.grpc_service_agent_session import GrpcServiceAgentSession
 from neuro_san.service.agent_server import DEFAULT_FORWARDED_REQUEST_METADATA
 
 
@@ -72,6 +73,19 @@ class NsGrpcBaseUtils:
         """
         grpc_session: AsyncAgentSession = \
             AsyncGrpcServiceAgentSession(
+                host=self.server_host,
+                port=self.server_port,
+                metadata=metadata,
+                agent_name=self.agent_name)
+        return grpc_session
+    
+    def get_regular_agent_grpc_session(self, metadata: Dict[str, Any]) -> AsyncAgentSession:
+        """
+        Build gRPC session to talk to "main" service
+        :return: a non async AgentSession to use
+        """
+        grpc_session: AsyncAgentSession = \
+            GrpcServiceAgentSession(
                 host=self.server_host,
                 port=self.server_port,
                 metadata=metadata,
