@@ -63,7 +63,7 @@ steps:
   build_wheel:
     title: Build wheel file
     # We'll move to python 3.12 soon, but using 3.10 currently
-    image: 634208487213.dkr.ecr.us-west-2.amazonaws.com/python-and-git:${{DEFAULT_NEUROAI_PYTHON_VERSION}}-2.46.0
+    image: 634208487213.dkr.ecr.us-west-2.amazonaws.com/python-and-git:3.10-2.46.0
     shell: bash
     description: Build wheel file for distribution
     working_directory: ${{CF_REPO_NAME}}

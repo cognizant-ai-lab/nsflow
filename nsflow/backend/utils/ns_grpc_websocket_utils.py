@@ -80,7 +80,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
 
         return chat_request
 
-    async def handle_chat_websocket(self, websocket: WebSocket):
+    async def handle_chat_websocket(self):
         """
         Main entry point for handling chat over WebSocket.
         :param websocket: The active WebSocket connection with a client.
