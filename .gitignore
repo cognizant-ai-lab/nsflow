@@ -8,6 +8,8 @@ wheels/
 wheels_private/
 .ipynb_checkpoints/
 *.ipynb
+.python-version
+.DS_Store
 
 # registries/*.hocon
 *.egg-info
