@@ -1,0 +1,14 @@
+# These requirements are for the Python that is run in the
+# build container.
+#
+# Requirements for tests, code style and other build stuff reside in
+# requirements-build.txt
+
+# Do the source-available stuff first to fast-fail if credentials are not right
+# DEF 07/26/2022: Due to bug in codefresh private repo plugin, this leaf-common
+# comes in from top-level requirements.txt file for now.
+
+# Public repos
+leaf-common @ git+https://github.com/leaf-ai/leaf-common.git@1.2.20
+leaf-server-common @ git+https://github.com/leaf-ai/leaf-server-common.git@0.1.17
+neuro-san @ git+https://github.com/leaf-ai/neuro-san@0.5.9
