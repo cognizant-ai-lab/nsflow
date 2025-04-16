@@ -22,7 +22,6 @@ git clone https://github.com/leaf-ai/nsflow.git
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements-private.txt
 ```
 
 #### **Step 3: Run Everything with a Single Command**
@@ -70,7 +69,6 @@ Make sure you have **Python 3.12** and **Node.js (with Yarn)** installed.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements-private.txt
 cd frontend; yarn install
 ```
 

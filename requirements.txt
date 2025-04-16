@@ -2,10 +2,16 @@
 # Requirements for tests, code style and other build stuff reside in
 # requirements-build.txt
 
+# Public repos
+leaf-common @ git+https://github.com/leaf-ai/leaf-common.git@1.2.20
+leaf-server-common @ git+https://github.com/leaf-ai/leaf-server-common.git@0.1.17
+neuro-san @ git+https://github.com/leaf-ai/neuro-san@0.5.9
+
 # These are needed to run this app
 fastapi-cors>=0.0.6
 fastapi>=0.115.8
 graphviz==0.20.3
+jupyterlab==4.4.0
 pyhocon>=0.3.61
 uvicorn>=0.34.0
 websockets>=14.2
