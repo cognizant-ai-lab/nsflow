@@ -1,0 +1,12 @@
+# These requirements are for the Python that is run in the
+# build container.
+#
+# Requirements for tests, code style and other build stuff reside in
+# requirements-build.txt
+
+# This might be useful when someone wants to run the nsflow local
+
+# Public repos
+leaf-common==1.2.21
+leaf-server-common==0.1.18
+neuro-san==0.5.15

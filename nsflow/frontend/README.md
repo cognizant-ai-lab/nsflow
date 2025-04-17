@@ -1,4 +1,45 @@
-# React + TypeScript + Vite
+# React + TypeScript + Vite dev environment setup for Frontend
+
+
+## Setup the dev environment for frontend
+- ensure that you have a profile such as `~/.zshrc` to manage terminal environment.
+- install nvm-sh as a version manager: 
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+```
+- source from your zshrc: 
+```bash
+source ~/.zshrc
+```
+- install node using nvm:
+```bash
+nvm install node
+```
+- check versions of node and npm:
+```bash
+node -v
+npm -v
+```
+- install yarn:
+```bash
+npm install -g yarn
+```
+- discover the frontend dir:
+```bash
+cd nsflow/nsflow/frontend
+```
+- install all dependencies:
+```bash
+yarn install
+```
+- run the app in dev mode:
+```bash
+yarn dev
+```
+
+---
+
+### Additional Instructions
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

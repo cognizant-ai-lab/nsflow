@@ -10,6 +10,7 @@ neuro_san==0.5.15
 fastapi-cors>=0.0.6
 fastapi>=0.115.8
 graphviz==0.20.3
+jupyterlab==4.4.0
 pyhocon>=0.3.61
 uvicorn>=0.34.0
 websockets>=14.2
