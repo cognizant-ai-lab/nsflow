@@ -2,7 +2,7 @@
 
 
 ## Setup the dev environment for frontend
-- ensure that you have a profile auch as `~/.zshrc` to manage terminal environment.
+- ensure that you have a profile such as `~/.zshrc` to manage terminal environment.
 - install nvm-sh as a version manager: 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
