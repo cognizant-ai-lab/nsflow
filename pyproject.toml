@@ -9,14 +9,10 @@ build-backend = "setuptools.build_meta"
 name = "nsflow"
 description = "A Neuro-San powered Smart Agent Network Framework"
 keywords = ["NsFlow", "NeuroSan", "agent-network"]
-license-files = ["LICENSE"]
-
-# Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
-# By 2026-Feb-18, you need to update your project and remove deprecated calls
-# or your builds will no longer be supported.
-# See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
-        
-# license = { file = "LICENSE" }
+# This license name comes from doc recommendation here
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license
+license = "LicenseRef-CognizantAcademicSource"
+license-files = ["LICENSE.txt"]
 requires-python = ">=3.12"
 readme = "README.md"
 authors = [
@@ -33,9 +29,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
 
     "Intended Audience :: Developers",
-
-    # We still need to classify our academic license
-    # "License :: XXX :: XXX"
 ]
 
 dynamic = ["version", "dependencies"]
@@ -43,8 +36,6 @@ dynamic = ["version", "dependencies"]
 [tool.setuptools.dynamic]
 # Specify the dependencies for the library from what is given in requirements.txt
 dependencies = {file = ["requirements.txt"]}
-
-optional-dependencies = {dev = {file = ["requirements-private.txt"]}}
 
 [project.scripts]
 nsflow = "nsflow.run:main"  # App entry point
@@ -69,4 +60,6 @@ fallback_version = "0.0.1"
 [project.urls]
 Homepage = "https://github.com/leaf-ai/nsflow"
 Repository = "https://github.com/leaf-ai/nsflow"
-
+Documentation = "https://github.com/leaf-ai/nsflow#readme"
+# If we move issue tracking to github 
+# Issues = "https://github.com/leaf-ai/nsflow/issues"
