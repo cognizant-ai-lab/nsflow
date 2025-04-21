@@ -11,4 +11,5 @@ recursive-exclude knowdocs *
 recursive-exclude wheels_private *
 recursive-exclude registries *
 recursive-exclude coded_tools *
+recursive-exclude build_scripts *
 include .env.example
