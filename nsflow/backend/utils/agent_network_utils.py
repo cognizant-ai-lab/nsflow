@@ -87,30 +87,30 @@ class AgentNetworkUtils:
         return {"networks": networks}
 
     @staticmethod
-    def load_hocon_config(file_path: Path, base_dir: Path=ROOT_DIR):
+    def load_hocon_config(file_path: Path, base_dir: Path = Path(ROOT_DIR)):
         """
         Load a HOCON file from the given directory and parse it safely.
-        
-        :param file_path: Path to the config file.
-        :param base_dir: Base directory to confine access.
+        Prevents path traversal by ensuring the resolved path stays within the base_dir.
         """
         try:
-            # Resolve the absolute path and normalize it
-            resolved_path = file_path.resolve(strict=True)
-            # Ensure base_dir is provided and validate the path
+            # Normalize both paths first
             base_dir = base_dir.resolve(strict=True)
-            if not str(resolved_path).startswith(str(base_dir) + os.sep):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Access to this file is not allowed"
-                )
-            
-            if not resolved_path.exists() or not resolved_path.is_file():
+            tentative_path = file_path.resolve(strict=False)  # Don't raise on missing files
+
+            # Prevent directory traversal
+            if not tentative_path.is_relative_to(base_dir):
+                raise HTTPException(status_code=403, detail="Access to this file is not allowed")
+
+            # Now safe to check existence
+            if not tentative_path.exists() or not tentative_path.is_file():
                 raise HTTPException(status_code=404, detail="Config file not found")
 
-            config = ConfigFactory.parse_file(str(resolved_path))
+            # Safe to read
+            config = ConfigFactory.parse_file(str(tentative_path))
             return config
 
+        except HTTPException:
+            raise  # Propagate our own exceptions
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
 
