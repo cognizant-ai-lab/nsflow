@@ -56,20 +56,20 @@ class AgentNetworkUtils:
 
     def get_network_file_path(self, network_name: str) -> Path:
         """Returns the correct path for a given network name, ensuring it is confined to a safe directory."""
-        base_dir = Path(self.fixtures_dir if network_name == "test_network" else self.registry_dir).resolve(strict=True)
+        base_dir = os.path.realpath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
 
         # Sanitize and normalize the network_name to prevent directory traversal
         sanitized_name = os.path.basename(os.path.normpath(network_name))
-        file_path = base_dir / f"{sanitized_name}.hocon"
+        file_path = os.path.join(base_dir, f"{sanitized_name}.hocon")
 
         # Resolve and validate the path
-        resolved_path = file_path.resolve(strict=False)
-        if not str(resolved_path).startswith(str(base_dir)):
+        resolved_path = os.path.realpath(file_path)
+        if os.path.commonpath([resolved_path, base_dir]) != base_dir:
             raise HTTPException(
                 status_code=403,
                 detail="Access to this file is not allowed"
             )
-        return resolved_path
+        return Path(resolved_path)
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
