@@ -64,19 +64,19 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   };
 
   return (
-    <aside className="h-full sidebar p-4 flex flex-col gap-3 border-r">
-      <h2 className="text-lg font-bold">Agent Networks</h2>
+    <aside className="sidebar h-full sidebar p-4 flex flex-col gap-3 border-r">
+      <span className="text-lg font-bold">Agent Networks</span>
 
       {/* API Port Input */}
-      <div className="mb-2 p-2 bg-gray-800 rounded">
-        <label className="text-sm text-gray-300">API Port:</label>
+      <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
+        <label className="sidebar-api-input text-sm text-gray-300">API Port:</label>
         <input
           type="number"
           min="1024"
           max="65535"
           value={tempPort}
           onChange={(e) => setTempPort(Number(e.target.value))}
-          className="w-full bg-gray-700 text-white p-1 rounded mt-1"
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
         />
         <button
           onClick={() => setApiPort(tempPort)}
@@ -88,18 +88,14 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
       
       {/* Scrollable networks container */}
-      <div className="flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
+      <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
         {loading && <p>Loading...</p>}
         {error && <p className="text-red-500">{error}</p>}
         {networks.map((network) => (
           <div key={network} className="relative p-1 rounded-md text-sm text-gray-100">
             <button
-              className={`w-full text-left p-1 text-sm rounded cursor-pointer transition-all 
-                ${
-                  activeNetwork === network
-                    ? "bg-orange-400 text-white font-bold" // Highlight active network
-                    : "bg-blue-700 hover:bg-blue-600"
-                }`}
+              className={`sidebar-btn w-full text-left p-1 text-sm rounded cursor-pointer transition-all font-medium
+                ${activeNetwork === network ? "active-network" : ""}`}
               onClick={() => handleNetworkSelection(network)}
             >
               {network}

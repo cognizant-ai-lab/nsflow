@@ -51,11 +51,11 @@ const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
   return (
     <div className="chat-panel flex flex-col h-full p-4">
       {/* Title with Download Button */}
-      <div className="flex justify-between items-center mb-2">
+      <div className="logs-header flex justify-between items-center mb-2">
         <h2 className="text-lg font-bold">{title}</h2>
         <button
           onClick={downloadMessages}
-          className="text-gray-400 hover:text-white p-1"
+          className="logs-download-btn text-gray-400 hover:text-white p-1"
           title="Download Messages"
         >
           <FaDownload size={18} />
@@ -63,9 +63,9 @@ const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
       </div>
 
       {/* Scrollable chat messages container */}
-      <div className="flex-grow overflow-y-auto p-2 space-y-2 bg-gray-900 rounded-md max-h-[70vh]">
+      <div className="chat-messages-container">
         {internalChatMessages.map((msg, index) => (
-          <div key={index} className="relative p-2 rounded-md text-sm bg-gray-700 text-gray-100">
+          <div key={index} className="chat-msg chat-msg-agent">
             {/* Sender Header */}
             <div className="font-bold mb-1 flex justify-between items-center">
               <span>{msg.sender}</span> {/* Fix Otrace display */}
@@ -81,28 +81,30 @@ const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
             </div>
 
             {/* Message Content */}
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-              components={{
-                p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
-                blockquote: ({ children }) => (
-                  <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">
-                    {children}
-                  </blockquote>
-                ),
-                code: ({ children }) => (
-                  <code className="bg-gray-800 text-yellow-300 px-1 rounded">{children}</code>
-                ),
-                pre: ({ children }) => (
-                  <pre className="bg-gray-900 text-gray-300 p-3 rounded-md overflow-x-auto">{children}</pre>
-                ),
-                strong: ({ children }) => <strong className="font-bold text-gray-200">{children}</strong>,
-                em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
-              }}
-            >
-              {msg.text}
-            </ReactMarkdown>
-
+            <div className="chat-markdown">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                components={{
+                  p: ({ children }) => <p className="mb-2 leading-relaxed text-[var(--chat-message-text-color)]">{children}</p>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">
+                      {children}
+                    </blockquote>
+                  ),
+                  code: ({ children }) => (
+                    <code className="bg-gray-400 text-yellow-300 px-1 rounded">{children}</code>
+                  ),
+                  pre: ({ children }) => (
+                    <pre className="bg-gray-900 text-gray-300 p-3 rounded-md overflow-x-auto">{children}</pre>
+                  ),
+                  strong: ({ children }) => <strong className="font-bold text-[var(--chat-message-text-color)]">{children}</strong>,
+                  em: ({ children }) => <em className="italic text-[var(--chat-message-text-color)]">{children}</em>,
+                }}
+              >
+                {msg.text}
+              </ReactMarkdown>
+            </div>
+            
             {/* Copied Tooltip */}
             {copiedMessage === index && (
               <div className="absolute top-0 right-6 bg-gray-800 text-white text-xs p-1 rounded-md">

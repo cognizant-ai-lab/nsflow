@@ -83,12 +83,22 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
 
   return (
     <div
-      className={`p-3 rounded-lg shadow-md text-white w-48 transition-all ${
-        data.isActive ? "bg-yellow-500 border-2 border-yellow-300 scale-105 shadow-xl" : "bg-blue-600"
+      className={`p-3 rounded-lg shadow-md w-48 transition-all ${
+        data.isActive
+          ? "border-2 scale-105 shadow-xl"
+          : ""
       }`}
+      style={{
+        background: data.isActive ? "var(--agentflow-node-active-bg)" : "var(--agentflow-node-bg)",
+        color: "var(--agentflow-node-text)",
+        borderColor: data.isActive ? "var(--agentflow-node-active-border)" : "var(--agentflow-edge)",
+      }}
     >
       {/* Title Bar */}
-      <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md">
+      <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md"
+           style={{ backgroundColor: "var(--agentflow-node-header-bg)", color: "var(--agentflow-node-text)" }}
+      >
+        {/* Icon */}
         <Icon className="text-white text-lg mr-2" />
         <span className="text-sm font-bold ml-2">{data.label}</span>
       </div>
@@ -118,7 +128,7 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
 
       {/* Node Body */}
       <div className="p-3 text-center">
-        {/* ✅ Correctly render handles with unique keys */}
+        {/* Correctly render handles with unique keys */}
         {Object.entries(handlePositions).map(([key, position]) => (
           <React.Fragment key={key}>
             <Handle type="target" position={position} id={`${key}-target`} />

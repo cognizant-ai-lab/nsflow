@@ -66,11 +66,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   return (
     <div className="chat-panel flex flex-col h-full p-4">
       {/* Header */}
-      <div className="flex justify-between items-center mb-2">
+      <div className="logs-header flex justify-between items-center mb-2">
         <h2 className="text-lg font-bold">{title}</h2>
         <button
           onClick={downloadMessages}
-          className="text-gray-400 hover:text-white p-1"
+          className="logs-download-btn hover:text-white p-1"
           title="Download Messages"
         >
           <FaDownload size={18} />
@@ -78,16 +78,16 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       </div>
 
       {/* Message List */}
-      <div className="flex-grow overflow-y-auto p-2 space-y-2 bg-gray-900 rounded-md max-h-[70vh]">
+      <div className="chat-messages-container">
         {chatMessages.map((msg, index) => (
           <div
             key={index}
-            className={`relative p-2 rounded-md text-sm ${
+            className={`chat-msg ${
               msg.sender === "user"
-                ? "bg-blue-600 text-white self-end"
+                ? "chat-msg-user"
                 : msg.sender === "agent"
-                ? "bg-gray-700 text-gray-100"
-                : "bg-gray-800 text-gray-400"
+                ? "chat-msg-agent"
+                : "chat-msg-system"
             }`}
           >
             {/* Sender header + Copy icon */}
@@ -109,64 +109,66 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             </div>
 
             {/* Markdown with syntax highlighting & custom code block */}
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-              // rehypePlugins={[rehypeHighlight]}
-              components={{
-                // Headings (H1 - H6)
-                h1: ({ children }) => <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-xl font-semibold mt-3 mb-2">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-lg font-semibold mt-2 mb-1">{children}</h3>,
-                // Lists
-                ul: ({ children }) => <ul className="list-disc ml-6">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal ml-6">{children}</ol>,
-                li: ({ children }) => <li className="ml-2">{children}</li>,
-                // Paragraphs
-                p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
-                strong: ({ children }) => <strong className="font-bold text-gray-200">{children}</strong>,
-                em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
-                // Links should open in a new tab
-                a: ({ children, href }) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                    {children}
-                  </a>
-                ),
-                code: ({ className = "", children, ...props }) => {
-                  const isBlock = className?.includes("language-");
-                
-                  const codeContent = String(children).trim();
-                
-                  if (isBlock) {
-                    // use this language variable for future syntax highlighting
-                    // const language = className.replace("language-", "") || "text";
+            <div className="chat-markdown">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                // rehypePlugins={[rehypeHighlight]}
+                components={{
+                  // Headings (H1 - H6)
+                  h1: ({ children }) => <h1 className="text-2xl font-bold mt-4 mb-2 text-[var(--chat-message-text-color)]">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-xl font-semibold mt-3 mb-2 text-[var(--chat-message-text-color)]">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-lg font-semibold mt-2 mb-1 text-[var(--chat-message-text-color)]">{children}</h3>,
+                  // Lists
+                  ul: ({ children }) => <ul className="list-disc ml-6 text-[var(--chat-message-text-color)]">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal ml-6 text-[var(--chat-message-text-color)]">{children}</ol>,
+                  li: ({ children }) => <li className="ml-2 text-[var(--chat-message-text-color)]">{children}</li>,
+                  // Paragraphs
+                  p: ({ children }) => <p className="mb-2 leading-relaxed text-[var(--chat-message-text-color)]">{children}</p>,
+                  strong: ({ children }) => <strong className="font-bold text-[var(--chat-message-text-color)]">{children}</strong>,
+                  em: ({ children }) => <em className="italic text-gray-300 text-[var(--chat-message-text-color)]">{children}</em>,
+                  // Links should open in a new tab
+                  a: ({ children, href }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                      {children}
+                    </a>
+                  ),
+                  code: ({ className = "", children, ...props }) => {
+                    const isBlock = className?.includes("language-");
+                  
+                    const codeContent = String(children).trim();
+                  
+                    if (isBlock) {
+                      // use this language variable for future syntax highlighting
+                      // const language = className.replace("language-", "") || "text";
+                      return (
+                        <div className="relative group my-2">
+                          <pre className={`rounded bg-gray-800 p-3 overflow-x-auto text-sm`}>
+                            <code className={className} {...props}>
+                              {codeContent}
+                            </code>
+                          </pre>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(codeContent)}
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-xs text-white bg-gray-700 px-2 py-1 rounded"
+                            title="Copy code"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      );
+                    }
+                    // Inline code
                     return (
-                      <div className="relative group my-2">
-                        <pre className={`rounded bg-gray-800 p-3 overflow-x-auto text-sm`}>
-                          <code className={className} {...props}>
-                            {codeContent}
-                          </code>
-                        </pre>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(codeContent)}
-                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-xs text-white bg-gray-700 px-2 py-1 rounded"
-                          title="Copy code"
-                        >
-                          📋
-                        </button>
-                      </div>
+                      <code className="bg-gray-800 text-yellow-300 px-1 py-0.5 rounded">
+                        {codeContent}
+                      </code>
                     );
-                  }
-                  // Inline code
-                  return (
-                    <code className="bg-gray-800 text-yellow-300 px-1 py-0.5 rounded">
-                      {codeContent}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {msg.text}
-            </ReactMarkdown>
+                  },
+                }}
+              >
+                {msg.text}
+              </ReactMarkdown>
+            </div>
 
             {/* Copied popup */}
             {copiedMessage === index && (
@@ -180,17 +182,17 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       </div>
 
       {/* Chat controls */}
-      <div className="flex justify-end space-x-2 mt-1">
+      <div className="flex justify-end space-x-4 mt-1">
         <button
           onClick={clearChat}
-          className="bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
+          className="logs-download-btn bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
           title="Clear Chat"
         >
           <ImBin2 size={12} />
         </button>
         <button
           onClick={stopWebSocket}
-          className="bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
+          className="chat-stop-btn bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
           title="Stop Chat"
         >
           <FaRegStopCircle size={12} />
@@ -201,7 +203,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       <div className="chat-input mt-2 flex gap-2 items-end">
         <textarea
           placeholder="Type a message..."
-          className="chat-input-box bg-gray-700 text-white p-2 rounded-md flex-grow resize-y min-h-20 max-h-40 overflow-y-auto"
+          className="chat-input-box"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyDown={(e) => {
@@ -213,7 +215,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
         />
         <button
           onClick={sendMessage}
-          className="chat-send-btn bg-blue-600 text-white px-4 py-2 p-2 rounded-md min-h-[60px] h-auto"
+          className="chat-send-btn"
         >
           Send
         </button>

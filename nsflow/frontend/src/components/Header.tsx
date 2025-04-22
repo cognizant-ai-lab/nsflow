@@ -10,9 +10,11 @@
 //
 // END COPYRIGHT
 import React, { useState, useRef, useEffect } from "react";
-import { FaUserCircle, FaFolderOpen, FaSave, FaDownload } from "react-icons/fa";
+import { FaUserCircle, FaEdit, FaDownload } from "react-icons/fa";
+import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
+import ThemeToggle from "./ThemeToggle";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
   const { apiPort } = useApiPort();
@@ -77,20 +79,20 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
   };
 
   return (
-    <header className="header flex items-center justify-between px-4 shadow-md relative z-50 bg-gray-900 h-14">
+    <header className="header-panel flex items-center justify-between px-4 shadow-md relative z-50 h-14">
       {/* Left - App Icon */}
       <div className="flex items-center space-x-2">
         <ImPower className="h-8 w-8 text-blue-400" />
-        <span className="text-lg font-semibold text-white">Neuro AI - Multi-Agent Accelerator Client</span>
+        <span className="text-lg font-semibold">Neuro AI - Multi-Agent Accelerator Client</span>
       </div>
 
       {/* Middle - Navigation Buttons */}
       <div className="flex space-x-4">
-        <button className="header-btn h-8 px-4 py-1">
-          <FaFolderOpen className="mr-2" /> Load From
+        <button className="header-btn h-8 px-4 py-1" onClick={() => window.location.reload()}>
+          <FaArrowsRotate className="mr-2" /> Reload
         </button>
-        <button className="header-btn h-8 px-4 py-1">
-          <FaSave className="mr-2" /> Save As
+        <button className="header-btn h-8 px-4 py-1" title="Editor is coming soon!">
+          <FaEdit className="mr-2" /> Editor
         </button>
 
         {/* Export Dropdown */}
@@ -124,8 +126,9 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
         </div>
       </div>
 
-      {/* Right - User Profile Icon */}
-      <div className="flex items-center">
+      {/* Right - Theme Toggle + Profile */}
+      <div className="flex items-center gap-4">
+        <ThemeToggle />
         <FaUserCircle className="h-8 w-8 text-gray-400 cursor-pointer hover:text-white" />
       </div>
     </header>
