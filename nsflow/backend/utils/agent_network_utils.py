@@ -56,11 +56,15 @@ class AgentNetworkUtils:
 
     def get_network_file_path(self, network_name: str) -> Path:
         """Returns the correct path for a given network name, ensuring it is confined to a safe directory."""
-        base_dir = self.fixtures_dir if network_name == "test_network" else self.registry_dir
-        file_path = Path(base_dir) / f"{network_name}.hocon"
-        # Normalize and validate the path
+        base_dir = Path(self.fixtures_dir if network_name == "test_network" else self.registry_dir).resolve(strict=True)
+
+        # Sanitize and normalize the network_name to prevent directory traversal
+        sanitized_name = os.path.basename(os.path.normpath(network_name))
+        file_path = base_dir / f"{sanitized_name}.hocon"
+
+        # Resolve and validate the path
         resolved_path = file_path.resolve(strict=False)
-        if not resolved_path.is_relative_to(Path(base_dir).resolve(strict=True)):
+        if not str(resolved_path).startswith(str(base_dir)):
             raise HTTPException(
                 status_code=403,
                 detail="Access to this file is not allowed"
@@ -92,10 +96,10 @@ class AgentNetworkUtils:
         """
         try:
             # Resolve the absolute path and normalize it
-            resolved_path = file_path.resolve(strict=False)
+            resolved_path = file_path.resolve(strict=True)
             # Ensure base_dir is provided and validate the path
             base_dir = base_dir.resolve(strict=True)
-            if not resolved_path.is_relative_to(base_dir):
+            if not str(resolved_path).startswith(str(base_dir) + os.sep):
                 raise HTTPException(
                     status_code=403,
                     detail="Access to this file is not allowed"
