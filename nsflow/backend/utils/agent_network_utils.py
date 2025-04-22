@@ -56,14 +56,14 @@ class AgentNetworkUtils:
 
     def get_network_file_path(self, network_name: str) -> Path:
         """Returns the correct path for a given network name, ensuring it is confined to a safe directory."""
-        base_dir = os.path.realpath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
+        base_dir = os.path.abspath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
 
         # Sanitize and normalize the network_name to prevent directory traversal
         sanitized_name = os.path.basename(os.path.normpath(network_name))
         file_path = os.path.join(base_dir, f"{sanitized_name}.hocon")
 
         # Resolve and validate the path
-        resolved_path = os.path.realpath(file_path)
+        resolved_path = os.path.abspath(file_path)
         if os.path.commonpath([resolved_path, base_dir]) != base_dir:
             raise HTTPException(
                 status_code=403,
@@ -93,24 +93,26 @@ class AgentNetworkUtils:
         Prevents path traversal by ensuring the resolved path stays within the base_dir.
         """
         try:
-            # Normalize both paths first
-            base_dir = base_dir.resolve(strict=True)
-            tentative_path = file_path.resolve(strict=False)  # Don't raise on missing files
+            # Ensure base_dir is an absolute, normalized path
+            base_dir_str = os.path.abspath(str(base_dir))
+            file_path_str = os.path.abspath(os.path.join(base_dir_str, str(file_path)))
 
-            # Prevent directory traversal
-            if not tentative_path.is_relative_to(base_dir):
+            # Ensure the final path is inside base_dir
+            if not file_path_str.startswith(base_dir_str + os.sep):
                 raise HTTPException(status_code=403, detail="Access to this file is not allowed")
 
-            # Now safe to check existence
-            if not tentative_path.exists() or not tentative_path.is_file():
+            # Now it is safe to use as a Path
+            safe_path = Path(file_path_str)
+
+            if not safe_path.exists() or not safe_path.is_file():
                 raise HTTPException(status_code=404, detail="Config file not found")
 
-            # Safe to read
-            config = ConfigFactory.parse_file(str(tentative_path))
+            # Safe to parse
+            config = ConfigFactory.parse_file(str(safe_path))
             return config
 
         except HTTPException:
-            raise  # Propagate our own exceptions
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
 
