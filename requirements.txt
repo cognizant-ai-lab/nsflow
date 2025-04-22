@@ -1,11 +1,6 @@
 # Requirements for tests, code style and other build stuff reside in
 # requirements-build.txt
 
-# In-house dependencies
-leaf_common==1.2.21
-leaf_server_common==0.1.18
-neuro_san==0.5.15
-
 # These are needed to run this app
 fastapi-cors>=0.0.6
 fastapi>=0.115.8
