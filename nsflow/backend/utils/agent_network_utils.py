@@ -55,10 +55,17 @@ class AgentNetworkUtils:
         return Path(self.fixtures_dir) / "manifest.hocon"
 
     def get_network_file_path(self, network_name: str) -> Path:
-        """Returns the correct path for a given network name."""
-        if network_name == "test_network":
-            return Path(os.path.join(self.fixtures_dir, f"{network_name}.hocon"))
-        return Path(os.path.join(self.registry_dir, f"{network_name}.hocon"))
+        """Returns the correct path for a given network name, ensuring it is confined to a safe directory."""
+        base_dir = self.fixtures_dir if network_name == "test_network" else self.registry_dir
+        file_path = Path(base_dir) / f"{network_name}.hocon"
+        # Normalize and validate the path
+        resolved_path = file_path.resolve(strict=False)
+        if not resolved_path.is_relative_to(Path(base_dir).resolve(strict=True)):
+            raise HTTPException(
+                status_code=403,
+                detail="Access to this file is not allowed"
+            )
+        return resolved_path
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
@@ -76,24 +83,23 @@ class AgentNetworkUtils:
         return {"networks": networks}
 
     @staticmethod
-    def load_hocon_config(file_path: Path, base_dir: Optional[Path] = None):
+    def load_hocon_config(file_path: Path, base_dir: Path=ROOT_DIR):
         """
         Load a HOCON file from the given directory and parse it safely.
         
         :param file_path: Path to the config file.
-        :param base_dir: Optional base directory to confine access.
+        :param base_dir: Base directory to confine access.
         """
         try:
             # Resolve the absolute path and normalize it
             resolved_path = file_path.resolve(strict=False)
-            
-            if base_dir:
-                base_dir = base_dir.resolve(strict=True)
-                if not resolved_path.is_relative_to(base_dir):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Access to this file is not allowed"
-                    )
+            # Ensure base_dir is provided and validate the path
+            base_dir = base_dir.resolve(strict=True)
+            if not resolved_path.is_relative_to(base_dir):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access to this file is not allowed"
+                )
             
             if not resolved_path.exists() or not resolved_path.is_file():
                 raise HTTPException(status_code=404, detail="Config file not found")
