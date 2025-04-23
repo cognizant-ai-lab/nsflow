@@ -9,7 +9,7 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import {
   FaRobot,
@@ -21,7 +21,9 @@ import {
   FaChevronDown,
   FaCheckSquare,
   FaRegSquare,
+  FaRegCopy
 } from "react-icons/fa";
+import { useApiPort } from "../context/ApiPortContext";
 
 // Define the structure of the `data` prop
 interface AgentNodeData {
@@ -29,6 +31,7 @@ interface AgentNodeData {
   label: string;
   isActive?: boolean;
   dropdown_tools?: string[];
+  selectedNetwork: string;
 }
 
 // Extend NodeProps to include AgentNodeData
@@ -57,7 +60,11 @@ const handlePositions: { [key: string]: Position } = {
 
 // Fix: Add type annotation for function props
 const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
+  const { apiPort } = useApiPort();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [agentDetails, setAgentDetails] = useState<any>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [hoveringTooltip, setHoveringTooltip] = useState(false);
   
   // Fix: Explicitly type the state object
   const [selectedTools, setSelectedTools] = useState<Record<string, boolean>>(
@@ -81,51 +88,186 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
     return icons[index];
   }, [data.id, data.label]);
 
+  useEffect(() => {
+    if (!showTooltip || agentDetails) return;
+
+    fetch(`http://127.0.0.1:${apiPort}/api/v1/networkconfig/${data.selectedNetwork}/agent/${data.label}`)
+      .then((res) => res.json())
+      .then((json) => setAgentDetails(json))
+      .catch((err) => console.error("Failed to load agent details:", err));
+  }, [showTooltip, agentDetails, apiPort, data.selectedNetwork, data.label]);
+
+  const handleMouseEnter = () => setShowTooltip(true);
+  const handleMouseLeave = () => setTimeout(() => {
+    if (!hoveringTooltip) setShowTooltip(false);
+  }, 250); // small delay to allow tooltip hover to register
+
+  const handleTooltipEnter = () => setHoveringTooltip(true);
+  const handleTooltipLeave = () => {
+    setHoveringTooltip(false);
+    setShowTooltip(false);
+  };
+
   return (
-    <div
-      className={`p-3 rounded-lg shadow-md text-white w-48 transition-all ${
-        data.isActive ? "bg-yellow-500 border-2 border-yellow-300 scale-105 shadow-xl" : "bg-blue-600"
-      }`}
-    >
-      {/* Title Bar */}
-      <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md">
-        <Icon className="text-white text-lg mr-2" />
-        <span className="text-sm font-bold ml-2">{data.label}</span>
+    <div className="relative w-fit h-fit">
+      {/* Node Container */}
+      <div
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`p-3 rounded-lg shadow-md w-48 transition-all ${
+          data.isActive
+            ? "border-2 scale-105 shadow-xl"
+            : ""
+        }`}
+        style={{
+          background: data.isActive ? "var(--agentflow-node-active-bg)" : "var(--agentflow-node-bg)",
+          color: "var(--agentflow-node-text)",
+          borderColor: data.isActive ? "var(--agentflow-node-active-border)" : "var(--agentflow-edge)",
+        }}
+      >
+        {/* Title Bar */}
+        <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md"
+            style={{ backgroundColor: "var(--agentflow-node-header-bg)", color: "var(--agentflow-node-text)" }}
+        >
+          {/* Icon */}
+          <Icon className="text-white text-lg mr-2" />
+          <span className="text-sm font-bold ml-2">{data.label}</span>
+        </div>
+
+        {/* Coded Tools Section */}
+        {data.dropdown_tools && data.dropdown_tools.length > 0 && (
+          <div className="coded-tools-section">
+            {/* Toggle Button */}
+            <button onClick={() => setDropdownOpen(!dropdownOpen)} className="coded-tools-toggle">
+              <span>Coded Tools</span>
+              <FaChevronDown className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Dropdown List - Multi-select checkboxes */}
+            {dropdownOpen && (
+              <ul className="coded-tools-list">
+                {data.dropdown_tools.map((tool: string) => (
+                  <li key={tool} className="coded-tools-item" onClick={() => toggleToolSelection(tool)}>
+                    {selectedTools[tool] ? <FaCheckSquare /> : <FaRegSquare />}
+                    {tool}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Node Body */}
+        <div className="p-3 text-center">
+          {/* Correctly render handles with unique keys */}
+          {Object.entries(handlePositions).map(([key, position]) => (
+            <React.Fragment key={key}>
+              <Handle type="target" position={position} id={`${key}-target`} />
+              <Handle type="source" position={position} id={`${key}-source`} />
+            </React.Fragment>
+          ))}
+        </div>
       </div>
 
-      {/* Coded Tools Section */}
-      {data.dropdown_tools && data.dropdown_tools.length > 0 && (
-        <div className="coded-tools-section">
-          {/* Toggle Button */}
-          <button onClick={() => setDropdownOpen(!dropdownOpen)} className="coded-tools-toggle">
-            <span>Coded Tools</span>
-            <FaChevronDown className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
-          </button>
+      {/* Tooltip on hover */}
+      {showTooltip && agentDetails && (
+        <div className="agent-tooltip nodrag absolute left-52 top-0 w-[340px]"
+             onMouseEnter={handleTooltipEnter}
+             onMouseLeave={handleTooltipLeave}
+             onMouseDown={(e) => e.stopPropagation()}
+             onClick={(e) => e.stopPropagation()}
+        >
+          {/* Top Row with Copy Icon */}
+          <div className="flex justify-between items-center mb-2">
+            <div className="tooltip-title font-bold text-sm">{agentDetails.name}</div>
+            <button
+              className="text-gray-400 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(JSON.stringify(agentDetails, null, 2));
+              }}
+              title="Copy details"
+            >
+              <FaRegCopy size={14} />
+            </button>
+          </div>
 
-          {/* Dropdown List - Multi-select checkboxes */}
-          {dropdownOpen && (
-            <ul className="coded-tools-list">
-              {data.dropdown_tools.map((tool: string) => (
-                <li key={tool} className="coded-tools-item" onClick={() => toggleToolSelection(tool)}>
-                  {selectedTools[tool] ? <FaCheckSquare /> : <FaRegSquare />}
-                  {tool}
-                </li>
-              ))}
-            </ul>
+          {agentDetails.llm_config && (
+            <div className="tooltip-section">
+              <span className="tooltip-label">LLM Config:</span>{" "}
+              {Object.entries(agentDetails.llm_config)
+                .map(([key, val]) => `${key}: ${val}`)
+                .join(", ")}
+            </div>
           )}
+
+          {agentDetails.function && (
+            <div className="tooltip-section">
+              <span className="tooltip-label">Function:</span>{" "}
+              {typeof agentDetails.function === "string"
+                ? agentDetails.function
+                : agentDetails.function.description}
+            </div>
+          )}
+
+          {agentDetails.command && (
+            <div className="tooltip-section">
+              <span className="tooltip-label">Command:</span> {agentDetails.command}
+            </div>
+          )}
+
+          {agentDetails.instructions && (
+            <div className="tooltip-section">
+              <span className="tooltip-label">Instructions:</span>
+              <div className="mt-1">{agentDetails.instructions}</div>
+            </div>
+          )}
+
+          {agentDetails.tools?.length > 0 && (
+            <div className="tooltip-section">
+              <span className="tooltip-label">Tools:</span> {agentDetails.tools.join(", ")}
+            </div>
+          )}
+
+          {/* {agentDetails.common_defs && (
+            <div className="tooltip-section">
+              <div className="tooltip-label mb-1">Common Defs:</div>
+
+              {agentDetails.common_defs.replacement_strings && (
+                <div className="mb-1">
+                  <span className="tooltip-italic-label">Strings:</span>
+                  <ul>
+                    {Object.entries(agentDetails.common_defs.replacement_strings).map(
+                      ([key, val]) => (
+                        <li key={key}>
+                          <strong>{key}:</strong> {val}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {agentDetails.common_defs.replacement_values && (
+                <div>
+                  <span className="tooltip-italic-label">Values:</span>
+                  <ul>
+                    {Object.entries(agentDetails.common_defs.replacement_values).map(
+                      ([key, val]) => (
+                        <li key={key}>
+                          <strong>{key}:</strong>{" "}
+                          {typeof val === "string" ? val : JSON.stringify(val)}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )} */}
         </div>
       )}
 
-      {/* Node Body */}
-      <div className="p-3 text-center">
-        {/* ✅ Correctly render handles with unique keys */}
-        {Object.entries(handlePositions).map(([key, position]) => (
-          <React.Fragment key={key}>
-            <Handle type="target" position={position} id={`${key}-target`} />
-            <Handle type="source" position={position} id={`${key}-source`} />
-          </React.Fragment>
-        ))}
-      </div>
     </div>
   );
 };

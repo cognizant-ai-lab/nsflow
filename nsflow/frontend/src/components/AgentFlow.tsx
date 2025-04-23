@@ -24,22 +24,10 @@ import "reactflow/dist/style.css";
 import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import { useApiPort } from "../context/ApiPortContext";
+import { hierarchicalRadialLayout } from "../utils/hierarchicalRadialLayout";
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
-
-// Define an interface for extended nodes (used in the layout)
-interface ExtendedNode extends Node {
-  style?: {
-    width?: number;
-    height?: number;
-  };
-  data: any;
-  children: ExtendedNode[];
-  parent?: ExtendedNode;
-  depth: number;
-  position: { x: number; y: number };
-}
 
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiPort } = useApiPort();
@@ -59,6 +47,23 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
 
+  // ** Get access to the ReactFlow setViewport instance **
+  const { setViewport } = useReactFlow();
+
+  // ** Add a diagramKey to force a full remount of ReactFlow **
+  const [diagramKey, setDiagramKey] = useState(0);
+
+  const resetFlow = () => {
+    setNodes([]);
+    setEdges([]);
+    setDiagramKey(prev => prev + 1); // This forces a full remount
+  };
+
+  useEffect(() => {
+    // Set zoom to 0.75 and center at (0, 0)
+    setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 }); // Optional animation
+  }, []);
+    
   useEffect(() => {
     if (!selectedNetwork) return;
 
@@ -82,6 +87,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           }))
         );
         fitView();
+        // You can change zoom and center values as needed
+        setViewport({ x: 0, y: 20, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
   }, [selectedNetwork, baseRadius, levelSpacing]);
@@ -154,108 +161,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     setter(value);
   };
 
-  // ** A hierarchical radial layout for nodes **
-  const hierarchicalRadialLayout = (
-    nodes: any[],
-    edges: any[],
-    BASE_RADIUS: number,
-    LEVEL_SPACING: number
-  ): { nodes: ExtendedNode[]; edges: any[] } => {
-    if (!Array.isArray(nodes) || !Array.isArray(edges)) {
-      console.error("Invalid nodes or edges:", nodes, edges);
-      return { nodes: [], edges: [] };
-    }
-
-    console.log("Received nodes and edges:", { nodes, edges });
-
-    // **Dynamic node size calculation**
-    const nodeDimensions = nodes.map((node) => ({
-      width: node.style?.width || 100,
-      height: node.style?.height || 50,
-    }));
-    const NODE_SIZE = Math.max(
-      ...nodeDimensions.map((n) => n.width),
-      ...nodeDimensions.map((n) => n.height)
-    );
-    const PADDING = NODE_SIZE * 0.4;
-
-    console.log(`NODE_SIZE: ${NODE_SIZE}, PADDING: ${PADDING}`);
-
-    const rootNode = nodes.find((node) => !edges.some((edge) => edge.target === node.id));
-    if (!rootNode) {
-      console.error("No root node found!");
-      return { nodes, edges };
-    }
-
-    // Create a map of ExtendedNodes.
-    const nodeMap = new Map<string, ExtendedNode>(
-      nodes.map((node: any) => [
-        node.id,
-        {...node,children: [],depth: -1,position: { x: 0, y: 0 },} as ExtendedNode,])
-    );
-
-    // Build parent-child relationships.
-    edges.forEach(({ source, target }: { source: string; target: string }) => {
-      if (nodeMap.has(target) && nodeMap.has(source)) {
-        const parentNode = nodeMap.get(source)!;
-        const childNode = nodeMap.get(target)!;
-        childNode.parent = parentNode;
-        parentNode.children.push(childNode);
-      }
-    });
-
-    // Set depth for each node recursively.
-     const setDepth = (node: ExtendedNode, depth: number = 0): void => {
-      node.depth = depth;
-       node.children.forEach((child: ExtendedNode) => setDepth(child, depth + 1));
-    };
-     setDepth(nodeMap.get(rootNode.id)!);
-
-    // Organize nodes by depth level.
-    const levelMap = new Map<number, ExtendedNode[]>();
-    Array.from(nodeMap.values()).forEach((node) => {
-      if (!levelMap.has(node.depth)) levelMap.set(node.depth, []);
-      levelMap.get(node.depth)!.push(node);
-    });
-
-    const centerX = window.innerWidth / 2;
-    const centerY = window.innerHeight / 2;
-    // Set the root node's position at the center.
-    nodeMap.get(rootNode.id)!.position = { x: centerX, y: centerY };
-
-    // Arrange nodes for each level (depth).
-    levelMap.forEach((nodesAtLevel, depth) => {
-      if (depth === 0) return;
-
-      const parentNodes = levelMap.get(depth - 1) || [];
-      const angleStep = (2 * Math.PI) / Math.max(nodesAtLevel.length, 3);
-
-      nodesAtLevel.forEach((node: ExtendedNode, index: number) => {
-        const parent = node.parent || parentNodes[Math.floor(index / 2)];
-        const parentX = parent.position.x;
-        const parentY = parent.position.y;
-        const radius = BASE_RADIUS + depth * LEVEL_SPACING;
-        const angle = index * angleStep;
-        node.position = {
-          x: parentX + radius * Math.cos(angle),
-          y: parentY + radius * Math.sin(angle),
-        };
-      });
-    });
-
-    const positionedNodes = Array.from(nodeMap.values());
-    const positionedEdges = edges.map((edge) => ({
-      ...edge,
-      type: "floating",
-      animated: true,
-      style: { strokeWidth: 2, stroke: "#ffffff" },
-    }));
-
-    return { nodes: positionedNodes, edges: positionedEdges };
-  };
-
   return (
-    <div className="h-full w-full bg-gray-800 relative">
+    <div className="agent-flow-container h-full w-full bg-gray-800 relative">
       {/* Auto Arrange Button */}
       <button
         className="absolute top-2 left-2 p-1 text-xs bg-blue-500 opacity-80 hover:bg-blue-600 text-white rounded-md shadow-md transition-all z-20"
@@ -272,6 +179,14 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         }}
       >
         Auto Arrange
+      </button>
+      {/* Reset Button */}
+      <button
+        title="Cleanup the reactflow viewport" 
+        className="absolute top-2 left-24 p-1 text-xs bg-blue-400 hover:bg-red-600 text-white rounded-md shadow-md z-20"
+        onClick={resetFlow}
+      >
+        Reset
       </button>
 
       {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
@@ -302,17 +217,19 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         </div>
       </div>
 
+      {/* React Flow Component */}
       <ReactFlow
+        key={diagramKey} // Force remount on network change
         nodes={nodes.map((node) => ({
           ...node,
-          data: { ...node.data, isActive: activeAgents.has(node.id) },
+          data: { ...node.data, isActive: activeAgents.has(node.id), selectedNetwork },
         }))}
         edges={edges.map((edge) => ({
           ...edge,
           animated: activeEdges.has(`${edge.source}-${edge.target}`),
           style: {
             strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 3 : 1,
-            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? "#ffcc00" : "#ffffff",
+            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? "#ffcc00" : "var(--agentflow-edge)",
           },
         }))}
         onNodesChange={onNodesChange}

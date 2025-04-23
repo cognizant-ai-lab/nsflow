@@ -28,6 +28,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 user_sessions_lock = threading.Lock()
 user_sessions = {}
 
+
 # pylint: disable=too-many-instance-attributes
 class NsGrpcWsUtils:
     """
@@ -48,19 +49,22 @@ class NsGrpcWsUtils:
         :param websocket: The WebSocket connection instance.
         :param forwarded_request_metadata: List of metadata keys to extract from incoming headers.
         """
-        
+
         self.agent_name = agent_name
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}
-        self.thinking_file = '/tmp/agent_thinking.txt',
+        self.thinking_file = '/tmp/agent_thinking.txt'
         self.thinking_dir = '/tmp'
 
         self.base_utils = NsGrpcBaseUtils(agent_name=agent_name)
 
         self.logs_manager = LogsRegistry.register(agent_name)
 
+    # pylint: disable=too-many-function-args
     async def handle_user_input(self):
+        """
+        Handle incoming WebSocket messages and process them using the gRPC session."""
         websocket = self.websocket
         await websocket.accept()
         sid = str(websocket.client)
@@ -75,7 +79,7 @@ class NsGrpcWsUtils:
                 # Retrieve or initialize user-specific data
                 # with user_sessions_lock:
                 user_session = user_sessions.get(sid)
-                if not user_session or len(user_session)<1:
+                if not user_session or len(user_session) < 1:
                     # No session found: create a new one
                     user_session = await self.create_user_session(sid)
                     user_sessions[sid] = user_session
@@ -102,19 +106,19 @@ class NsGrpcWsUtils:
                     except RuntimeError as e:
                         logging.error("Error sending streaming response: %s", e)
                         self.active_chat_connections.pop(sid, None)
-        
+
         except WebSocketDisconnect:
             await self.logs_manager.log_event(f"WebSocket chat client disconnected: {sid}", "FastAPI")
             self.active_chat_connections.pop(sid, None)
 
-
-    async def create_user_session(self, sid):
+    async def create_user_session(self):
+        """method to create a user session with the given WebSocket connection."""
         metadata = self.base_utils.get_metadata(self.websocket)
         agent_session = self.base_utils.get_regular_agent_grpc_session(metadata=metadata)
         input_processor = StreamingInputProcessor(default_input="",
-                                                thinking_file=self.thinking_file,
-                                                session=agent_session,
-                                                thinking_dir=self.thinking_dir)
+                                                  thinking_file=self.thinking_file,
+                                                  session=agent_session,
+                                                  thinking_dir=self.thinking_dir)
         # Add a processor to handle agent logs
         # and to highlight the agents that respond in the agent network diagram
         # agent_log_processor = AgentLogProcessor(socketio, sid)

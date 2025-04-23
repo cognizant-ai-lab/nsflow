@@ -108,18 +108,16 @@ const TabbedChatPanel = () => {
   }, [activeNetwork, apiPort]);
 
   return (
-    <div className="tabbed-chat-panel flex flex-col h-full p-4">
+    <div className="tabbed-chat-panel">
       {/* Tabs */}
-      <div className="tabs flex border-b border-gray-700 h-10">
+      <div className="tabbed-tabs">
         {["chat", "internal", "config"].map((tab) => (
           <button
             key={tab}
             title={tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : "Configuration"}
             onClick={() => setActiveTab(tab as "chat" | "internal" | "config")}
-            className={`p-2 px-4 transition-all duration-200 ${
-                activeTab === tab
-                  ? "bg-gray-800 text-white font-bold border-t-2 border-l-2 border-r-2 border-gray-700 rounded-t-lg"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+            className={`tabbed-tab ${
+                activeTab === tab ? "tabbed-tab-active" : "tabbed-tab-inactive"
               }`}
           >
             {tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : "Config"}
@@ -128,7 +126,7 @@ const TabbedChatPanel = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-grow">
+      <div className="tabbed-content">
         {activeTab === "chat" && <ChatPanel />}
         {activeTab === "internal" && <InternalChatPanel />}
         {activeTab === "config" && <ConfigPanel selectedNetwork={activeNetwork} />}

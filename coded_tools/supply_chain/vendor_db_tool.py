@@ -63,7 +63,7 @@ class VendorDatabaseTool(CodedTool):
                     INSERT INTO vendors (name, country, materials, reliability_score, lead_time_days, risk_rating)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', [(name, country, json.dumps(materials), score, lead_time, risk)
-                      for name, country, materials, score, lead_time, risk])
+                      for name, country, materials, score, lead_time, risk in sample_vendors])
                 conn.commit()
 
     def invoke(self, args: Dict[str, Any], sly_data: Dict[str, Any]) -> Union[Dict[str, Any], str]:

@@ -57,13 +57,11 @@ const InfoPanel = () => {
           <p className="font-bold text-gray-400">Resources:</p>
           
           {/* Versions Display */}
-          <div className="flex items-center text-gray-400">
-            <FaInfoCircle className="mr-2" /> <span>NeuroSan v.</span> 
-            <span className="ml-1 text-white">{versions.neuroSan}</span>
+          <div className="info-panel flex items-center">
+            <FaInfoCircle className="mr-2" /> NeuroSan v. {versions.neuroSan}
           </div>
-          <div className="flex items-center text-gray-400">
-            <FaInfoCircle className="mr-2" /> <span>Client v.</span> 
-            <span className="ml-1 text-white">{versions.nsflow}</span>
+          <div className="info-panel flex items-center">
+            <FaInfoCircle className="mr-2" /> Client v. {versions.nsflow}
           </div>
 
           {/* GitHub Link */}

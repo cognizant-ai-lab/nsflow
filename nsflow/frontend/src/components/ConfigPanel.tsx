@@ -67,22 +67,22 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   };
 
   return (
-    <div className="p-4 border border-gray-700 rounded-md bg-gray-900 text-white h-full flex flex-col">
-      <h2 className="text-lg font-bold mb-2">Config: {selectedNetwork}</h2>
+    <div className="config-panel">
+      <h2 className="config-title">Config: {selectedNetwork}</h2>
 
       {/* Search Box */}
-      <div className="mb-2 flex items-center bg-gray-800 px-3 py-2 rounded-md">
-        <FaSearch className="text-gray-400 mr-2" />
+      <div className="config-search-box">
+        <FaSearch className="config-search-icon" />
         <input
           type="text"
           placeholder="Search config..."
           value={searchTerm}
           onChange={handleSearch}
-          className="bg-transparent text-white w-full focus:outline-none"
+          className="config-search-input"
         />
         {searchTerm && (
           <button
-            className="absolute right-14 text-gray-400 hover:text-white"
+            className="config-clear-button"
             onClick={clearSearch}
           >
             <FaTimes />
@@ -91,9 +91,9 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
       </div>
 
       {/* Expand/Collapse ALL Toggle */}
-      <div className="mb-2">
+      <div className="config-toggle">
         <button
-          className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-md text-sm flex items-center"
+          className="config-toggle-btn"
           onClick={handleExpandCollapseAll}
         >
           {isExpanded ? (
@@ -109,13 +109,13 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
       </div>
 
       {/* Scrollable Tree View Container */}
-      <div className="flex-grow bg-gray-800 rounded-md text-sm p-2 overflow-y-auto max-h-[65vh]">
+      <div className="config-tree-container">
         {error ? (
-          <p className="text-red-500">{error}</p>
+          <p className="config-error">{error}</p>
         ) : filteredTree.length > 0 ? (
           <TreeView tree={filteredTree} onToggle={handleToggle} />
         ) : (
-          <p>No matches found</p>
+          <p className="config-empty">No matches found</p>
         )}
       </div>
     </div>
@@ -132,7 +132,7 @@ const TreeView = ({ tree, onToggle }: { tree: TreeNode[]; onToggle: (key: string
           {node.children ? (
             <button
               onClick={() => onToggle(node.uniqueKey)}
-              className="mr-2 text-blue-400 hover:text-blue-300 flex items-center"
+              className="tree-node-button"
             >
               {node.expanded ? <FaMinusSquare /> : <FaPlusSquare />}{" "}
               <span className="ml-1 font-mono">{node.key}</span>
@@ -145,7 +145,7 @@ const TreeView = ({ tree, onToggle }: { tree: TreeNode[]; onToggle: (key: string
           {node.children && node.expanded ? (
             <TreeView tree={node.children} onToggle={onToggle} />
           ) : (
-            node.value !== undefined && <span className="ml-6 text-yellow-400">{JSON.stringify(node.value)}</span>
+            node.value !== undefined && <span className="tree-node-value">{JSON.stringify(node.value)}</span>
           )}
         </li>
       ))}
