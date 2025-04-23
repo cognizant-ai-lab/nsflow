@@ -69,17 +69,21 @@ class AgentNetworkUtils:
 
         # Step 3: Build full path inside safe REGISTRY_DIR
         raw_path = REGISTRY_DIR / f"{sanitized_name}.hocon"
-        resolved_path = raw_path.resolve()
 
-        # Step 4: Prevent directory traversal by checking prefix
-        if not str(resolved_path).startswith(str(REGISTRY_DIR)):
+        # Step 4: Normalize and resolve to handle ../ or symlinks
+        resolved_path = os.path.realpath(os.path.normpath(str(raw_path)))
+        allowed_dir = os.path.realpath(str(REGISTRY_DIR))
+
+        # Step 5: Ensure resolved path stays inside allowed dir
+        if os.path.commonpath([resolved_path, allowed_dir]) != allowed_dir:
             raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
-        # Step 5: Ensure file exists
-        if not resolved_path.exists():
+        # Step 6: Check if file exists
+        final_path = Path(resolved_path)
+        if not final_path.exists():
             raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
 
-        return resolved_path
+        return final_path
     
         # base_dir = os.path.abspath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
 
