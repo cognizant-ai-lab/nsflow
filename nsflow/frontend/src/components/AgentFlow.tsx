@@ -194,7 +194,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       <ReactFlow
         nodes={nodes.map((node) => ({
           ...node,
-          data: { ...node.data, isActive: activeAgents.has(node.id) },
+          data: { ...node.data, isActive: activeAgents.has(node.id), selectedNetwork },
         }))}
         edges={edges.map((edge) => ({
           ...edge,

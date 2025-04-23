@@ -56,3 +56,11 @@ def get_networkconfig(network_name: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"HOCON file '{network_name}.hocon' not found.")
     return agent_utils.load_hocon_config(file_path)
+
+@router.get("/networkconfig/{network_name}/agent/{agent_name}", responses={200: {"description": "Agent Info found"},
+                                                        404: {"description": "Info not found"}})
+def fetch_agent_info(network_name: str, agent_name: str):
+    file_path = agent_utils.get_network_file_path(network_name)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"HOCON file '{network_name}.hocon' not found.")
+    return agent_utils.get_agent_details(file_path, agent_name)

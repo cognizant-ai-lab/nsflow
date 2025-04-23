@@ -10,10 +10,11 @@
 #
 # END COPYRIGHT
 import os
+import re
 from pathlib import Path
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Union
 from fastapi import HTTPException
 from pyhocon import ConfigFactory
 
@@ -302,3 +303,73 @@ class AgentNetworkUtils:
             if class_name:
                 coded_tool_classes.append(class_name)
         return coded_tool_classes
+
+    def get_agent_details(self, config_path: Path, agent_name: str) -> Dict[str, Any]:
+        config = self.load_hocon_config(config_path)
+
+        empty_dict = {}
+        empty_list = []
+
+        if "tools" not in config:
+            raise HTTPException(status_code=400, detail="Missing tools section")
+
+        tools = config.get("tools", empty_list)
+        commondefs = config.get("commondefs", empty_dict)
+        agent_data = next((tool for tool in tools if tool.get("name") == agent_name), None)
+
+        if not agent_data:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+
+        # Start with the agent_data as-is
+        agent_details = dict(agent_data)
+
+        # Merge global and agent-level llm_config
+        merged_llm_config = dict(config.get("llm_config", empty_dict))
+        if "llm_config" in agent_data:
+            merged_llm_config.update(agent_data["llm_config"])
+        agent_details["llm_config"] = merged_llm_config
+
+        # Check if commondefs are referenced
+        all_values = AgentNetworkUtils.flatten_values(agent_data)
+
+        uses_commondefs = AgentNetworkUtils.detect_commondefs_usage(
+            all_values,
+            commondefs.get("replacement_strings", empty_dict),
+            commondefs.get("replacement_values", empty_dict)
+        )
+
+        if uses_commondefs:
+            agent_details["common_defs"] = commondefs
+
+        return agent_details
+
+    @staticmethod
+    def flatten_values(obj: Any) -> list:
+        flat = []
+        if isinstance(obj, dict):
+            for v in obj.values():
+                flat.extend(AgentNetworkUtils.flatten_values(v))
+        elif isinstance(obj, list):
+            for i in obj:
+                flat.extend(AgentNetworkUtils.flatten_values(i))
+        elif isinstance(obj, str):
+            flat.append(obj)
+        return flat
+
+    @staticmethod
+    def detect_commondefs_usage(values: list, replacement_strings: dict, replacement_values: dict) -> bool:
+        pattern = re.compile(r"\{(\w+)\}")
+        for val in values:
+            if not isinstance(val, str):
+                continue
+
+            # Check {replacement_string} markers
+            matches = pattern.findall(val)
+            if any(match in replacement_strings for match in matches):
+                return True
+
+            # Check if value is directly one of the replacement_values
+            if val in replacement_values:
+                return True
+
+        return False
