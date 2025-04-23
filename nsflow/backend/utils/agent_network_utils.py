@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Define the registries directory
 ROOT_DIR = os.getcwd()
-REGISTRY_DIR = os.path.join(ROOT_DIR, "registries")
+REGISTRY_DIR = Path(os.path.join(ROOT_DIR, "registries")).resolve()
 CODED_TOOLS_DIR = os.path.join(ROOT_DIR, "coded_tools")
 FIXTURES_DIR = os.path.join(ROOT_DIR, "tests", "fixtures")
 TEST_NETWORK = os.path.join(FIXTURES_DIR, "test_network.hocon")
@@ -57,20 +57,32 @@ class AgentNetworkUtils:
 
     def get_network_file_path(self, network_name: str) -> Path:
         """Returns the correct path for a given network name, ensuring it is confined to a safe directory."""
-        base_dir = os.path.abspath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
+        raw_path = REGISTRY_DIR / f"{network_name}.hocon"
+        resolved_path = raw_path.resolve()
 
-        # Sanitize and normalize the network_name to prevent directory traversal
-        sanitized_name = os.path.basename(os.path.normpath(network_name))
-        file_path = os.path.join(base_dir, f"{sanitized_name}.hocon")
+        # Check for path traversal
+        if not str(resolved_path).startswith(str(REGISTRY_DIR)):
+            raise HTTPException(status_code=403, detail="Access denied: Invalid network path")
 
-        # Resolve and validate the path
-        resolved_path = os.path.abspath(file_path)
-        if os.path.commonpath([resolved_path, base_dir]) != base_dir:
-            raise HTTPException(
-                status_code=403,
-                detail="Access to this file is not allowed"
-            )
-        return Path(resolved_path)
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail=f"Network file not found: {network_name}.hocon")
+
+        return resolved_path
+    
+        # base_dir = os.path.abspath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
+
+        # # Sanitize and normalize the network_name to prevent directory traversal
+        # sanitized_name = os.path.basename(os.path.normpath(network_name))
+        # file_path = os.path.join(base_dir, f"{sanitized_name}.hocon")
+
+        # # Resolve and validate the path
+        # resolved_path = os.path.abspath(file_path)
+        # if os.path.commonpath([resolved_path, base_dir]) != base_dir:
+        #     raise HTTPException(
+        #         status_code=403,
+        #         detail="Access to this file is not allowed"
+        #     )
+        # return Path(resolved_path)
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
