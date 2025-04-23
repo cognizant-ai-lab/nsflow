@@ -56,16 +56,28 @@ class AgentNetworkUtils:
         return Path(self.fixtures_dir) / "manifest.hocon"
 
     def get_network_file_path(self, network_name: str) -> Path:
-        """Returns the correct path for a given network name, ensuring it is confined to a safe directory."""
-        raw_path = REGISTRY_DIR / f"{network_name}.hocon"
+        """
+        Securely returns the absolute path for a given agent network name.
+        Validates to prevent directory traversal or malformed names.
+        """
+        # Step 1: Sanitize input to strip any path-like behavior
+        sanitized_name = os.path.basename(network_name)
+
+        # Step 2: Ensure only safe characters are used (alphanumeric, _, -)
+        if not re.match(r'^[\w\-]+$', sanitized_name):
+            raise HTTPException(status_code=400, detail="Invalid network name. Only alphanumeric, underscores, and hyphens are allowed.")
+
+        # Step 3: Build full path inside safe REGISTRY_DIR
+        raw_path = REGISTRY_DIR / f"{sanitized_name}.hocon"
         resolved_path = raw_path.resolve()
 
-        # Check for path traversal
+        # Step 4: Prevent directory traversal by checking prefix
         if not str(resolved_path).startswith(str(REGISTRY_DIR)):
-            raise HTTPException(status_code=403, detail="Access denied: Invalid network path")
+            raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
+        # Step 5: Ensure file exists
         if not resolved_path.exists():
-            raise HTTPException(status_code=404, detail=f"Network file not found: {network_name}.hocon")
+            raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
 
         return resolved_path
     
