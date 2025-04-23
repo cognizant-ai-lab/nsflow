@@ -21,6 +21,7 @@ import {
   FaChevronDown,
   FaCheckSquare,
   FaRegSquare,
+  FaRegCopy
 } from "react-icons/fa";
 import { useApiPort } from "../context/ApiPortContext";
 
@@ -108,62 +109,64 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
   };
 
   return (
-    <div
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className={`p-3 rounded-lg shadow-md w-48 transition-all ${
-        data.isActive
-          ? "border-2 scale-105 shadow-xl"
-          : ""
-      }`}
-      style={{
-        zIndex: showTooltip ? 999 : "auto",
-        background: data.isActive ? "var(--agentflow-node-active-bg)" : "var(--agentflow-node-bg)",
-        color: "var(--agentflow-node-text)",
-        borderColor: data.isActive ? "var(--agentflow-node-active-border)" : "var(--agentflow-edge)",
-      }}
-    >
-      {/* Title Bar */}
-      <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md"
-           style={{ backgroundColor: "var(--agentflow-node-header-bg)", color: "var(--agentflow-node-text)" }}
+    <div className="relative w-fit h-fit">
+      {/* Node Container */}
+      <div
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`p-3 rounded-lg shadow-md w-48 transition-all ${
+          data.isActive
+            ? "border-2 scale-105 shadow-xl"
+            : ""
+        }`}
+        style={{
+          background: data.isActive ? "var(--agentflow-node-active-bg)" : "var(--agentflow-node-bg)",
+          color: "var(--agentflow-node-text)",
+          borderColor: data.isActive ? "var(--agentflow-node-active-border)" : "var(--agentflow-edge)",
+        }}
       >
-        {/* Icon */}
-        <Icon className="text-white text-lg mr-2" />
-        <span className="text-sm font-bold ml-2">{data.label}</span>
-      </div>
-
-      {/* Coded Tools Section */}
-      {data.dropdown_tools && data.dropdown_tools.length > 0 && (
-        <div className="coded-tools-section">
-          {/* Toggle Button */}
-          <button onClick={() => setDropdownOpen(!dropdownOpen)} className="coded-tools-toggle">
-            <span>Coded Tools</span>
-            <FaChevronDown className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {/* Dropdown List - Multi-select checkboxes */}
-          {dropdownOpen && (
-            <ul className="coded-tools-list">
-              {data.dropdown_tools.map((tool: string) => (
-                <li key={tool} className="coded-tools-item" onClick={() => toggleToolSelection(tool)}>
-                  {selectedTools[tool] ? <FaCheckSquare /> : <FaRegSquare />}
-                  {tool}
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* Title Bar */}
+        <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md"
+            style={{ backgroundColor: "var(--agentflow-node-header-bg)", color: "var(--agentflow-node-text)" }}
+        >
+          {/* Icon */}
+          <Icon className="text-white text-lg mr-2" />
+          <span className="text-sm font-bold ml-2">{data.label}</span>
         </div>
-      )}
 
-      {/* Node Body */}
-      <div className="p-3 text-center">
-        {/* Correctly render handles with unique keys */}
-        {Object.entries(handlePositions).map(([key, position]) => (
-          <React.Fragment key={key}>
-            <Handle type="target" position={position} id={`${key}-target`} />
-            <Handle type="source" position={position} id={`${key}-source`} />
-          </React.Fragment>
-        ))}
+        {/* Coded Tools Section */}
+        {data.dropdown_tools && data.dropdown_tools.length > 0 && (
+          <div className="coded-tools-section">
+            {/* Toggle Button */}
+            <button onClick={() => setDropdownOpen(!dropdownOpen)} className="coded-tools-toggle">
+              <span>Coded Tools</span>
+              <FaChevronDown className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Dropdown List - Multi-select checkboxes */}
+            {dropdownOpen && (
+              <ul className="coded-tools-list">
+                {data.dropdown_tools.map((tool: string) => (
+                  <li key={tool} className="coded-tools-item" onClick={() => toggleToolSelection(tool)}>
+                    {selectedTools[tool] ? <FaCheckSquare /> : <FaRegSquare />}
+                    {tool}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Node Body */}
+        <div className="p-3 text-center">
+          {/* Correctly render handles with unique keys */}
+          {Object.entries(handlePositions).map(([key, position]) => (
+            <React.Fragment key={key}>
+              <Handle type="target" position={position} id={`${key}-target`} />
+              <Handle type="source" position={position} id={`${key}-source`} />
+            </React.Fragment>
+          ))}
+        </div>
       </div>
 
       {/* Tooltip on hover */}
@@ -174,7 +177,20 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
              onMouseDown={(e) => e.stopPropagation()}
              onClick={(e) => e.stopPropagation()}
         >
-          <div className="tooltip-title">{agentDetails.name}</div>
+          {/* Top Row with Copy Icon */}
+          <div className="flex justify-between items-center mb-2">
+            <div className="tooltip-title font-bold text-sm">{agentDetails.name}</div>
+            <button
+              className="text-gray-400 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(JSON.stringify(agentDetails, null, 2));
+              }}
+              title="Copy details"
+            >
+              <FaRegCopy size={14} />
+            </button>
+          </div>
 
           {agentDetails.llm_config && (
             <div className="tooltip-section">

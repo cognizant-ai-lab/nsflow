@@ -47,6 +47,23 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
 
+  // ** Get access to the ReactFlow setViewport instance **
+  const { setViewport } = useReactFlow();
+
+  // ** Add a diagramKey to force a full remount of ReactFlow **
+  const [diagramKey, setDiagramKey] = useState(0);
+
+  const resetFlow = () => {
+    setNodes([]);
+    setEdges([]);
+    setDiagramKey(prev => prev + 1); // This forces a full remount
+  };
+
+  useEffect(() => {
+    // Set zoom to 0.75 and center at (0, 0)
+    setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 }); // Optional animation
+  }, []);
+    
   useEffect(() => {
     if (!selectedNetwork) return;
 
@@ -70,6 +87,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           }))
         );
         fitView();
+        // You can change zoom and center values as needed
+        setViewport({ x: 0, y: 20, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
   }, [selectedNetwork, baseRadius, levelSpacing]);
@@ -161,6 +180,14 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       >
         Auto Arrange
       </button>
+      {/* Reset Button */}
+      <button
+        title="Cleanup the reactflow viewport" 
+        className="absolute top-2 left-24 p-1 text-xs bg-blue-400 hover:bg-red-600 text-white rounded-md shadow-md z-20"
+        onClick={resetFlow}
+      >
+        Reset
+      </button>
 
       {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
       <div className="slider-container">
@@ -192,6 +219,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
       {/* React Flow Component */}
       <ReactFlow
+        key={diagramKey} // Force remount on network change
         nodes={nodes.map((node) => ({
           ...node,
           data: { ...node.data, isActive: activeAgents.has(node.id), selectedNetwork },
