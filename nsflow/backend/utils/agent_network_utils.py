@@ -75,30 +75,15 @@ class AgentNetworkUtils:
         allowed_dir = os.path.realpath(str(REGISTRY_DIR))
 
         # Step 5: Ensure resolved path stays inside allowed dir
-        if os.path.commonpath([resolved_path, allowed_dir]) != allowed_dir:
+        if not resolved_path.startswith(allowed_dir + os.sep):
             raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
-        # Step 6: Check if file exists
+        # Step 6: Check if file exists and is a file (not a directory)
         final_path = Path(resolved_path)
-        if not final_path.exists():
+        if not final_path.is_file():
             raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
 
         return final_path
-    
-        # base_dir = os.path.abspath(self.fixtures_dir if network_name == "test_network" else self.registry_dir)
-
-        # # Sanitize and normalize the network_name to prevent directory traversal
-        # sanitized_name = os.path.basename(os.path.normpath(network_name))
-        # file_path = os.path.join(base_dir, f"{sanitized_name}.hocon")
-
-        # # Resolve and validate the path
-        # resolved_path = os.path.abspath(file_path)
-        # if os.path.commonpath([resolved_path, base_dir]) != base_dir:
-        #     raise HTTPException(
-        #         status_code=403,
-        #         detail="Access to this file is not allowed"
-        #     )
-        # return Path(resolved_path)
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
