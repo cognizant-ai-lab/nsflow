@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 from fastapi import HTTPException
 from pyhocon import ConfigFactory
 
@@ -65,7 +65,8 @@ class AgentNetworkUtils:
 
         # Step 2: Ensure only safe characters are used (alphanumeric, _, -)
         if not re.match(r'^[\w\-]+$', sanitized_name):
-            raise HTTPException(status_code=400, detail="Invalid network name. Only alphanumeric, underscores, and hyphens are allowed.")
+            raise HTTPException(status_code=400,
+                                detail="Invalid network name. Only alphanumeric, underscores, and hyphens are allowed.")
 
         # Step 3: Build full path inside safe REGISTRY_DIR
         raw_path = REGISTRY_DIR / f"{sanitized_name}.hocon"
@@ -129,7 +130,6 @@ class AgentNetworkUtils:
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
-
 
     def parse_agent_network(self, file_path: Path):
         """Parses an agent network from a HOCON configuration file."""
@@ -318,6 +318,12 @@ class AgentNetworkUtils:
         return coded_tool_classes
 
     def get_agent_details(self, config_path: Path, agent_name: str) -> Dict[str, Any]:
+        """
+        Retrieves the entire details of an Agent from a HOCON network configuration file.
+        :param config_path: Path to the HOCON configuration file.
+        :param agent_name: Name of the agent to retrieve details for.
+        :return: A dictionary containing the agent's details.
+        """
         config = self.load_hocon_config(config_path)
 
         empty_dict = {}
@@ -358,6 +364,11 @@ class AgentNetworkUtils:
 
     @staticmethod
     def flatten_values(obj: Any) -> list:
+        """
+        Flattens the values of a nested dictionary or list into a single list.
+        :param obj: The object to flatten (can be a dict, list, or string).
+        :return: A flat list of values.
+        """
         flat = []
         if isinstance(obj, dict):
             for v in obj.values():
@@ -371,6 +382,13 @@ class AgentNetworkUtils:
 
     @staticmethod
     def detect_commondefs_usage(values: list, replacement_strings: dict, replacement_values: dict) -> bool:
+        """
+        Detects if any of the values use commondefs replacement strings or values.
+        :param values: List of values to check.
+        :param replacement_strings: Dictionary of replacement strings.
+        :param replacement_values: Dictionary of replacement values.
+        :return: True if any value uses commondefs, False otherwise.
+        """
         pattern = re.compile(r"\{(\w+)\}")
         for val in values:
             if not isinstance(val, str):

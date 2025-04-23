@@ -1,4 +1,4 @@
-import { Node, Edge } from "reactflow";
+import { Node } from "reactflow";
 
 export interface ExtendedNode extends Node {
   style?: {
@@ -24,16 +24,16 @@ export function hierarchicalRadialLayout(
   }
 
   // Calculate maximum node size
-  const nodeDimensions = nodes.map((node) => ({
-    width: node.style?.width || 100,
-    height: node.style?.height || 50,
-  }));
+  // const nodeDimensions = nodes.map((node) => ({
+  //   width: node.style?.width || 100,
+  //   height: node.style?.height || 50,
+  // }));
 
-  const NODE_SIZE = Math.max(
-    ...nodeDimensions.map((n) => n.width),
-    ...nodeDimensions.map((n) => n.height)
-  );
-  const PADDING = NODE_SIZE * 0.4;
+  // const NODE_SIZE = Math.max(
+  //   ...nodeDimensions.map((n) => n.width),
+  //   ...nodeDimensions.map((n) => n.height)
+  // );
+  // const PADDING = NODE_SIZE * 0.4;
 
   const rootNode = nodes.find((node) => !edges.some((edge) => edge.target === node.id));
   if (!rootNode) {

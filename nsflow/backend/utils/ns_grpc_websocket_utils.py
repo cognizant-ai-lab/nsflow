@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 user_sessions_lock = asyncio.Lock()
 user_sessions = {}
 
+
 # pylint: disable=too-many-instance-attributes
 class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
     """
@@ -61,7 +62,7 @@ class NsGrpcWebsocketUtils(NsGrpcServiceUtils):
         self.chat_context: Dict[str, Any] = {}
         self.sly_data: Dict[str, Any] = {}
 
-        self.thinking_file = '/tmp/agent_thinking.txt',
+        self.thinking_file = '/tmp/agent_thinking.txt'
         self.thinking_dir = '/tmp'
 
         self.logs_manager = LogsRegistry.register(agent_name)

@@ -89,7 +89,7 @@ class NsGrpcBaseUtils:
                 metadata=metadata,
                 agent_name=self.agent_name)
         return grpc_session
-    
+
     def get_regular_agent_grpc_session(self, metadata: Dict[str, Any]) -> AsyncAgentSession:
         """
         Build gRPC session to talk to "main" service
