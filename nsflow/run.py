@@ -80,7 +80,8 @@ class NsFlowRunner:
 
     def parse_args(self):
         """Parses command-line arguments for configuration."""
-        parser = argparse.ArgumentParser(description="Run Neuro SAN server and FastAPI backend.")
+        parser = argparse.ArgumentParser(description="Run Neuro SAN server and FastAPI backend.",
+                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
         parser.add_argument('--server-host', type=str, default=self.ns_server_host,
                             help="Host address for the Neuro SAN server")
