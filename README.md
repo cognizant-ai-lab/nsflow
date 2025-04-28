@@ -1,8 +1,8 @@
 # nsflow - A FastAPI based client for NeuroSan
 
-nsflow is a react-based client that enables users to explore, visualize, and interact with smart agent networks. It integrates with [**NeuroSan**](https://github.com/leaf-ai/neuro-san) for intelligent agent-based interactions.
+**nsflow** is a react-based client that enables users to explore, visualize, and interact with smart agent networks. It integrates with [**NeuroSan**](https://github.com/leaf-ai/neuro-san) for intelligent agent-based interactions.
 
-![Project Logo](docs/snapshot01.png)
+![Project Logo](https://raw.githubusercontent.com/leaf-ai/nsflow/main/docs/snapshot01.png)
 
 ---
 
