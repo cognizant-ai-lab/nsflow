@@ -14,7 +14,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 
-import { FaDownload, FaRegStopCircle } from "react-icons/fa";
+import { FaDownload, FaRegStopCircle, FaCopy } from "react-icons/fa";
 import { ImBin2 } from "react-icons/im";
 import { Clipboard } from "lucide-react";
 import { useChatControls } from "../hooks/useChatControls";
@@ -134,36 +134,46 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   ),
                   code: ({ className = "", children, ...props }) => {
                     const isBlock = className?.includes("language-");
-                  
                     const codeContent = String(children).trim();
                   
                     if (isBlock) {
-                      // use this language variable for future syntax highlighting
-                      // const language = className.replace("language-", "") || "text";
                       return (
                         <div className="relative group my-2">
-                          <pre className={`rounded bg-gray-800 p-3 overflow-x-auto text-sm`}>
+                          <pre
+                            className="rounded p-3 overflow-x-auto text-sm"
+                            style={{
+                              backgroundColor: "var(--code-block-bg)",
+                              color: "var(--code-block-text)"
+                            }}
+                          >
                             <code className={className} {...props}>
                               {codeContent}
                             </code>
                           </pre>
                           <button
-                            onClick={() => navigator.clipboard.writeText(codeContent)}
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-xs text-white bg-gray-700 px-2 py-1 rounded"
-                            title="Copy code"
+                            onClick={() => copyToClipboard(msg.text, index)}
+                            className="copy-button"
+                            title="Copy to clipboard"
                           >
-                            📋
+                            <FaCopy size={10} />
                           </button>
                         </div>
                       );
                     }
+                  
                     // Inline code
                     return (
-                      <code className="bg-gray-800 text-yellow-300 px-1 py-0.5 rounded">
+                      <code
+                        className="px-1 py-0.5 rounded"
+                        style={{
+                          backgroundColor: "var(--code-inline-bg)",
+                          color: "var(--code-inline-text)"
+                        }}
+                      >
                         {codeContent}
                       </code>
                     );
-                  },
+                  }
                 }}
               >
                 {msg.text}
