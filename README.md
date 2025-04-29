@@ -46,34 +46,32 @@ cd nsflow
 ```
 
 #### **Step 2: Install Dependencies**
-- Make sure you have **Python 3.12** and **Node.js (with Yarn)** installed.
-- Follow the instructions to setup the frontend here: [./nsflow/frontend/README.md](https://github.com/leaf-ai/nsflow/tree/main/nsflow/frontend/README.md)
-
+- Make sure you have python (preferably **Python 3.12**) installed.
     ```bash
     python -m venv .venv
     source .venv/bin/activate
     pip install -r requirements.txt
     pip install -r requirements-dev.txt
-    cd nsflow/frontend; yarn install
     ```
 
 #### **Step 3: Start the Backend in dev mode & Frontend separately**
-- Back to the root and start Backend:
+- From the root start Backend:
     ```bash
-    cd ...
     python -m nsflow.run --dev
     ```
 
 - Start Frontend:
-On another terminal window
-    ```bash
-    cd nsflow/frontend
-    yarn dev
-    ```
+    - Ensure that you have **Node.js (with Yarn)** installed.
+    - Follow the instructions to setup the frontend here: [./nsflow/frontend/README.md](https://github.com/leaf-ai/nsflow/tree/main/nsflow/frontend/README.md)
+    - On another terminal window
+        ```bash
+        cd nsflow/frontend; yarn install
+        yarn dev
+        ```
 
-By default:
-- **backend** will be available at: `http://127.0.0.1:8005`
-- **frontend** will be available at: `http://127.0.0.1:5173`
+- By default:
+    - **backend** will be available at: `http://127.0.0.1:8005`
+    - **frontend** will be available at: `http://127.0.0.1:5173`
 
 
 #### **Step 4: To make sure your changes to frontend take effect in the wheel, run the script**
@@ -83,7 +81,7 @@ By default:
     sh build_scripts/build_frontend.sh
     ```
 
-Note: The above script output should show that `./nsflow` dir contains a module `prebuilt_frontend`
+Note: The above script's output should show that `./nsflow` dir contains a module `prebuilt_frontend`
 
 - To build and test the wheel locally
     ```bash
