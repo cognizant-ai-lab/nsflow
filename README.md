@@ -36,7 +36,7 @@ By default, this will start:
 ---
 
 ### **2️⃣ Development & Contribution (Manually Start Frontend & Backend)**
-If you want to contribute, ensure you have the necessary dependencies installed:
+If you want to contribute, ensure you have the necessary dependencies installed. 
 To start the frontend and backend separately, follow these steps:
 
 #### **Step 1: Clone the Repository**
@@ -55,6 +55,9 @@ cd nsflow
     ```
 
 #### **Step 3: Start the Backend in dev mode & Frontend separately**
+- Ensure that you have a few example hocon files in your `registries` and the same mapped in `registries/manifest`.
+- [Optional] Ensure that you have the necessary coded tools in the `coded_tools` dir.
+
 - From the root start Backend:
     ```bash
     python -m nsflow.run --dev

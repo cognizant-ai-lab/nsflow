@@ -10,12 +10,15 @@ wheels_private/
 *.ipynb
 .python-version
 .DS_Store
-
-# registries/*.hocon
 *.egg-info
+
+# pytest-cache
 .pytest_cache/
 .coverage
 .hypothesis/
+
+registries/
+coded_tools/
 
 # Virtual environments
 .venv
