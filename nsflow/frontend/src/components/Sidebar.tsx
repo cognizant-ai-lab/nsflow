@@ -9,48 +9,97 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
+import { useNeuroSan } from "../context/NeuroSanContext";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { apiPort, setApiPort } = useApiPort(); // Access API port from context
+  const { apiPort } = useApiPort(); // Access API port from context
   const { activeNetwork, setActiveNetwork } = useChatContext(); 
   const { stopWebSocket, clearChat } = useChatControls();
-  const [tempPort, setTempPort] = useState(apiPort);
+  // const [tempPort, setTempPort] = useState(apiPort);
   const networksEndRef = useRef<HTMLDivElement>(null);
+  const { host, port, setHost, setPort } = useNeuroSan();
 
   useEffect(() => {
     // Auto-scroll to latest network
     networksEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [networks]);
 
-  useEffect(() => {
-    setTempPort(apiPort);
-  }, [apiPort]);
+  // useEffect(() => {
+  //   setTempPort(apiPort);
+  // }, [apiPort]);
 
-  useEffect(() => {
-    const fetchNetworks = async () => {
-      setLoading(true);
-      setError(""); // Reset error
-      try {
-        const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/networks/`);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        const data = await response.json();
-        setNetworks(data.networks);
-      } catch (err) {
-        setError(`Failed to load agent networks. ${err}`);
-      } finally {
-        setLoading(false);
+  // Reusable network fetcher
+  const fetchNetworks = useCallback(async () => {
+    console.log(">>>> Using FastapiPort:", apiPort);
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(host)}&port=${port}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) throw new Error(`Failed to connect to NeuroSan server: ${response.statusText}`);
+      const data = await response.json();
+
+      console.log("Fetched agent networks:", data); // Debug
+
+      if (data?.agents) {
+        const agentNames = data.agents.map((agent: { agent_name: string }) => agent.agent_name);
+        setNetworks(agentNames);
+      } else {
+        throw new Error("Invalid response format from NeuroSan");
       }
-    };
 
-    fetchNetworks();
-  }, [apiPort]);
+    } catch (err: any) {
+      setError(`Connection failed. ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiPort, host, port]);
+
+  const setConfig = async () => {
+    // Optional: replace or fetch this securely if auth is needed later
+    // const token = localStorage.getItem("authToken") || "dummy";
+  
+    try {
+      const response = await fetch(`http://localhost:${apiPort}/api/v1/set_config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          NS_SERVER_HOST: host,
+          NS_SERVER_PORT: port
+        })
+      });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to connect: ${response.status} - ${errorText}`);
+      }
+  
+      const data = await response.json();
+      console.log(">>>> Config set to use NeuroSan server:", data.message, data.config);
+    } catch (error) {
+      console.error("❌ Failed to set config:", error);
+    }
+  };
+  
+  const handleNeurosanConnect = async () => {
+    await setConfig();
+    await fetchNetworks();
+  };
 
   const handleNetworkSelection = (network: string) => {
     if (network === activeNetwork) return; // Prevent unnecessary reloading
@@ -68,7 +117,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       <span className="text-lg font-bold">Agent Networks</span>
 
       {/* API Port Input */}
-      <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
+      {/* <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
         <label className="sidebar-api-input text-sm text-gray-300">API Port:</label>
         <input
           type="number"
@@ -81,6 +130,33 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         <button
           onClick={() => setApiPort(tempPort)}
           className="w-full mt-2 p-1 bg-blue-500 hover:bg-blue-500 text-white rounded"
+        >
+          Connect
+        </button>
+      </div> */}
+
+      {/* NeuroSan Host and Port */}
+      <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
+        <label className="text-sm text-gray-300">NeuroSan Host:</label>
+        <input
+          type="text"
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
+        />
+
+        <label className="text-sm text-gray-300 mt-2 block">NeuroSan Port:</label>
+        <input
+          type="number"
+          min="1024"
+          max="65535"
+          value={port}
+          onChange={(e) => setPort(Number(e.target.value))}
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
+        />
+        <button
+          onClick={handleNeurosanConnect}
+          className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded"
         >
           Connect
         </button>

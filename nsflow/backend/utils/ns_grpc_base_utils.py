@@ -6,7 +6,7 @@
 # You can be released from the terms, and requirements of the Academic Public
 # License by purchasing a commercial license.
 # Purchase of a commercial license is mandatory for any use of the
-# ENN-release SDK Software in commercial settings.
+# nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
 import os
@@ -21,6 +21,7 @@ from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 from neuro_san.session.async_grpc_service_agent_session import AsyncGrpcServiceAgentSession
 from neuro_san.session.grpc_service_agent_session import GrpcServiceAgentSession
+from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 from neuro_san.service.agent_server import DEFAULT_FORWARDED_REQUEST_METADATA
 
 
@@ -44,24 +45,12 @@ class NsGrpcBaseUtils:
                  forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA,
                  host: str = None,
                  port: int = None):
-        self.root_dir = os.getcwd()
-        self.load_env_variables()
-        self.server_host = host or os.getenv("NS_SERVER_HOST", "localhost")
-        self.server_port = port or int(os.getenv("NS_SERVER_PORT", "30015"))
+        config = NsConfigsRegistry.get_current().config
+        self.server_host = host or config.get("ns_server_host", "localhost")
+        self.server_port = port or config.get("ns_server_port", 30015)
         self.agent_name = agent_name
         self.forwarded_request_metadata = forwarded_request_metadata.split(" ")
         self.logger = logging.getLogger(self.__class__.__name__)
-
-    def load_env_variables(self):
-        """
-        Loads environment variables from a .env file in the current root directory.
-        """
-        env_path = os.path.join(self.root_dir, ".env")
-        if os.path.exists(env_path):
-            load_dotenv(env_path)
-            logging.info("Loaded env vars from .env")
-        else:
-            logging.warning("No .env file found")
 
     def get_metadata(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

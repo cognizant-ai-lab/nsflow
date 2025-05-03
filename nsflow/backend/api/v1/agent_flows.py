@@ -9,16 +9,30 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
-# nsflow/backend/api/v1/agent_flows.py
-
+import os
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from nsflow.backend.utils.agent_network_utils import AgentNetworkUtils
+from nsflow.backend.utils.auth_utils import AuthUtils
+from nsflow.backend.models.set_config_model import ConfigRequest
+from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 
 logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
+
+
+@router.post("/set_config")
+async def set_config(config_req: ConfigRequest, _=Depends(AuthUtils.allow_all)):
+    updated_config = NsConfigsRegistry.set_current(str(config_req.NS_SERVER_HOST), config_req.NS_SERVER_PORT)
+    return JSONResponse(content={"message": "Config updated successfully", "config": updated_config.config})
+
+
+@router.get("/ping", tags=["Health"])
+async def health_check():
+    return JSONResponse(content={"status": "ok", "message": "API is alive"})
 
 
 @router.get("/networks/")

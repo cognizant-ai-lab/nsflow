@@ -9,9 +9,10 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import React, { createContext, useState, useContext } from "react";
+import React, { createContext, useEffect, useState, useContext } from "react";
 
 const DEFAULT_PORT = 4173;
+const NSFLOW_DEV_PORT = 8005;
 
 type ApiPortContextType = {
   apiPort: number;
@@ -21,7 +22,24 @@ type ApiPortContextType = {
 const ApiPortContext = createContext<ApiPortContextType | undefined>(undefined);
 
 export const ApiPortProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [apiPort, setApiPort] = useState(DEFAULT_PORT);
+  const [apiPort, setApiPort] = useState<number>(DEFAULT_PORT);
+
+  useEffect(() => {
+    // Try hitting the default backend port
+    fetch(`http://localhost:${DEFAULT_PORT}/api/v1/ping`)
+      .then((res) => {
+        if (res.ok) {
+          console.log("✅ FastAPI backend is running on DEFAULT_PORT:", DEFAULT_PORT);
+          setApiPort(DEFAULT_PORT);
+        } else {
+          throw new Error(`Default port response not OK`);
+        }
+      })
+      .catch((err) => {
+        console.warn("⚠️ Default port failed, switching to NSFLOW_DEV_PORT:", err);
+        setApiPort(NSFLOW_DEV_PORT);
+      });
+  }, []);
 
   return (
     <ApiPortContext.Provider value={{ apiPort, setApiPort }}>
@@ -30,7 +48,6 @@ export const ApiPortProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
-// Custom Hook
 export const useApiPort = () => {
   const context = useContext(ApiPortContext);
   if (!context) {
