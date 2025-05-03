@@ -84,10 +84,15 @@ const InfoPanel = () => {
             <SiFastapi className="mr-2" /> FastAPI (OpenAPI) Specs
           </a>
 
-          {/* Documentation (Placeholder) */}
-          <div className="flex items-center text-gray-500">
-            <FaBookOpen className="mr-2" /> Documentation (Coming Soon)
-          </div>
+          {/* Documentation and User Guide */}
+          <a
+            href="https://github.com/leaf-ai/neuro-san-demos/blob/main/README.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center text-blue-400 hover:text-blue-300"
+          >
+            <FaBookOpen className="mr-2" /> User Guide
+          </a>
         </div>
       </div>
     </div>

@@ -92,13 +92,25 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       const data = await response.json();
       console.log(">>>> Config set to use NeuroSan server:", data.message, data.config);
     } catch (error) {
-      console.error("❌ Failed to set config:", error);
+      console.error(">>>> Failed to set config:", error);
     }
   };
   
   const handleNeurosanConnect = async () => {
-    await setConfig();
-    await fetchNetworks();
+    // Clear current networks to avoid stale display
+    setNetworks([]);
+    setError(""); // Also reset any old error messages
+    setLoading(true); // Show loading indicator while connecting
+
+    try {
+      await setConfig();       // Update the backend config
+      await fetchNetworks();   // Fetch fresh list from the new host/port
+    } catch (error) {
+      console.error("Error during NeuroSan connection setup:", error);
+      setError("Failed to connect to NeuroSan server.");
+    } finally {
+      setLoading(false); // Ensure loading state resets even on error
+    }
   };
 
   const handleNetworkSelection = (network: string) => {
@@ -114,49 +126,30 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
   return (
     <aside className="sidebar h-full sidebar p-4 flex flex-col gap-3 border-r">
-      <span className="text-lg font-bold">Agent Networks</span>
-
-      {/* API Port Input */}
-      {/* <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
-        <label className="sidebar-api-input text-sm text-gray-300">API Port:</label>
-        <input
-          type="number"
-          min="1024"
-          max="65535"
-          value={tempPort}
-          onChange={(e) => setTempPort(Number(e.target.value))}
-          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
-        />
-        <button
-          onClick={() => setApiPort(tempPort)}
-          className="w-full mt-2 p-1 bg-blue-500 hover:bg-blue-500 text-white rounded"
-        >
-          Connect
-        </button>
-      </div> */}
+      <span className="text-lg font-bold sidebar-text-large">Agent Networks</span>
 
       {/* NeuroSan Host and Port */}
-      <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
-        <label className="text-sm text-gray-300">NeuroSan Host:</label>
+      <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
+        <label className="text-gray-300">NeuroSan Host:</label>
         <input
           type="text"
           value={host}
           onChange={(e) => setHost(e.target.value)}
-          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
         />
 
-        <label className="text-sm text-gray-300 mt-2 block">NeuroSan Port:</label>
+        <label className="text-gray-300 mt-2 block">NeuroSan Port:</label>
         <input
           type="number"
           min="1024"
           max="65535"
           value={port}
           onChange={(e) => setPort(Number(e.target.value))}
-          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
         />
         <button
           onClick={handleNeurosanConnect}
-          className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded"
+          className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
         >
           Connect
         </button>
@@ -168,9 +161,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         {loading && <p>Loading...</p>}
         {error && <p className="text-red-500">{error}</p>}
         {networks.map((network) => (
-          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100">
+          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text">
             <button
-              className={`sidebar-btn w-full text-left p-1 text-sm rounded cursor-pointer transition-all font-medium
+              className={`sidebar-btn w-full text-left p-1 text-sm rounded cursor-pointer transition-all sidebar-text
                 ${activeNetwork === network ? "active-network" : ""}`}
               onClick={() => handleNetworkSelection(network)}
             >
