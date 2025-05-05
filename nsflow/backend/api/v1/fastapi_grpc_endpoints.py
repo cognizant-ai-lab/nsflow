@@ -32,8 +32,8 @@ async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, reques
     :param request: FastAPI Request with JSON body and headers.
     :return: StreamingResponse that yields JSON lines.
     """
-    grpc_service_utils = NsGrpcServiceUtils(agent_name=agent_name)
     try:
+        grpc_service_utils = NsGrpcServiceUtils(agent_name=agent_name)
         response_generator = await grpc_service_utils.stream_chat(
             agent_name=agent_name,
             chat_request=chat_request.model_dump(),
@@ -75,3 +75,27 @@ async def get_concierge_list(request: Request):
     except Exception as e:
         logging.exception("Failed to retrieve concierge list: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve concierge list") from e
+
+@router.get("{agent_name}/connectivity")
+async def get_connectivity(agent_name: str, request: Request):
+    """
+    GET handler for connectivity API.
+    Extracts forwarded metadata from headers and uses the utility class to call gRPC.
+
+    :param agent_name: The name of the target agent.
+    :param request: The FastAPI Request object, used to extract headers.
+    :return: JSON response from gRPC service.
+    """
+    grpc_service_utils = NsGrpcServiceUtils(agent_name=agent_name)
+    try:
+        # Extract metadata from headers
+        metadata: Dict[str, Any] = grpc_service_utils.get_metadata(request)
+
+        # Delegate to utility function
+        result = grpc_service_utils.get_connectivity(metadata)
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logging.exception("Failed to retrieve connectivity info: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve connectivity info") from e

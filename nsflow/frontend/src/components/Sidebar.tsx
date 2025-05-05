@@ -130,7 +130,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
       {/* NeuroSan Host and Port */}
       <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
-        <label className="text-gray-300">NeuroSan Host:</label>
+        <label className="sidebar-text">NeuroSan Host:</label>
         <input
           type="text"
           value={host}
@@ -138,7 +138,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
         />
 
-        <label className="text-gray-300 mt-2 block">NeuroSan Port:</label>
+        <label className="sidebar-text mt-2 block">NeuroSan Port:</label>
         <input
           type="number"
           min="1024"
@@ -158,7 +158,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       
       {/* Scrollable networks container */}
       <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
-        {loading && <p>Loading...</p>}
+        {loading && <p className="sidebar-text-large">Loading...</p>}
         {error && <p className="text-red-500">{error}</p>}
         {networks.map((network) => (
           <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text">

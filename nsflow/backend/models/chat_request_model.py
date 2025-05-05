@@ -10,7 +10,7 @@
 #
 # END COPYRIGHT
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, List, Any
 
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 
@@ -30,6 +30,31 @@ class UserMessage(BaseModel):
     text: str = Field(..., example="Hello, what can you help me with?")
 
 
+class OriginModel(BaseModel):
+    tool: str
+    instantiation_index: Optional[int] = 0
+
+
+class ChatMessageModel(BaseModel):
+    type: ChatMessageType
+    text: str
+    origin: Optional[List[OriginModel]] = None
+
+
+class ChatHistoryModel(BaseModel):
+    origin: Optional[List[OriginModel]] = None
+    messages: Optional[List[ChatMessageModel]] = None
+
+
+class ChatContextModel(BaseModel):
+    """
+    Represents the context of a chat session.
+    Attributes:
+        chat_histories (Dict[str, Any]): The context data for the chat session.
+    """
+    chat_histories: Optional[List[ChatHistoryModel]] = None
+
+
 class ChatRequestModel(BaseModel):
     """
     Represents the complete payload structure for initiating a streaming chat request
@@ -44,6 +69,16 @@ class ChatRequestModel(BaseModel):
             agent's response behavior (MINIMAL, MAXIMAL).
     """
     user_message: UserMessage
-    sly_data: Optional[Dict[str, Any]] = None
-    chat_context: Optional[Dict[str, Any]] = None
-    chat_filter: Optional[Dict[str, Any]] = None
+    sly_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional structured sly_data given to the agent.",
+        example={}
+    )
+    chat_context: Optional[ChatContextModel] = None
+    chat_filter: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional filters to show the level of logs from server.",
+        example={"chat_filter_type": "MAXIMAL"}
+    )
+
+# ChatMessageModel.model_rebuild()

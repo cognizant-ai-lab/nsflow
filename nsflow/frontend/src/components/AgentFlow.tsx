@@ -87,6 +87,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           }))
         );
         fitView();
+        console.log("received data", data);
         // You can change zoom and center values as needed
         setViewport({ x: 0, y: 20, zoom: 0.5 }, { duration: 800 });
       })

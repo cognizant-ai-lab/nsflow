@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from nsflow.backend.api.router import router
+from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,10 +37,20 @@ else:
 NSFLOW_PORT = int(os.getenv("NSFLOW_PORT", "4173"))
 
 
+def initialize_ns_config_from_env():
+    """Initialize default NeuroSan config into registry using env variables."""
+    default_host = os.getenv("NS_SERVER_HOST", "localhost")
+    default_port = int(os.getenv("NS_SERVER_PORT", "30015"))
+    NsConfigsRegistry.set_current(default_host, default_port)
+    logging.info("[Startup] Default NsConfig set to %s:%s", default_host, default_port)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Handles the startup and shutdown of the FastAPI application."""
     logging.info("FastAPI is starting up...")
+    logging.info("Initializing NeuroSan config from environment variables...")
+    initialize_ns_config_from_env()
     try:
         yield
     finally:
