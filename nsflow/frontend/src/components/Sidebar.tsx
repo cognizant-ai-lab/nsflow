@@ -19,21 +19,33 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { apiPort } = useApiPort(); // Access API port from context
+  const { apiPort, isReady } = useApiPort(); // Access API port from context
   const { activeNetwork, setActiveNetwork } = useChatContext(); 
   const { stopWebSocket, clearChat } = useChatControls();
   // const [tempPort, setTempPort] = useState(apiPort);
   const networksEndRef = useRef<HTMLDivElement>(null);
   const { host, port, setHost, setPort } = useNeuroSan();
 
+
+  // Ensure default host and port on mount
+  useEffect(() => {
+    if (!host) setHost("localhost");
+    if (!port) setPort(30015);
+  }, []);
+
   useEffect(() => {
     // Auto-scroll to latest network
     networksEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [networks]);
 
-  // useEffect(() => {
-  //   setTempPort(apiPort);
-  // }, [apiPort]);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!initialized && isReady && host && port && apiPort) {
+      handleNeurosanConnect();
+      setInitialized(true);
+    }
+  }, [isReady, apiPort, host, port]);
 
   // Reusable network fetcher
   const fetchNetworks = useCallback(async () => {
