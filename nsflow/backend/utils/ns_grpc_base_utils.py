@@ -45,15 +45,17 @@ class NsGrpcBaseUtils:
                  forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA,
                  host: str = None,
                  port: int = None):
+        self.logger = logging.getLogger(self.__class__.__name__)
         try:
             config = NsConfigsRegistry.get_current().config
         except RuntimeError:
             raise RuntimeError("No active NsConfigStore. Please set it via /set_config before using gRPC endpoints.")
+        self.logger.info("Using config: %s", config)
         self.server_host = host or config.get("ns_server_host", "localhost")
         self.server_port = port or config.get("ns_server_port", 30015)
         self.agent_name = agent_name
         self.forwarded_request_metadata = forwarded_request_metadata.split(" ")
-        self.logger = logging.getLogger(self.__class__.__name__)
+        
 
     def get_metadata(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

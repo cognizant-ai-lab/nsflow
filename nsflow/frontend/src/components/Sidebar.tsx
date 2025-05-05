@@ -37,6 +37,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
   useEffect(() => {
     if (!initialized && isReady && isNsReady && host && port && apiPort) {
+      // console.log(">>>> Final host/port being used:", host, port);
       handleNeurosanConnect();
       setInitialized(true);
     }
@@ -56,11 +57,12 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   
   const fetchNetworks = useCallback(async () => {
     console.log(">>>> Using FastapiPort:", apiPort);
+    console.log(">>>> Calling /list with", host, port);
     setLoading(true);
     setError("");
     try {
       const response = await fetchWithTimeout(
-        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(host)}&port=${port}`,
+        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(host || "localhost")}&port=${port}`,
         {
           method: "GET",
           headers: {

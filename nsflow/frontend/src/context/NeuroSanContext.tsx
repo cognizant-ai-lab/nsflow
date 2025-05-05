@@ -13,8 +13,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useApiPort } from "./ApiPortContext";
 
 type NeuroSanContextType = {
-  host: string;
-  port: number;
+  host: string | undefined;
+  port: number | undefined;
   setHost: (h: string) => void;
   setPort: (p: number) => void;
   isNsReady: boolean;
@@ -23,8 +23,8 @@ type NeuroSanContextType = {
 const NeuroSanContext = createContext<NeuroSanContextType | undefined>(undefined);
 
 export const NeuroSanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [host, setHost] = useState("localhost");
-  const [port, setPort] = useState(30015);
+  const [host, setHost] = useState<string | undefined>(undefined);
+  const [port, setPort] = useState<number | undefined>(undefined);    
   const [isNsReady, setIsNsReady] = useState(false);
   const { apiPort } = useApiPort();
 
