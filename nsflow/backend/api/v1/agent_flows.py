@@ -11,9 +11,14 @@
 # END COPYRIGHT
 import os
 import logging
+from typing import Dict, Any
+
+from fastapi import HTTPException
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from nsflow.backend.utils.agent_network_utils import AgentNetworkUtils
+from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
+from nsflow.backend.utils.ns_grpc_network_utils import NsGrpcNetworkUtils
 from nsflow.backend.utils.auth_utils import AuthUtils
 from nsflow.backend.models.set_config_model import ConfigRequest
 from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
@@ -43,11 +48,25 @@ def get_networks():
 
 @router.get("/network/{network_name}", responses={200: {"description": "Agent Network found"},
                                                   404: {"description": "Agent Network not found"}})
-def get_agent_network(network_name: str):
+async def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
-    file_path = agent_utils.get_network_file_path(network_name)
-    logging.info("file_path: %s", file_path)
-    return agent_utils.parse_agent_network(file_path)
+    # file_path = agent_utils.get_network_file_path(network_name)
+    # logging.info("file_path: %s", file_path)
+    # return agent_utils.parse_agent_network(file_path)
+    grpc_service_utils = NsGrpcServiceUtils(agent_name=network_name)
+    try:
+        # Extract metadata from headers
+        metadata: Dict[str, Any] = {}
+        # Delegate to utility function
+        result = await grpc_service_utils.get_connectivity(metadata, network_name)
+
+    except Exception as e:
+        logging.exception("Failed to retrieve connectivity info: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve connectivity info") from e
+    
+    grpc_network_utils = NsGrpcNetworkUtils()
+    res = grpc_network_utils.build_nodes_and_edges(result)
+    return JSONResponse(content=res)
 
 
 @router.get("/connectivity/{network_name}", responses={200: {"description": "Connectivity Info"},
