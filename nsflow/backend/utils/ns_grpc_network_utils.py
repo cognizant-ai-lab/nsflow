@@ -27,6 +27,12 @@ class NsGrpcNetworkUtils:
     """
     @staticmethod
     def build_nodes_and_edges(connectivity_response: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict]]:
+        """
+        Build nodes and edges for the agent network based on connectivity information.
+        :param connectivity_response: The response from the gRPC connectivity call.
+        :return: A dictionary containing nodes and edges for the network.
+        """
+        # Initialize data structures
         origin_to_tools: Dict[str, List[str]] = {}
         all_nodes: set = set()
         parent_map: Dict[str, str] = {}
