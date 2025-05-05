@@ -69,3 +69,23 @@ class NsGrpcServiceUtils(NsGrpcBaseUtils):
         except Exception as e:
             self.logger.exception("Failed to fetch concierge list: %s", e)
             raise
+
+    def get_connectivity(self, metadata: Dict[str, Any], agent_name: str) -> Dict[str, Any]:
+        """
+        Call the concierge `connectivity()` method via gRPC.
+
+        :param metadata: Metadata to be forwarded with the request (e.g., from headers).
+        :return: Dictionary containing the result from the gRPC service.
+        """
+        try:
+            grpc_session = AsyncGrpcServiceAgentSession(
+                host=self.server_host,
+                port=self.server_port,
+                metadata=metadata,
+                agent_name=agent_name
+            )
+            request_data: Dict[str, Any] = {}
+            return grpc_session.connectivity(request_data)
+        except Exception as e:
+            self.logger.exception("Failed to fetch connectivity info: %s", e)
+            raise

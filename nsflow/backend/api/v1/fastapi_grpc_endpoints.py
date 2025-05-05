@@ -76,7 +76,7 @@ async def get_concierge_list(request: Request):
         logging.exception("Failed to retrieve concierge list: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve concierge list") from e
 
-@router.get("{agent_name}/connectivity")
+@router.get("/{agent_name}/connectivity")
 async def get_connectivity(agent_name: str, request: Request):
     """
     GET handler for connectivity API.
@@ -92,7 +92,7 @@ async def get_connectivity(agent_name: str, request: Request):
         metadata: Dict[str, Any] = grpc_service_utils.get_metadata(request)
 
         # Delegate to utility function
-        result = grpc_service_utils.get_connectivity(metadata)
+        result = await grpc_service_utils.get_connectivity(metadata, agent_name)
 
         return JSONResponse(content=result)
 
