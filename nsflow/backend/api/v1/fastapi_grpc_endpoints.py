@@ -23,7 +23,7 @@ from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
 router = APIRouter(prefix="/api/v1")
 
 
-@router.post("/streaming_chat/{agent_name}")
+@router.post("/{agent_name}/streaming_chat")
 async def streaming_chat(agent_name: str, chat_request: ChatRequestModel, request: Request):
     """
     Streaming POST endpoint for Neuro-SAN chat using gRPC.
@@ -99,3 +99,27 @@ async def get_connectivity(agent_name: str, request: Request):
     except Exception as e:
         logging.exception("Failed to retrieve connectivity info: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve connectivity info") from e
+    
+@router.get("/{agent_name}/function")
+async def get_function(agent_name: str, request: Request):
+    """
+    GET handler for function API.
+    Extracts forwarded metadata from headers and uses the utility class to call gRPC.
+
+    :param agent_name: The name of the target agent.
+    :param request: The FastAPI Request object, used to extract headers.
+    :return: JSON response from gRPC service.
+    """
+    grpc_service_utils = NsGrpcServiceUtils(agent_name=agent_name)
+    try:
+        # Extract metadata from headers
+        metadata: Dict[str, Any] = grpc_service_utils.get_metadata(request)
+
+        # Delegate to utility function
+        result = await grpc_service_utils.get_function(metadata, agent_name)
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logging.exception("Failed to retrieve function info: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve function info") from e
