@@ -103,7 +103,16 @@ class NsFlowRunner:
         parser.add_argument("--server-only", action="store_true",
                             help="Run only the NeuroSan server without nsflow client")
 
-        return vars(parser.parse_args())
+        args = parser.parse_args()
+
+        # Check for mutually exclusive usage
+        if args.client_only and (args.server_port != self.config["server_port"] or args.server_host != self.config["server_host"]):
+            parser.error("[x] You cannot specify --server-port or --server-host when using --client-only mode.")
+
+        if args.server_only and (args.nsflow_port != self.config["nsflow_port"] or args.nsflow_host != self.config["nsflow_host"]):
+            parser.error("[x] You cannot specify --nsflow-port or --nsflow-host when using --server-only mode.")
+
+        return vars(args)
 
     def set_environment_variables(self):
         """Set required environment variables based on active mode."""

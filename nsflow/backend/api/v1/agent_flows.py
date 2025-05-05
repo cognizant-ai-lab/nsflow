@@ -29,14 +29,39 @@ router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
 
 
-@router.post("/set_config")
+@router.post("/set_ns_config")
 async def set_config(config_req: ConfigRequest, _=Depends(AuthUtils.allow_all)):
-    updated_config = NsConfigsRegistry.set_current(str(config_req.NS_SERVER_HOST), config_req.NS_SERVER_PORT)
-    return JSONResponse(content={"message": "Config updated successfully", "config": updated_config.config})
+    """Sets the configuration for the Neuro-SAN server."""
+    try:
+        # Validate the input
+        if not config_req.NS_SERVER_HOST or not config_req.NS_SERVER_PORT:
+            raise HTTPException(status_code=400, detail="Invalid host or port")
+    except ValueError as e:
+        logging.error("Invalid host or port: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid host or port") from e
+    # Set the configuration
+    try:
+        updated_config = NsConfigsRegistry.set_current(str(config_req.NS_SERVER_HOST), config_req.NS_SERVER_PORT)
+        return JSONResponse(content={"message": "Config updated successfully", "config": updated_config.config})
+    except RuntimeError as e:
+        logging.error("Failed to set config: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to set config") from e
+
+
+@router.get("/get_ns_config")
+async def get_config(_=Depends(AuthUtils.allow_all)):
+    """Returns the current configuration of the Neuro-SAN server."""
+    try:
+        config = NsConfigsRegistry.get_current().config
+        return JSONResponse(content={"message": "Config retrieved successfully", "config": config})
+    except RuntimeError as e:
+        logging.error("Failed to retrieve config: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve config") from e
 
 
 @router.get("/ping", tags=["Health"])
 async def health_check():
+    """Health check endpoint to verify if the API is alive."""
     return JSONResponse(content={"status": "ok", "message": "API is alive"})
 
 
