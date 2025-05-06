@@ -86,7 +86,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     } catch (err: any) {
       const message = err.name === "AbortError"
         ? "[x] Connection timed out. Check if the server is up and running."
-        : `[x] Connection failed. ${err.message}`;
+        : `[x] Connection failed. Check NeuroSan server. \n\n${err.message}`;
       setError(message);
     } finally {
       setLoading(false);
@@ -181,7 +181,12 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       {/* Networks Display */}
       <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
         {loading && <p className="sidebar-text-large">Loading...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {error && <p className="text-red-500">{error.split('\n').map((line, idx) => (
+          <span key={idx}>
+            {line}
+            <br />
+          </span>
+        ))}</p>}
         {networks.map((network) => (
           <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text">
             <button
