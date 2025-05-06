@@ -29,9 +29,8 @@ NSFLOW_LOG_LEVEL = os.getenv("NSFLOW_LOG_LEVEL", "info")
 
 if NSFLOW_DEV_MODE:
     logging.info("DEV_MODE: %s", NSFLOW_DEV_MODE)
-    os.environ["NSFLOW_PORT"] = "8005"
-    logging.info("Running in **DEV MODE** - Using FastAPI on default dev port.")
-else:
+    # USe the values set in run.py or 8005 by default
+    os.environ["NSFLOW_PORT"] = os.getenv("NSFLOW_PORT", "8005")
     logging.info("Running in **DEV MODE** - Using FastAPI on default dev port.")
 # finally, get nsflow_port
 NSFLOW_PORT = int(os.getenv("NSFLOW_PORT", "4173"))
