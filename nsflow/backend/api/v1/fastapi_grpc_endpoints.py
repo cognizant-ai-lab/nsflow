@@ -12,6 +12,7 @@
 from typing import Dict, Any
 import logging
 import json
+import socket
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -63,6 +64,16 @@ async def get_concierge_list(request: Request):
     :return: JSON response from gRPC service.
     """
     grpc_service_utils = NsGrpcServiceUtils(agent_name=None)
+    host = grpc_service_utils.server_host
+    port = grpc_service_utils.server_port
+    # fail fast if the server is not reachable
+    # This might not be always true when using a http sidecar for example
+    if host == "localhost" and not is_port_open(host, port, timeout=5.0):
+        raise HTTPException(
+            status_code=503,
+            detail=f"NeuroSan server at {host}:{port} is not reachable"
+        )
+
     try:
         # Extract metadata from headers
         metadata: Dict[str, Any] = grpc_service_utils.get_metadata(request)
@@ -123,3 +134,12 @@ async def get_function(agent_name: str, request: Request):
     except Exception as e:
         logging.exception("Failed to retrieve function info: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve function info") from e
+
+def is_port_open(host: str, port: int, timeout=1.0) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        try:
+            sock.connect((host, port))
+            return True
+        except Exception:
+            return False
