@@ -19,31 +19,40 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { apiPort, isReady } = useApiPort(); // Access API port from context
-  const { activeNetwork, setActiveNetwork } = useChatContext(); 
+  const { apiPort, isReady } = useApiPort();
+  const { activeNetwork, setActiveNetwork } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
-  // const [tempPort, setTempPort] = useState(apiPort);
   const networksEndRef = useRef<HTMLDivElement>(null);
   const { host, port, setHost, setPort, isNsReady } = useNeuroSan();
 
+  const [tempHost, setTempHost] = useState(host);
+  const [tempPort, setTempPort] = useState<number | undefined>(port);
+  const [initialized, setInitialized] = useState(false);
+
+  // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
+  useEffect(() => {
+    if (host && host.trim() !== "") {
+      setTempHost(host);
+    }
+    if (port && typeof port === "number") {
+      setTempPort(port);
+    }
+    console.log(">>>> NeuroSanContext config updated:", { host, port });
+  }, [host, port]);
+
 
   useEffect(() => {
-    // Auto-scroll to latest network
     networksEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [networks]);
 
-  const [initialized, setInitialized] = useState(false);
-  const [shouldUpdateConfig, setShouldUpdateConfig] = useState(false);
-
+  // Initial connect only once if host and port exist
   useEffect(() => {
-    if (!initialized && isReady && isNsReady && host && port && apiPort) {
-      // console.log(">>>> Final host/port being used:", host, port);
-      handleNeurosanConnect();
+    if (!initialized && isReady && isNsReady && host?.trim() !== "" && port && apiPort) {
       setInitialized(true);
+      handleNeurosanConnect(host, port, false); // skip setConfig on first load
     }
   }, [isReady, isNsReady, apiPort, host, port]);
 
-  // Reusable network fetcher
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 30000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -54,106 +63,83 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     clearTimeout(id);
     return response;
   };
-  
-  const fetchNetworks = useCallback(async () => {
-    console.log(">>>> Using FastapiPort:", apiPort);
-    console.log(">>>> Calling /list with", host, port);
+
+  const fetchNetworks = useCallback(async (hostToUse: string, portToUse: number) => {
+    console.log(">>>> Calling /list with", hostToUse, portToUse);
     setLoading(true);
     setError("");
     try {
       const response = await fetchWithTimeout(
-        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(host || "localhost")}&port=${port}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-        30000 // 30 seconds timeout
+        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
+        { method: "GET", headers: { "Content-Type": "application/json" } },
+        30000
       );
-  
+
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`Failed to connect: ${response.statusText} - ${text}`);
       }
-  
+
       const data = await response.json();
-      console.log("Fetched agent networks:", data);
-  
-      if (data?.agents) {
-        const agentNames = data.agents.map((agent: { agent_name: string }) => agent.agent_name);
-        setNetworks(agentNames);
-      } else {
-        throw new Error("Invalid response format from NeuroSan");
-      }
+      const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
+      setNetworks(agentNames || []);
     } catch (err: any) {
       const message = err.name === "AbortError"
-        ? "[x] Connection to NeuroSan server timed out. Please check the server status."
+        ? "[x] Connection timed out. Check if the server is up and running."
         : `[x] Connection failed. ${err.message}`;
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [apiPort, host, port]);
-  
+  }, [apiPort]);
 
-  const setConfig = async () => {
-    // Optional: replace or fetch this securely if auth is needed later
-    // const token = localStorage.getItem("authToken") || "dummy";
-  
+  const setConfig = async (hostToUse: string, portToUse: number) => {
     try {
       const response = await fetch(`http://localhost:${apiPort}/api/v1/set_ns_config`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          NS_SERVER_HOST: host,
-          NS_SERVER_PORT: port
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ NS_SERVER_HOST: hostToUse, NS_SERVER_PORT: portToUse })
       });
-  
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to connect: ${response.status} - ${errorText}`);
-      }
-  
+      if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      console.log(`>>>> Config via fastapi port:${apiPort} set to use NeuroSan server:", ${data.message}, ${data.config}`);
+      console.log(`>>>> Config via fastapi port:${apiPort} set to use NeuroSan server:", ${data}`);
     } catch (error) {
-      console.error(">>>> Failed to set config:", error);
+      console.error("[x] Failed to set config:", error);
     }
   };
-  
-  const handleNeurosanConnect = async () => {
-    // Clear current networks to avoid stale display
+
+  const handleNeurosanConnect = async (newHost?: string, newPort?: number, updateConfig = true) => {
+    const finalHost = newHost ?? tempHost;
+    const finalPort = newPort ?? tempPort;
+
+    if (!finalHost || !finalPort) {
+      setError("[x] Please enter valid host and port.");
+      return;
+    }
+
     setNetworks([]);
-    setError(""); // Also reset any old error messages
-    setLoading(true); // Show loading indicator while connecting
+    setError("");
+    setLoading(true);
 
     try {
-      if (shouldUpdateConfig) {
-        await setConfig(); // Only update server config if user made changes
-        setShouldUpdateConfig(false); // Reset flag after setting config
+      if (updateConfig) {
+        setHost(finalHost);
+        setPort(finalPort);
+        await setConfig(finalHost, finalPort);
       }
-      await fetchNetworks();   // Fetch fresh list from the new host/port
+      await fetchNetworks(finalHost, finalPort);
     } catch (error) {
-      console.error("Error during NeuroSan connection setup:", error);
       setError("Failed to connect to NeuroSan server.");
     } finally {
-      setLoading(false); // Ensure loading state resets even on error
+      setLoading(false);
     }
   };
 
   const handleNetworkSelection = (network: string) => {
-    if (network === activeNetwork) return; // Prevent unnecessary reloading
-
-    console.log(`Switching to network: ${network}`);
-
-    stopWebSocket();  // Close current WebSocket connections
-    clearChat();      // Reset chat history
-    setActiveNetwork(network); // Set new active network
+    if (network === activeNetwork) return;
+    stopWebSocket();
+    clearChat();
+    setActiveNetwork(network);
     onSelectNetwork(network);
   };
 
@@ -161,16 +147,13 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     <aside className="sidebar h-full sidebar p-4 flex flex-col gap-3 border-r">
       <span className="text-lg font-bold sidebar-text-large">Agent Networks</span>
 
-      {/* NeuroSan Host and Port */}
+      {/* NeuroSan Host/Port Section */}
       <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
         <label className="sidebar-text">NeuroSan Host:</label>
         <input
           type="text"
-          value={host}
-          onChange={(e) => {
-            setHost(e.target.value);
-            setShouldUpdateConfig(true); // Mark config used
-          }}
+          value={tempHost ?? ""}
+          onChange={(e) => setTempHost(e.target.value)}
           className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
         />
 
@@ -179,23 +162,23 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           type="number"
           min="1024"
           max="65535"
-          value={port}
+          value={tempPort !== undefined ? tempPort : ""}
           onChange={(e) => {
-            setPort(Number(e.target.value));
-            setShouldUpdateConfig(true); // Mark config used
+            const val = e.target.value;
+            setTempPort(val === "" ? undefined : Number(val));
           }}
           className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
         />
+
         <button
-          onClick={handleNeurosanConnect}
+          onClick={() => handleNeurosanConnect(tempHost, tempPort, true)}
           className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
         >
           Connect
         </button>
       </div>
 
-      
-      {/* Scrollable networks container */}
+      {/* Networks Display */}
       <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
         {loading && <p className="sidebar-text-large">Loading...</p>}
         {error && <p className="text-red-500">{error}</p>}
@@ -210,7 +193,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             </button>
           </div>
         ))}
-        <div ref={networksEndRef} /> {/* Auto-scroll reference */}
+        <div ref={networksEndRef} />
       </div>
     </aside>
   );

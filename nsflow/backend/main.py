@@ -39,6 +39,9 @@ NSFLOW_PORT = int(os.getenv("NSFLOW_PORT", "4173"))
 
 def initialize_ns_config_from_env():
     """Initialize default NeuroSan config into registry using env variables."""
+    if os.getenv("NSFLOW_CLIENT_ONLY", "False").lower() == "true":
+        logging.info("CLIENT-ONLY mode detected. Skipping NeuroSan config initialization.")
+        return
     default_host = os.getenv("NS_SERVER_HOST", "localhost")
     default_port = int(os.getenv("NS_SERVER_PORT", "30015"))
     NsConfigsRegistry.set_current(default_host, default_port)
