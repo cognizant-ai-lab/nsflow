@@ -87,6 +87,7 @@ async def get_concierge_list(request: Request):
         logging.exception("Failed to retrieve concierge list: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve concierge list") from e
 
+
 @router.get("/{agent_name}/connectivity")
 async def get_connectivity(agent_name: str, request: Request):
     """
@@ -110,7 +111,8 @@ async def get_connectivity(agent_name: str, request: Request):
     except Exception as e:
         logging.exception("Failed to retrieve connectivity info: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve connectivity info") from e
-    
+
+
 @router.get("/{agent_name}/function")
 async def get_function(agent_name: str, request: Request):
     """
@@ -135,7 +137,16 @@ async def get_function(agent_name: str, request: Request):
         logging.exception("Failed to retrieve function info: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve function info") from e
 
+
 def is_port_open(host: str, port: int, timeout=1.0) -> bool:
+    """
+    Check if a port is open on a given host.
+    :param host: The hostname or IP address.
+    :param port: The port number to check.
+    :param timeout: Timeout in seconds for the connection attempt.
+    :return: True if the port is open, False otherwise.
+    """
+    # Create a socket and set a timeout
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
         try:

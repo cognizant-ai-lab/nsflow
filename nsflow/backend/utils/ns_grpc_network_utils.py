@@ -20,11 +20,13 @@ class AgentData:
     edges: List[Dict]
 
 
+# pylint: disable=too-few-public-methods
 class NsGrpcNetworkUtils:
     """
     Utility class to handle network-related operations for Neuro-San agents.
     This includes building nodes and edges for visualization.
     """
+    # pylint: disable=too-many-locals
     @staticmethod
     def build_nodes_and_edges(connectivity_response: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict]]:
         """

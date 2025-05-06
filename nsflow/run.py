@@ -15,7 +15,6 @@ import signal
 import subprocess
 import argparse
 import threading
-import socket
 import logging
 import time
 from typing import Dict, Any
@@ -50,9 +49,9 @@ class NsFlowRunner:
             "thinking_dir": os.getenv("THINKING_DIR", "C:\\tmp") if self.is_windows else "/tmp",
             # Ensure all paths are resolved relative to `self.root_dir`
             "agent_manifest_file": os.getenv("AGENT_MANIFEST_FILE",
-                                                os.path.join(self.root_dir, "registries", "manifest.hocon")),
+                                             os.path.join(self.root_dir, "registries", "manifest.hocon")),
             "agent_tool_path": os.getenv("AGENT_TOOL_PATH",
-                                            os.path.join(self.root_dir, "coded_tools")),
+                                         os.path.join(self.root_dir, "coded_tools")),
             "nsflow_log_dir": os.path.join(self.root_dir, "logs")
         }
 
@@ -103,14 +102,33 @@ class NsFlowRunner:
         parser.add_argument("--server-only", action="store_true",
                             help="Run only the NeuroSan server without nsflow client")
 
-        args = parser.parse_args()
+        args, _ = parser.parse_known_args()
+        explicitly_passed_args = {
+            arg for arg in sys.argv[1:] if arg.startswith("--")
+        }
 
-        # Check for mutually exclusive usage
-        if args.client_only and (args.server_port != self.config["server_port"] or args.server_host != self.config["server_host"]):
-            parser.error("[x] You cannot specify --server-port or --server-host when using --client-only mode.")
+        if args.client_only and (
+            "--server-host" in explicitly_passed_args
+            or "--server-port" in explicitly_passed_args
+        ):
+            parser.error(
+                "[x] You cannot specify --server-host or --server-port "
+                "when using --client-only mode."
+            )
 
-        if args.server_only and (args.nsflow_port != self.config["nsflow_port"] or args.nsflow_host != self.config["nsflow_host"]):
-            parser.error("[x] You cannot specify --nsflow-port or --nsflow-host when using --server-only mode.")
+        if args.server_only and (
+            "--nsflow-host" in explicitly_passed_args
+            or "--nsflow-port" in explicitly_passed_args
+        ):
+            parser.error(
+                "[x] You cannot specify --nsflow-host or --nsflow-port "
+                "when using --server-only mode."
+            )
+
+        if args.client_only and args.server_only:
+            parser.error(
+                "[x] You cannot specify both --client-only and --server-only at the same time."
+            )
 
         return vars(args)
 
@@ -209,7 +227,8 @@ class NsFlowRunner:
             sys.executable, "-u", "-m", "neuro_san.service.agent_main_loop",
             "--port", str(self.config["server_port"])
         ]
-        self.server_process = self.start_process(command, "Neuro SAN", os.path.join(self.config["nsflow_log_dir"], "server.log"))
+        self.server_process = self.start_process(command, "Neuro SAN",
+                                                 os.path.join(self.config["nsflow_log_dir"], "server.log"))
         self.logger.info("NeuroSan server started on port: %s", self.config["server_port"])
 
     def start_fastapi(self):
@@ -223,7 +242,8 @@ class NsFlowRunner:
             "--reload"
         ]
 
-        self.fastapi_process = self.start_process(command, "FastAPI", os.path.join(self.config["nsflow_log_dir"], "api.log"))
+        self.fastapi_process = self.start_process(command, "FastAPI",
+                                                  os.path.join(self.config["nsflow_log_dir"], "api.log"))
         self.logger.info("FastAPI started on port: %s", self.config["nsflow_port"])
 
     def signal_handler(self, signum, frame):
@@ -281,13 +301,11 @@ class NsFlowRunner:
         self.logger.info("Press Ctrl+C to stop the server.")
         self.logger.info("\n" + "="*50 + "\n")
 
-
         # Wait on active subprocesses
         if self.server_process:
             self.server_process.wait()
         if self.fastapi_process:
             self.fastapi_process.wait()
-
 
 
 if __name__ == "__main__":

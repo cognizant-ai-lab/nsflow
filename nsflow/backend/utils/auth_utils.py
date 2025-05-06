@@ -9,8 +9,9 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
-from fastapi import Header, HTTPException, status, Depends
+from fastapi import Header, HTTPException, status
 import jwt
+
 
 class AuthUtils:
     SHARED_SECRET = "supersecret123"  # Replace in production
@@ -21,16 +22,24 @@ class AuthUtils:
 
     @classmethod
     def verify_token(cls, token: str):
+        """
+        Verifies the JWT token and returns the payload.
+        Raises HTTPException if the token is invalid or expired.
+        """
         try:
             payload = jwt.decode(token, cls.SHARED_SECRET, algorithms=["HS256"])
             return payload
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-        except jwt.InvalidTokenError:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        except jwt.ExpiredSignatureError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired") from e
+        except jwt.InvalidTokenError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from e
 
     @classmethod
     def get_auth_token(cls, authorization: str = Header(...)):
+        """
+        Extracts the token from the authorization header.
+        Raises HTTPException if the header is missing or invalid.
+        """
         if not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Invalid authorization header")
         token = authorization.split(" ")[1]

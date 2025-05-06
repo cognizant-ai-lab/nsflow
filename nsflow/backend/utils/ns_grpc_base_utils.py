@@ -9,10 +9,8 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
-import os
 import logging
 from typing import Dict, Any
-from dotenv import load_dotenv
 
 from fastapi import HTTPException
 import grpc
@@ -21,8 +19,8 @@ from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 from neuro_san.session.async_grpc_service_agent_session import AsyncGrpcServiceAgentSession
 from neuro_san.session.grpc_service_agent_session import GrpcServiceAgentSession
-from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 from neuro_san.service.agent_server import DEFAULT_FORWARDED_REQUEST_METADATA
+from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 
 
 class NsGrpcBaseUtils:
@@ -48,14 +46,14 @@ class NsGrpcBaseUtils:
         self.logger = logging.getLogger(self.__class__.__name__)
         try:
             config = NsConfigsRegistry.get_current().config
-        except RuntimeError:
-            raise RuntimeError("No active NsConfigStore. Please set it via /set_config before using gRPC endpoints.")
+        except RuntimeError as e:
+            raise RuntimeError("No active NsConfigStore. \
+                               Please set it via /set_config before using gRPC endpoints.") from e
         self.logger.info("Using config: %s", config)
         self.server_host = host or config.get("ns_server_host", "localhost")
         self.server_port = port or config.get("ns_server_port", 30015)
         self.agent_name = agent_name
         self.forwarded_request_metadata = forwarded_request_metadata.split(" ")
-        
 
     def get_metadata(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

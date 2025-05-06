@@ -9,7 +9,6 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
-import os
 import logging
 from typing import Dict, Any
 
@@ -88,7 +87,7 @@ async def get_agent_network(network_name: str):
     except Exception as e:
         logging.exception("Failed to retrieve connectivity info: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve connectivity info") from e
-    
+
     grpc_network_utils = NsGrpcNetworkUtils()
     res = grpc_network_utils.build_nodes_and_edges(result)
     return JSONResponse(content=res)

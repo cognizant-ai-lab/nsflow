@@ -12,6 +12,7 @@
 from typing import Optional
 from nsflow.backend.utils.ns_config_store import NsConfigStore
 
+
 class NsConfigsRegistry:
     """
     Temporary simplified registry for a single NsConfigStore.
@@ -22,15 +23,27 @@ class NsConfigsRegistry:
 
     @classmethod
     def set_current(cls, host: str, port: int) -> NsConfigStore:
+        """
+        Set the current NsConfigStore instance.
+        This will replace any existing instance.
+        """
         cls._current_config = NsConfigStore(host, port)
         return cls._current_config
 
     @classmethod
     def get_current(cls) -> NsConfigStore:
+        """
+        Get the current NsConfigStore instance.
+        Raises RuntimeError if no instance is set.
+        """
         if cls._current_config is None:
             raise RuntimeError("No active NsConfigStore has been set.")
         return cls._current_config
 
     @classmethod
     def reset(cls):
+        """
+        Reset the current NsConfigStore instance.
+        This will remove the reference to the current instance.
+        """
         cls._current_config = None
