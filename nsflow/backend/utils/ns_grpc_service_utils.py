@@ -6,7 +6,7 @@
 # You can be released from the terms, and requirements of the Academic Public
 # License by purchasing a commercial license.
 # Purchase of a commercial license is mandatory for any use of the
-# ENN-release SDK Software in commercial settings.
+# nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
 
@@ -68,4 +68,44 @@ class NsGrpcServiceUtils(NsGrpcBaseUtils):
             return grpc_session.list(request_data)
         except Exception as e:
             self.logger.exception("Failed to fetch concierge list: %s", e)
+            raise
+
+    def get_connectivity(self, metadata: Dict[str, Any], agent_name: str) -> Dict[str, Any]:
+        """
+        Call the concierge `connectivity()` method via gRPC.
+
+        :param metadata: Metadata to be forwarded with the request (e.g., from headers).
+        :return: Dictionary containing the result from the gRPC service.
+        """
+        try:
+            grpc_session = AsyncGrpcServiceAgentSession(
+                host=self.server_host,
+                port=self.server_port,
+                metadata=metadata,
+                agent_name=agent_name
+            )
+            request_data: Dict[str, Any] = {}
+            return grpc_session.connectivity(request_data)
+        except Exception as e:
+            self.logger.exception("Failed to fetch connectivity info: %s", e)
+            raise
+
+    def get_function(self, metadata: Dict[str, Any], agent_name: str) -> Dict[str, Any]:
+        """
+        Call the concierge `function()` method via gRPC.
+
+        :param metadata: Metadata to be forwarded with the request (e.g., from headers).
+        :return: Dictionary containing the result from the gRPC service.
+        """
+        try:
+            grpc_session = AsyncGrpcServiceAgentSession(
+                host=self.server_host,
+                port=self.server_port,
+                metadata=metadata,
+                agent_name=agent_name
+            )
+            request_data: Dict[str, Any] = {}
+            return grpc_session.function(request_data)
+        except Exception as e:
+            self.logger.exception("Failed to fetch function info: %s", e)
             raise

@@ -411,6 +411,14 @@ input:focus {
   font-weight: bold;
 }
 
+.sidebar-text {
+  font-size: 12px;
+}
+
+.sidebar-text-large {
+  font-size: 14px;
+}
+
 /* Agent Flow */
 .agent-flow-container {
   background-color: var(--agentflow-bg);

@@ -19,6 +19,7 @@ wheels_private/
 
 registries/
 coded_tools/
+generated_notebooks/
 
 # Virtual environments
 .venv
@@ -31,6 +32,7 @@ logs
 tree.txt
 test.ipynb
 test.json
+test.py
 
 # keep the dist for prebuilt_frontend
 !nsflow/prebuilt_frontend/dist/

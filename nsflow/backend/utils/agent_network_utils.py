@@ -6,7 +6,7 @@
 # You can be released from the terms, and requirements of the Academic Public
 # License by purchasing a commercial license.
 # Purchase of a commercial license is mandatory for any use of the
-# ENN-release SDK Software in commercial settings.
+# nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
 import os
@@ -20,9 +20,15 @@ from pyhocon import ConfigFactory
 
 logging.basicConfig(level=logging.INFO)
 
-# Define the registries directory
-ROOT_DIR = os.getcwd()
-REGISTRY_DIR = Path(os.path.join(ROOT_DIR, "registries")).resolve()
+# Define the registry directory and other constants
+# Ensure the environment variable is set
+if os.getenv("AGENT_MANIFEST_FILE") is None:
+    raise ValueError("Environment variable AGENT_MANIFEST_FILE is not set. "
+                     "Please set it to the path of the agent manifest file.")
+
+AGENT_MANIFEST_FILE = Path(os.getenv("AGENT_MANIFEST_FILE"))
+REGISTRY_DIR = Path(os.path.dirname(AGENT_MANIFEST_FILE))
+ROOT_DIR = Path(os.path.dirname(REGISTRY_DIR))
 CODED_TOOLS_DIR = os.path.join(ROOT_DIR, "coded_tools")
 FIXTURES_DIR = os.path.join(ROOT_DIR, "tests", "fixtures")
 TEST_NETWORK = os.path.join(FIXTURES_DIR, "test_network.hocon")
@@ -46,10 +52,6 @@ class AgentNetworkUtils:
     def __init__(self):
         self.registry_dir = REGISTRY_DIR
         self.fixtures_dir = FIXTURES_DIR
-
-    def get_manifest_path(self):
-        """Returns the manifest.hocon path."""
-        return Path(self.registry_dir) / "manifest.hocon"
 
     def get_test_manifest_path(self):
         """Returns the manifest.hocon path."""
@@ -88,7 +90,7 @@ class AgentNetworkUtils:
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
-        manifest_path = self.get_manifest_path()
+        manifest_path = AGENT_MANIFEST_FILE
         if not manifest_path.exists():
             return {"networks": []}
 

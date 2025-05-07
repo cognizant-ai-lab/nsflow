@@ -90,12 +90,30 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
 
   useEffect(() => {
     if (!showTooltip || agentDetails) return;
-
+    // Fetch agent details when the tooltip is shown
     fetch(`http://127.0.0.1:${apiPort}/api/v1/networkconfig/${data.selectedNetwork}/agent/${data.label}`)
-      .then((res) => res.json())
-      .then((json) => setAgentDetails(json))
-      .catch((err) => console.error("Failed to load agent details:", err));
+      .then((res) => {
+        if (!res.ok) {
+          if (res.status === 404) {
+            setAgentDetails({
+              name: data.label,
+              error: "This agent is managed by a remote NeuroSan server. Detailed configuration is not available locally."
+            });
+          } else {
+            throw new Error(`HTTP error! Status: ${res.status}`);
+          }
+        } else {
+          return res.json();
+        }
+      })
+      .then((json) => {
+        if (json) setAgentDetails(json);
+      })
+      .catch((err) => {
+        console.error("Failed to load agent details:", err);
+      });
   }, [showTooltip, agentDetails, apiPort, data.selectedNetwork, data.label]);
+  
 
   const handleMouseEnter = () => setShowTooltip(true);
   const handleMouseLeave = () => setTimeout(() => {
@@ -172,61 +190,66 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
       {/* Tooltip on hover */}
       {showTooltip && agentDetails && (
         <div className="agent-tooltip nodrag absolute left-52 top-0 w-[340px]"
-             onMouseEnter={handleTooltipEnter}
-             onMouseLeave={handleTooltipLeave}
-             onMouseDown={(e) => e.stopPropagation()}
-             onClick={(e) => e.stopPropagation()}
+            onMouseEnter={handleTooltipEnter}
+            onMouseLeave={handleTooltipLeave}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
         >
-          {/* Top Row with Copy Icon */}
           <div className="flex justify-between items-center mb-2">
             <div className="tooltip-title font-bold text-sm">{agentDetails.name}</div>
-            <button
-              className="text-gray-400 hover:text-white"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(JSON.stringify(agentDetails, null, 2));
-              }}
-              title="Copy details"
-            >
-              <FaRegCopy size={14} />
-            </button>
+            {agentDetails.error === undefined && (
+              <button
+                className="text-gray-400 hover:text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(JSON.stringify(agentDetails, null, 2));
+                }}
+                title="Copy details"
+              >
+                <FaRegCopy size={14} />
+              </button>
+            )}
           </div>
 
-          {agentDetails.llm_config && (
-            <div className="tooltip-section">
-              <span className="tooltip-label">LLM Config:</span>{" "}
-              {Object.entries(agentDetails.llm_config)
-                .map(([key, val]) => `${key}: ${val}`)
-                .join(", ")}
+          {agentDetails.error ? (
+            <div className="tooltip-section italic text-gray-400 text-sm">
+              {agentDetails.error}
             </div>
-          )}
-
-          {agentDetails.function && (
-            <div className="tooltip-section">
-              <span className="tooltip-label">Function:</span>{" "}
-              {typeof agentDetails.function === "string"
-                ? agentDetails.function
-                : agentDetails.function.description}
-            </div>
-          )}
-
-          {agentDetails.command && (
-            <div className="tooltip-section">
-              <span className="tooltip-label">Command:</span> {agentDetails.command}
-            </div>
-          )}
-
-          {agentDetails.instructions && (
-            <div className="tooltip-section">
-              <span className="tooltip-label">Instructions:</span>
-              <div className="mt-1">{agentDetails.instructions}</div>
-            </div>
-          )}
-
-          {agentDetails.tools?.length > 0 && (
-            <div className="tooltip-section">
-              <span className="tooltip-label">Tools:</span> {agentDetails.tools.join(", ")}
-            </div>
+          ) : (
+            <>
+              {agentDetails.llm_config && (
+                <div className="tooltip-section">
+                  <span className="tooltip-label">LLM Config:</span>{" "}
+                  {Object.entries(agentDetails.llm_config)
+                    .map(([key, val]) => `${key}: ${val}`)
+                    .join(", ")}
+                </div>
+              )}
+              {agentDetails.function && (
+                <div className="tooltip-section">
+                  <span className="tooltip-label">Function:</span>{" "}
+                  {typeof agentDetails.function === "string"
+                    ? agentDetails.function
+                    : agentDetails.function.description}
+                </div>
+              )}
+              {agentDetails.command && (
+                <div className="tooltip-section">
+                  <span className="tooltip-label">Command:</span> {agentDetails.command}
+                </div>
+              )}
+              {agentDetails.instructions && (
+                <div className="tooltip-section">
+                  <span className="tooltip-label">Instructions:</span>
+                  <div className="mt-1">{agentDetails.instructions}</div>
+                </div>
+              )}
+              {agentDetails.tools?.length > 0 && (
+                <div className="tooltip-section">
+                  <span className="tooltip-label">Tools:</span> {agentDetails.tools.join(", ")}
+                </div>
+              )}
+            </>
           )}
 
           {/* {agentDetails.common_defs && (

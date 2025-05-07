@@ -9,92 +9,188 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
+import { useNeuroSan } from "../context/NeuroSanContext";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { apiPort, setApiPort } = useApiPort(); // Access API port from context
-  const { activeNetwork, setActiveNetwork } = useChatContext(); 
+  const { apiPort, isReady } = useApiPort();
+  const { activeNetwork, setActiveNetwork } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
-  const [tempPort, setTempPort] = useState(apiPort);
   const networksEndRef = useRef<HTMLDivElement>(null);
+  const { host, port, setHost, setPort, isNsReady } = useNeuroSan();
+
+  const [tempHost, setTempHost] = useState(host);
+  const [tempPort, setTempPort] = useState<number | undefined>(port);
+  const [initialized, setInitialized] = useState(false);
+
+  // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
+  useEffect(() => {
+    if (host && host.trim() !== "") {
+      setTempHost(host);
+    }
+    if (port && typeof port === "number") {
+      setTempPort(port);
+    }
+    console.log(">>>> NeuroSanContext config updated:", { host, port });
+  }, [host, port]);
+
 
   useEffect(() => {
-    // Auto-scroll to latest network
     networksEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [networks]);
 
+  // Initial connect only once if host and port exist
   useEffect(() => {
-    setTempPort(apiPort);
-  }, [apiPort]);
+    if (!initialized && isReady && isNsReady && host?.trim() !== "" && port && apiPort) {
+      setInitialized(true);
+      handleNeurosanConnect(host, port, false); // skip setConfig on first load
+    }
+  }, [isReady, isNsReady, apiPort, host, port]);
 
-  useEffect(() => {
-    const fetchNetworks = async () => {
-      setLoading(true);
-      setError(""); // Reset error
-      try {
-        const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/networks/`);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        const data = await response.json();
-        setNetworks(data.networks);
-      } catch (err) {
-        setError(`Failed to load agent networks. ${err}`);
-      } finally {
-        setLoading(false);
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 30000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(id);
+    return response;
+  };
+
+  const fetchNetworks = useCallback(async (hostToUse: string, portToUse: number) => {
+    console.log(">>>> Calling /list with", hostToUse, portToUse);
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetchWithTimeout(
+        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
+        { method: "GET", headers: { "Content-Type": "application/json" } },
+        30000
+      );
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to connect: ${response.statusText} - ${text}`);
       }
-    };
 
-    fetchNetworks();
+      const data = await response.json();
+      const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
+      setNetworks(agentNames || []);
+    } catch (err: any) {
+      const message = err.name === "AbortError"
+        ? "[x] Connection timed out. Check if the server is up and running."
+        : `[x] Connection failed. Check NeuroSan server. \n\n${err.message}`;
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }, [apiPort]);
+
+  const setConfig = async (hostToUse: string, portToUse: number) => {
+    try {
+      const response = await fetch(`http://localhost:${apiPort}/api/v1/set_ns_config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ NS_SERVER_HOST: hostToUse, NS_SERVER_PORT: portToUse })
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      console.log(`>>>> Config via fastapi port:${apiPort} set to use NeuroSan server:", ${data}`);
+    } catch (error) {
+      console.error("[x] Failed to set config:", error);
+    }
+  };
+
+  const handleNeurosanConnect = async (newHost?: string, newPort?: number, updateConfig = true) => {
+    const finalHost = newHost ?? tempHost;
+    const finalPort = newPort ?? tempPort;
+
+    if (!finalHost || !finalPort) {
+      setError("[x] Please enter valid host and port.");
+      return;
+    }
+
+    setNetworks([]);
+    setError("");
+    setLoading(true);
+
+    try {
+      if (updateConfig) {
+        setHost(finalHost);
+        setPort(finalPort);
+        await setConfig(finalHost, finalPort);
+      }
+      await fetchNetworks(finalHost, finalPort);
+    } catch (error) {
+      setError("Failed to connect to NeuroSan server.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleNetworkSelection = (network: string) => {
-    if (network === activeNetwork) return; // Prevent unnecessary reloading
-
-    console.log(`Switching to network: ${network}`);
-
-    stopWebSocket();  // Close current WebSocket connections
-    clearChat();      // Reset chat history
-    setActiveNetwork(network); // Set new active network
+    if (network === activeNetwork) return;
+    stopWebSocket();
+    clearChat();
+    setActiveNetwork(network);
     onSelectNetwork(network);
   };
 
   return (
     <aside className="sidebar h-full sidebar p-4 flex flex-col gap-3 border-r">
-      <span className="text-lg font-bold">Agent Networks</span>
+      <span className="text-lg font-bold sidebar-text-large">Agent Networks</span>
 
-      {/* API Port Input */}
-      <div className="sidebar-api-input mb-2 p-2 bg-gray-800 rounded">
-        <label className="sidebar-api-input text-sm text-gray-300">API Port:</label>
+      {/* NeuroSan Host/Port Section */}
+      <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
+        <label className="sidebar-text">NeuroSan Host:</label>
+        <input
+          type="text"
+          value={tempHost ?? ""}
+          onChange={(e) => setTempHost(e.target.value)}
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
+        />
+
+        <label className="sidebar-text mt-2 block">NeuroSan Port:</label>
         <input
           type="number"
           min="1024"
           max="65535"
-          value={tempPort}
-          onChange={(e) => setTempPort(Number(e.target.value))}
-          className="w-full bg-gray-500 text-white p-1 rounded mt-1"
+          value={tempPort !== undefined ? tempPort : ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            setTempPort(val === "" ? undefined : Number(val));
+          }}
+          className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
         />
+
         <button
-          onClick={() => setApiPort(tempPort)}
-          className="w-full mt-2 p-1 bg-blue-500 hover:bg-blue-500 text-white rounded"
+          onClick={() => handleNeurosanConnect(tempHost, tempPort, true)}
+          className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
         >
           Connect
         </button>
       </div>
 
-      
-      {/* Scrollable networks container */}
+      {/* Networks Display */}
       <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
-        {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {loading && <p className="sidebar-text-large">Loading...</p>}
+        {error && <p className="text-red-500">{error.split('\n').map((line, idx) => (
+          <span key={idx}>
+            {line}
+            <br />
+          </span>
+        ))}</p>}
         {networks.map((network) => (
-          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100">
+          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text">
             <button
-              className={`sidebar-btn w-full text-left p-1 text-sm rounded cursor-pointer transition-all font-medium
+              className={`sidebar-btn w-full text-left p-1 text-sm rounded cursor-pointer transition-all sidebar-text
                 ${activeNetwork === network ? "active-network" : ""}`}
               onClick={() => handleNetworkSelection(network)}
             >
@@ -102,7 +198,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             </button>
           </div>
         ))}
-        <div ref={networksEndRef} /> {/* Auto-scroll reference */}
+        <div ref={networksEndRef} />
       </div>
     </aside>
   );
