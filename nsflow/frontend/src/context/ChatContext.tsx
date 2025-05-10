@@ -21,16 +21,21 @@ type Message = {
 type ChatContextType = {
   chatMessages: Message[];
   internalChatMessages: Message[];
+  slyDataMessages: Message[];
   addChatMessage: (msg: Message) => void;
   addInternalChatMessage: (msg: Message) => void;
+  addSlyDataMessage: (msg: Message) => void;
   setChatMessages: (messages: Message[]) => void;
   setInternalChatMessages: (messages: Message[]) => void;
+  setSlyDataMessages: (messages: Message[]) => void;
   activeNetwork: string;
   setActiveNetwork: (network: string) => void;
   chatWs: WebSocket | null;
   internalChatWs: WebSocket | null;
+  slyDataWs: WebSocket | null;
   setChatWs: (ws: WebSocket | null) => void;
   setInternalChatWs: (ws: WebSocket | null) => void;
+  setSlyDataWs: (ws: WebSocket | null) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -40,32 +45,44 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     { sender: "system", text: "Welcome to the chat!" },
   ]);
   const [internalChatMessages, setInternalChatMessages] = useState<Message[]>([
-    { sender: "system", text: "Welcome to internal chat log" },
+    { sender: "system", text: "Welcome to internal chat logs." },
+  ]);
+  const [slyDataMessages, setSlyDataMessages] = useState<Message[]>([
+    { sender: "system", text: "Welcome to sly_data logs." },
   ]);
   const [activeNetwork, setActiveNetwork] = useState<string>("");
   const [chatWs, setChatWs] = useState<WebSocket | null>(null);
   const [internalChatWs, setInternalChatWs] = useState<WebSocket | null>(null);
+  const [slyDataWs, setSlyDataWs] = useState<WebSocket | null>(null);
 
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
   const addInternalChatMessage = (msg: Message) => {
     setInternalChatMessages((prev) => [...prev, { ...msg}]);
   };
+  const addSlyDataMessage = (msg: Message) => {
+    setSlyDataMessages((prev) => [...prev, { ...msg}]);
+  };
 
   return (
     <ChatContext.Provider value={{ 
       chatMessages, 
-      internalChatMessages, 
+      internalChatMessages,
+      slyDataMessages,
       addChatMessage, 
       addInternalChatMessage,
+      addSlyDataMessage,
       setChatMessages, 
       setInternalChatMessages,
+      setSlyDataMessages,
       activeNetwork, 
       setActiveNetwork,
       chatWs,
       setChatWs,
       internalChatWs,
       setInternalChatWs,
+      slyDataWs,
+      setSlyDataWs,
      }}>
       {children}
     </ChatContext.Provider>

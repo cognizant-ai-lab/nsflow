@@ -98,16 +98,16 @@ class NsGrpcWsUtils:
                     websocket_data = await websocket.receive_text()
                     message_data = json.loads(websocket_data)
                     user_input = message_data.get("message", "")
-                    sly_data_str = message_data.get("sly_data", None)
-                    if sly_data_str:
+                    sly_data = message_data.get("sly_data", None)
+                    if sly_data:
                         try:
-                            sly_data = json.loads(sly_data_str)
+                            sly_data = json.loads(sly_data)
                         except json.JSONDecodeError as e:
                             logging.info("Invalid JSON:", e)
-                            await self.logs_manager.log_event(f"{e}\nInvalid sly_data: {sly_data_str}\n"
+                            await self.logs_manager.log_event(f"{e}\nInvalid sly_data: {sly_data}\n"
                                                             "sly_data should be a valid Dictionary", 
                                                             "NeuroSan")
-                            sly_data = None
+                            sly_data = ""
 
                     input_processor = user_session['input_processor']
                     state = user_session['state']

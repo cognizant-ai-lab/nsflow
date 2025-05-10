@@ -53,3 +53,10 @@ async def websocket_logs(websocket: WebSocket, agent_name: str):
     """WebSocket route for log streaming."""
     manager = LogsRegistry.register(agent_name)
     await manager.handle_log_websocket(websocket)
+
+
+@router.websocket("/slydata/{agent_name}")
+async def websocket_logs(websocket: WebSocket, agent_name: str):
+    """WebSocket route for sly_data streaming."""
+    manager = LogsRegistry.register(agent_name)
+    await manager.handle_sly_data_websocket(websocket)

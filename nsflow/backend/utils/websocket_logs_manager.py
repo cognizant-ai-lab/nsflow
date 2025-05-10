@@ -46,6 +46,7 @@ class WebsocketLogsManager:
         self.agent_name = agent_name
         self.active_log_connections: List[WebSocket] = []
         self.active_internal_chat_connections: List[WebSocket] = []
+        self.active_sly_data_connections: List[WebSocket] = []
         self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}")
         self.log_buffer: List[Dict] = []
 
@@ -87,6 +88,14 @@ class WebsocketLogsManager:
         """
         entry = {"message": message}
         await self.broadcast_to_websocket(entry, self.active_internal_chat_connections)
+
+    async def sly_data_event(self, message: Dict[str, Any]):
+        """
+        Send a structured sly_data to all connected clients.
+        :param message: A dictionary representing the chat message and metadata.
+        """
+        entry = {"message": message}
+        await self.broadcast_to_websocket(entry, self.active_sly_data_connections)
 
     async def broadcast_to_websocket(self,
                                      entry: Dict[str, Any],
@@ -134,3 +143,19 @@ class WebsocketLogsManager:
         except WebSocketDisconnect:
             self.active_log_connections.remove(websocket)
             await self.log_event("Logs client disconnected", "FastAPI")
+    
+    async def handle_sly_data_websocket(self, websocket: WebSocket):
+        """
+        Handle a new WebSocket connection for receiving sly_data.
+        :param websocket: The connected WebSocket instance.
+        """
+        await websocket.accept()
+        self.active_sly_data_connections.append(websocket)
+        await self.sly_data_event(f"Sly Data connected: {self.agent_name}")
+        try:
+            while True:
+                await asyncio.sleep(3)
+        except WebSocketDisconnect:
+            self.active_sly_data_connections.remove(websocket)
+            await self.sly_data_event(f"Sly Data disconnected: {self.agent_name}")
+

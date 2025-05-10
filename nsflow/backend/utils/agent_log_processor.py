@@ -43,12 +43,19 @@ class AgentLogProcessor(MessageProcessor):
         # initialize different items in response
         internal_chat = None
         otrace = None
+        sly_data = None
         token_accounting: Dict[str, Any] = {}
         
         # Log the original chat_message_dict in full only for debugging
-        # await self.logs_manager.log_event(f"{chat_message_dict}", "NeuroSan")
+        # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}", "NeuroSan")
+        sly_data = chat_message_dict.get("sly_data", None)
+        if sly_data:
+            sly_data_str = {"text": sly_data}
+            await self.logs_manager.sly_data_event(sly_data_str)
 
-        if message_type not in (ChatMessageType.AGENT, ChatMessageType.AI, ChatMessageType.AGENT_TOOL_RESULT):
+        if message_type not in (ChatMessageType.AGENT,
+                                ChatMessageType.AI,
+                                ChatMessageType.AGENT_TOOL_RESULT):
             # These are framework messages that contain chat context, system prompts or consolidated messages etc.
             # Don't log them. And there's no agent to highlight in the network diagram.
             return
@@ -70,6 +77,7 @@ class AgentLogProcessor(MessageProcessor):
             internal_chat = chat_message_dict.get("text", "")
 
         otrace_str = json.dumps({"otrace": otrace})
+        # Always send longs with a key "text" to any web socket
         internal_chat_str = {"otrace": otrace, "text": internal_chat}
         token_accounting_str = json.dumps({"token_accounting": token_accounting})
         await self.logs_manager.log_event(f"{otrace_str}", "NeuroSan")
