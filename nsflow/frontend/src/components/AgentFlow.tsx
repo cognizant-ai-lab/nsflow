@@ -41,8 +41,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
   // ** State for actual values (used in API calls) **
-  const [baseRadius, setBaseRadius] = useState(110);
-  const [levelSpacing, setLevelSpacing] = useState(125);
+  const [baseRadius, setBaseRadius] = useState(20);
+  const [levelSpacing, setLevelSpacing] = useState(90);
 
   // ** State for temporary values while scrubbing **
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
@@ -64,7 +64,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   useEffect(() => {
     // Set zoom to 0.75 and center at (0, 0)
-    setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 }); // Optional animation
+    setViewport({ x: 0, y: 0, zoom: 0.4 }, { duration: 800 }); // Optional animation
   }, []);
     
   useEffect(() => {
@@ -192,7 +192,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         className="absolute top-2 left-24 p-1 text-xs bg-blue-400 hover:bg-red-600 text-white rounded-md shadow-md z-20"
         onClick={resetFlow}
       >
-        Reset
+        Reset View
       </button>
 
       {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
