@@ -16,8 +16,10 @@ class ConfigRequest(BaseModel):
     """
     Represents the configuration request for the NeuroSan server.
     Attributes:
-        NS_SERVER_HOST (IPvAnyAddress): The host address of the NS server.
-        NS_SERVER_PORT (int): The port number of the NS server.
+        NS_CONNECTIVITY_TYPE (str): The connectivity type for NeuroSan server
+        NS_SERVER_HOST (IPvAnyAddress): The host address of the NeuroSan server.
+        NS_SERVER_PORT (int): The port number of the NeuroSan server.
     """
+    NS_CONNECTIVITY_TYPE: str = Field(..., description="Connectivity type")
     NS_SERVER_HOST: str = Field(..., description="Host address of the NeuroSan server")
     NS_SERVER_PORT: int = Field(..., ge=0, le=65535)

@@ -59,14 +59,14 @@ class NsGrpcWsUtils:
         :param forwarded_request_metadata: List of metadata keys to extract from incoming headers.
         """
         try:
-            config = NsConfigsRegistry.get_current().config
+            config = NsConfigsRegistry.get_current()
         except RuntimeError as e:
             raise RuntimeError("No active NsConfigStore. \
                                Please set it via /set_config before using gRPC endpoints.") from e
         
-        self.server_host = config.get("ns_server_host", "localhost")
-        self.server_port = config.get("ns_server_port", 30015)
-        self.connection = "grpc"
+        self.server_host = config.host
+        self.server_port = config.port
+        self.connection = config.connection_type
 
         self.agent_name = agent_name
         self.use_direct = False
@@ -76,9 +76,9 @@ class NsGrpcWsUtils:
         self.thinking_file = '/tmp/agent_thinking.txt'
         self.thinking_dir = '/tmp'
 
-        # self.base_utils = NsGrpcBaseUtils(agent_name=agent_name)
-
         self.logs_manager = LogsRegistry.register(agent_name)
+        self.session = self.create_agent_session()
+
 
     # pylint: disable=too-many-function-args
     async def handle_user_input(self):
@@ -135,12 +135,7 @@ class NsGrpcWsUtils:
     async def create_user_session(self, sid: str) -> Dict[str, Any]:
         """method to create a user session with the given WebSocket connection."""
         
-        # Open a session with the factory
-        factory: AgentSessionFactory = self.get_agent_session_factory()
-        metadata: Dict[str, str] = {"user_id": os.environ.get("USER")}
-        self.session = factory.create_session(self.connection, self.agent_name,
-                                              self.server_host, self.server_port, self.use_direct,
-                                              metadata)
+        # Agent session gets created in init
         chat_filter: Dict[str, Any] = {"chat_filter_type": "MAXIMAL"}
         state: Dict[str, Any] = {
             "last_chat_response": None,
@@ -171,6 +166,21 @@ class NsGrpcWsUtils:
         }
         return user_session
     
+    def create_agent_session(self):
+        """Open a session with the factory"""
+         # Open a session with the factory
+        factory: AgentSessionFactory = self.get_agent_session_factory()
+        metadata: Dict[str, str] = {"user_id": os.environ.get("USER")}
+        session = factory.create_session(self.connection, self.agent_name,
+                                              self.server_host, self.server_port, self.use_direct,
+                                              metadata)
+        return session
+
+    def get_connectivity(self):
+        """Simple method to get connectivity details"""
+        data: Dict[str, Any] = {}
+        return self.session.connectivity(data)
+
     def get_agent_session_factory(self) -> AgentSessionFactory:
         """
         This allows subclasses to add different kinds of connections.

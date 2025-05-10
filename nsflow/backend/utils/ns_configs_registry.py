@@ -9,41 +9,65 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
-from typing import Optional
-from nsflow.backend.utils.ns_config_store import NsConfigStore
+from typing import Optional, Dict
+import logging
+from nsflow.backend.utils.ns_config import NsConfig
 
 
 class NsConfigsRegistry:
     """
-    Temporary simplified registry for a single NsConfigStore.
-    This supports only one active config at a time.
+    Registry for managing multiple NsConfig instances keyed by unique URL.
     """
 
-    _current_config: Optional[NsConfigStore] = None
+    _configs: Dict[str, NsConfig] = {}
+    _current_config_id: Optional[str] = None
 
     @classmethod
-    def set_current(cls, host: str, port: int) -> NsConfigStore:
-        """
-        Set the current NsConfigStore instance.
-        This will replace any existing instance.
-        """
-        cls._current_config = NsConfigStore(host, port)
-        return cls._current_config
+    def build_config_id(cls, connection_type: str, host: str, port: int) -> str:
+        """Build a unique id per connectivity-host-port"""
+        return f"{connection_type}://{host}:{port}"
 
     @classmethod
-    def get_current(cls) -> NsConfigStore:
-        """
-        Get the current NsConfigStore instance.
-        Raises RuntimeError if no instance is set.
-        """
-        if cls._current_config is None:
-            raise RuntimeError("No active NsConfigStore has been set.")
-        return cls._current_config
+    def get_or_create(cls, connection_type: str, host: str, port: int) -> NsConfig:
+        """Get or create configs based on connectivity-host-port"""
+        config_id = cls.build_config_id(connection_type, host, port)
+        if config_id not in cls._configs:
+            cls._configs[config_id] = NsConfig(host, port, connection_type)
+        cls._current_config_id = config_id  # optional: also set as current
+        logging.info("NeuroSan Server connectivity initialized with %s", config_id)
+        return cls._configs[config_id]
+
+    @classmethod
+    def get(cls, connection_type: str, host: str, port: int) -> Optional[NsConfig]:
+        """Get an existing config"""
+        config_id = cls.build_config_id(connection_type, host, port)
+        return cls._configs.get(config_id)
+
+    @classmethod
+    def get_by_id(cls, config_id: str) -> Optional[NsConfig]:
+        """Get an existing config by its unique id which is the url"""
+        return cls._configs.get(config_id)
+
+    @classmethod
+    def get_current(cls) -> NsConfig:
+        """Get the current config id"""
+        # This might not be required in future once we start using the get_or_create method
+        if cls._current_config_id is None:
+            raise RuntimeError("No current config is set.")
+        return cls._configs[cls._current_config_id]
+
+    @classmethod
+    def set_current(cls, connection_type: str, host: str, port: int) -> NsConfig:
+        """Set current connectivity"""
+        # This might not be required in future once we start using the get_or_create method
+        config_id = cls.build_config_id(connection_type, host, port)
+        if config_id not in cls._configs:
+            cls._configs[config_id] = NsConfig(host, port, connection_type)
+        cls._current_config_id = config_id
+        return cls._configs[config_id]
 
     @classmethod
     def reset(cls):
-        """
-        Reset the current NsConfigStore instance.
-        This will remove the reference to the current instance.
-        """
-        cls._current_config = None
+        """Reset all available configs"""
+        cls._configs.clear()
+        cls._current_config_id = None

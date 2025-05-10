@@ -21,6 +21,7 @@ from google.protobuf.json_format import MessageToDict
 
 from nsflow.backend.models.chat_request_model import ChatRequestModel
 from nsflow.backend.utils.ns_grpc_service_utils import NsGrpcServiceUtils
+from nsflow.backend.utils.ns_concierge_utils import NsConciergeUtils
 
 router = APIRouter(prefix="/api/v1")
 
@@ -64,6 +65,23 @@ async def get_concierge_list(request: Request):
     :param request: The FastAPI Request object, used to extract headers.
     :return: JSON response from gRPC service.
     """
+    # common class for both grpc and https/https
+    ns_concierge_utils = NsConciergeUtils()
+    try:
+        # Extract metadata from headers
+        metadata: Dict[str, Any] = ns_concierge_utils.get_metadata(request)
+
+        # Delegate to utility function
+        result = await ns_concierge_utils.list_concierge(metadata)
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logging.exception("Failed to retrieve concierge list: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve concierge list") from e
+
+
+    # # for gRPC based connection
     # grpc_service_utils = NsGrpcServiceUtils(agent_name=None)
     # host = grpc_service_utils.server_host
     # port = grpc_service_utils.server_port
@@ -88,36 +106,37 @@ async def get_concierge_list(request: Request):
     #     logging.exception("Failed to retrieve concierge list: %s", e)
     #     raise HTTPException(status_code=500, detail="Failed to retrieve concierge list") from e
     
-    protocol_prefix = "https"
-    host = request.query_params.get("host", "abcd.ml")
-    port = request.query_params.get("port", "443")
-    # url = f"https://{host}:{port}/api/v1/list"
-    if str(host) in ("localhost", "127.0.0.1"):
-        protocol_prefix = "http"
-    if port == "443"
-        url = f"{protocol_prefix}://{host}/api/v1/list"
-    else:
-        url = f"{protocol_prefix}://{host}:{port}/api/v1/list"
+    # # for http/https based connection
+    # protocol_prefix = "https"
+    # host = request.query_params.get("host", "abcd.ml")
+    # port = request.query_params.get("port", "443")
+    # # url = f"https://{host}:{port}/api/v1/list"
+    # if str(host) in ("localhost", "127.0.0.1"):
+    #     protocol_prefix = "http"
+    # if port == "443":
+    #     url = f"{protocol_prefix}://{host}/api/v1/list"
+    # else:
+    #     url = f"{protocol_prefix}://{host}:{port}/api/v1/list"
 
-    try:
-        async with httpx.AsyncClient(verify=True, headers={"host": host}) as client:  # consider verify=True in prod
-            response = await client.get(url, headers={
-                "User-Agent": "curl/8.7.1",
-                "Accept": "*/*",
-                "Host": host  # important for SNI + proxying
-                })
-            try:
-                json_data = response.json()
-                logging.info("Response status: %s, response.text: %s", response.status_code, response.text)
-            except (httpx.HTTPError, json.JSONDecodeError):
-                json_data = {
-                    "error": "Tornado did not return valid JSON",
-                    "status_code": response.status_code,
-                    "text": response.text.strip()
-                }
-            return JSONResponse(content=json_data, status_code=response.status_code)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to reach {url}: {str(exc)}")
+    # try:
+    #     async with httpx.AsyncClient(verify=True, headers={"host": host}) as client:  # consider verify=True in prod
+    #         response = await client.get(url, headers={
+    #             "User-Agent": "curl/8.7.1",
+    #             "Accept": "*/*",
+    #             "Host": host  # important for SNI + proxying
+    #             })
+    #         try:
+    #             json_data = response.json()
+    #             logging.info("Response status: %s, response.text: %s", response.status_code, response.text)
+    #         except (httpx.HTTPError, json.JSONDecodeError):
+    #             json_data = {
+    #                 "error": "Tornado did not return valid JSON",
+    #                 "status_code": response.status_code,
+    #                 "text": response.text.strip()
+    #             }
+    #         return JSONResponse(content=json_data, status_code=response.status_code)
+    # except httpx.RequestError as exc:
+    #     raise HTTPException(status_code=502, detail=f"Failed to reach {url}: {str(exc)}")
 
 
 @router.get("/{agent_name}/connectivity")

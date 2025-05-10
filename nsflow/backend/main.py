@@ -41,10 +41,11 @@ def initialize_ns_config_from_env():
     if os.getenv("NSFLOW_CLIENT_ONLY", "False").lower() == "true":
         logging.info("CLIENT-ONLY mode detected. Skipping NeuroSan config initialization.")
         return
-    default_host = os.getenv("NS_SERVER_HOST", "localhost")
-    default_port = int(os.getenv("NS_SERVER_PORT", "30015"))
-    NsConfigsRegistry.set_current(default_host, default_port)
-    logging.info("[Startup] Default NsConfig set to %s:%s", default_host, default_port)
+    default_connection = os.getenv("NEURO_SAN_SERVER_CONNECTION", "grpc")
+    default_host = os.getenv("NEURO_SAN_SERVER_HOST", "localhost")
+    default_port = int(os.getenv("NEURO_SAN_SERVER_PORT", "30015"))
+    NsConfigsRegistry.set_current(default_connection, default_host, default_port)
+    logging.info("[Startup] Default NsConfig set to %s://%s:%s", default_connection, default_host, default_port)
 
 
 @asynccontextmanager
