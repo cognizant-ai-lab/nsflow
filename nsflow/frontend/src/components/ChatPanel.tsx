@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 
 import { FaDownload, FaRegStopCircle, FaCopy } from "react-icons/fa";
 import { ImBin2 } from "react-icons/im";
@@ -28,6 +29,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // sly_data enablers
+  const [enableSlyData, setEnableSlyData] = useState(false);
+  const [newSlyData, setNewSlyData] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -41,7 +47,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
 
     addChatMessage({ sender: "user", text: newMessage, network: activeNetwork });
-    chatWs.send(JSON.stringify({ message: newMessage }));
+    chatWs.send(JSON.stringify({ message: newMessage, sly_data: enableSlyData ? newSlyData : undefined }));
     setNewMessage("");
   };
 
@@ -193,6 +199,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
       {/* Chat controls */}
       <div className="flex justify-end space-x-4 mt-1">
+        <label className="sly-data-btn flex items-center text-xs gap-1 text-white">
+          <input
+            type="checkbox"
+            checked={enableSlyData}
+            onChange={() => setEnableSlyData(!enableSlyData)}
+            className="accent-orange-400"
+          />
+          sly_data
+        </label>
         <button
           onClick={clearChat}
           className="logs-download-btn bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
@@ -230,6 +245,45 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           Send
         </button>
       </div>
+
+      {/* Sly Data*/}
+      {enableSlyData && (
+        <div className="sly-data-section mt-2 w-full">
+          <hr className="my-1 border-t border-gray-600" />
+          <div className="flex items-center gap-2 mb-1">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="sly-data-attach-btn"
+            >
+              Attach sly_data
+            </button>
+            <span className="text-xs text-gray-400">Supported: .json, .txt, .hocon</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.txt,.hocon"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  setNewSlyData(ev.target?.result as string);
+                };
+                reader.readAsText(file);
+              }}
+            />
+          </div>
+
+          <textarea
+            className="w-full h-32 p-2 bg-gray-800 text-white rounded-md text-sm font-mono"
+            placeholder="Enter or edit sly_data here..."
+            value={newSlyData}
+            onChange={(e) => setNewSlyData(e.target.value)}
+          />
+        </div>
+      )}
+
     </div>
   );
 };

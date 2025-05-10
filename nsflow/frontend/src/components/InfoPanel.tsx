@@ -10,7 +10,7 @@
 //
 // END COPYRIGHT
 import { useEffect, useState } from "react";
-import { FaGithub, FaBookOpen, FaInfoCircle } from "react-icons/fa";
+import { FaGithub, FaBookOpen } from "react-icons/fa";
 import { SiFastapi } from "react-icons/si";
 import { useApiPort } from "../context/ApiPortContext";
 
