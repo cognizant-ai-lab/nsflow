@@ -58,20 +58,34 @@ const InfoPanel = () => {
           
           {/* Versions Display */}
           <div className="info-panel flex items-center">
-            <FaInfoCircle className="mr-2" /> NeuroSan v. {versions.neuroSan}
+            <a
+                href="https://github.com/leaf-ai/neuro-san"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center text-blue-400 hover:text-blue-300"
+              >
+            <FaGithub className="mr-2" /> neuro-san v. {versions.neuroSan}
+            </a>
           </div>
           <div className="info-panel flex items-center">
-            <FaInfoCircle className="mr-2" /> Client v. {versions.nsflow}
+            <a
+              href="https://github.com/leaf-ai/nsflow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center text-blue-400 hover:text-blue-300"
+            >
+              <FaGithub className="mr-2" /> nsflow v. {versions.nsflow}
+            </a>
           </div>
 
           {/* GitHub Link */}
           <a
-            href="https://github.com/leaf-ai/nsflow"
+            href="https://github.com/leaf-ai/neuro-san-demos"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
           >
-            <FaGithub className="mr-2" /> GitHub
+            <FaGithub className="mr-2" /> neuro-san-demos
           </a>
 
           {/* FastAPI Docs Link */}
