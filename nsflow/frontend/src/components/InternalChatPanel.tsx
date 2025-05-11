@@ -10,12 +10,10 @@
 //
 // END COPYRIGHT
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { FaDownload } from "react-icons/fa";
-import { Clipboard } from "lucide-react";
 import { useChatContext } from "../context/ChatContext";
+import { PanelGroup, Panel } from "react-resizable-panels";
+import ScrollableMessageContainer from "./ScrollableMessageContainer";
 
 const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
   const { internalChatMessages } = useChatContext();
@@ -49,72 +47,35 @@ const InternalChatPanel = ({ title = "Internal Chat" }: { title?: string }) => {
   };
 
   return (
-    <div className="chat-panel flex flex-col h-full p-4">
-      {/* Title with Download Button */}
-      <div className="logs-header flex justify-between items-center mb-2">
-        <h2 className="text-lg font-bold">{title}</h2>
-        <button
-          onClick={downloadMessages}
-          className="logs-download-btn text-gray-400 hover:text-white p-1"
-          title="Download Messages"
-        >
-          <FaDownload size={18} />
-        </button>
-      </div>
-
-      {/* Scrollable chat messages container */}
-      <div className="chat-messages-container">
-        {internalChatMessages.map((msg, index) => (
-          <div key={index} className="chat-msg chat-msg-agent">
-            {/* Sender Header */}
-            <div className="font-bold mb-1 flex justify-between items-center">
-              <span>{msg.sender}</span> {/* Fix Otrace display */}
-
-              {/* Copy Icon */}
+    <div className="chat-panel h-full w-full">
+      <PanelGroup direction="vertical">
+        {/* Panel 1: Header + Message List */}
+        <Panel defaultSize={75} minSize={30}>
+          {/* Title with Download Button */}
+          <div className="flex flex-col h-full p-4 overflow-hidden">
+            {/* Header */}
+            <div className="logs-header flex justify-between items-center mb-2">
+              <h2 className="text-lg font-bold">{title}</h2>
               <button
-                onClick={() => copyToClipboard(msg.text, index)}
-                className="text-gray-400 hover:text-white ml-2 p-1"
-                title="Copy to clipboard"
+                onClick={downloadMessages}
+                className="logs-download-btn text-gray-400 hover:text-white p-1"
+                title="Download Messages"
               >
-                <Clipboard size={10} />
+                <FaDownload size={18} />
               </button>
             </div>
 
-            {/* Message Content */}
-            <div className="chat-markdown">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={{
-                  p: ({ children }) => <p className="mb-2 leading-relaxed text-[var(--chat-message-text-color)]">{children}</p>,
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">
-                      {children}
-                    </blockquote>
-                  ),
-                  code: ({ children }) => (
-                    <code className="bg-gray-400 text-yellow-300 px-1 rounded">{children}</code>
-                  ),
-                  pre: ({ children }) => (
-                    <pre className="bg-gray-900 text-gray-300 p-3 rounded-md overflow-x-auto">{children}</pre>
-                  ),
-                  strong: ({ children }) => <strong className="font-bold text-[var(--chat-message-text-color)]">{children}</strong>,
-                  em: ({ children }) => <em className="italic text-[var(--chat-message-text-color)]">{children}</em>,
-                }}
-              >
-                {msg.text}
-              </ReactMarkdown>
-            </div>
-            
-            {/* Copied Tooltip */}
-            {copiedMessage === index && (
-              <div className="absolute top-0 right-6 bg-gray-800 text-white text-xs p-1 rounded-md">
-                Copied!
-              </div>
-            )}
+            {/* Scrollable chat messages container */}
+            <ScrollableMessageContainer
+              messages={internalChatMessages}
+              copiedMessage={copiedMessage}
+              onCopy={copyToClipboard}
+              renderSenderLabel={(msg) => msg.sender} // Raw label
+              getMessageClass={() => "chat-msg chat-msg-agent"} 
+            />
           </div>
-        ))}
-        <div ref={messagesEndRef} /> {/* Auto-scroll reference */}
-      </div>
+        </Panel>
+      </PanelGroup>
     </div>
   );
 };

@@ -125,11 +125,7 @@ const TabbedChatPanel = () => {
             typeof chatTextRaw === "string"
               ? chatTextRaw
               : JSON.stringify(chatTextRaw, null, 2);
-          // if (!chatText || !otrace.length) return;
-          // if (lastMessageRef.current === chatText) {
-            // console.log("Duplicate message ignored");
-            // return;
-          // }
+
           lastMessageRef.current = chatText;
           addSlyDataMessage({ sender: "agent", text: chatText, network: activeNetwork });
         }

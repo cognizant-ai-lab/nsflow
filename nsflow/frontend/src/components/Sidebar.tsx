@@ -66,13 +66,13 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     return response;
   };
 
-  const fetchNetworks = useCallback(async (hostToUse: string, portToUse: number) => {
-    console.log(">>>> Calling /list with", hostToUse, portToUse);
+  const fetchNetworks = useCallback(async (connectionToUse: string, hostToUse: string, portToUse: number) => {
+    console.log(">>>> Calling /list with", connectionToUse, hostToUse, portToUse);
     setLoading(true);
     setError("");
     try {
       const response = await fetchWithTimeout(
-        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
+        `http://localhost:${apiPort}/api/v1/list?connection_type=${connectionToUse}&host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
         { method: "GET", headers: { "Content-Type": "application/json" } },
         30000
       );
@@ -101,9 +101,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          NS_SERVER_HOST: hostToUse,
-          NS_SERVER_PORT: portToUse,
-          NS_CONNECTION_TYPE: typeToUse 
+          NEURO_SAN_SERVER_HOST: hostToUse,
+          NEURO_SAN_SERVER_PORT: portToUse,
+          NEURO_SAN_CONNECTION_TYPE: typeToUse 
         })
       });
       if (!response.ok) throw new Error(await response.text());
@@ -118,6 +118,8 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     const finalHost = newHost ?? tempHost;
     const finalPort = newPort ?? tempPort;
     const finalType = newType ?? tempConnectionType;
+
+    console.log(`>>>Connecting to ${finalType}::/${finalHost}:${finalPort}`)
 
     if (!finalHost || !finalPort) {
       setError("[x] Please enter valid host and port.");
@@ -135,7 +137,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         setConnectionType(finalType);
         await setConfig(finalHost, finalPort, finalType);
       }
-      await fetchNetworks(finalHost, finalPort);
+      await fetchNetworks(finalType, finalHost, finalPort);
     } catch (error) {
       setError("Failed to connect to NeuroSan server.");
     } finally {

@@ -10,20 +10,17 @@
 //
 // END COPYRIGHT
 import { useState, useEffect, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { PanelGroup, Panel, PanelResizeHandle, ImperativePanelHandle } from "react-resizable-panels";
 
-import { FaDownload, FaRegStopCircle, FaCopy } from "react-icons/fa";
+import { FaDownload, FaRegStopCircle } from "react-icons/fa";
 import { ImBin2 } from "react-icons/im";
-import { Clipboard } from "lucide-react";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
+import ScrollableMessageContainer from "./ScrollableMessageContainer";
 
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
-  const { activeNetwork, chatMessages, addChatMessage, chatWs } = useChatContext();
+  const { activeNetwork, chatMessages, addChatMessage, addSlyDataMessage, chatWs } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
@@ -50,7 +47,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
     let parsedSlyData: Record<string, any> | undefined;
 
-    if (enableSlyData && newSlyData.trim()) {
+    if (newSlyData.trim()) {
       try {
         const parsed = JSON.parse(newSlyData);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
@@ -62,6 +59,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
 
     addChatMessage({ sender: "user", text: newMessage, network: activeNetwork });
+    addSlyDataMessage({ sender: "user", text: String(parsedSlyData), network: activeNetwork });
     chatWs.send(JSON.stringify({
       message: newMessage,
       ...(parsedSlyData ? { sly_data: parsedSlyData } : {})
@@ -124,120 +122,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             </div>
 
             {/* Scrollable Message Container */}
-            <div className="flex-1 overflow-y-auto pr-1">
-              <div className="bg-[var(--chat-message-bg)] rounded-md p-1 space-y-2">
-                {chatMessages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`chat-msg ${
-                      msg.sender === "user"
-                        ? "chat-msg-user"
-                        : msg.sender === "agent"
-                        ? "chat-msg-agent"
-                        : "chat-msg-system"
-                    }`}
-                  >
-                    {/* Sender header + Copy icon */}
-                    <div className="font-bold mb-1 flex justify-between items-center">
-                      <span>
-                        {msg.sender === "user"
-                          ? "User"
-                          : msg.sender === "agent"
-                          ? msg.network || "Unknown Agent"
-                          : "System"}
-                      </span>
-                      <button
-                        onClick={() => copyToClipboard(msg.text, index)}
-                        className="text-gray-400 hover:text-white ml-2 p-1"
-                        title="Copy to clipboard"
-                      >
-                        <Clipboard size={10} />
-                      </button>
-                    </div>
-
-                    {/* Markdown with syntax highlighting & custom code block */}
-                    <div className="chat-markdown">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                        // rehypePlugins={[rehypeHighlight]}
-                        components={{
-                          // Headings (H1 - H6)
-                          h1: ({ children }) => <h1 className="text-2xl font-bold mt-4 mb-2 text-[var(--chat-message-text-color)]">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-xl font-semibold mt-3 mb-2 text-[var(--chat-message-text-color)]">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-lg font-semibold mt-2 mb-1 text-[var(--chat-message-text-color)]">{children}</h3>,
-                          // Lists
-                          ul: ({ children }) => <ul className="list-disc ml-6 text-[var(--chat-message-text-color)]">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal ml-6 text-[var(--chat-message-text-color)]">{children}</ol>,
-                          li: ({ children }) => <li className="ml-2 text-[var(--chat-message-text-color)]">{children}</li>,
-                          // Paragraphs
-                          p: ({ children }) => <p className="mb-2 leading-relaxed text-[var(--chat-message-text-color)]">{children}</p>,
-                          strong: ({ children }) => <strong className="font-bold text-[var(--chat-message-text-color)]">{children}</strong>,
-                          em: ({ children }) => <em className="italic text-gray-300 text-[var(--chat-message-text-color)]">{children}</em>,
-                          // Links should open in a new tab
-                          a: ({ children, href }) => (
-                            <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                              {children}
-                            </a>
-                          ),
-                          code: ({ className = "", children, ...props }) => {
-                            const isBlock = className?.includes("language-");
-                            const codeContent = String(children).trim();
-                          
-                            if (isBlock) {
-                              return (
-                                <div className="relative group my-2">
-                                  <pre
-                                    className="rounded p-3 overflow-x-auto text-sm"
-                                    style={{
-                                      backgroundColor: "var(--code-block-bg)",
-                                      color: "var(--code-block-text)"
-                                    }}
-                                  >
-                                    <code className={className} {...props}>
-                                      {codeContent}
-                                    </code>
-                                  </pre>
-                                  <button
-                                    onClick={() => copyToClipboard(msg.text, index)}
-                                    className="copy-button"
-                                    title="Copy to clipboard"
-                                  >
-                                    <FaCopy size={10} />
-                                  </button>
-                                </div>
-                              );
-                            }
-                          
-                            // Inline code
-                            return (
-                              <code
-                                className="px-1 py-0.5 rounded"
-                                style={{
-                                  backgroundColor: "var(--code-inline-bg)",
-                                  color: "var(--code-inline-text)"
-                                }}
-                              >
-                                {codeContent}
-                              </code>
-                            );
-                          }
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
-                    </div>
-
-                    {/* Copied popup */}
-                    {copiedMessage === index && (
-                      <div className="absolute top-0 right-6 bg-gray-800 text-white text-xs p-1 rounded-md">
-                        Copied!
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
+            <ScrollableMessageContainer
+              messages={chatMessages}
+              copiedMessage={copiedMessage}
+              onCopy={copyToClipboard}
+            />
 
           </div>
         </Panel>

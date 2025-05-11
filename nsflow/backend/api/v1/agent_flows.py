@@ -34,14 +34,14 @@ agent_utils = AgentNetworkUtils()  # Instantiate utility class
 async def set_config(config_req: ConfigRequest, _=Depends(AuthUtils.allow_all)):
     """Sets the configuration for the Neuro-SAN server."""
     try:
-        connectivity_type = str(config_req.NS_CONNECTIVITY_TYPE).strip()
-        host = str(config_req.NS_SERVER_HOST).strip()
-        port = int(config_req.NS_SERVER_PORT)
+        connection_type = str(config_req.NEURO_SAN_CONNECTION_TYPE).strip()
+        host = str(config_req.NEURO_SAN_SERVER_HOST).strip()
+        port = int(config_req.NEURO_SAN_SERVER_PORT)
 
-        if not connectivity_type or not host or not port:
+        if not connection_type or not host or not port:
             raise HTTPException(status_code=400, detail="Missing connectivity type, host or port")
 
-        updated_config = NsConfigsRegistry.set_current(connectivity_type, host, port)
+        updated_config = NsConfigsRegistry.set_current(connection_type, host, port)
         return JSONResponse(
             content={
                 "message": "Config updated successfully",
