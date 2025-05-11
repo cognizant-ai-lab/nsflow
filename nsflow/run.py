@@ -270,7 +270,7 @@ The type of connection to initiate. Choices are to connect to:
 
     def signal_handler(self, signum, frame):
         """Handle termination signals for cleanup."""
-        self.logger.info("\nTermination signal received. Stopping all processes...")
+        self.logger.info("\n"+"="*50+"\nTermination signal received. Stopping all processes...")
 
         if self.server_process:
             self.logger.info("Stopping Neuro SAN (PID: %s)...", self.server_process.pid)
