@@ -9,13 +9,14 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { StrictMode } from 'react'
-import ReactDOM from 'react-dom/client'
-import './index.css'
-import App from './app/App.tsx'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+import LogsPanel from '../../components/LogsPanel';
+
+export default function Observability() {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">Observability Dashboard</h1>
+      <LogsPanel />
+    </div>
+  );
+}

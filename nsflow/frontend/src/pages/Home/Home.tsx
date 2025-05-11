@@ -12,19 +12,19 @@
 import React, { useState, useEffect } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import AgentFlow from "./components/AgentFlow";
-import Sidebar from "./components/Sidebar";
+import AgentFlow from "../../components/AgentFlow";
+import Sidebar from "../../components/Sidebar";
 // import ChatPanel from "./components/ChatPanel";
-import TabbedChatPanel from "./components/TabbedChatPanel";
-import LogsPanel from "./components/LogsPanel";
-import InfoPanel from "./components/InfoPanel";
-import Header from "./components/Header";
-import { ApiPortProvider } from "./context/ApiPortContext";
-import { NeuroSanProvider } from "./context/NeuroSanContext";
-import { ChatProvider } from "./context/ChatContext";
-import { getInitialTheme } from "./utils/theme";
+import TabbedChatPanel from "../../components/TabbedChatPanel";
+import LogsPanel from "../../components/LogsPanel";
+import InfoPanel from "../../components/InfoPanel";
+import Header from "../../components/Header";
+import { ApiPortProvider } from "../../context/ApiPortContext";
+import { NeuroSanProvider } from "../../context/NeuroSanContext";
+import { ChatProvider } from "../../context/ChatContext";
+import { getInitialTheme } from "../../utils/theme";
 
-const App: React.FC = () => {
+const Home: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
 
   useEffect(() => {
@@ -86,4 +86,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default Home;

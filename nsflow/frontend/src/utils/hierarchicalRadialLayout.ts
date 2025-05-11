@@ -99,7 +99,7 @@ export function hierarchicalRadialLayout(
     const angleStep = (angleRange.end - angleRange.start) / children.length;
     let currentAngle = angleRange.start;
 
-    children.forEach((child, i) => {
+    children.forEach((child) => {
       const childAngle = currentAngle + angleStep / 2;
       const radius = 4 * BASE_RADIUS + level * (LEVEL_SPACING + NODE_SIZE + PADDING);
       const rad = (childAngle * Math.PI) / 180;
