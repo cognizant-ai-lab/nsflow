@@ -10,7 +10,7 @@
 //
 // END COPYRIGHT
 import React, { useState, useRef, useEffect } from "react";
-import { FaUserCircle, FaEdit, FaDownload, FaHome, FaChartBar } from "react-icons/fa";
+import { FaUserCircle, FaEdit, FaDownload, FaHome } from "react-icons/fa";
 import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
@@ -101,12 +101,14 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
         <div className="w-6" />
 
         {/* Home */}
-        <button 
-        className="header-btn h-8 px-4 py-1"
-        onClick={() => navigate("/home")}
-        >
-            <FaHome className="mr-2" /> Home
-        </button>
+        {location.pathname !== "/home" && (
+          <button 
+          className="header-btn h-8 px-4 py-1"
+          onClick={() => navigate("/home")}
+          >
+              <FaHome className="mr-2" /> Home
+          </button>
+        )}
 
         {/* Editor */}
         <a
@@ -121,7 +123,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
         </a>
         {/* Observe */}
 
-        {location.pathname !== "/observability" && (
+        {/* {location.pathname !== "/observability" && (
           <button
             className="header-btn h-8 px-4 py-1"
             title="Coming soon"
@@ -129,7 +131,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
           >
             <FaChartBar className="mr-2" /> Observe
           </button>
-        )}
+        )} */}
 
         {/* Export Dropdown */}
         <div className="relative" ref={dropdownRef}>

@@ -13,10 +13,10 @@
 import React, { useState, useEffect } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import AgentFlow from "../../components/AgentFlow";
+// import AgentFlow from "../../components/AgentFlow";
 import Sidebar from "../../components/Sidebar";
 // import ChatPanel from "./components/ChatPanel";
-import TabbedChatPanel from "../../components/TabbedChatPanel";
+// import TabbedChatPanel from "../../components/TabbedChatPanel";
 import LogsPanel from "../../components/LogsPanel";
 import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
