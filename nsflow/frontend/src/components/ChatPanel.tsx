@@ -59,7 +59,9 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
 
     addChatMessage({ sender: "user", text: newMessage, network: activeNetwork });
-    addSlyDataMessage({ sender: "user", text: String(parsedSlyData), network: activeNetwork });
+    if (parsedSlyData) {
+      addSlyDataMessage({ sender: "user", text: JSON.stringify(parsedSlyData, null, 2), network: activeNetwork });
+    }    
     chatWs.send(JSON.stringify({
       message: newMessage,
       ...(parsedSlyData ? { sly_data: parsedSlyData } : {})
