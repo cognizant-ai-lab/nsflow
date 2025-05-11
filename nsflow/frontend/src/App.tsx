@@ -44,12 +44,14 @@ const App: React.FC = () => {
 
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={10} minSize={5} maxSize={30}>
+                  {/* Sidebar */}
                   <Sidebar onSelectNetwork={setSelectedNetwork} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 <Panel defaultSize={60} minSize={40}>
                   <PanelGroup direction="vertical">
-                    <Panel defaultSize={75} minSize={50} maxSize={85}>
+                    <Panel defaultSize={60} minSize={50} maxSize={85}>
+                      {/* AgentFlow */}
                       <AgentFlow selectedNetwork={selectedNetwork} />
                     </Panel>
                     <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
@@ -57,10 +59,12 @@ const App: React.FC = () => {
                     <Panel defaultSize={30} minSize={20} maxSize={40}>
                       <PanelGroup direction="horizontal">
                         <Panel defaultSize={50} minSize={30} maxSize={70}>
+                          {/* LogsPanel */}
                           <LogsPanel />
                         </Panel>
                         <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                         <Panel defaultSize={20} minSize={15} maxSize={30}>
+                          {/* InfoPanel */}
                           <InfoPanel />
                         </Panel>
                       </PanelGroup>
@@ -68,8 +72,9 @@ const App: React.FC = () => {
                   </PanelGroup>
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                <Panel defaultSize={25} minSize={15} maxSize={40}>
+                <Panel defaultSize={30} minSize={15} maxSize={40}>
                   {/* Pass selectedNetwork to ChatPanel */}
+                  {/* TabbedChatPanel */}
                   <TabbedChatPanel />
                 </Panel>
               </PanelGroup>

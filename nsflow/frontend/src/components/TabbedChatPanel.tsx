@@ -160,7 +160,7 @@ const TabbedChatPanel = () => {
                 activeTab === tab ? "tabbed-tab-active" : "tabbed-tab-inactive"
               }`}
           >
-            {tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : tab === "slydata" ? "SlyData" : "Config"}
+            {tab === "chat" ? "Chat" : tab === "internal" ? "InternalChat" : tab === "slydata" ? "SlyData" : "Config"}
           </button>
         ))}
       </div>

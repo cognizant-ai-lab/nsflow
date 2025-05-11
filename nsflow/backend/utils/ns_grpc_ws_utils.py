@@ -107,7 +107,7 @@ class NsGrpcWsUtils:
                             await self.logs_manager.log_event(f"{e}\nInvalid sly_data: {sly_data}\n"
                                                             "sly_data should be a valid Dictionary", 
                                                             "NeuroSan")
-                            sly_data = ""
+                            sly_data = {}
 
                     input_processor = user_session['input_processor']
                     state = user_session['state']

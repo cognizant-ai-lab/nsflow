@@ -91,9 +91,16 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
         <button className="header-btn h-8 px-4 py-1" onClick={() => window.location.reload()}>
           <FaArrowsRotate className="mr-2" /> Reload
         </button>
-        <button className="header-btn h-8 px-4 py-1" title="Editor is coming soon!">
-          <FaEdit className="mr-2" /> Editor
-        </button>
+        <a
+          href={`https://neurosan-hocon-editor.streamlit.app/ `}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center text-blue-400 hover:text-blue-300"
+        >
+          <button className="header-btn h-8 px-4 py-1" title="Editor is coming soon!">
+            <FaEdit className="mr-2" /> Editor
+          </button>
+        </a>
 
         {/* Export Dropdown */}
         <div className="relative" ref={dropdownRef}>

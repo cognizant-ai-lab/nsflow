@@ -377,6 +377,19 @@ input:focus {
   transform: scale(1);
 }
 
+.collapsible {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.collapsible.open {
+  max-height: 20rem; /* or whatever */
+}
+
+.collapsible.closed {
+  max-height: 0;
+}
+
 /* Info Panel */
 .info-panel {
   background-color: var(--bg-color);
