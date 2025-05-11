@@ -10,16 +10,20 @@
 //
 // END COPYRIGHT
 import React, { useState, useRef, useEffect } from "react";
-import { FaUserCircle, FaEdit, FaDownload } from "react-icons/fa";
+import { FaUserCircle, FaEdit, FaDownload, FaHome, FaChartBar } from "react-icons/fa";
 import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
+import { useLocation, useNavigate } from "react-router-dom";
+
 import ThemeToggle from "./ThemeToggle";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
   const { apiPort } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Handle clicking outside to close dropdown
   useEffect(() => {
@@ -88,9 +92,23 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
 
       {/* Middle - Navigation Buttons */}
       <div className="flex space-x-4">
+        {/* Reload */}
         <button className="header-btn h-8 px-4 py-1" onClick={() => window.location.reload()}>
           <FaArrowsRotate className="mr-2" /> Reload
         </button>
+
+        {/* Spacer */}
+        <div className="w-6" />
+
+        {/* Home */}
+        <button 
+        className="header-btn h-8 px-4 py-1"
+        onClick={() => navigate("/home")}
+        >
+            <FaHome className="mr-2" /> Home
+        </button>
+
+        {/* Editor */}
         <a
           href={`https://neurosan-hocon-editor.streamlit.app/ `}
           target="_blank"
@@ -101,6 +119,17 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
             <FaEdit className="mr-2" /> Editor
           </button>
         </a>
+        {/* Observe */}
+
+        {location.pathname !== "/observability" && (
+          <button
+            className="header-btn h-8 px-4 py-1"
+            title="Coming soon"
+            // onClick={() => window.open("/observability", "_blank", "noopener,noreferrer")}
+          >
+            <FaChartBar className="mr-2" /> Observe
+          </button>
+        )}
 
         {/* Export Dropdown */}
         <div className="relative" ref={dropdownRef}>
