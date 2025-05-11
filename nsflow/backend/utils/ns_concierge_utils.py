@@ -23,7 +23,6 @@ from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 from neuro_san.service.agent_server import DEFAULT_FORWARDED_REQUEST_METADATA
-from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
 
 class NsConciergeUtils:
     """

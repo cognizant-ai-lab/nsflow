@@ -1,4 +1,3 @@
-
 # Copyright (C) 2023-2025 Cognizant Digital Business, Evolutionary AI.
 # All Rights Reserved.
 # Issued under the Academic Public License.
@@ -9,16 +8,17 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
+import argparse
+import logging
 import os
-import sys
 import signal
 import socket
 import subprocess
-import argparse
+import sys
 import threading
-import logging
 import time
-from typing import Dict, Any
+from typing import Any, Dict
+
 from dotenv import load_dotenv
 
 
@@ -50,11 +50,11 @@ class NsFlowRunner:
             "thinking_file": "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt",
             "thinking_dir": os.getenv("THINKING_DIR", "C:\\tmp") if self.is_windows else "/tmp",
             # Ensure all paths are resolved relative to `self.root_dir`
-            "agent_manifest_file": os.getenv("AGENT_MANIFEST_FILE",
-                                             os.path.join(self.root_dir, "registries", "manifest.hocon")),
-            "agent_tool_path": os.getenv("AGENT_TOOL_PATH",
-                                         os.path.join(self.root_dir, "coded_tools")),
-            "nsflow_log_dir": os.path.join(self.root_dir, "logs")
+            "agent_manifest_file": os.getenv(
+                "AGENT_MANIFEST_FILE", os.path.join(self.root_dir, "registries", "manifest.hocon")
+            ),
+            "agent_tool_path": os.getenv("AGENT_TOOL_PATH", os.path.join(self.root_dir, "coded_tools")),
+            "nsflow_log_dir": os.path.join(self.root_dir, "logs"),
         }
 
         # Set up logging
@@ -64,8 +64,8 @@ class NsFlowRunner:
             format="%(asctime)s - %(levelname)s - %(message)s",
             handlers=[
                 logging.StreamHandler(sys.stdout),
-                logging.FileHandler(os.path.join(self.config["nsflow_log_dir"], "runner.log"), mode="a")
-            ]
+                logging.FileHandler(os.path.join(self.config["nsflow_log_dir"], "runner.log"), mode="a"),
+            ],
         )
 
         # Parse CLI args
@@ -84,72 +84,84 @@ class NsFlowRunner:
 
     def parse_args(self):
         """Parses command-line arguments for configuration."""
-        parser = argparse.ArgumentParser(description="Run Neuro SAN server and FastAPI backend.",
-                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        parser = argparse.ArgumentParser(
+            description="Run Neuro SAN server and FastAPI backend.",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        )
 
-        parser.add_argument("--server-host", type=str, default=self.config["server_host"],
-                            help="Host address for the Neuro SAN server")
-        parser.add_argument("--server-port", type=int, default=self.config["server_port"],
-                            help="Neuro SAN server port")
-        group = parser.add_argument_group(title="Session Type",
-                                              description="How will we connect to neuro-san?")
-        group.add_argument("--connection", default="grpc", type=str,
-                           choices=["grpc", "http", "https"],
-                           help="""
+        parser.add_argument(
+            "--server-host", type=str, default=self.config["server_host"], help="Host address for the Neuro SAN server"
+        )
+        parser.add_argument(
+            "--server-port", type=int, default=self.config["server_port"], help="Neuro SAN server port"
+        )
+        group = parser.add_argument_group(title="Session Type", description="How will we connect to neuro-san?")
+        group.add_argument(
+            "--connection",
+            default="grpc",
+            type=str,
+            choices=["grpc", "http", "https"],
+            help="""
 The type of connection to initiate. Choices are to connect to:
     "grpc"      - an agent service via gRPC. Needs host and port.
     "http"      - an agent service via HTTP. Needs host and port.
     "https"     - an agent service via secure HTTP. Needs host and port.
-""")
-        group.add_argument("--grpc", dest="connection", action="store_const", const="grpc",
-                           help="Use a gRPC service connection")
-        group.add_argument("--http", dest="connection", action="store_const", const="http",
-                           help="Use a HTTP service connection")
-        group.add_argument("--https", dest="connection", action="store_const", const="https",
-                           help="Use a secure HTTP service connection. "
-                                "Requires your agent server to be set up with certificates that are well known. "
-                                "This is not something that our basic server setup supports out-of-the-box.")
+""",
+        )
+        group.add_argument(
+            "--grpc", dest="connection", action="store_const", const="grpc", help="Use a gRPC service connection"
+        )
+        group.add_argument(
+            "--http", dest="connection", action="store_const", const="http", help="Use a HTTP service connection"
+        )
+        group.add_argument(
+            "--https",
+            dest="connection",
+            action="store_const",
+            const="https",
+            help="Use a secure HTTP service connection. "
+            "Requires your agent server to be set up with certificates that are well known. "
+            "This is not something that our basic server setup supports out-of-the-box.",
+        )
 
-        parser.add_argument("--nsflow-host", type=str, default=self.config["nsflow_host"],
-                            help="Host address for the Fastapi based nsflow client")
-        parser.add_argument("--nsflow-port", type=int, default=self.config["nsflow_port"],
-                            help="Port for the Fastapi based nsflow client")
-        parser.add_argument("--nsflow-log-level", type=str, default=self.config["nsflow_log_level"],
-                            help="Log level for FastAPI")
-        parser.add_argument("--dev", action="store_true",
-                            help="Use dev port for FastAPI")
-        parser.add_argument("--client-only", action="store_true",
-                            help="Run only the nsflow client without NeuroSan server")
-        parser.add_argument("--server-only", action="store_true",
-                            help="Run only the NeuroSan server without nsflow client")
+        parser.add_argument(
+            "--nsflow-host",
+            type=str,
+            default=self.config["nsflow_host"],
+            help="Host address for the Fastapi based nsflow client",
+        )
+        parser.add_argument(
+            "--nsflow-port",
+            type=int,
+            default=self.config["nsflow_port"],
+            help="Port for the Fastapi based nsflow client",
+        )
+        parser.add_argument(
+            "--nsflow-log-level", type=str, default=self.config["nsflow_log_level"], help="Log level for FastAPI"
+        )
+        parser.add_argument("--dev", action="store_true", help="Use dev port for FastAPI")
+        parser.add_argument(
+            "--client-only", action="store_true", help="Run only the nsflow client without NeuroSan server"
+        )
+        parser.add_argument(
+            "--server-only", action="store_true", help="Run only the NeuroSan server without nsflow client"
+        )
 
         args, _ = parser.parse_known_args()
-        explicitly_passed_args = {
-            arg for arg in sys.argv[1:] if arg.startswith("--")
-        }
+        explicitly_passed_args = {arg for arg in sys.argv[1:] if arg.startswith("--")}
 
         if args.client_only and (
-            "--server-host" in explicitly_passed_args
-            or "--server-port" in explicitly_passed_args
+            "--server-host" in explicitly_passed_args or "--server-port" in explicitly_passed_args
         ):
-            parser.error(
-                "[x] You cannot specify --server-host or --server-port "
-                "when using --client-only mode."
-            )
+            parser.error("[x] You cannot specify --server-host or --server-port " "when using --client-only mode.")
 
         if args.server_only and (
-            "--nsflow-host" in explicitly_passed_args
-            or "--nsflow-port" in explicitly_passed_args
+            "--nsflow-host" in explicitly_passed_args or "--nsflow-port" in explicitly_passed_args
         ):
-            parser.error(
-                "[x] You cannot specify --nsflow-host or --nsflow-port "
-                "when using --server-only mode."
-            )
+            parser.error("[x] You cannot specify --nsflow-host or --nsflow-port " "when using --server-only mode.")
 
         if args.client_only and args.server_only:
-            parser.error(
-                "[x] You cannot specify both --client-only and --server-only at the same time."
-            )
+            parser.error("[x] You cannot specify both --client-only and --server-only at the same time.")
 
         return vars(args)
 
@@ -163,7 +175,7 @@ The type of connection to initiate. Choices are to connect to:
             "THINKING_DIR": "thinking_dir",
             "AGENT_MANIFEST_FILE": "agent_manifest_file",
             "NSFLOW_LOG_DIR": "nsflow_log_dir",
-            "NEURO_SAN_SERVER_CONNECTION": "server_connection"
+            "NEURO_SAN_SERVER_CONNECTION": "server_connection",
         }
 
         client_env = {
@@ -171,14 +183,14 @@ The type of connection to initiate. Choices are to connect to:
             "NSFLOW_PORT": "nsflow_port",
             "NSFLOW_LOG_LEVEL": "nsflow_log_level",
             "NSFLOW_DEV_MODE": "dev",
-            "NSFLOW_CLIENT_ONLY": "client_only"
+            "NSFLOW_CLIENT_ONLY": "client_only",
         }
 
         server_env = {
             "NEURO_SAN_SERVER_HOST": "server_host",
             "NEURO_SAN_SERVER_PORT": "server_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
-            "NSFLOW_SERVER_ONLY": "server_only"
+            "NSFLOW_SERVER_ONLY": "server_only",
         }
 
         self.logger.info("\n" + "=" * 50)
@@ -219,10 +231,16 @@ The type of connection to initiate. Choices are to connect to:
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if self.is_windows else 0
 
         with open(log_file, "w", encoding="utf-8") as log:  # noqa: F841
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       text=True, bufsize=1, universal_newlines=True,
-                                       preexec_fn=None if self.is_windows else os.setpgrp,
-                                       creationflags=creation_flags)
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                preexec_fn=None if self.is_windows else os.setpgrp,
+                creationflags=creation_flags,
+            )
 
         self.logger.info("Started %s with PID %s", process_name, process.pid)
 
@@ -246,31 +264,43 @@ The type of connection to initiate. Choices are to connect to:
         """Start the Neuro SAN server."""
         self.logger.info("Starting Neuro SAN server...")
         command = [
-            sys.executable, "-u", "-m", "neuro_san.service.agent_main_loop",
-            "--port", str(self.config["server_port"])
+            sys.executable,
+            "-u",
+            "-m",
+            "neuro_san.service.agent_main_loop",
+            "--port",
+            str(self.config["server_port"]),
         ]
-        self.server_process = self.start_process(command, "Neuro SAN",
-                                                 os.path.join(self.config["nsflow_log_dir"], "server.log"))
+        self.server_process = self.start_process(
+            command, "Neuro SAN", os.path.join(self.config["nsflow_log_dir"], "server.log")
+        )
         self.logger.info("NeuroSan server started on port: %s", self.config["server_port"])
 
     def start_fastapi(self):
         """Start FastAPI backend."""
         self.logger.info("Starting FastAPI backend...")
         command = [
-            sys.executable, "-m", "uvicorn", "nsflow.backend.main:app",
-            "--host", self.config["nsflow_host"],
-            "--port", str(self.config["nsflow_port"]),
-            "--log-level", self.config["nsflow_log_level"],
-            "--reload"
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "nsflow.backend.main:app",
+            "--host",
+            self.config["nsflow_host"],
+            "--port",
+            str(self.config["nsflow_port"]),
+            "--log-level",
+            self.config["nsflow_log_level"],
+            "--reload",
         ]
 
-        self.fastapi_process = self.start_process(command, "FastAPI",
-                                                  os.path.join(self.config["nsflow_log_dir"], "api.log"))
+        self.fastapi_process = self.start_process(
+            command, "FastAPI", os.path.join(self.config["nsflow_log_dir"], "api.log")
+        )
         self.logger.info("FastAPI started on port: %s", self.config["nsflow_port"])
 
     def signal_handler(self, signum, frame):
         """Handle termination signals for cleanup."""
-        self.logger.info("\n"+"="*50+"\nTermination signal received. Stopping all processes...")
+        self.logger.info("\n" + "=" * 50 + "\nTermination signal received. Stopping all processes...")
 
         if self.server_process:
             self.logger.info("Stopping Neuro SAN (PID: %s)...", self.server_process.pid)
@@ -287,7 +317,7 @@ The type of connection to initiate. Choices are to connect to:
                 os.killpg(os.getpgid(self.fastapi_process.pid), signal.SIGKILL)
 
         sys.exit(0)
-    
+
     def is_port_open(self, host: str, port: int, timeout=1.0) -> bool:
         """
         Check if a port is open on a given host.
@@ -330,22 +360,35 @@ The type of connection to initiate. Choices are to connect to:
             sys.exit(1)
 
         if not server_only:
-            if self.config["nsflow_host"] == "localhost" and self.is_port_open(self.config["nsflow_host"], self.config["nsflow_port"]):
-                self.logger.error("\n"+"="*50 + "\nCannot start nsflow client while the port %s is already in use.\n" + "="*50, self.config["nsflow_port"])
+            if self.config["nsflow_host"] == "localhost" and self.is_port_open(
+                self.config["nsflow_host"], self.config["nsflow_port"]
+            ):
+                self.logger.error(
+                    "\n" + "=" * 50 + "\nCannot start nsflow client while the port %s is already in use.\n" + "=" * 50,
+                    self.config["nsflow_port"],
+                )
             else:
                 self.start_fastapi()
                 self.logger.info("NSFlow client is now running.")
 
         if not client_only:
-            if self.config["server_host"] == "localhost" and self.is_port_open(self.config["server_host"], self.config["server_port"]):
-                self.logger.error("\n"+"="*50 + "\nCannot start neuro-san server while the port %s is already in use.\n" + "="*50, self.config["server_port"])
+            if self.config["server_host"] == "localhost" and self.is_port_open(
+                self.config["server_host"], self.config["server_port"]
+            ):
+                self.logger.error(
+                    "\n"
+                    + "=" * 50
+                    + "\nCannot start neuro-san server while the port %s is already in use.\n"
+                    + "=" * 50,
+                    self.config["server_port"],
+                )
             else:
                 self.start_neuro_san()
                 time.sleep(3)  # Give the server time to initialize
                 self.logger.info("Neuro-San server is now running.")
 
         self.logger.info("Press Ctrl+C to stop any running processes.")
-        self.logger.info("\n" + "="*50 + "\n")
+        self.logger.info("\n" + "=" * 50 + "\n")
 
         # Wait on active subprocesses
         if self.server_process:

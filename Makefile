@@ -60,10 +60,10 @@ lint: ## Run code formatting and linting tools on source
 		echo ""; \
 		exit 1; \
 	fi
-	isort run.py coded_tools/ --force-single-line
-	black run.py coded_tools/
-	flake8 run.py coded_tools/
-	pylint run.py coded_tools/
+	isort nsflow/run.py coded_tools/ --force-single-line
+	black nsflow/run.py coded_tools/
+	flake8 nsflow/run.py coded_tools/
+	pylint nsflow/run.py coded_tools/
 
 lint-tests: ## Run code formatting and linting tools on tests
 	@if [ -z "$$VIRTUAL_ENV" ]; then \
