@@ -14,7 +14,7 @@ import { FaUserCircle, FaEdit, FaDownload, FaHome } from "react-icons/fa";
 import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import ThemeToggle from "./ThemeToggle";
 
@@ -23,7 +23,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const location = useLocation();
+  // const location = useLocation();
 
   // Handle clicking outside to close dropdown
   useEffect(() => {
@@ -101,14 +101,12 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
         <div className="w-6" />
 
         {/* Home */}
-        {location.pathname !== "/home" && (
-          <button 
-          className="header-btn h-8 px-4 py-1"
-          onClick={() => navigate("/home")}
-          >
-              <FaHome className="mr-2" /> Home
-          </button>
-        )}
+        <button 
+        className="header-btn h-8 px-4 py-1"
+        onClick={() => navigate("/home")}
+        >
+            <FaHome className="mr-2" /> Home
+        </button>
 
         {/* Editor */}
         <a

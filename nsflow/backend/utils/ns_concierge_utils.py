@@ -16,7 +16,6 @@ import socket
 import httpx
 
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
 
 from nsflow.backend.utils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
@@ -125,7 +124,6 @@ class NsConciergeUtils:
                             "status_code": response.status_code,
                             "text": response.text.strip()
                         }
-                    # return JSONResponse(content=json_data, status_code=response.status_code)
                     return json_data
             except httpx.RequestError as exc:
                 await self.logs_manager.log_event(f"Failed to fetch concierge list: {exc}", "NeuroSan")

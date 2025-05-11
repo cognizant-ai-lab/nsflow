@@ -12,6 +12,7 @@
 import os
 import sys
 import signal
+import socket
 import subprocess
 import argparse
 import threading
@@ -286,6 +287,23 @@ The type of connection to initiate. Choices are to connect to:
                 os.killpg(os.getpgid(self.fastapi_process.pid), signal.SIGKILL)
 
         sys.exit(0)
+    
+    def is_port_open(self, host: str, port: int, timeout=1.0) -> bool:
+        """
+        Check if a port is open on a given host.
+        :param host: The hostname or IP address.
+        :param port: The port number to check.
+        :param timeout: Timeout in seconds for the connection attempt.
+        :return: True if the port is open, False otherwise.
+        """
+        # Create a socket and set a timeout
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            try:
+                sock.connect((host, port))
+                return True
+            except Exception:
+                return False
 
     def run(self):
         """Run the Neuro SAN server and FastAPI backend based on CLI arguments."""
@@ -312,14 +330,21 @@ The type of connection to initiate. Choices are to connect to:
             sys.exit(1)
 
         if not server_only:
-            self.start_fastapi()
+            if self.config["nsflow_host"] == "localhost" and self.is_port_open(self.config["nsflow_host"], self.config["nsflow_port"]):
+                self.logger.error("\n"+"="*50 + "\nCannot start nsflow client while the port %s is already in use.\n" + "="*50, self.config["nsflow_port"])
+            else:
+                self.start_fastapi()
+                self.logger.info("NSFlow client is now running.")
 
         if not client_only:
-            self.start_neuro_san()
-            time.sleep(3)  # Give the server time to initialize
+            if self.config["server_host"] == "localhost" and self.is_port_open(self.config["server_host"], self.config["server_port"]):
+                self.logger.error("\n"+"="*50 + "\nCannot start neuro-san server while the port %s is already in use.\n" + "="*50, self.config["server_port"])
+            else:
+                self.start_neuro_san()
+                time.sleep(3)  # Give the server time to initialize
+                self.logger.info("Neuro-San server is now running.")
 
-        self.logger.info("NSFlow is now running.")
-        self.logger.info("Press Ctrl+C to stop the server.")
+        self.logger.info("Press Ctrl+C to stop any running processes.")
         self.logger.info("\n" + "="*50 + "\n")
 
         # Wait on active subprocesses
