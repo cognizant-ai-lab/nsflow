@@ -61,11 +61,6 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     setEdges([]);
     setDiagramKey(prev => prev + 1); // This forces a full remount
   };
-
-  useEffect(() => {
-    // Set zoom to 0.75 and center at (0, 0)
-    setViewport({ x: 0, y: 0, zoom: 0.4 }, { duration: 800 }); // Optional animation
-  }, []);
     
   useEffect(() => {
     if (!selectedNetwork) return;
@@ -243,6 +238,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         fitView
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        minZoom={0.1}
+        maxZoom={3}
       >
         <Background />
         <Controls>

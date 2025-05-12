@@ -13,6 +13,7 @@
 import json
 from typing import Any
 from typing import Dict
+import logging
 
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
@@ -47,7 +48,10 @@ class AgentLogProcessor(MessageProcessor):
         token_accounting: Dict[str, Any] = {}
         
         # Log the original chat_message_dict in full only for debugging
-        # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}", "NeuroSan")
+        # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}")
+        logging.info("\n"+"="*30 + "chat_message_dict incoming" + "="*30+"\n")
+        logging.info(chat_message_dict)
+        logging.info("\n"+"x"*30 + "End of chat_message_dict" + "x"*30+"\n")
         sly_data = chat_message_dict.get("sly_data", None)
         if sly_data:
             sly_data_str = {"text": sly_data}

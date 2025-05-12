@@ -86,7 +86,7 @@ class NsGrpcWsUtils:
         await websocket.accept()
         sid = str(websocket.client)
         self.active_chat_connections[sid] = websocket
-        await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "FastAPI")
+        await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "nsflow")
         with user_sessions_lock:
             user_session = user_sessions.get(sid)
             if not user_session or len(user_session) < 1:
@@ -125,7 +125,7 @@ class NsGrpcWsUtils:
                         try:
                             response_str = json.dumps({"message": {"type": "AI", "text": last_chat_response}})
                             await websocket.send_text(response_str)
-                            await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "FastAPI")
+                            await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
                         except WebSocketDisconnect:
                             self.active_chat_connections.pop(sid, None)
                         except RuntimeError as e:
@@ -133,10 +133,10 @@ class NsGrpcWsUtils:
                             self.active_chat_connections.pop(sid, None)
                 
                     # Do not close WebSocket here; allow continuous interaction
-                    await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "FastAPI")
+                    await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
 
             except WebSocketDisconnect:
-                await self.logs_manager.log_event(f"WebSocket chat client disconnected: {sid}", "FastAPI")
+                await self.logs_manager.log_event(f"WebSocket chat client disconnected: {sid}", "nsflow")
                 self.active_chat_connections.pop(sid, None)
 
     async def create_user_session(self, sid: str) -> Dict[str, Any]:

@@ -12,7 +12,7 @@
 import os
 import unittest
 from pathlib import Path
-from nsflow.backend.utils.agent_network_utils import AgentNetworkUtils
+from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 
 ROOT_DIR = os.getcwd()
 FIXTURES_DIR = os.path.join(ROOT_DIR, "tests", "fixtures")

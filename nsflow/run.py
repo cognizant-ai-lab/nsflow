@@ -32,7 +32,7 @@ class NsFlowRunner:
         self.fastapi_process = None
 
         # Ensure correct paths
-        self.root_dir = os.getcwd()
+        self.root_dir = os.path.dirname(os.path.abspath(__file__))
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.info("root: %s", self.root_dir)
 
@@ -44,6 +44,7 @@ class NsFlowRunner:
             "server_host": os.getenv("NEURO_SAN_SERVER_HOST", "localhost"),
             "server_port": int(os.getenv("NEURO_SAN_SERVER_PORT", "30015")),
             "server_connection": str(os.getenv("NEURO_SAN_SERVER_CONNECTION", "grpc")),
+            "manifest_update_period_seconds": int(os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")),
             "nsflow_host": os.getenv("NSFLOW_HOST", "localhost"),
             "nsflow_port": int(os.getenv("NSFLOW_PORT", "4173")),
             "nsflow_log_level": os.getenv("NSFLOW_LOG_LEVEL", "info"),
@@ -176,6 +177,7 @@ The type of connection to initiate. Choices are to connect to:
             "AGENT_MANIFEST_FILE": "agent_manifest_file",
             "NSFLOW_LOG_DIR": "nsflow_log_dir",
             "NEURO_SAN_SERVER_CONNECTION": "server_connection",
+            "AGENT_MANIFEST_UPDATE_PERIOD_SECONDS": "manifest_update_period_seconds",
         }
 
         client_env = {

@@ -12,13 +12,6 @@
 
 import React, { useState, useEffect } from "react";
 import { ReactFlowProvider } from "reactflow";
-import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-// import AgentFlow from "../../components/AgentFlow";
-import Sidebar from "../../components/Sidebar";
-// import ChatPanel from "./components/ChatPanel";
-// import TabbedChatPanel from "../../components/TabbedChatPanel";
-import LogsPanel from "../../components/LogsPanel";
-import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
@@ -27,7 +20,7 @@ import { getInitialTheme } from "../../utils/theme";
 
 
 const Observability: React.FC = () => {
-    const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+    const [selectedNetwork] = useState<string>("");
   
     useEffect(() => {
       document.documentElement.setAttribute("data-theme", getInitialTheme());
@@ -43,43 +36,10 @@ const Observability: React.FC = () => {
                 <div className="h-14">
                   <Header selectedNetwork={selectedNetwork}/>
                 </div>
-  
-                <PanelGroup direction="horizontal">
-                  <Panel defaultSize={10} minSize={5} maxSize={30}>
-                    {/* Sidebar */}
-                    <Sidebar onSelectNetwork={setSelectedNetwork} />
-                  </Panel>
-                  <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                  <Panel defaultSize={60} minSize={40}>
-                    <PanelGroup direction="vertical">
-                      <Panel defaultSize={60} minSize={50} maxSize={85}>
-                        {/* AgentFlow */}
-                        {/* <AgentFlow selectedNetwork={selectedNetwork} /> */}
-                      </Panel>
-                      <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
-  
-                      <Panel defaultSize={30} minSize={20} maxSize={40}>
-                        <PanelGroup direction="horizontal">
-                          <Panel defaultSize={50} minSize={30} maxSize={70}>
-                            {/* LogsPanel */}
-                            <LogsPanel />
-                          </Panel>
-                          <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                          <Panel defaultSize={20} minSize={15} maxSize={30}>
-                            {/* InfoPanel */}
-                            <InfoPanel />
-                          </Panel>
-                        </PanelGroup>
-                      </Panel>
-                    </PanelGroup>
-                  </Panel>
-                  <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                  <Panel defaultSize={30} minSize={15} maxSize={40}>
-                    {/* Pass selectedNetwork to ChatPanel */}
-                    {/* TabbedChatPanel */}
-                    {/* <TabbedChatPanel /> */}
-                  </Panel>
-                </PanelGroup>
+                
+                <div className="h-14">
+                  Coming soon
+                </div>
               </div>
             </NeuroSanProvider>
           </ApiPortProvider>
