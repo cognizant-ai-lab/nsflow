@@ -46,6 +46,7 @@ class NsFlowRunner:
             "server_port": int(os.getenv("NEURO_SAN_SERVER_PORT", "30015")),
             "server_connection": str(os.getenv("NEURO_SAN_SERVER_CONNECTION", "grpc")),
             "manifest_update_period_seconds": int(os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")),
+            "default_sly_data": str(os.getenv("DEFAULT_SLY_DATA", "")),
             "nsflow_host": os.getenv("NSFLOW_HOST", "localhost"),
             "nsflow_port": int(os.getenv("NSFLOW_PORT", "4173")),
             "nsflow_log_level": os.getenv("NSFLOW_LOG_LEVEL", "info"),
@@ -125,7 +126,10 @@ The type of connection to initiate. Choices are to connect to:
             "Requires your agent server to be set up with certificates that are well known. "
             "This is not something that our basic server setup supports out-of-the-box.",
         )
-
+        parser.add_argument("--default-sly-data", type=str,
+                            default=self.config["default_sly_data"],
+                            help="JSON string containing data that is out-of-band to the chat stream, "
+                                "but is still essential to agent function")
         parser.add_argument(
             "--nsflow-host",
             type=str,
@@ -194,6 +198,7 @@ The type of connection to initiate. Choices are to connect to:
             "NEURO_SAN_SERVER_PORT": "server_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",
+            "DEFAULT_SLY_DATA": "default_sly_data"
         }
 
         self.logger.info("\n" + "=" * 50)
