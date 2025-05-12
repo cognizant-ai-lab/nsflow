@@ -11,7 +11,6 @@
 # END COPYRIGHT
 import os
 import re
-from pathlib import Path
 import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
@@ -22,13 +21,13 @@ logging.basicConfig(level=logging.INFO)
 
 # Define the registry directory and other constants
 # Ensure the environment variable is set
-if os.getenv("AGENT_MANIFEST_FILE") is None:
-    raise ValueError("Environment variable AGENT_MANIFEST_FILE is not set. "
-                     "Please set it to the path of the agent manifest file.")
+# if os.getenv("AGENT_MANIFEST_FILE") is None:
+#     raise ValueError("Environment variable AGENT_MANIFEST_FILE is not set. "
+#                      "Please set it to the path of the agent manifest file.")
 
-AGENT_MANIFEST_FILE = Path(os.getenv("AGENT_MANIFEST_FILE"))
-REGISTRY_DIR = Path(os.path.dirname(AGENT_MANIFEST_FILE))
-ROOT_DIR = Path(os.path.dirname(REGISTRY_DIR))
+AGENT_MANIFEST_FILE = os.getenv("AGENT_MANIFEST_FILE")
+REGISTRY_DIR = os.path.dirname(AGENT_MANIFEST_FILE)
+ROOT_DIR = os.path.dirname(REGISTRY_DIR)
 CODED_TOOLS_DIR = os.path.join(ROOT_DIR, "coded_tools")
 FIXTURES_DIR = os.path.join(ROOT_DIR, "tests", "fixtures")
 TEST_NETWORK = os.path.join(FIXTURES_DIR, "test_network.hocon")
@@ -55,9 +54,9 @@ class AgentNetworkUtils:
 
     def get_test_manifest_path(self):
         """Returns the manifest.hocon path."""
-        return Path(self.fixtures_dir) / "manifest.hocon"
+        return os.path.join(self.fixtures_dir, "manifest.hocon")
 
-    def get_network_file_path(self, network_name: str) -> Path:
+    def get_network_file_path(self, network_name: str):
         """
         Securely returns the absolute path for a given agent network name.
         Validates to prevent directory traversal or malformed names.
@@ -82,21 +81,21 @@ class AgentNetworkUtils:
             raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
         # Step 6: Check if file exists and is a file (not a directory)
-        final_path = Path(resolved_path)
-        if not final_path.is_file():
-            raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
+        # final_path = Path(resolved_path)
+        # if not final_path.is_file():
+        #     raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
 
-        return final_path
+        return resolved_path
 
     def list_available_networks(self):
         """Lists available networks from the manifest file."""
         manifest_path = AGENT_MANIFEST_FILE
-        if not manifest_path.exists():
+        if not os.path.exists(manifest_path):
             return {"networks": []}
 
         config = ConfigFactory.parse_file(str(manifest_path))
         networks = [
-            Path(file).stem.replace('"', "").strip()
+            os.path.splitext(os.path.basename(file))[0].replace('"', "").strip()
             for file, enabled in config.items()
             if enabled is True
         ]
@@ -104,7 +103,7 @@ class AgentNetworkUtils:
         return {"networks": networks}
 
     @staticmethod
-    def load_hocon_config(file_path: Path, base_dir: Path = Path(ROOT_DIR)):
+    def load_hocon_config(file_path: str, base_dir: str = ROOT_DIR):
         """
         Load a HOCON file from the given directory and parse it safely.
         Prevents path traversal by ensuring the resolved path stays within the base_dir.
@@ -119,7 +118,7 @@ class AgentNetworkUtils:
                 raise HTTPException(status_code=403, detail="Access to this file is not allowed")
 
             # Now it is safe to use as a Path
-            safe_path = Path(file_path_str)
+            safe_path = file_path_str
 
             if not safe_path.exists() or not safe_path.is_file():
                 raise HTTPException(status_code=404, detail="Config file not found")
@@ -133,7 +132,7 @@ class AgentNetworkUtils:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
 
-    def parse_agent_network(self, file_path: Path):
+    def parse_agent_network(self, file_path: str):
         """Parses an agent network from a HOCON configuration file."""
         config = self.load_hocon_config(file_path)
 
@@ -164,7 +163,7 @@ class AgentNetworkUtils:
 
         return {"nodes": nodes, "edges": edges, "agent_details": agent_details}
 
-    def find_front_man(self, file_path: Path):
+    def find_front_man(self, file_path: str):
         """Finds the front-man agent from the tools list.
         1. First, check if an agent has a function **without parameters**.
         2. If all agents have parameters, **fallback to the first agent** in the HOCON file.
@@ -279,7 +278,7 @@ class AgentNetworkUtils:
                 "color": "green",  # Mark sub-network edges as green
             })
 
-    def extract_connectivity_info(self, file_path: Path):
+    def extract_connectivity_info(self, file_path: str):
         """Extracts connectivity details from an HOCON network configuration file."""
         logging.info("utils file_path: %s", file_path)
 
@@ -308,7 +307,7 @@ class AgentNetworkUtils:
 
         return {"connectivity": connectivity}
 
-    def extract_coded_tool_class(self, file_path: Path):
+    def extract_coded_tool_class(self, file_path: str):
         """Extract all the coded tool classes in a list"""
         config = self.load_hocon_config(file_path)
         tools = config.get("tools", [])
@@ -319,7 +318,7 @@ class AgentNetworkUtils:
                 coded_tool_classes.append(class_name)
         return coded_tool_classes
 
-    def get_agent_details(self, config_path: Path, agent_name: str) -> Dict[str, Any]:
+    def get_agent_details(self, config_path: str, agent_name: str) -> Dict[str, Any]:
         """
         Retrieves the entire details of an Agent from a HOCON network configuration file.
         :param config_path: Path to the HOCON configuration file.

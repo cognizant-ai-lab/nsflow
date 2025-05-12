@@ -32,7 +32,8 @@ class NsFlowRunner:
         self.fastapi_process = None
 
         # Ensure correct paths
-        self.root_dir = os.path.dirname(os.path.abspath(__file__))
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        self.root_dir = os.path.dirname(this_dir)
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.info("root: %s", self.root_dir)
 
