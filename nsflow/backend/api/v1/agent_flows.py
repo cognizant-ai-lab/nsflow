@@ -15,12 +15,12 @@ from fastapi import HTTPException
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from nsflow.backend.utils.agent_network_utils import AgentNetworkUtils
-from nsflow.backend.utils.ns_grpc_network_utils import NsGrpcNetworkUtils
-from nsflow.backend.utils.auth_utils import AuthUtils
+from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
+from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
+from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.models.config_model import ConfigRequest
-from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
-from nsflow.backend.utils.ns_grpc_ws_utils import NsGrpcWsUtils
+from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
+from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils
 
 logging.basicConfig(level=logging.INFO)
 

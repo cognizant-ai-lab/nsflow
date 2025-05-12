@@ -11,7 +11,7 @@
 # END COPYRIGHT
 from typing import Optional, Dict
 import logging
-from nsflow.backend.utils.ns_config import NsConfig
+from nsflow.backend.utils.tools.ns_config import NsConfig
 
 
 class NsConfigsRegistry:

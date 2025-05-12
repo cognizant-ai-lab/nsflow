@@ -17,8 +17,8 @@ import httpx
 
 from fastapi import HTTPException
 
-from nsflow.backend.utils.websocket_logs_registry import LogsRegistry
-from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
+from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession

@@ -57,7 +57,7 @@ class WebsocketLogsManager:
         """
         return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-    async def log_event(self, message: str, source: str = "FastAPI"):
+    async def log_event(self, message: str, source: str = "neuro-san"):
         """
         Send a structured log event to all connected log WebSocket clients.
         :param message: The log message to send.

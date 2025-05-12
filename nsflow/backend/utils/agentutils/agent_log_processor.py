@@ -16,7 +16,7 @@ from typing import Dict
 
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
-from nsflow.backend.utils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 
 class AgentLogProcessor(MessageProcessor):

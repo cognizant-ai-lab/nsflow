@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
-from nsflow.backend.utils.ns_concierge_utils import NsConciergeUtils
+from nsflow.backend.utils.agentutils.ns_concierge_utils import NsConciergeUtils
 
 router = APIRouter(prefix="/api/v1")
 

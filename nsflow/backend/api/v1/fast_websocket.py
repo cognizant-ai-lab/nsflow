@@ -18,8 +18,8 @@ For now, we have separate end-points for OpenAPI specs
 
 from fastapi import APIRouter, WebSocket
 
-from nsflow.backend.utils.ns_grpc_ws_utils import NsGrpcWsUtils
-from nsflow.backend.utils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils
+from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 router = APIRouter(prefix="/api/v1/ws")
 

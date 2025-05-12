@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from nsflow.backend.api.router import router
-from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
+from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 logging.basicConfig(level=logging.INFO)
 

@@ -20,11 +20,11 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from neuro_san.client.agent_session_factory import AgentSessionFactory
 
-from nsflow.backend.utils.async_streaming_input_processor import AsyncStreamingInputProcessor
+from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
 
-from nsflow.backend.utils.websocket_logs_registry import LogsRegistry
-from nsflow.backend.utils.ns_configs_registry import NsConfigsRegistry
-from nsflow.backend.utils.agent_log_processor import AgentLogProcessor
+from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
+from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
