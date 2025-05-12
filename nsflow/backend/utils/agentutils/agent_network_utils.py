@@ -21,11 +21,16 @@ logging.basicConfig(level=logging.INFO)
 
 # Define the registry directory and other constants
 # Ensure the environment variable is set
-# if os.getenv("AGENT_MANIFEST_FILE") is None:
+# if not os.getenv("AGENT_MANIFEST_FILE"):
 #     raise ValueError("Environment variable AGENT_MANIFEST_FILE is not set. "
 #                      "Please set it to the path of the agent manifest file.")
 
 AGENT_MANIFEST_FILE = os.getenv("AGENT_MANIFEST_FILE")
+if not AGENT_MANIFEST_FILE:
+    THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+    ROOT_DIR = os.path.abspath(os.path.join(THIS_DIR, "../../../../.."))
+    AGENT_MANIFEST_FILE = os.path.join(ROOT_DIR, "registries", "manifest.hocon")
+
 REGISTRY_DIR = os.path.dirname(AGENT_MANIFEST_FILE)
 ROOT_DIR = os.path.dirname(REGISTRY_DIR)
 CODED_TOOLS_DIR = os.path.join(ROOT_DIR, "coded_tools")
@@ -46,7 +51,10 @@ class AgentData:
 
 
 class AgentNetworkUtils:
-    """Encapsulates utility methods for agent network operations."""
+    """
+    Encapsulates utility methods for agent network operations.
+    This class is to be used only for locally located hocon files.
+    """
 
     def __init__(self):
         self.registry_dir = REGISTRY_DIR
@@ -120,7 +128,7 @@ class AgentNetworkUtils:
             # Now it is safe to use as a Path
             safe_path = file_path_str
 
-            if not safe_path.exists() or not safe_path.is_file():
+            if not os.path.exists(safe_path) or not os.path.isfile(safe_path):
                 raise HTTPException(status_code=404, detail="Config file not found")
 
             # Safe to parse

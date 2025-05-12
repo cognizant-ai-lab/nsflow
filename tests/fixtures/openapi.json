@@ -1,1 +1,370 @@
-{"openapi":"3.0.2","info":{"title":"FastAPI","version":"0.1.0"},"paths":{"/api/v1/ws/connectivity/{agent_name}":{"get":{"summary":"Get Agent Connectivity","description":"Fetch agent connectivity details.","operationId":"get_agent_connectivity_api_v1_ws_connectivity__agent_name__get","parameters":[{"name":"agent_name","in":"path","required":true,"schema":{"type":"string","title":"Agent Name"}}],"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/v1/ws/function/{agent_name}":{"get":{"summary":"Get Agent Function","description":"Fetch agent function details.","operationId":"get_agent_function_api_v1_ws_function__agent_name__get","parameters":[{"name":"agent_name","in":"path","required":true,"schema":{"type":"string","title":"Agent Name"}}],"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/v1/networks/":{"get":{"summary":"Get Networks","description":"Returns a list of available agent networks.","operationId":"get_networks_api_v1_networks__get","responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}}}}},"/api/v1/network/{network_name}":{"get":{"summary":"Get Agent Network","description":"Retrieves the network structure for a given agent network.","operationId":"get_agent_network_api_v1_network__network_name__get","parameters":[{"name":"network_name","in":"path","required":true,"schema":{"type":"string","title":"Network Name"}}],"responses":{"200":{"description":"Agent Network found","content":{"application/json":{"schema":{}}}},"404":{"description":"Agent Network not found"},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/v1/connectivity/{network_name}":{"get":{"summary":"Get Connectivity Info","description":"Retrieves connectivity details from an HOCON network configuration file.","operationId":"get_connectivity_info_api_v1_connectivity__network_name__get","parameters":[{"name":"network_name","in":"path","required":true,"schema":{"type":"string","title":"Network Name"}}],"responses":{"200":{"description":"Connectivity Info","content":{"application/json":{"schema":{}}}},"404":{"description":"HOCON file not found"},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/v1/export/notebook/{agent_network}":{"get":{"summary":"Export Notebook","description":"Endpoint to generate and return a downloadable Jupyter Notebook for an agent network.","operationId":"export_notebook_api_v1_export_notebook__agent_network__get","parameters":[{"name":"agent_network","in":"path","required":true,"schema":{"type":"string","title":"Agent Network"}}],"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/v1/export/agent_network/{agent_network}":{"get":{"summary":"Export Agent Network","description":"Endpoint to download the HOCON file of the selected agent network.","operationId":"export_agent_network_api_v1_export_agent_network__agent_network__get","parameters":[{"name":"agent_network","in":"path","required":true,"schema":{"type":"string","title":"Agent Network"}}],"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"404":{"description":"Agent network not found"},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}}},"components":{"schemas":{"HTTPValidationError":{"properties":{"detail":{"items":{"$ref":"#/components/schemas/ValidationError"},"type":"array","title":"Detail"}},"type":"object","title":"HTTPValidationError"},"ValidationError":{"properties":{"loc":{"items":{"anyOf":[{"type":"string"},{"type":"integer"}]},"type":"array","title":"Location"},"msg":{"type":"string","title":"Message"},"type":{"type":"string","title":"Error Type"}},"type":"object","required":["loc","msg","type"],"title":"ValidationError"}}}}
+{
+  "openapi": "3.0.2",
+  "info": { "title": "FastAPI", "version": "0.1.0" },
+  "paths": {
+    "/api/v1/set_ns_config": {
+      "post": {
+        "tags": ["Agent Flows"],
+        "summary": "Set Config",
+        "description": "Sets the configuration for the Neuro-SAN server.",
+        "operationId": "set_config_api_v1_set_ns_config_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ConfigRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/get_ns_config": {
+      "get": {
+        "tags": ["Agent Flows"],
+        "summary": "Get Config",
+        "description": "Returns the current configuration of the Neuro-SAN server.",
+        "operationId": "get_config_api_v1_get_ns_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/api/v1/ping": {
+      "get": {
+        "tags": ["Agent Flows", "Health"],
+        "summary": "Health Check",
+        "description": "Health check endpoint to verify if the API is alive.",
+        "operationId": "health_check_api_v1_ping_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/api/v1/networks/": {
+      "get": {
+        "tags": ["Agent Flows"],
+        "summary": "Get Networks",
+        "description": "Returns a list of available agent networks.",
+        "operationId": "get_networks_api_v1_networks__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/api/v1/connectivity/{network_name}": {
+      "get": {
+        "tags": ["Agent Flows"],
+        "summary": "Get Agent Network",
+        "description": "Retrieves the network structure for a given agent network.",
+        "operationId": "get_agent_network_api_v1_connectivity__network_name__get",
+        "parameters": [
+          {
+            "name": "network_name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Network Name" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent Network found",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "404": { "description": "Agent Network not found" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compact_connectivity/{network_name}": {
+      "get": {
+        "tags": ["Agent Flows"],
+        "summary": "Get Connectivity Info",
+        "description": "Retrieves the network structure for a given local HOCON based agent network.",
+        "operationId": "get_connectivity_info_api_v1_compact_connectivity__network_name__get",
+        "parameters": [
+          {
+            "name": "network_name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Network Name" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connectivity Info",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "404": { "description": "HOCON file not found" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/networkconfig/{network_name}": {
+      "get": {
+        "tags": ["Agent Flows"],
+        "summary": "Get Networkconfig",
+        "description": "Retrieves the entire details from a HOCON network configuration file.",
+        "operationId": "get_networkconfig_api_v1_networkconfig__network_name__get",
+        "parameters": [
+          {
+            "name": "network_name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Network Name" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connectivity Info",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "404": { "description": "HOCON file not found" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/networkconfig/{network_name}/agent/{agent_name}": {
+      "get": {
+        "tags": ["Agent Flows"],
+        "summary": "Fetch Agent Info",
+        "description": "Retrieves the entire details of an Agent from a HOCON network configuration file.",
+        "operationId": "fetch_agent_info_api_v1_networkconfig__network_name__agent__agent_name__get",
+        "parameters": [
+          {
+            "name": "network_name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Network Name" }
+          },
+          {
+            "name": "agent_name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Agent Name" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent Info found",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "404": { "description": "Info not found" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/export/notebook/{agent_network}": {
+      "get": {
+        "tags": ["Notebook Export"],
+        "summary": "Export Notebook",
+        "description": "Endpoint to generate and return a downloadable Jupyter Notebook for an agent network.",
+        "operationId": "export_notebook_api_v1_export_notebook__agent_network__get",
+        "parameters": [
+          {
+            "name": "agent_network",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Agent Network" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/export/agent_network/{agent_network}": {
+      "get": {
+        "tags": ["Notebook Export"],
+        "summary": "Export Agent Network",
+        "description": "Endpoint to download the HOCON file of the selected agent network.",
+        "operationId": "export_agent_network_api_v1_export_agent_network__agent_network__get",
+        "parameters": [
+          {
+            "name": "agent_network",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Agent Network" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "404": { "description": "Agent network not found" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/version/{package_name}": {
+      "get": {
+        "tags": ["Version Info"],
+        "summary": "Fetch Version",
+        "description": "Get the version from installed package",
+        "operationId": "fetch_version_api_v1_version__package_name__get",
+        "parameters": [
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Package Name" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/list": {
+      "get": {
+        "tags": ["gRPC Endpoints"],
+        "summary": "Get Concierge List",
+        "description": "GET handler for concierge list API.\nExtracts forwarded metadata from headers and uses the utility class to call gRPC.\n\n:param request: The FastAPI Request object, used to extract headers.\n:return: JSON response from gRPC service.",
+        "operationId": "get_concierge_list_api_v1_list_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConfigRequest": {
+        "properties": {
+          "NEURO_SAN_CONNECTION_TYPE": {
+            "type": "string",
+            "title": "Neuro San Connection Type",
+            "description": "Connectivity type"
+          },
+          "NEURO_SAN_SERVER_HOST": {
+            "type": "string",
+            "title": "Neuro San Server Host",
+            "description": "Host address of the NeuroSan server"
+          },
+          "NEURO_SAN_SERVER_PORT": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 0.0,
+            "title": "Neuro San Server Port"
+          }
+        },
+        "type": "object",
+        "required": [
+          "NEURO_SAN_CONNECTION_TYPE",
+          "NEURO_SAN_SERVER_HOST",
+          "NEURO_SAN_SERVER_PORT"
+        ],
+        "title": "ConfigRequest",
+        "description": "Represents the configuration request for the NeuroSan server.\nAttributes:\n    NS_CONNECTIVITY_TYPE (str): The connectivity type for NeuroSan server\n    NS_SERVER_HOST (IPvAnyAddress): The host address of the NeuroSan server.\n    NS_SERVER_PORT (int): The port number of the NeuroSan server."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": { "$ref": "#/components/schemas/ValidationError" },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
