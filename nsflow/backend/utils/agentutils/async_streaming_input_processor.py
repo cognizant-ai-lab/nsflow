@@ -12,6 +12,7 @@
 
 from typing import Dict, Any, Optional, Generator
 from copy import copy
+import logging
 
 from neuro_san.interfaces.agent_session import AgentSession
 from neuro_san.internals.messages.origination import Origination
@@ -49,6 +50,7 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
             return state
 
         sly_data: Optional[Dict[str, Any]] = state.get("sly_data", None)
+        logging.info("="*30+"\nASIP: sly_data from state: %s\n"+"="*30, sly_data)
         # Note that by design, a client does not have to interpret the
         # chat_context at all. It merely needs to pass it along to continue
         # the conversation.

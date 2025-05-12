@@ -36,6 +36,8 @@ type ChatContextType = {
   setChatWs: (ws: WebSocket | null) => void;
   setInternalChatWs: (ws: WebSocket | null) => void;
   setSlyDataWs: (ws: WebSocket | null) => void;
+  newSlyData: string;
+  setNewSlyData: (data: string) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -54,6 +56,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [chatWs, setChatWs] = useState<WebSocket | null>(null);
   const [internalChatWs, setInternalChatWs] = useState<WebSocket | null>(null);
   const [slyDataWs, setSlyDataWs] = useState<WebSocket | null>(null);
+  const [newSlyData, setNewSlyData] = useState<string>("");
 
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
@@ -83,6 +86,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       setInternalChatWs,
       slyDataWs,
       setSlyDataWs,
+      newSlyData,
+      setNewSlyData
      }}>
       {children}
     </ChatContext.Provider>

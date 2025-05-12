@@ -113,7 +113,8 @@ class NsGrpcWsUtils:
                     state = user_session['state']
                     # Update user input in state
                     state["user_input"] = user_input
-                    state["sly_data"] = sly_data
+                    # Update sly_data in state based on user input
+                    state["sly_data"].update(sly_data)
 
                     # Update the state
                     state = await input_processor.async_process_once(state)
@@ -124,8 +125,10 @@ class NsGrpcWsUtils:
                     if last_chat_response:
                         try:
                             response_str = json.dumps({"message": {"type": "AI", "text": last_chat_response}})
+                            sly_data_str = {"text": state["sly_data"]}
                             await websocket.send_text(response_str)
                             await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
+                            await self.logs_manager.sly_data_event(sly_data_str)
                         except WebSocketDisconnect:
                             self.active_chat_connections.pop(sid, None)
                         except RuntimeError as e:
@@ -148,6 +151,7 @@ class NsGrpcWsUtils:
             "last_chat_response": None,
             "num_input": 0,
             "chat_filter": chat_filter,
+            "sly_data": {},
         }
         
         # agent_session = self.base_utils.get_regular_agent_grpc_session(metadata=metadata)

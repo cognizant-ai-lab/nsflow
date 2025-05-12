@@ -31,7 +31,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
   // sly_data enablers
   const [enableSlyData, setEnableSlyData] = useState(false);
-  const [newSlyData, setNewSlyData] = useState("");
+  const {newSlyData, setNewSlyData} = useChatContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

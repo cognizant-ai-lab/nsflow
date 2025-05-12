@@ -47,15 +47,12 @@ class AgentLogProcessor(MessageProcessor):
         sly_data = None
         token_accounting: Dict[str, Any] = {}
         
-        # Log the original chat_message_dict in full only for debugging
+        # Log the original chat_message_dict in full only for debugging on client interface
         # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}")
-        logging.info("\n"+"="*30 + "chat_message_dict incoming" + "="*30+"\n")
-        logging.info(chat_message_dict)
-        logging.info("\n"+"x"*30 + "End of chat_message_dict" + "x"*30+"\n")
-        sly_data = chat_message_dict.get("sly_data", None)
-        if sly_data:
-            sly_data_str = {"text": sly_data}
-            await self.logs_manager.sly_data_event(sly_data_str)
+        # To just print on terminal, uncomment the below 3 lines
+        # logging.info("\n"+"="*30 + "chat_message_dict incoming" + "="*30+"\n")
+        # logging.info(chat_message_dict)
+        # logging.info("\n"+"x"*30 + "End of chat_message_dict" + "x"*30+"\n")
 
         if message_type not in (ChatMessageType.AGENT,
                                 ChatMessageType.AI,

@@ -10,6 +10,7 @@
 #
 # END COPYRIGHT
 import logging
+import os
 
 from fastapi import HTTPException
 from fastapi import APIRouter, Depends
@@ -106,7 +107,7 @@ def get_connectivity_info(network_name: str):
     """Retrieves the network structure for a given local HOCON based agent network."""
     file_path = agent_utils.get_network_file_path(network_name)
     logging.info("file_path: %s", file_path)
-    if not file_path.exists():
+    if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"Network name '{network_name}' not found.")
     return agent_utils.parse_agent_network(file_path)
 

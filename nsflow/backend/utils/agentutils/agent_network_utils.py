@@ -78,7 +78,7 @@ class AgentNetworkUtils:
                                 detail="Invalid network name. Only alphanumeric, underscores, and hyphens are allowed.")
 
         # Step 3: Build full path inside safe REGISTRY_DIR
-        raw_path = REGISTRY_DIR / f"{sanitized_name}.hocon"
+        raw_path = os.path.join(REGISTRY_DIR, f"{sanitized_name}.hocon")
 
         # Step 4: Normalize and resolve to handle ../ or symlinks
         resolved_path = os.path.realpath(os.path.normpath(str(raw_path)))
