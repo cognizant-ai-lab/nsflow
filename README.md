@@ -75,6 +75,7 @@ cd nsflow
 - By default:
     - **backend** will be available at: `http://127.0.0.1:8005`
     - **frontend** will be available at: `http://127.0.0.1:5173`
+    - You may change the host/port configs using environment variables for fastapi (refer [run.py](./nsflow/run.py)) and using [frontend/.env.development](./nsflow/frontend/.env.development) for react app
 
 
 #### **Step 4: To make sure your changes to frontend take effect in the wheel, run the script**
