@@ -127,20 +127,19 @@ const TabbedChatPanel = () => {
             chatTextRaw !== null &&
             Object.keys(chatTextRaw).length === 0;
 
-            let chatText = "";
-
+            let slyText = "";
+            
             if (typeof chatTextRaw === "string") {
-              chatText = chatTextRaw;
+              slyText = chatTextRaw;
             } else if (!isEmptyObject) {
               // Format as markdown code block
-              chatText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2)}\n\`\`\``;
+              slyText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2).replace(/\\n/g, '\n')}\n\`\`\``;
             }
-
-          if (chatText.trim().length > 0) {
+          if (slyText.trim().length > 0) {
             // lastMessageRef.current = chatText;
             addSlyDataMessage({
               sender: activeNetwork,
-              text: chatText,
+              text: slyText,
               network: activeNetwork,
             });
           }
