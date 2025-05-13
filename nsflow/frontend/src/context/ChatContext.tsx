@@ -12,7 +12,7 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 
 type Message = {
-  sender: "system" | "internal" | "user" | "agent";
+  sender: "system" | "internal" | "user" | "agent" | string;
   text: string;
   network?: string;
   otrace?: string[];

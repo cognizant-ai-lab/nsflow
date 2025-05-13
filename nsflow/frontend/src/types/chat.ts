@@ -11,7 +11,7 @@
 // END COPYRIGHT
 
 export type Message = {
-    sender: "user" | "agent" | "system" | "internal";
+    sender: "user" | "agent" | "system" | "internal" | string;
     text: string;
     network?: string;
   };

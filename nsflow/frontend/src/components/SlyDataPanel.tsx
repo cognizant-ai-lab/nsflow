@@ -67,11 +67,14 @@ const SlyDataPanel = ({ title = "Sly Data" }: { title?: string }) => {
           {/* Scrollable chat messages container */}
           <ScrollableMessageContainer
             messages={slyDataMessages.filter(
-              (msg) => typeof msg.text === "string" && msg.text.trim().length > 0
-            )}            
+              (msg) =>
+                typeof msg.text === "string" &&
+                msg.text.trim().length > 0 &&
+                msg.text.trim() !== "{}"
+            )}           
             copiedMessage={copiedMessage}
             onCopy={copyToClipboard}
-            renderSenderLabel={(msg) => msg.sender}
+            renderSenderLabel={(msg) => msg.network || msg.sender}
             getMessageClass={() => "chat-msg chat-msg-agent"}
           />
         </Panel>

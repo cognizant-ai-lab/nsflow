@@ -121,13 +121,29 @@ const TabbedChatPanel = () => {
         if (data.message && typeof data.message === "object") {
           // const otrace = data.message.otrace;
           const chatTextRaw = data.message.text;
-          const chatText =
-            typeof chatTextRaw === "string"
-              ? chatTextRaw
-              : JSON.stringify(chatTextRaw, null, 2);
+          // Check if it's a non-empty object
+          const isEmptyObject =
+            typeof chatTextRaw === "object" &&
+            chatTextRaw !== null &&
+            Object.keys(chatTextRaw).length === 0;
 
-          lastMessageRef.current = chatText;
-          addSlyDataMessage({ sender: "agent", text: chatText, network: activeNetwork });
+            let chatText = "";
+
+            if (typeof chatTextRaw === "string") {
+              chatText = chatTextRaw;
+            } else if (!isEmptyObject) {
+              // Format as markdown code block
+              chatText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2)}\n\`\`\``;
+            }
+
+          if (chatText.trim().length > 0) {
+            // lastMessageRef.current = chatText;
+            addSlyDataMessage({
+              sender: activeNetwork,
+              text: chatText,
+              network: activeNetwork,
+            });
+          }
         }
       } catch (err) {
         console.error("Error parsing Sly Data WebSocket message:", err);
