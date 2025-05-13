@@ -18,7 +18,7 @@ import sys
 import threading
 import time
 from typing import Any, Dict
-
+# Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
 
 
@@ -50,6 +50,8 @@ class NsFlowRunner:
             "nsflow_host": os.getenv("NSFLOW_HOST", "localhost"),
             "nsflow_port": int(os.getenv("NSFLOW_PORT", "4173")),
             "nsflow_log_level": os.getenv("NSFLOW_LOG_LEVEL", "info"),
+            "vite_api_protocol": os.getenv("VITE_API_PROTOCOL", "http"),
+            "vite_ws_protocol": os.getenv("VITE_WS_PROTOCOL", "ws"),
             "thinking_file": "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt",
             "thinking_dir": os.getenv("THINKING_DIR", "C:\\tmp") if self.is_windows else "/tmp",
             # Ensure all paths are resolved relative to `self.root_dir`
@@ -191,6 +193,8 @@ The type of connection to initiate. Choices are to connect to:
             "NSFLOW_LOG_LEVEL": "nsflow_log_level",
             "NSFLOW_DEV_MODE": "dev",
             "NSFLOW_CLIENT_ONLY": "client_only",
+            "VITE_API_PROTOCOL": "vite_api_protocol",
+            "VITE_WS_PROTOCOL": "vite_ws_protocol"
         }
 
         server_env = {
@@ -342,23 +346,9 @@ The type of connection to initiate. Choices are to connect to:
                 return True
             except Exception:
                 return False
-
-    def run(self):
-        """Run the Neuro SAN server and FastAPI backend based on CLI arguments."""
-        if self.config["dev"]:
-            self.config["nsflow_port"] = 8005
-        self.logger.info("Starting Backend System...")
-        log_config_blob = "\n".join(f"{key}: {value}" for key, value in self.config.items())
-        self.logger.info("\nRun Config:\n%s\n", log_config_blob)
-
-        # Set environment variables
-        self.set_environment_variables()
-
-        # Set up signal handling
-        signal.signal(signal.SIGINT, self.signal_handler)
-        if not self.is_windows:
-            signal.signal(signal.SIGTERM, self.signal_handler)
-
+    
+    def conditional_start_servers(self):
+        """Start both neuro-san and nsflow basis given conditions"""
         # Handle mutually exclusive modes
         client_only = self.config["client_only"]
         server_only = self.config["server_only"]
@@ -394,6 +384,24 @@ The type of connection to initiate. Choices are to connect to:
                 self.start_neuro_san()
                 time.sleep(3)  # Give the server time to initialize
                 self.logger.info("Neuro-San server is now running.")
+
+    def run(self):
+        """Run the Neuro SAN server and FastAPI backend based on CLI arguments."""
+        if self.config["dev"]:
+            self.config["nsflow_port"] = 8005
+        self.logger.info("Starting Backend System...")
+        log_config_blob = "\n".join(f"{key}: {value}" for key, value in self.config.items())
+        self.logger.info("\nRun Config:\n%s\n", log_config_blob)
+
+        # Set environment variables
+        self.set_environment_variables()
+
+        # Set up signal handling
+        signal.signal(signal.SIGINT, self.signal_handler)
+        if not self.is_windows:
+            signal.signal(signal.SIGTERM, self.signal_handler)
+
+        self.conditional_start_servers()
 
         self.logger.info("Press Ctrl+C to stop any running processes.")
         self.logger.info("\n" + "=" * 50 + "\n")

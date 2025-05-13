@@ -19,7 +19,7 @@ import { useNavigate } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -44,7 +44,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       return;
     }
 
-    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/export/notebook/${selectedNetwork}`);
+    const response = await fetch(`${apiUrl}/api/v1/export/notebook/${selectedNetwork}`);
     if (!response.ok) {
       alert("Failed to generate notebook.");
       return;
@@ -66,7 +66,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       return;
     }
 
-    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/export/agent_network/${selectedNetwork}`);
+    const response = await fetch(`${apiUrl}/api/v1/export/agent_network/${selectedNetwork}`);
     if (!response.ok) {
       alert("Failed to download agent network.");
       return;
@@ -115,7 +115,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
           rel="noopener noreferrer"
           className="flex items-center text-blue-400 hover:text-blue-300"
         >
-          <button className="header-btn h-8 px-4 py-1" title="Editor is coming soon!">
+          <button className="header-btn h-8 px-4 py-1" title="Hocon Editor">
             <FaEdit className="mr-2" /> Editor
           </button>
         </a>

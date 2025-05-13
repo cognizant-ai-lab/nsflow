@@ -66,7 +66,9 @@ const SlyDataPanel = ({ title = "Sly Data" }: { title?: string }) => {
 
           {/* Scrollable chat messages container */}
           <ScrollableMessageContainer
-            messages={slyDataMessages.filter((msg) => !!msg.text?.trim())}
+            messages={slyDataMessages.filter(
+              (msg) => typeof msg.text === "string" && msg.text.trim().length > 0
+            )}            
             copiedMessage={copiedMessage}
             onCopy={copyToClipboard}
             renderSenderLabel={(msg) => msg.sender}

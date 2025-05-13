@@ -31,7 +31,7 @@ const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
 
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
-  const { apiPort } = useApiPort();
+  const { apiUrl, wsUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
@@ -67,7 +67,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
     const endpoint = useCompactMode ? "connectivity" : "compact_connectivity";
 
-    fetch(`http://127.0.0.1:${apiPort}/api/v1/${endpoint}/${selectedNetwork}`)
+    fetch(`${apiUrl}/api/v1/${endpoint}/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
         const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
@@ -97,7 +97,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   useEffect(() => {
     if (!selectedNetwork) return;
     
-    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs/${selectedNetwork}`);
+    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${selectedNetwork}`);
 
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event: MessageEvent) => {
@@ -134,7 +134,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
     return () => ws.close();
-  }, [selectedNetwork, apiPort]);
+  }, [selectedNetwork, wsUrl]);
 
   // Utility function to validate JSON
   const isValidJson = (str: string): boolean => {

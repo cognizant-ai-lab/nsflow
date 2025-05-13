@@ -19,7 +19,7 @@ import { useChatContext } from "../context/ChatContext";
 
 const TabbedChatPanel = () => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "config">("chat");
-  const { apiPort } = useApiPort();
+  const { wsUrl } = useApiPort();
   const { 
     activeNetwork,
     addChatMessage,
@@ -63,7 +63,7 @@ const TabbedChatPanel = () => {
     }
 
     // Setup WebSocket for Chat Panel
-    const chatWsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`;
+    const chatWsUrl = `${wsUrl}/api/v1/ws/chat/${activeNetwork}`;
     console.log("Connecting Chat WebSocket:", chatWsUrl);
     const newChatWs = new WebSocket(chatWsUrl);
 
@@ -83,7 +83,7 @@ const TabbedChatPanel = () => {
     setChatWs(newChatWs);
 
     // Setup WebSocket for Internal Chat Panel
-    const internalWsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`;
+    const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${activeNetwork}`;
     console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
     const newInternalWs = new WebSocket(internalWsUrl);
 
@@ -111,7 +111,7 @@ const TabbedChatPanel = () => {
     setInternalChatWs(newInternalWs);
 
     // Setup WebSocket for Sly Data Panel
-    const slyDataWsUrl = `ws://localhost:${apiPort}/api/v1/ws/slydata/${activeNetwork}`;
+    const slyDataWsUrl = `${wsUrl}/api/v1/ws/slydata/${activeNetwork}`;
     console.log("Connecting Sly Data WebSocket:", slyDataWsUrl);
     const newSlyDataWs = new WebSocket(slyDataWsUrl);
 
@@ -141,7 +141,7 @@ const TabbedChatPanel = () => {
     return () => {
       console.log("WebSockets for old network are closed.");
     };
-  }, [activeNetwork, apiPort]);
+  }, [activeNetwork, wsUrl]);
 
   return (
     <div className="tabbed-chat-panel">

@@ -13,69 +13,17 @@ import logging
 import os
 
 from fastapi import HTTPException
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
-from nsflow.backend.utils.tools.auth_utils import AuthUtils
-from nsflow.backend.models.config_model import ConfigRequest
-from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils
 
 logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
-
-
-@router.post("/set_ns_config")
-async def set_config(config_req: ConfigRequest, _=Depends(AuthUtils.allow_all)):
-    """Sets the configuration for the Neuro-SAN server."""
-    try:
-        connection_type = str(config_req.NEURO_SAN_CONNECTION_TYPE).strip()
-        host = str(config_req.NEURO_SAN_SERVER_HOST).strip()
-        port = int(config_req.NEURO_SAN_SERVER_PORT)
-
-        if not connection_type or not host or not port:
-            raise HTTPException(status_code=400, detail="Missing connectivity type, host or port")
-
-        updated_config = NsConfigsRegistry.set_current(connection_type, host, port)
-        return JSONResponse(
-            content={
-                "message": "Config updated successfully",
-                "config": updated_config.to_dict(),
-                "config_id": updated_config.config_id
-            }
-        )
-
-    except Exception as e:
-        logging.exception("Failed to set config")
-        raise HTTPException(status_code=500, detail="Failed to set config") from e
-
-
-@router.get("/get_ns_config")
-async def get_config(_=Depends(AuthUtils.allow_all)):
-    """Returns the current configuration of the Neuro-SAN server."""
-    try:
-        current_config = NsConfigsRegistry.get_current()
-        return JSONResponse(
-            content={
-                "message": "Config retrieved successfully",
-                "config": current_config.to_dict(),
-                "config_id": current_config.config_id
-            }
-        )
-
-    except RuntimeError as e:
-        logging.error("Failed to retrieve config: %s", e)
-        raise HTTPException(status_code=500, detail="No config has been set yet.") from e
-
-
-@router.get("/ping", tags=["Health"])
-async def health_check():
-    """Health check endpoint to verify if the API is alive."""
-    return JSONResponse(content={"status": "ok", "message": "API is alive"})
 
 
 @router.get("/networks/")

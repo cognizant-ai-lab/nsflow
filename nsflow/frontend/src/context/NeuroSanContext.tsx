@@ -32,12 +32,12 @@ export const NeuroSanProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [configId, setConfigId] = useState<string | undefined>();
   const [isNsReady, setIsNsReady] = useState(false);
 
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch(`http://localhost:${apiPort}/api/v1/get_ns_config`);
+        const response = await fetch(`${apiUrl}/api/v1/get_ns_config`);
         if (!response.ok) throw new Error("Failed to fetch config");
 
         const data = await response.json();
@@ -51,16 +51,14 @@ export const NeuroSanProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.log(">>>> NeuroSan config loaded:", data);
       } catch (err) {
         console.warn("[!] Failed to load NeuroSan config, using fallback values:", err);
-        // Optionally set some safe fallbacks here:
-        // setHost("localhost");
-        // setPort(8080);
+
       } finally {
         setIsNsReady(true); // signal readiness regardless of success/failure
       }
     };
 
     fetchConfig();
-  }, [apiPort]);
+  }, [apiUrl]);
 
   return (
     <NeuroSanContext.Provider

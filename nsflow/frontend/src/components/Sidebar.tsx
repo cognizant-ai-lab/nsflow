@@ -19,7 +19,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { apiPort, isReady } = useApiPort();
+  const { apiUrl, isReady } = useApiPort();
   const { activeNetwork, setActiveNetwork } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
   const networksEndRef = useRef<HTMLDivElement>(null);
@@ -49,11 +49,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
   // Initial connect only once if host and port exist
   useEffect(() => {
-    if (!initialized && isReady && isNsReady && host?.trim() !== "" && port && apiPort) {
+    if (!initialized && isReady && isNsReady && host?.trim() !== "" && port && apiUrl) {
       setInitialized(true);
       handleNeurosanConnect(connectionType, host, port, false); // skip setConfig on first load
     }
-  }, [isReady, isNsReady, apiPort, host, port]);
+  }, [isReady, isNsReady, apiUrl, host, port]);
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 30000) => {
     const controller = new AbortController();
@@ -72,7 +72,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     setError("");
     try {
       const response = await fetchWithTimeout(
-        `http://localhost:${apiPort}/api/v1/list?connection_type=${connectionToUse}&host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
+        `${apiUrl}/api/v1/list?connection_type=${connectionToUse}&host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
         { method: "GET", headers: { "Content-Type": "application/json" } },
         30000
       );
@@ -93,11 +93,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     } finally {
       setLoading(false);
     }
-  }, [apiPort]);
+  }, [apiUrl]);
 
   const setConfig = async (hostToUse: string, portToUse: number, typeToUse: string) => {
     try {
-      const response = await fetch(`http://localhost:${apiPort}/api/v1/set_ns_config`, {
+      const response = await fetch(`${apiUrl}/api/v1/set_ns_config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -108,7 +108,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      console.log(`>>>> Config via fastapi port:${apiPort} set to use NeuroSan server:", ${data}`);
+      console.log(`>>>> Config via fastapi port:${apiUrl} set to use NeuroSan server:", ${data}`);
     } catch (error) {
       console.error("[x] Failed to set config:", error);
     }

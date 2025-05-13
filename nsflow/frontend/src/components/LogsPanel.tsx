@@ -25,7 +25,7 @@ type LogEntry = {
 const getCurrentTimestamp = () => new Date().toISOString().replace("T", " ").split(".")[0];
 
 const LogsPanel = () => {
-  const { apiPort } = useApiPort();
+  const { wsUrl } = useApiPort();
   const [logs, setLogs] = useState<LogEntry[]>([
     { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "System initialized." },
     { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "Frontend app loaded successfully." },
@@ -39,15 +39,15 @@ const LogsPanel = () => {
   }, [logs]);
 
   useEffect(() => {
-    if (!apiPort || !activeNetwork) return; // Prevents WebSocket from connecting before port is set
+    if (!wsUrl || !activeNetwork) return; // Prevents WebSocket from connecting before port is set
 
     setLogs((prevLogs) => [
       ...prevLogs,
-      { timestamp: getCurrentTimestamp(), agent: `${activeNetwork}`, source: "Frontend", message: `Connected to API on port ${apiPort}` },
+      { timestamp: getCurrentTimestamp(), agent: `${activeNetwork}`, source: "Frontend", message: `Connected to ${wsUrl}` },
     ]);
 
     // WebSocket for real-time logs
-    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs/${activeNetwork}`);
+    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${activeNetwork}`);
     
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event) => {
@@ -66,7 +66,7 @@ const LogsPanel = () => {
     return () => {
       ws.close();
     };
-  }, [activeNetwork, apiPort]);
+  }, [activeNetwork, wsUrl]);
 
   const downloadLogs = () => {
     const logText = logs

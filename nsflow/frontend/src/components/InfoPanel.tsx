@@ -15,7 +15,7 @@ import { SiFastapi } from "react-icons/si";
 import { useApiPort } from "../context/ApiPortContext";
 
 const InfoPanel = () => {
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
   const [versions, setVersions] = useState<{ nsflow: string; neuroSan: string }>({
     nsflow: "Loading...",
     neuroSan: "Loading...",
@@ -24,7 +24,7 @@ const InfoPanel = () => {
   useEffect(() => {
     const fetchVersion = async (packageName: string) => {
       try {
-        const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/version/${packageName}`);
+        const response = await fetch(`${apiUrl}/api/v1/version/${packageName}`);
         const data = await response.json();
         return data.version;
       } catch (err) {
@@ -44,7 +44,7 @@ const InfoPanel = () => {
     };
 
     fetchVersions();
-  }, [apiPort]);
+  }, [apiUrl]);
 
   return (
     <div className="logs-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
@@ -90,7 +90,7 @@ const InfoPanel = () => {
 
           {/* FastAPI Docs Link */}
           <a
-            href={`http://localhost:${apiPort}/docs`}
+            href={`${apiUrl}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
