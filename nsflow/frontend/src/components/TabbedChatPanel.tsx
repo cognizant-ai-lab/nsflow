@@ -12,21 +12,25 @@
 import { useState, useRef, useEffect } from "react";
 import ChatPanel from "./ChatPanel";
 import InternalChatPanel from "./InternalChatPanel";
+import SlyDataPanel from "./SlyDataPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
 const TabbedChatPanel = () => {
-  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "config">("chat");
-  const { apiPort } = useApiPort();
+  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "config">("chat");
+  const { wsUrl } = useApiPort();
   const { 
     activeNetwork,
     addChatMessage,
     addInternalChatMessage,
+    addSlyDataMessage,
     setChatWs,
     setInternalChatWs,
+    setSlyDataWs,
     chatWs,
     internalChatWs,
+    slyDataWs
    } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
@@ -43,6 +47,10 @@ const TabbedChatPanel = () => {
       console.log("Closing previous Internal Chat WebSocket...");
       internalChatWs.close();
     }
+    if (slyDataWs) {
+      console.log("Closing previous Sly Data WebSocket...");
+      slyDataWs.close();
+    }
 
     // Send system message for network switch only once
     if (lastActiveNetworkRef.current !== activeNetwork) {
@@ -55,7 +63,7 @@ const TabbedChatPanel = () => {
     }
 
     // Setup WebSocket for Chat Panel
-    const chatWsUrl = `ws://localhost:${apiPort}/api/v1/ws/chat/${activeNetwork}`;
+    const chatWsUrl = `${wsUrl}/api/v1/ws/chat/${activeNetwork}`;
     console.log("Connecting Chat WebSocket:", chatWsUrl);
     const newChatWs = new WebSocket(chatWsUrl);
 
@@ -75,7 +83,7 @@ const TabbedChatPanel = () => {
     setChatWs(newChatWs);
 
     // Setup WebSocket for Internal Chat Panel
-    const internalWsUrl = `ws://localhost:${apiPort}/api/v1/ws/internalchat/${activeNetwork}`;
+    const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${activeNetwork}`;
     console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
     const newInternalWs = new WebSocket(internalWsUrl);
 
@@ -102,25 +110,68 @@ const TabbedChatPanel = () => {
     newInternalWs.onclose = () => console.log(">> Internal Chat WebSocket Disconnected");
     setInternalChatWs(newInternalWs);
 
+    // Setup WebSocket for Sly Data Panel
+    const slyDataWsUrl = `${wsUrl}/api/v1/ws/slydata/${activeNetwork}`;
+    console.log("Connecting Sly Data WebSocket:", slyDataWsUrl);
+    const newSlyDataWs = new WebSocket(slyDataWsUrl);
+
+    newSlyDataWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.message && typeof data.message === "object") {
+          // const otrace = data.message.otrace;
+          const chatTextRaw = data.message.text;
+          // Check if it's a non-empty object
+          const isEmptyObject =
+            typeof chatTextRaw === "object" &&
+            chatTextRaw !== null &&
+            Object.keys(chatTextRaw).length === 0;
+
+            let slyText = "";
+            
+            if (typeof chatTextRaw === "string") {
+              slyText = chatTextRaw;
+            } else if (!isEmptyObject) {
+              // Format as markdown code block
+              slyText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2).replace(/\\n/g, '\n')}\n\`\`\``;
+            }
+          if (slyText.trim().length > 0) {
+            // lastMessageRef.current = chatText;
+            addSlyDataMessage({
+              sender: activeNetwork,
+              text: slyText,
+              network: activeNetwork,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error parsing Sly Data WebSocket message:", err);
+      }
+    };
+
+    newSlyDataWs.onopen = () => console.log(">>Sly Data WebSocket Connected");
+    newSlyDataWs.onclose = () => console.log(">> Sly Data WebSocket Disconnected");
+    setSlyDataWs(newSlyDataWs);
+
     return () => {
       console.log("WebSockets for old network are closed.");
     };
-  }, [activeNetwork, apiPort]);
+  }, [activeNetwork, wsUrl]);
 
   return (
     <div className="tabbed-chat-panel">
       {/* Tabs */}
       <div className="tabbed-tabs">
-        {["chat", "internal", "config"].map((tab) => (
+        {["chat", "internal", "slydata", "config"].map((tab) => (
           <button
             key={tab}
-            title={tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : "Configuration"}
-            onClick={() => setActiveTab(tab as "chat" | "internal" | "config")}
+            title={tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : tab === "slydata" ? "SlyData" : "Configuration"}
+            onClick={() => setActiveTab(tab as "chat" | "internal" | "slydata" | "config")}
             className={`tabbed-tab ${
                 activeTab === tab ? "tabbed-tab-active" : "tabbed-tab-inactive"
               }`}
           >
-            {tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : "Config"}
+            {tab === "chat" ? "Chat" : tab === "internal" ? "InternalChat" : tab === "slydata" ? "SlyData" : "Config"}
           </button>
         ))}
       </div>
@@ -129,6 +180,7 @@ const TabbedChatPanel = () => {
       <div className="tabbed-content">
         {activeTab === "chat" && <ChatPanel />}
         {activeTab === "internal" && <InternalChatPanel />}
+        {activeTab === "slydata" && <SlyDataPanel />}
         {activeTab === "config" && <ConfigPanel selectedNetwork={activeNetwork} />}
       </div>
     </div>

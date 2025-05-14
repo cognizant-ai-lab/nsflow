@@ -25,12 +25,13 @@ import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import { useApiPort } from "../context/ApiPortContext";
 import { hierarchicalRadialLayout } from "../utils/hierarchicalRadialLayout";
+import { FaBoxOpen, FaBox } from "react-icons/fa";
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
 
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
-  const { apiPort } = useApiPort();
+  const { apiUrl, wsUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
@@ -40,8 +41,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
   // ** State for actual values (used in API calls) **
-  const [baseRadius, setBaseRadius] = useState(110);
-  const [levelSpacing, setLevelSpacing] = useState(125);
+  const [baseRadius, setBaseRadius] = useState(20);
+  const [levelSpacing, setLevelSpacing] = useState(90);
 
   // ** State for temporary values while scrubbing **
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
@@ -52,22 +53,21 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   // ** Add a diagramKey to force a full remount of ReactFlow **
   const [diagramKey, setDiagramKey] = useState(0);
+  // ** Add a compact mode option for connectivity **
+  const [useCompactMode, setUseCompactMode] = useState(true);
 
   const resetFlow = () => {
     setNodes([]);
     setEdges([]);
     setDiagramKey(prev => prev + 1); // This forces a full remount
   };
-
-  useEffect(() => {
-    // Set zoom to 0.75 and center at (0, 0)
-    setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 }); // Optional animation
-  }, []);
     
   useEffect(() => {
     if (!selectedNetwork) return;
 
-    fetch(`http://127.0.0.1:${apiPort}/api/v1/network/${selectedNetwork}`)
+    const endpoint = useCompactMode ? "connectivity" : "compact_connectivity";
+
+    fetch(`${apiUrl}/api/v1/${endpoint}/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
         const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
@@ -92,12 +92,12 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         setViewport({ x: 0, y: 20, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
-  }, [selectedNetwork, baseRadius, levelSpacing]);
+  }, [selectedNetwork, baseRadius, levelSpacing, useCompactMode]);
 
   useEffect(() => {
     if (!selectedNetwork) return;
     
-    const ws = new WebSocket(`ws://localhost:${apiPort}/api/v1/ws/logs/${selectedNetwork}`);
+    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${selectedNetwork}`);
 
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event: MessageEvent) => {
@@ -134,7 +134,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
     return () => ws.close();
-  }, [selectedNetwork, apiPort]);
+  }, [selectedNetwork, wsUrl]);
 
   // Utility function to validate JSON
   const isValidJson = (str: string): boolean => {
@@ -187,7 +187,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         className="absolute top-2 left-24 p-1 text-xs bg-blue-400 hover:bg-red-600 text-white rounded-md shadow-md z-20"
         onClick={resetFlow}
       >
-        Reset
+        Reset View
       </button>
 
       {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
@@ -238,9 +238,22 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         fitView
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        minZoom={0.1}
+        maxZoom={3}
       >
         <Background />
-        <Controls />
+        <Controls>
+          <div className="react-flow__controls-button" title="Toggle connectivity mode">
+            <button
+              onClick={() => setUseCompactMode(!useCompactMode)}
+              className="agent-flow-container p-1 flex items-center justify-center text-white bg-gray-700 hover:bg-gray-600 rounded shadow-sm"
+              title={useCompactMode ? "Switch to compact connectivity" : "Switch to full connectivity"}
+            >
+              {useCompactMode ? <FaBoxOpen size={14} /> : <FaBox size={14} />}
+            </button>
+          </div>
+        </Controls>
+
       </ReactFlow>
     </div>
   );

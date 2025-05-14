@@ -1,3 +1,14 @@
+
+// Copyright (C) 2023-2025 Cognizant Digital Business, Evolutionary AI.
+// All Rights Reserved.
+// Issued under the Academic Public License.
+//
+// You can be released from the terms, and requirements of the Academic Public
+// License by purchasing a commercial license.
+// Purchase of a commercial license is mandatory for any use of the
+// nsflow SDK Software in commercial settings.
+//
+// END COPYRIGHT
 import { Node } from "reactflow";
 
 export interface ExtendedNode extends Node {
@@ -12,6 +23,11 @@ export interface ExtendedNode extends Node {
   position: { x: number; y: number };
 }
 
+interface AngleRange {
+  start: number;
+  end: number;
+}
+
 export function hierarchicalRadialLayout(
   nodes: any[],
   edges: any[],
@@ -23,17 +39,18 @@ export function hierarchicalRadialLayout(
     return { nodes: [], edges: [] };
   }
 
-  // Calculate maximum node size
-  // const nodeDimensions = nodes.map((node) => ({
-  //   width: node.style?.width || 100,
-  //   height: node.style?.height || 50,
-  // }));
+  // Compute max node size for spacing
+  const nodeDimensions = nodes.map((node) => ({
+    width: node.style?.width || 100,
+    height: node.style?.height || 50,
+  }));
 
-  // const NODE_SIZE = Math.max(
-  //   ...nodeDimensions.map((n) => n.width),
-  //   ...nodeDimensions.map((n) => n.height)
-  // );
-  // const PADDING = NODE_SIZE * 0.4;
+  const NODE_SIZE = Math.max(
+    ...nodeDimensions.map((n) => n.width),
+    ...nodeDimensions.map((n) => n.height)
+  );
+
+  const PADDING = NODE_SIZE * 0.4;
 
   const rootNode = nodes.find((node) => !edges.some((edge) => edge.target === node.id));
   if (!rootNode) {
@@ -53,10 +70,11 @@ export function hierarchicalRadialLayout(
     ])
   );
 
+  // Assign parent-child relationships
   edges.forEach(({ source, target }: { source: string; target: string }) => {
-    if (nodeMap.has(target) && nodeMap.has(source)) {
-      const parentNode = nodeMap.get(source)!;
-      const childNode = nodeMap.get(target)!;
+    const parentNode = nodeMap.get(source);
+    const childNode = nodeMap.get(target);
+    if (parentNode && childNode) {
       childNode.parent = parentNode;
       parentNode.children.push(childNode);
     }
@@ -77,28 +95,43 @@ export function hierarchicalRadialLayout(
 
   const centerX = window.innerWidth / 2;
   const centerY = window.innerHeight / 2;
+  const root = nodeMap.get(rootNode.id)!;
+  root.position = { x: centerX, y: centerY };
 
-  nodeMap.get(rootNode.id)!.position = { x: centerX, y: centerY };
+  // Recursive placement with angular range tracking
+  const placeChildren = (
+    node: ExtendedNode,
+    level: number,
+    angleRange: AngleRange
+  ) => {
+    const children = node.children;
+    if (!children.length) return;
 
-  levelMap.forEach((nodesAtLevel, depth) => {
-    if (depth === 0) return;
+    const angleStep = (angleRange.end - angleRange.start) / children.length;
+    let currentAngle = angleRange.start;
 
-    const parentNodes = levelMap.get(depth - 1) || [];
-    const angleStep = (2 * Math.PI) / Math.max(nodesAtLevel.length, 3);
+    children.forEach((child) => {
+      const childAngle = currentAngle + angleStep / 2;
+      const radius = 4 * BASE_RADIUS + level * (LEVEL_SPACING + NODE_SIZE + PADDING);
+      const rad = (childAngle * Math.PI) / 180;
 
-    nodesAtLevel.forEach((node: ExtendedNode, index: number) => {
-      const parent = node.parent || parentNodes[Math.floor(index / 2)];
-      const parentX = parent.position.x;
-      const parentY = parent.position.y;
-      const radius = BASE_RADIUS + depth * LEVEL_SPACING;
-      const angle = index * angleStep;
-
-      node.position = {
-        x: parentX + radius * Math.cos(angle),
-        y: parentY + radius * Math.sin(angle),
+      child.position = {
+        x: centerX + radius * Math.cos(rad),
+        y: centerY + radius * Math.sin(rad),
       };
+
+      // Assign new angular range to each child
+      const childRange = {
+        start: currentAngle,
+        end: currentAngle + angleStep,
+      };
+
+      placeChildren(child, level + 1, childRange);
+      currentAngle += angleStep;
     });
-  });
+  };
+
+  placeChildren(root, 1, { start: 0, end: 360 });
 
   const positionedNodes = Array.from(nodeMap.values());
   const positionedEdges = edges.map((edge) => ({

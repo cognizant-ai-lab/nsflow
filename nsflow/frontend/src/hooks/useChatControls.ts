@@ -19,8 +19,10 @@ export const useChatControls = () => {
     setInternalChatWs, 
     setChatMessages, 
     setInternalChatMessages,
+    setSlyDataMessages,
     addInternalChatMessage,
-    addChatMessage
+    addChatMessage,
+    addSlyDataMessage
   } = useChatContext();
 
   const stopWebSocket = () => {
@@ -40,8 +42,10 @@ export const useChatControls = () => {
     console.log("Clearing chat history...");
     setChatMessages([]);
     setInternalChatMessages([]);
-    addChatMessage({ sender: "system", text: "Welcome to the chat", network: "" });
-    addInternalChatMessage({ sender: "system", text: "Welcome to internal chat log", network: "" });
+    setSlyDataMessages([]);
+    addChatMessage({ sender: "system", text: "Welcome to the chats", network: "" });
+    addInternalChatMessage({ sender: "system", text: "Welcome to internal chat logs.", network: "" });
+    addSlyDataMessage({ sender: "system", text: "Welcome to sly_data logs.", network: "" });
   };
 
   return { stopWebSocket, clearChat };

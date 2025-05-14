@@ -11,18 +11,22 @@
 # END COPYRIGHT
 import os
 import unittest
-from pathlib import Path
-from nsflow.backend.utils.agent_network_utils import AgentNetworkUtils
 
-ROOT_DIR = os.getcwd()
-FIXTURES_DIR = os.path.join(ROOT_DIR, "tests", "fixtures")
+from neuro_san.internals.utils.file_of_class import FileOfClass
+
+from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
+
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(THIS_DIR)
+FIXTURES_DIR = os.path.join(ROOT_DIR, "fixtures")
 
 
 class TestAgentNetwork(unittest.TestCase):
     def setUp(self):
         """Setup test instance."""
         self.agent_utils = AgentNetworkUtils()
-        self.test_hocon_path = Path(os.path.join(FIXTURES_DIR, "test_network.hocon"))
+        self.test_hocon_path = os.path.join(FIXTURES_DIR, "test_network.hocon")
 
         # Show full diff, no truncation
         # self.maxDiff = None

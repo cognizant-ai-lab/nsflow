@@ -19,14 +19,15 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { apiPort, isReady } = useApiPort();
+  const { apiUrl, isReady } = useApiPort();
   const { activeNetwork, setActiveNetwork } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
   const networksEndRef = useRef<HTMLDivElement>(null);
-  const { host, port, setHost, setPort, isNsReady } = useNeuroSan();
+  const { host, port, connectionType, setHost, setPort, setConnectionType, isNsReady } = useNeuroSan();
 
   const [tempHost, setTempHost] = useState(host);
   const [tempPort, setTempPort] = useState<number | undefined>(port);
+  const [tempConnectionType, setTempConnectionType] = useState<string>("grpc");
   const [initialized, setInitialized] = useState(false);
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
@@ -37,8 +38,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     if (port && typeof port === "number") {
       setTempPort(port);
     }
-    console.log(">>>> NeuroSanContext config updated:", { host, port });
-  }, [host, port]);
+    if (connectionType?.trim()) setTempConnectionType(connectionType);
+    console.log(">>>> NeuroSanContext config updated:", { host, port, connectionType });
+  }, [host, port, connectionType]);
 
 
   useEffect(() => {
@@ -47,11 +49,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
   // Initial connect only once if host and port exist
   useEffect(() => {
-    if (!initialized && isReady && isNsReady && host?.trim() !== "" && port && apiPort) {
+    if (!initialized && isReady && isNsReady && host?.trim() !== "" && port && apiUrl) {
       setInitialized(true);
-      handleNeurosanConnect(host, port, false); // skip setConfig on first load
+      handleNeurosanConnect(connectionType, host, port, false); // skip setConfig on first load
     }
-  }, [isReady, isNsReady, apiPort, host, port]);
+  }, [isReady, isNsReady, apiUrl, host, port]);
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 30000) => {
     const controller = new AbortController();
@@ -64,13 +66,13 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     return response;
   };
 
-  const fetchNetworks = useCallback(async (hostToUse: string, portToUse: number) => {
-    console.log(">>>> Calling /list with", hostToUse, portToUse);
+  const fetchNetworks = useCallback(async (connectionToUse: string, hostToUse: string, portToUse: number) => {
+    console.log(">>>> Calling /list with", connectionToUse, hostToUse, portToUse);
     setLoading(true);
     setError("");
     try {
       const response = await fetchWithTimeout(
-        `http://localhost:${apiPort}/api/v1/list?host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
+        `${apiUrl}/api/v1/list?connection_type=${connectionToUse}&host=${encodeURIComponent(hostToUse)}&port=${portToUse}`,
         { method: "GET", headers: { "Content-Type": "application/json" } },
         30000
       );
@@ -91,26 +93,33 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     } finally {
       setLoading(false);
     }
-  }, [apiPort]);
+  }, [apiUrl]);
 
-  const setConfig = async (hostToUse: string, portToUse: number) => {
+  const setConfig = async (hostToUse: string, portToUse: number, typeToUse: string) => {
     try {
-      const response = await fetch(`http://localhost:${apiPort}/api/v1/set_ns_config`, {
+      const response = await fetch(`${apiUrl}/api/v1/set_ns_config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ NS_SERVER_HOST: hostToUse, NS_SERVER_PORT: portToUse })
+        body: JSON.stringify({ 
+          NEURO_SAN_SERVER_HOST: hostToUse,
+          NEURO_SAN_SERVER_PORT: portToUse,
+          NEURO_SAN_CONNECTION_TYPE: typeToUse 
+        })
       });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      console.log(`>>>> Config via fastapi port:${apiPort} set to use NeuroSan server:", ${data}`);
+      console.log(`>>>> Config via fastapi port:${apiUrl} set to use NeuroSan server:", ${data}`);
     } catch (error) {
       console.error("[x] Failed to set config:", error);
     }
   };
 
-  const handleNeurosanConnect = async (newHost?: string, newPort?: number, updateConfig = true) => {
+  const handleNeurosanConnect = async (newType?: string, newHost?: string, newPort?: number, updateConfig = true) => {
     const finalHost = newHost ?? tempHost;
     const finalPort = newPort ?? tempPort;
+    const finalType = newType ?? tempConnectionType;
+
+    console.log(`>>>Connecting to ${finalType}::/${finalHost}:${finalPort}`)
 
     if (!finalHost || !finalPort) {
       setError("[x] Please enter valid host and port.");
@@ -125,9 +134,10 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       if (updateConfig) {
         setHost(finalHost);
         setPort(finalPort);
-        await setConfig(finalHost, finalPort);
+        setConnectionType(finalType);
+        await setConfig(finalHost, finalPort, finalType);
       }
-      await fetchNetworks(finalHost, finalPort);
+      await fetchNetworks(finalType, finalHost, finalPort);
     } catch (error) {
       setError("Failed to connect to NeuroSan server.");
     } finally {
@@ -149,6 +159,21 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
       {/* NeuroSan Host/Port Section */}
       <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
+        <label className="sidebar-text block mb-1">Type:</label>
+          <div className="flex flex-wrap gap-1 mb-1 text-white">
+            {["grpc", "http", "https"].map((type) => (
+              <label key={type} className="flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="connectionType"
+                  value={type}
+                  checked={tempConnectionType === type}
+                  onChange={() => setTempConnectionType(type)}
+                />
+                {type}
+              </label>
+            ))}
+          </div>
         <label className="sidebar-text">NeuroSan Host:</label>
         <input
           type="text"
@@ -171,7 +196,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         />
 
         <button
-          onClick={() => handleNeurosanConnect(tempHost, tempPort, true)}
+          onClick={() => handleNeurosanConnect(tempConnectionType, tempHost, tempPort, true)}
           className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
         >
           Connect

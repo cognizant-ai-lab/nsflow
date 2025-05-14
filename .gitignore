@@ -16,6 +16,7 @@ wheels_private/
 .pytest_cache/
 .coverage
 .hypothesis/
+.ruff_cache/
 
 registries/
 coded_tools/

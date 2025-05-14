@@ -10,16 +10,20 @@
 //
 // END COPYRIGHT
 import React, { useState, useRef, useEffect } from "react";
-import { FaUserCircle, FaEdit, FaDownload } from "react-icons/fa";
+import { FaUserCircle, FaEdit, FaDownload, FaHome } from "react-icons/fa";
 import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
+import { useNavigate } from "react-router-dom";
+
 import ThemeToggle from "./ThemeToggle";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  // const location = useLocation();
 
   // Handle clicking outside to close dropdown
   useEffect(() => {
@@ -40,7 +44,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       return;
     }
 
-    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/export/notebook/${selectedNetwork}`);
+    const response = await fetch(`${apiUrl}/api/v1/export/notebook/${selectedNetwork}`);
     if (!response.ok) {
       alert("Failed to generate notebook.");
       return;
@@ -62,7 +66,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
       return;
     }
 
-    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/export/agent_network/${selectedNetwork}`);
+    const response = await fetch(`${apiUrl}/api/v1/export/agent_network/${selectedNetwork}`);
     if (!response.ok) {
       alert("Failed to download agent network.");
       return;
@@ -88,12 +92,44 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
 
       {/* Middle - Navigation Buttons */}
       <div className="flex space-x-4">
+        {/* Reload */}
         <button className="header-btn h-8 px-4 py-1" onClick={() => window.location.reload()}>
           <FaArrowsRotate className="mr-2" /> Reload
         </button>
-        <button className="header-btn h-8 px-4 py-1" title="Editor is coming soon!">
-          <FaEdit className="mr-2" /> Editor
+
+        {/* Spacer */}
+        <div className="w-6" />
+
+        {/* Home */}
+        <button 
+        className="header-btn h-8 px-4 py-1"
+        onClick={() => navigate("/home")}
+        >
+            <FaHome className="mr-2" /> Home
         </button>
+
+        {/* Editor */}
+        <a
+          href={`https://neurosan-hocon-editor.streamlit.app/ `}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center text-blue-400 hover:text-blue-300"
+        >
+          <button className="header-btn h-8 px-4 py-1" title="Hocon Editor">
+            <FaEdit className="mr-2" /> Editor
+          </button>
+        </a>
+        {/* Observe */}
+
+        {/* {location.pathname !== "/observability" && (
+          <button
+            className="header-btn h-8 px-4 py-1"
+            title="Coming soon"
+            // onClick={() => window.open("/observability", "_blank", "noopener,noreferrer")}
+          >
+            <FaChartBar className="mr-2" /> Observe
+          </button>
+        )} */}
 
         {/* Export Dropdown */}
         <div className="relative" ref={dropdownRef}>

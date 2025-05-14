@@ -342,6 +342,54 @@ input:focus {
   transform: scale(1.1) !important;
 }
 
+/* sly_data */
+/* Small Download Button */
+.sly-data-btn {
+  background: none !important;
+  border: none !important;
+  cursor: pointer !important;
+  color: #9ca3af !important; /* Gray */
+  font-size: 0.8rem !important; /* Small icon */
+  padding: 4px !important;
+  transition: color 0.2s ease-in-out !important;
+}
+
+.sly-data-btn:hover {
+  color: #ffa449 !important; /* Brighter on hover */
+  transform: scale(1) !important;
+}
+
+/* Send Button */
+.sly-data-attach-btn {
+  background-color: var(--button-bg);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  min-height: 0;
+  height: auto;
+  transition: all 0.2s ease-in-out;
+  font-weight: 500;
+}
+
+.sly-data-attach-btn:hover {
+  background-color: #1d4ed8;
+  transform: scale(1);
+}
+
+.collapsible {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.collapsible.open {
+  max-height: 20rem; /* or whatever */
+}
+
+.collapsible.closed {
+  max-height: 0;
+}
+
 /* Info Panel */
 .info-panel {
   background-color: var(--bg-color);

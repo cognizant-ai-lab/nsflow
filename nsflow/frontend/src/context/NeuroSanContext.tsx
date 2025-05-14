@@ -15,51 +15,70 @@ import { useApiPort } from "./ApiPortContext";
 type NeuroSanContextType = {
   host: string | undefined;
   port: number | undefined;
+  connectionType: string | undefined;
+  configId: string | undefined;
   setHost: (h: string) => void;
   setPort: (p: number) => void;
+  setConnectionType: (c: string) => void;
   isNsReady: boolean;
 };
 
 const NeuroSanContext = createContext<NeuroSanContextType | undefined>(undefined);
 
 export const NeuroSanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [host, setHost] = useState<string | undefined>(undefined);
-  const [port, setPort] = useState<number | undefined>(undefined);    
+  const [host, setHost] = useState<string | undefined>();
+  const [port, setPort] = useState<number | undefined>();
+  const [connectionType, setConnectionType] = useState<string | undefined>();
+  const [configId, setConfigId] = useState<string | undefined>();
   const [isNsReady, setIsNsReady] = useState(false);
-  const { apiPort } = useApiPort();
 
-  // Fetch config from backend on initial mount
+  const { apiUrl } = useApiPort();
+
   useEffect(() => {
-    fetch(`http://localhost:${apiPort}/api/v1/get_ns_config`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch config");
-        return res.json();
-      })
-      .then((data) => {
-        if (data?.config?.ns_server_host) {
-          setHost(data.config.ns_server_host);
-        }
-        if (data?.config?.ns_server_port) {
-          setPort(data.config.ns_server_port);
-        }
-        setIsNsReady(true); // indicate config is loaded
-        console.log(">>>> NeuroSan config loaded:", data.config);
-      })
-      .catch((err) => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/get_ns_config`);
+        if (!response.ok) throw new Error("Failed to fetch config");
+
+        const data = await response.json();
+        const cfg = data?.config;
+
+        if (cfg?.ns_server_host) setHost(cfg.ns_server_host);
+        if (cfg?.ns_server_port) setPort(cfg.ns_server_port);
+        if (cfg?.ns_connectivity_type) setConnectionType(cfg.ns_connectivity_type);
+        if (data?.config_id) setConfigId(data.config_id);
+
+        console.log(">>>> NeuroSan config loaded:", data);
+      } catch (err) {
         console.warn("[!] Failed to load NeuroSan config, using fallback values:", err);
-        setIsNsReady(true); // indicate config is loaded to avoid blocking UI
-        // Optional: set fallback here if needed
-      });
-  }, [apiPort]);
+
+      } finally {
+        setIsNsReady(true); // signal readiness regardless of success/failure
+      }
+    };
+
+    fetchConfig();
+  }, [apiUrl]);
 
   return (
-    <NeuroSanContext.Provider value={{ host, port, setHost, setPort, isNsReady }}>
+    <NeuroSanContext.Provider
+      value={{
+        host,
+        port,
+        connectionType,
+        configId,
+        setHost,
+        setPort,
+        setConnectionType,
+        isNsReady,
+      }}
+    >
       {children}
     </NeuroSanContext.Provider>
   );
 };
 
-export const useNeuroSan = () => {
+export const useNeuroSan = (): NeuroSanContextType => {
   const context = useContext(NeuroSanContext);
   if (!context) {
     throw new Error("useNeuroSan must be used within a NeuroSanProvider");

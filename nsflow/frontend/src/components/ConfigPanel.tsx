@@ -15,7 +15,7 @@ import { useApiPort } from "../context/ApiPortContext";
 import { convertToTree, toggleNode, setExpandCollapseAll, filterTree, TreeNode } from "../utils/hoconViewer";
 
 const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
   const [configTree, setConfigTree] = useState<TreeNode[]>([]);
   const [filteredTree, setFilteredTree] = useState<TreeNode[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
     if (!selectedNetwork) return;
     console.log(`Generating config map for the network: ${selectedNetwork}`);
 
-    fetch(`http://127.0.0.1:${apiPort}/api/v1/networkconfig/${selectedNetwork}`)
+    fetch(`${apiUrl}/api/v1/networkconfig/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
         const tree = convertToTree(data);

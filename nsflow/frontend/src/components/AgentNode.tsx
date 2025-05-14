@@ -60,7 +60,7 @@ const handlePositions: { [key: string]: Position } = {
 
 // Fix: Add type annotation for function props
 const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [agentDetails, setAgentDetails] = useState<any>(null);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -91,7 +91,7 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
   useEffect(() => {
     if (!showTooltip || agentDetails) return;
     // Fetch agent details when the tooltip is shown
-    fetch(`http://127.0.0.1:${apiPort}/api/v1/networkconfig/${data.selectedNetwork}/agent/${data.label}`)
+    fetch(`${apiUrl}/api/v1/networkconfig/${data.selectedNetwork}/agent/${data.label}`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) {
@@ -112,7 +112,7 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
       .catch((err) => {
         console.error("Failed to load agent details:", err);
       });
-  }, [showTooltip, agentDetails, apiPort, data.selectedNetwork, data.label]);
+  }, [showTooltip, agentDetails, apiUrl, data.selectedNetwork, data.label]);
   
 
   const handleMouseEnter = () => setShowTooltip(true);

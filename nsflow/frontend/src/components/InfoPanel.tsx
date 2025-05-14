@@ -10,12 +10,12 @@
 //
 // END COPYRIGHT
 import { useEffect, useState } from "react";
-import { FaGithub, FaBookOpen, FaInfoCircle } from "react-icons/fa";
+import { FaGithub, FaBookOpen } from "react-icons/fa";
 import { SiFastapi } from "react-icons/si";
 import { useApiPort } from "../context/ApiPortContext";
 
 const InfoPanel = () => {
-  const { apiPort } = useApiPort();
+  const { apiUrl } = useApiPort();
   const [versions, setVersions] = useState<{ nsflow: string; neuroSan: string }>({
     nsflow: "Loading...",
     neuroSan: "Loading...",
@@ -24,7 +24,7 @@ const InfoPanel = () => {
   useEffect(() => {
     const fetchVersion = async (packageName: string) => {
       try {
-        const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/version/${packageName}`);
+        const response = await fetch(`${apiUrl}/api/v1/version/${packageName}`);
         const data = await response.json();
         return data.version;
       } catch (err) {
@@ -44,7 +44,7 @@ const InfoPanel = () => {
     };
 
     fetchVersions();
-  }, [apiPort]);
+  }, [apiUrl]);
 
   return (
     <div className="logs-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
@@ -58,30 +58,44 @@ const InfoPanel = () => {
           
           {/* Versions Display */}
           <div className="info-panel flex items-center">
-            <FaInfoCircle className="mr-2" /> NeuroSan v. {versions.neuroSan}
+            <a
+                href="https://github.com/leaf-ai/neuro-san"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center text-blue-400 hover:text-blue-300"
+              >
+            <FaGithub className="mr-2" /> neuro-san v. {versions.neuroSan}
+            </a>
           </div>
           <div className="info-panel flex items-center">
-            <FaInfoCircle className="mr-2" /> Client v. {versions.nsflow}
+            <a
+              href="https://github.com/leaf-ai/nsflow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center text-blue-400 hover:text-blue-300"
+            >
+              <FaGithub className="mr-2" /> nsflow v. {versions.nsflow}
+            </a>
           </div>
 
           {/* GitHub Link */}
           <a
-            href="https://github.com/leaf-ai/nsflow"
+            href="https://github.com/leaf-ai/neuro-san-demos"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
           >
-            <FaGithub className="mr-2" /> GitHub
+            <FaGithub className="mr-2" /> neuro-san-demos
           </a>
 
           {/* FastAPI Docs Link */}
           <a
-            href={`http://localhost:${apiPort}/docs`}
+            href={`${apiUrl}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
           >
-            <SiFastapi className="mr-2" /> FastAPI (OpenAPI) Specs
+            <SiFastapi className="mr-2" /> FastAPI Specs
           </a>
 
           {/* Documentation and User Guide */}
@@ -91,7 +105,7 @@ const InfoPanel = () => {
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
           >
-            <FaBookOpen className="mr-2" /> User Guide
+            <FaBookOpen className="mr-2" /> Examples and User Guide
           </a>
         </div>
       </div>
