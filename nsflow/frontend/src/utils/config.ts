@@ -13,18 +13,18 @@
 let config: any = null;
 
 export async function loadAppConfig(): Promise<void> {
-  const isDev = import.meta.env.MODE === "development";
+  // const isDev = import.meta.env.MODE === "development";
 
-  // In development, use full URL to talk to FastAPI
-  const devHost = import.meta.env.VITE_BACKEND_HOST || "localhost";
-  const devPort = import.meta.env.VITE_BACKEND_PORT || "8005";
-  const baseUrl = isDev ? `http://${devHost}:${devPort}` : "";
+  // // In development, use full URL to talk to FastAPI
+  // const devHost = import.meta.env.VITE_BACKEND_HOST || "localhost";
+  // const devPort = import.meta.env.VITE_BACKEND_PORT || "8005";
+  // const baseUrl = isDev ? `http://${devHost}:${devPort}` : "";
 
-  const endpoint = isDev
-    ? `${baseUrl}/api/v1/vite_config.json`
-    : `/api/v1/vite_config.json`;
+  // const endpoint = isDev
+  //   ? `${baseUrl}/api/v1/vite_config.json`
+  //   : `/api/v1/vite_config.json`;
 
-  const res = await fetch(endpoint);
+  const res = await fetch(`/api/v1/vite_config.json`);
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

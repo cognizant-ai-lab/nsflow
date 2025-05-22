@@ -13,7 +13,8 @@ import os
 import logging
 from contextlib import asynccontextmanager
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -84,6 +85,20 @@ if not NSFLOW_DEV_MODE and os.path.exists(frontend_dist_path):
     app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
 else:
     logging.info("DEV MODE: Skipping frontend serving.")
+
+
+@app.get("/{path_name:path}", response_class=HTMLResponse)
+async def spa_fallback(path_name: str):
+    if path_name.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API route not found")
+    
+    index_file_path = os.path.join(frontend_dist_path, "index.html")
+    if os.path.exists(index_file_path):
+        with open(index_file_path, "r") as f:
+            return HTMLResponse(content=f.read())
+    else:
+        logging.error("index.html not found at: %s", index_file_path)
+        raise HTTPException(status_code=500, detail="index.html not found")
 
 
 # Uvicorn startup command

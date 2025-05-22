@@ -9,20 +9,13 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 
-export default defineConfig(({ mode }) => {
-  // Load environment variables based on current mode (e.g., 'development')
-  const env = loadEnv(mode, process.cwd());
-
-  const backendHost = env.VITE_BACKEND_HOST || "localhost";
-  const backendPort = env.VITE_BACKEND_PORT || "8005";
-  const targetUrl = `http://${backendHost}:${backendPort}`;
-
+export default defineConfig(() => { 
   return {
     plugins: [react()],
-    base: mode === "development" ? "/" : "./",
+    base: "/",
     build: {
       outDir: "dist",
       assetsDir: "assets",
@@ -37,7 +30,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api/v1": {
-          target: targetUrl,
+          target: `http://localhost:8005`,
           changeOrigin: true,
           secure: false,
         },
@@ -46,4 +39,3 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
-
