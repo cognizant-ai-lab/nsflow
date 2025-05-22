@@ -12,18 +12,30 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 
-export default defineConfig (({ mode }) => ({
-  plugins: [react()],
-  base: mode === "development" ? "/" : "./",
-  build: {
-    outDir: "dist",
-    assetsDir: "assets",
-    rollupOptions: {
-      output: {
-        entryFileNames: "assets/index.js", // Static JS filename
-        chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name].[ext]",
+export default defineConfig(() => { 
+  return {
+    plugins: [react()],
+    base: "/",
+    build: {
+      outDir: "dist",
+      assetsDir: "assets",
+      rollupOptions: {
+        output: {
+          entryFileNames: "assets/index.js",
+          chunkFileNames: "assets/[name].js",
+          assetFileNames: "assets/[name].[ext]",
+        },
       },
     },
-  },
-}));
+    server: {
+      proxy: {
+        "/api/v1": {
+          target: `http://localhost:8005`,
+          changeOrigin: true,
+          secure: false,
+        },
+      },
+      historyApiFallback: true, // Needed to support page refresh on /home
+    },
+  };
+});
