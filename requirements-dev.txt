@@ -7,4 +7,4 @@
 # This might be useful when someone wants to run the nsflow local
 
 # Public repos
-neuro-san==0.5.23
+neuro-san>=0.5.27,<0.6

@@ -1,8 +1,11 @@
 # nsflow - A FastAPI based client for NeuroSan
 
-**nsflow** is a react-based developer-oriented client that enables users to explore, visualize, and interact with smart agent networks. It integrates with [**NeuroSan**](https://github.com/leaf-ai/neuro-san) for intelligent agent-based interactions.
+Note: To see and use how nsflow client works along with neuro-san library, please visit [https://github.com/cognizant-ai-lab/neuro-san-studio](https://github.com/cognizant-ai-lab/neuro-san-studio)
 
-![Project Snapshot](https://raw.githubusercontent.com/leaf-ai/nsflow/main/docs/snapshot01.png)
+
+**nsflow** is a react-based developer-oriented client that enables users to explore, visualize, and interact with smart agent networks. It integrates with [**NeuroSan**](https://github.com/cognizant-ai-lab/neuro-san) for intelligent agent-based interactions.
+
+![Project Snapshot](https://raw.githubusercontent.com/cognizant-ai-lab/nsflow/main/docs/snapshot01.png)
 
 ---
 
@@ -41,7 +44,7 @@ To start the frontend and backend separately, follow these steps:
 
 #### **Step 1: Clone the Repository**
 ```bash
-git clone https://github.com/leaf-ai/nsflow.git
+git clone https://github.com/cognizant-ai-lab/nsflow.git
 cd nsflow
 ```
 
@@ -65,7 +68,7 @@ cd nsflow
 
 - Start Frontend:
     - Ensure that you have **Node.js (with Yarn)** installed.
-    - Follow the instructions to setup the frontend here: [./nsflow/frontend/README.md](https://github.com/leaf-ai/nsflow/tree/main/nsflow/frontend/README.md)
+    - Follow the instructions to setup the frontend here: [./nsflow/frontend/README.md](https://github.com/cognizant-ai-lab/nsflow/tree/main/nsflow/frontend/README.md)
     - On another terminal window
         ```bash
         cd nsflow/frontend; yarn install

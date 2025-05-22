@@ -20,7 +20,11 @@ export async function loadAppConfig(): Promise<void> {
   const devPort = import.meta.env.VITE_BACKEND_PORT || "8005";
   const baseUrl = isDev ? `http://${devHost}:${devPort}` : "";
 
-  const res = await fetch(`${baseUrl}/api/v1/vite_config.json`);
+  const endpoint = isDev
+    ? `${baseUrl}/api/v1/vite_config.json`
+    : `/api/v1/vite_config.json`;
+
+  const res = await fetch(endpoint);
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

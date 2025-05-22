@@ -103,8 +103,8 @@ init-import = false
 
 
 [project.urls]
-Homepage = "https://github.com/leaf-ai/nsflow"
-Repository = "https://github.com/leaf-ai/nsflow"
-Documentation = "https://github.com/leaf-ai/nsflow#readme"
+Homepage = "https://github.com/cognizant-ai-lab/nsflow"
+Repository = "https://github.com/cognizant-ai-lab/nsflow"
+Documentation = "https://github.com/cognizant-ai-lab/nsflow#readme"
 # If we move issue tracking to github 
-# Issues = "https://github.com/leaf-ai/nsflow/issues"
+# Issues = "https://github.com/cognizant-ai-lab/nsflow/issues"

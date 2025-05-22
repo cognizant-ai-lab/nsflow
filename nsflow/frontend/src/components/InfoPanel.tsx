@@ -59,7 +59,7 @@ const InfoPanel = () => {
           {/* Versions Display */}
           <div className="info-panel flex items-center">
             <a
-                href="https://github.com/leaf-ai/neuro-san"
+                href="https://github.com/cognizant-ai-lab/neuro-san"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center text-blue-400 hover:text-blue-300"
@@ -69,7 +69,7 @@ const InfoPanel = () => {
           </div>
           <div className="info-panel flex items-center">
             <a
-              href="https://github.com/leaf-ai/nsflow"
+              href="https://github.com/cognizant-ai-lab/nsflow"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center text-blue-400 hover:text-blue-300"
@@ -80,12 +80,12 @@ const InfoPanel = () => {
 
           {/* GitHub Link */}
           <a
-            href="https://github.com/leaf-ai/neuro-san-demos"
+            href="https://github.com/cognizant-ai-lab/neuro-san-studio"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
           >
-            <FaGithub className="mr-2" /> neuro-san-demos
+            <FaGithub className="mr-2" /> neuro-san-studio
           </a>
 
           {/* FastAPI Docs Link */}
@@ -100,7 +100,7 @@ const InfoPanel = () => {
 
           {/* Documentation and User Guide */}
           <a
-            href="https://github.com/leaf-ai/neuro-san-demos/blob/main/README.md"
+            href="https://github.com/cognizant-ai-lab/neuro-san-studio/blob/main/README.md"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center text-blue-400 hover:text-blue-300"
