@@ -43,7 +43,7 @@ class NsFlowRunner:
         # Default Configuration
         self.config: Dict[str, Any] = {
             "server_host": os.getenv("NEURO_SAN_SERVER_HOST", "localhost"),
-            "server_port": int(os.getenv("NEURO_SAN_SERVER_PORT", "30015")),
+            "server_port": int(os.getenv("NEURO_SAN_GRPC_SERVER_PORT", "30011")),
             "server_connection": str(os.getenv("NEURO_SAN_SERVER_CONNECTION", "grpc")),
             "manifest_update_period_seconds": int(os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")),
             "default_sly_data": str(os.getenv("DEFAULT_SLY_DATA", "")),
@@ -199,7 +199,7 @@ The type of connection to initiate. Choices are to connect to:
 
         server_env = {
             "NEURO_SAN_SERVER_HOST": "server_host",
-            "NEURO_SAN_SERVER_PORT": "server_port",
+            "NEURO_SAN_GRPC_SERVER_PORT": "server_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",
             "DEFAULT_SLY_DATA": "default_sly_data"
