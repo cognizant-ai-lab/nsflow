@@ -15,7 +15,6 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from typing import Any, Dict
@@ -42,9 +41,9 @@ class NsFlowRunner:
         self.load_env_variables()
 
         # Use paths relative to the root directory
-        tmp_dir = tempfile.gettempdir()
         logs_dir_path = os.path.join(self.root_dir, "logs")
-        thinking_file_path = os.path.join(tmp_dir, "agent_thinking.txt")
+        thinking_dir_path = os.path.join(logs_dir_path, "thinking_dir")
+        thinking_file_path = os.path.join(thinking_dir_path, "agent_thinking.txt")
 
         # Default Configuration
         self.config: Dict[str, Any] = {
@@ -59,7 +58,7 @@ class NsFlowRunner:
             "vite_api_protocol": os.getenv("VITE_API_PROTOCOL", "http"),
             "vite_ws_protocol": os.getenv("VITE_WS_PROTOCOL", "ws"),
             "thinking_file": os.getenv("THINKING_FILE", thinking_file_path),
-            "thinking_dir": os.getenv("THINKING_DIR", tmp_dir),
+            "thinking_dir": os.getenv("THINKING_DIR", thinking_dir_path),
             # Ensure all paths are resolved relative to `self.root_dir`
             "agent_manifest_file": os.getenv(
                 "AGENT_MANIFEST_FILE", os.path.join(self.root_dir, "registries", "manifest.hocon")

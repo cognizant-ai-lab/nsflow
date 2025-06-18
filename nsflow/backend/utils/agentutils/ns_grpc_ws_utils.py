@@ -72,7 +72,7 @@ class NsGrpcWsUtils:
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}
         self.thinking_file = os.getenv("THINKING_FILE")
-        self.thinking_dir = os.getenv("THINKING_DIR")
+        self.thinking_dir = os.getenv("THINKING_DIR", None)
 
         self.logs_manager = LogsRegistry.register(agent_name)
         self.session = self.create_agent_session()
