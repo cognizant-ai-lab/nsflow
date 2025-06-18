@@ -68,7 +68,9 @@ class NsFlowRunner:
         }
 
         # Set up logging
-        os.makedirs(self.config["nsflow_log_dir"], exist_ok=True)
+        os.makedirs(logs_dir_path, exist_ok=True)
+        os.makedirs(thinking_dir_path, exist_ok=True)
+        
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(message)s",
