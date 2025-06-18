@@ -13,6 +13,7 @@
 import json
 import os
 import logging
+import tempfile
 import threading
 from typing import Dict, Any
 
@@ -71,8 +72,13 @@ class NsGrpcWsUtils:
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}
-        self.thinking_file = os.getenv("THINKING_FILE")
+        # Set up the thinking file and directory from environment variables or defaults
+        if "THINKING_FILE" not in os.environ:
+            logging.warning("THINKING_FILE environment variable is not set. Using default temporary file.")
+        self.thinking_file = os.getenv("THINKING_FILE", tempfile.gettempdir() + "/agent_thinking.txt")
         self.thinking_dir = os.getenv("THINKING_DIR", None)
+        logging.info("Using thinking file: %s", self.thinking_file)
+        logging.info("Using thinking dir: %s", self.thinking_dir)
 
         self.logs_manager = LogsRegistry.register(agent_name)
         self.session = self.create_agent_session()
