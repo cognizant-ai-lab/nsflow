@@ -15,6 +15,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from typing import Any, Dict
@@ -40,6 +41,11 @@ class NsFlowRunner:
         # Load environment variables from .env
         self.load_env_variables()
 
+        # Use paths relative to the root directory
+        tmp_dir = tempfile.gettempdir()
+        logs_dir_path = os.path.join(self.root_dir, "logs")
+        thinking_file_path = os.path.join(tmp_dir, "agent_thinking.txt")
+
         # Default Configuration
         self.config: Dict[str, Any] = {
             "server_host": os.getenv("NEURO_SAN_SERVER_HOST", "localhost"),
@@ -52,14 +58,14 @@ class NsFlowRunner:
             "nsflow_log_level": os.getenv("NSFLOW_LOG_LEVEL", "info"),
             "vite_api_protocol": os.getenv("VITE_API_PROTOCOL", "http"),
             "vite_ws_protocol": os.getenv("VITE_WS_PROTOCOL", "ws"),
-            "thinking_file": "C:\\tmp\\agent_thinking.txt" if self.is_windows else "/tmp/agent_thinking.txt",
-            "thinking_dir": os.getenv("THINKING_DIR", "C:\\tmp") if self.is_windows else "/tmp",
+            "thinking_file": os.getenv("THINKING_FILE", thinking_file_path),
+            "thinking_dir": os.getenv("THINKING_DIR", tmp_dir),
             # Ensure all paths are resolved relative to `self.root_dir`
             "agent_manifest_file": os.getenv(
                 "AGENT_MANIFEST_FILE", os.path.join(self.root_dir, "registries", "manifest.hocon")
             ),
             "agent_tool_path": os.getenv("AGENT_TOOL_PATH", os.path.join(self.root_dir, "coded_tools")),
-            "nsflow_log_dir": os.path.join(self.root_dir, "logs"),
+            "nsflow_log_dir": logs_dir_path,
         }
 
         # Set up logging
@@ -148,6 +154,12 @@ The type of connection to initiate. Choices are to connect to:
             "--nsflow-log-level", type=str, default=self.config["nsflow_log_level"], help="Log level for FastAPI"
         )
         parser.add_argument("--dev", action="store_true", help="Use dev port for FastAPI")
+        parser.add_argument(
+            "--thinking-file", type=str, default=self.config["thinking_file"], help="Path to the agent thinking file"
+        )
+        parser.add_argument(
+            "--thinking-dir", type=str, default=self.config["thinking_dir"], help="Path to the agent thinking dir"
+        )
         parser.add_argument(
             "--client-only", action="store_true", help="Run only the nsflow client without NeuroSan server"
         )

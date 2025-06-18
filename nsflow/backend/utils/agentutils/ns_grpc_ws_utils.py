@@ -71,8 +71,8 @@ class NsGrpcWsUtils:
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
         self.chat_context: Dict[str, Any] = {}
-        self.thinking_file = '/tmp/agent_thinking.txt'
-        self.thinking_dir = '/tmp'
+        self.thinking_file = os.getenv("THINKING_FILE")
+        self.thinking_dir = os.getenv("THINKING_DIR")
 
         self.logs_manager = LogsRegistry.register(agent_name)
         self.session = self.create_agent_session()
@@ -85,6 +85,9 @@ class NsGrpcWsUtils:
         websocket = self.websocket
         await websocket.accept()
         sid = str(websocket.client)
+        # For production, we should use a more secure way to generate session IDs
+        # e.g., UUIDs or secure random strings.
+        # sid = str(uuid.uuid4())
         self.active_chat_connections[sid] = websocket
         await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "nsflow")
         with user_sessions_lock:
