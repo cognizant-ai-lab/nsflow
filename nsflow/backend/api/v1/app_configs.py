@@ -11,7 +11,8 @@
 # END COPYRIGHT
 import logging
 import os
-import pkg_resources
+from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError
 
 from fastapi import HTTPException
 from fastapi import APIRouter, Depends
@@ -92,11 +93,9 @@ def get_version(package_name: str):
     """Get the version from installed package"""
     try:
         # Fetch version from installed package
-        return pkg_resources.get_distribution(package_name).version
-    except pkg_resources.DistributionNotFound as e:
+        return version(package_name)
+    except PackageNotFoundError as e:
         logging.error("Package '%s' not found: %s", package_name, e)
-        if package_name == "nsflow":
-            return "dev.version"
         return "not found"
 
 
