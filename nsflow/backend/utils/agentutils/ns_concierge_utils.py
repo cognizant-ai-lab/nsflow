@@ -22,12 +22,12 @@ from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
-from neuro_san.service.agent_server import DEFAULT_FORWARDED_REQUEST_METADATA
 
 class NsConciergeUtils:
     """
     Encapsulates concierge session management and interactions for a client.
     """
+    DEFAULT_FORWARDED_REQUEST_METADATA: str = "request_id user_id"
     def __init__(self,
                  agent_name: str=None,
                  forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA):
