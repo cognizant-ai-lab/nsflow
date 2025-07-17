@@ -13,7 +13,7 @@ keywords = ["NsFlow", "NeuroSan", "agent-network"]
 # https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license
 license = "LicenseRef-CognizantAcademicSource"
 license-files = ["LICENSE.txt"]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 readme = "README.md"
 authors = [
     { name = "Deepak" }
