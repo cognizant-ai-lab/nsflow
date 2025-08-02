@@ -25,6 +25,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { stopWebSocket, clearChat } = useChatControls();
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
   const messagePanelRef = useRef<ImperativePanelHandle>(null);
