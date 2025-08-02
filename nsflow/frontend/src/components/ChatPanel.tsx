@@ -19,6 +19,7 @@ import { useChatContext } from "../context/ChatContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 
 
+
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { activeNetwork, chatMessages, addChatMessage, addSlyDataMessage, chatWs } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
@@ -28,11 +29,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
   const messagePanelRef = useRef<ImperativePanelHandle>(null);
 
-
   // sly_data enablers
   const [enableSlyData, setEnableSlyData] = useState(false);
   const {newSlyData, setNewSlyData} = useChatContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ADD audioRef here
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -75,6 +78,56 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       setTimeout(() => setCopiedMessage(null), 1000);
     });
   };
+  
+  const textToSpeech = async (text: string, index: number) => {
+
+    // Handler called when speaker icon is clicked
+    console.log('Text to speech clicked for message:', text);
+    console.log('Message index:', index);
+    
+    // TODO: Implement text-to-speech functionality here
+    try {
+      const response = await fetch("http://127.0.0.1:8080/api/v1/text_to_speech", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: text }), // your string input
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch audio");
+      } else{
+        console.log('Successfully fetched audio');
+      }
+
+      // Convert response to audio blob
+      const blob = await response.blob();
+      console.log("Received blob type:", blob.type);
+
+      const url = URL.createObjectURL(blob);
+
+      // Assign to <audio> element and play
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        
+        // Explicitly load audio before playing
+        audioRef.current.load();
+
+        // Play inside user gesture context
+        await audioRef.current.play().catch(err => {
+          console.warn("Autoplay blocked, user must click Play:", err);
+        });
+      } else {
+        console.log("autoRef.current is False");
+      }
+    } catch (error) {
+      console.error("Error in textToSpeech:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
 
   const downloadMessages = () => {
     const logText = chatMessages.map((msg) => `${msg.sender}: ${msg.text}`).join("\n");
@@ -128,7 +181,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               messages={chatMessages}
               copiedMessage={copiedMessage}
               onCopy={copyToClipboard}
+              onTextToSpeech={textToSpeech}
             />
+
+            {/* Audio element for playback */}
+            <div className="mt-2">
+              <audio ref={audioRef} controls className="w-full" />
+            </div>
 
           </div>
         </Panel>

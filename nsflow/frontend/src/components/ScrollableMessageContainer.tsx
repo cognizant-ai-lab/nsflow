@@ -14,7 +14,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { FaCopy } from "react-icons/fa";
-import { Clipboard } from "lucide-react";
+import { Clipboard, Volume2 } from "lucide-react";
 
 import { Message } from "../types/chat";
 
@@ -28,6 +28,7 @@ type Props = {
   messages: Message[];
   copiedMessage: number | null;
   onCopy: (text: string, index: number) => void;
+  onTextToSpeech?: (text: string, index: number) => void;
   renderSenderLabel?: (msg: Message) => string;
   getMessageClass?: (msg: Message) => string;
 };
@@ -36,6 +37,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   messages,
   copiedMessage,
   onCopy,
+  onTextToSpeech,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
       ? "User"
@@ -64,13 +66,24 @@ const ScrollableMessageContainer: React.FC<Props> = ({
           <div key={index} className={getMessageClass(msg)}>
             <div className="font-bold mb-1 flex justify-between items-center">
               <span>{renderSenderLabel(msg)}</span>
-              <button
-                onClick={() => onCopy(msg.text, index)}
-                className="text-gray-400 hover:text-white ml-2 p-1"
-                title="Copy to clipboard"
-              >
-                <Clipboard size={10} />
-              </button>
+              <div className="flex items-center space-x-1">
+                {onTextToSpeech && (
+                  <button
+                    onClick={() => onTextToSpeech(msg.text, index)}
+                    className="text-gray-400 hover:text-white p-1"
+                    title="Text to speech"
+                  >
+                    <Volume2 size={10} />
+                  </button>
+                )}
+                <button
+                  onClick={() => onCopy(msg.text, index)}
+                  className="text-gray-400 hover:text-white p-1"
+                  title="Copy to clipboard"
+                >
+                  <Clipboard size={10} />
+                </button>
+              </div>
             </div>
 
             <div className="chat-markdown">
