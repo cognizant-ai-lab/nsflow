@@ -206,7 +206,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
 
     try {
-      console.log('Converting audio to MP3...');
+      console.log('Converting audio to MP3 for speech-to-text...');
+      setLoading(true);
       
       // Determine the actual mime type used for recording
       const actualMimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
@@ -227,41 +228,152 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       // Convert to MP3
       const mp3Blob = await convertToMp3(audioBuffer);
       
-      // Create download link
-      const url = URL.createObjectURL(mp3Blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `recording_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.mp3`;
-      
-      // Trigger download
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      // Send MP3 to speech-to-text API
+      await sendToSpeechToText(mp3Blob);
       
       // Clean up
-      URL.revokeObjectURL(url);
       audioContext.close();
       
-      console.log('Recording saved as MP3');
+      console.log('Speech-to-text processing completed');
       
     } catch (error) {
-      console.error('Error converting to MP3:', error);
+      console.error('Error in speech-to-text processing:', error);
       
-      // Fallback: save as original format
-      const actualMimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
-      const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-      const url = URL.createObjectURL(audioBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      const extension = actualMimeType.includes('wav') ? 'wav' : 'webm';
-      a.download = `recording_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
+      // Fallback: try to send original format to API
+      try {
+        const actualMimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
+        await sendToSpeechToText(audioBlob);
+        console.log('Speech-to-text completed with original format');
+      } catch (fallbackError) {
+        console.error('Speech-to-text failed completely:', fallbackError);
+        alert('Speech-to-text conversion failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendToSpeechToText = async (audioBlob: Blob) => {
+    try {
+      console.log('Sending audio to speech-to-text API...');
+      console.log('Audio blob details:', {
+        size: audioBlob.size,
+        type: audioBlob.type
+      });
       
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // First try with just 'file' field name (most common)
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.mp3');
       
-      console.log('Saved as WebM (MP3 conversion failed)');
+      console.log('FormData entries:');
+      for (let [key, value] of formData.entries()) {
+        console.log(key, value);
+      }
+      
+      // Send to speech-to-text endpoint
+      let response = await fetch('http://127.0.0.1:8080/api/v1/speech_to_text', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      // If first attempt fails, try alternative field names
+      if (!response.ok && response.status === 400) {
+        console.log('First attempt failed, trying alternative field names...');
+        
+        const alternativeNames = ['audio', 'audio_file', 'upload', 'data'];
+        
+        for (const fieldName of alternativeNames) {
+          console.log(`Trying field name: ${fieldName}`);
+          
+          const altFormData = new FormData();
+          altFormData.append(fieldName, audioBlob, 'recording.mp3');
+          
+          const altResponse = await fetch('http://127.0.0.1:8080/api/v1/speech_to_text', {
+            method: 'POST',
+            body: altFormData,
+          });
+          
+          console.log(`Response for ${fieldName}:`, altResponse.status);
+          
+          if (altResponse.ok) {
+            response = altResponse;
+            console.log(`Success with field name: ${fieldName}`);
+            break;
+          } else {
+            const errorText = await altResponse.text();
+            console.log(`Failed with ${fieldName}:`, errorText);
+          }
+        }
+      }
+      
+      // If all FormData attempts fail, try sending as JSON with base64
+      if (!response.ok && response.status === 400) {
+        console.log('All FormData attempts failed, trying JSON with base64...');
+        
+        try {
+          // Convert blob to base64
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const base64String = btoa(String.fromCharCode(...uint8Array));
+          
+          const jsonResponse = await fetch('http://127.0.0.1:8080/api/v1/speech_to_text', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              audio_data: base64String,
+              format: 'mp3'
+            }),
+          });
+          
+          console.log('JSON response status:', jsonResponse.status);
+          
+          if (jsonResponse.ok) {
+            response = jsonResponse;
+            console.log('Success with JSON/base64 format');
+          }
+        } catch (jsonError) {
+          console.log('JSON attempt also failed:', jsonError);
+        }
+      }
+      
+      if (!response.ok) {
+        // Get error details from the last response
+        const errorText = await response.text();
+        console.error('All attempts failed. Final API Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
+      }
+      
+      // Get the response text
+      const result = await response.text();
+      console.log('Speech-to-text response:', result);
+      
+      // Parse the response - it might be JSON or plain text
+      let transcribedText = '';
+      try {
+        const jsonResult = JSON.parse(result);
+        transcribedText = jsonResult.text || jsonResult.transcription || result;
+      } catch {
+        // If it's not JSON, use the raw text
+        transcribedText = result;
+      }
+      
+      // Place the transcribed text in the message input box
+      if (transcribedText && transcribedText.trim()) {
+        setNewMessage(transcribedText.trim());
+        console.log('Transcribed text placed in message input:', transcribedText);
+      } else {
+        console.warn('No transcribed text received from API');
+      }
+      
+    } catch (error) {
+      console.error('Error calling speech-to-text API:', error);
+      throw error; // Re-throw so the calling function can handle it
     }
   };
 
@@ -430,14 +542,22 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   onTouchStart={startRecording}
                   onTouchEnd={stopRecording}
                   className={`flex items-center justify-center p-2 rounded-md transition-colors ${
-                    isRecording 
+                    loading
+                      ? 'bg-blue-600 text-white cursor-not-allowed'
+                      : isRecording 
                       ? 'bg-red-600 text-white' 
                       : 'bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white'
                   }`}
-                  title={isRecording ? "Recording... Release to stop" : "Hold to record audio"}
+                  title={
+                    loading
+                      ? "Converting speech to text..."
+                      : isRecording 
+                      ? "Recording... Release to stop" 
+                      : "Hold to record audio"
+                  }
                   disabled={loading}
                 >
-                  <Mic size={16} className={isRecording ? 'animate-pulse' : ''} />
+                  <Mic size={16} className={loading ? 'animate-spin' : isRecording ? 'animate-pulse' : ''} />
                 </button>
               </div>
             </div>
