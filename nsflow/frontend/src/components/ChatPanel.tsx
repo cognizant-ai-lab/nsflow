@@ -44,14 +44,76 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  
+  // Flag to track when microphone was used for auto-play
+  const [shouldAutoPlayNextAgent, setShouldAutoPlayNextAgent] = useState(false);
+  // Keep track of the last message count to detect new agent messages
+  const lastMessageCountRef = useRef(0);
 
   useEffect(() => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
+  // Auto-play agent responses when microphone was used
+  useEffect(() => {
+    // Only proceed if we should auto-play and there are messages
+    if (shouldAutoPlayNextAgent && chatMessages.length > 0) {
+      // Check if this is a new message (message count increased)
+      const currentMessageCount = chatMessages.length;
+      const previousMessageCount = lastMessageCountRef.current;
+      
+      console.log('=== AUTO-PLAY DEBUG ===');
+      console.log('Should auto-play:', shouldAutoPlayNextAgent);
+      console.log('Current message count:', currentMessageCount);
+      console.log('Previous message count:', previousMessageCount);
+      console.log('Is new message?', currentMessageCount > previousMessageCount);
+      
+      // Only auto-play if this is a NEW message (count increased)
+      if (currentMessageCount > previousMessageCount) {
+        const lastMessage = chatMessages[chatMessages.length - 1];
+        console.log('Last message sender:', lastMessage.sender);
+        console.log('Last message text:', lastMessage.text.substring(0, 50) + '...');
+        
+        // Check if the last message is from an agent
+        if (lastMessage.sender === "agent") {
+          console.log('NEW AGENT MESSAGE - Auto-playing!');
+          console.log('Full message text being sent to TTS:', lastMessage.text);
+          
+          // Reset the flag immediately to prevent multiple triggers
+          setShouldAutoPlayNextAgent(false);
+          
+          // Update the message count ref
+          lastMessageCountRef.current = currentMessageCount;
+          
+          // Store the current message text to ensure we're playing the right one
+          const messageToPlay = lastMessage.text;
+          const messageIndex = chatMessages.length - 1;
+          
+          // Call textToSpeech directly with the agent's message
+          setTimeout(() => {
+            console.log('Calling textToSpeech with text:', messageToPlay.substring(0, 50) + '...');
+            console.log('Using message index:', messageIndex);
+            textToSpeech(messageToPlay, messageIndex);
+          }, 100); // Small delay to ensure the component is ready
+        } else {
+          console.log('Last message is not from agent, skipping auto-play');
+          // Update the message count ref anyway
+          lastMessageCountRef.current = currentMessageCount;
+        }
+      } else {
+        console.log('No new message detected, skipping auto-play');
+      }
+    } else {
+      // Update the message count ref even when not auto-playing
+      lastMessageCountRef.current = chatMessages.length;
+    }
+  }, [chatMessages, shouldAutoPlayNextAgent]);
+
   const sendMessage = () => {
     if (!newMessage.trim()) return;
+    // Reset auto-play flag for typed messages (not from microphone)
+    setShouldAutoPlayNextAgent(false);
     sendMessageWithText(newMessage);
   };
 
@@ -95,8 +157,10 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const textToSpeech = async (text: string, index: number) => {
 
     // Handler called when speaker icon is clicked
-    console.log('Text to speech clicked for message:', text);
+    console.log('=== TEXT-TO-SPEECH FUNCTION ===');
+    console.log('Text to speech called for message:', text.substring(0, 50) + '...');
     console.log('Message index:', index);
+    console.log('Full text being processed:', text);
     
     // TODO: Implement text-to-speech functionality here
     try {
@@ -374,8 +438,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
         setNewMessage(trimmedText);
         console.log('Transcribed text placed in message input:', trimmedText);
         
-        // Automatically send the message directly with the transcribed text
-        sendMessageWithText(trimmedText);
+        // Set flag to auto-play the next agent response
+        console.log('Setting shouldAutoPlayNextAgent to true after microphone usage');
+        setShouldAutoPlayNextAgent(true);
+        
+        // Add a small delay so user can see the transcribed text before it's sent
+        setTimeout(() => {
+          // Automatically send the message directly with the transcribed text
+          sendMessageWithText(trimmedText);
+        }, 1000); // 1 second delay to show the transcribed text
       } else {
         console.warn('No transcribed text received from API');
       }
