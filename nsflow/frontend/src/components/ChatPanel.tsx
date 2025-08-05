@@ -546,7 +546,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                       ? 'bg-blue-600 text-white cursor-not-allowed'
                       : isRecording 
                       ? 'bg-red-600 text-white' 
-                      : 'bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white'
+                      : 'chat-send-btn'
                   }`}
                   title={
                     loading
