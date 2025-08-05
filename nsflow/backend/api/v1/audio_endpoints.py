@@ -38,6 +38,12 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
     Returns:
         JSON response containing the transcribed text
+
+    To test the endpoint with curl
+
+    curl -X POST \
+        -F "audio=@audio.mp3;type=audio/mpeg" \
+        http://127.0.0.1:8080/api/v1/speech_to_text
     """
     try:
         # Validate file type
@@ -113,6 +119,14 @@ async def text_to_speech(request: TextToSpeechRequest):
 
     Returns:
         MP3 audio file containing the synthesized speech
+
+    To test the endpoint with curl
+
+    curl -X POST \
+        -H "Content-Type: application/json" \
+        -d '{"text": "Convert text to speech"}' \
+        http://127.0.0.1:8080/api/v1/text_to_speech \
+        --output audio.mp3
     """
     try:
         text = request.text
