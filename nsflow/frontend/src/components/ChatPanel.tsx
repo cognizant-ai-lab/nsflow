@@ -52,6 +52,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
+    sendMessageWithText(newMessage);
+  };
+
+  const sendMessageWithText = (messageText: string) => {
+    if (!messageText.trim()) return;
     if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
       console.error("WebSocket not connected. Unable to send message.");
       return;
@@ -69,12 +74,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       }
     }
 
-    addChatMessage({ sender: "user", text: newMessage, network: activeNetwork });
+    addChatMessage({ sender: "user", text: messageText, network: activeNetwork });
     if (parsedSlyData) {
       addSlyDataMessage({ sender: "user", text: JSON.stringify(parsedSlyData, null, 2), network: activeNetwork });
     }    
     chatWs.send(JSON.stringify({
-      message: newMessage,
+      message: messageText,
       ...(parsedSlyData ? { sly_data: parsedSlyData } : {})
     }));
     setNewMessage("");
@@ -365,8 +370,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       
       // Place the transcribed text in the message input box
       if (transcribedText && transcribedText.trim()) {
-        setNewMessage(transcribedText.trim());
-        console.log('Transcribed text placed in message input:', transcribedText);
+        const trimmedText = transcribedText.trim();
+        setNewMessage(trimmedText);
+        console.log('Transcribed text placed in message input:', trimmedText);
+        
+        // Automatically send the message directly with the transcribed text
+        sendMessageWithText(trimmedText);
       } else {
         console.warn('No transcribed text received from API');
       }
