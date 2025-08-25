@@ -13,3 +13,15 @@ wsproto>=1.2.0
 nbformat>=5.10.4
 pydantic>=2.9.2
 python-dotenv==1.0.1
+
+# These are needed for text-2-speech and speech-2-text
+# PyAudio depends on PortAudio, which you need to install first
+# On macOS:
+#     brew install portaudio
+# pydub relies on ffmpeg
+# On Mac:
+#     brew install ffmpeg
+gTTS==2.5.4
+SpeechRecognition==3.14.3
+PyAudio==0.2.14
+pydub==0.25.1
