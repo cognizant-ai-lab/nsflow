@@ -71,7 +71,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
             # Use pydub to convert MP3 to WAV
             try:
                 from pydub import AudioSegment
-                audio_segment = AudioSegment.from_mp3(temp_audio_path)
+                audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, "mp3")
                 audio_segment.export(temp_wav_path, format="wav")
             except ImportError:
                 raise HTTPException(

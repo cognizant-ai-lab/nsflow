@@ -164,7 +164,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     
     // TODO: Implement text-to-speech functionality here
     try {
-      const response = await fetch("http://127.0.0.1:8080/api/v1/text_to_speech", {
+      const response = await fetch("http://127.0.0.1:8005/api/v1/text_to_speech", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -333,7 +333,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       
       // First try with just 'file' field name (most common)
       const formData = new FormData();
-      formData.append('file', audioBlob, 'recording.mp3');
+      formData.append('audio', audioBlob, 'recording.mp3');
       
       console.log('FormData entries:');
       for (let [key, value] of formData.entries()) {
@@ -341,7 +341,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       }
       
       // Send to speech-to-text endpoint
-      let response = await fetch('http://127.0.0.1:8080/api/v1/speech_to_text', {
+      let response = await fetch('http://127.0.0.1:8005/api/v1/speech_to_text', {
         method: 'POST',
         body: formData,
       });
@@ -361,7 +361,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           const altFormData = new FormData();
           altFormData.append(fieldName, audioBlob, 'recording.mp3');
           
-          const altResponse = await fetch('http://127.0.0.1:8080/api/v1/speech_to_text', {
+          const altResponse = await fetch('http://127.0.0.1:8005/api/v1/speech_to_text', {
             method: 'POST',
             body: altFormData,
           });
@@ -389,7 +389,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           const uint8Array = new Uint8Array(arrayBuffer);
           const base64String = btoa(String.fromCharCode(...uint8Array));
           
-          const jsonResponse = await fetch('http://127.0.0.1:8080/api/v1/speech_to_text', {
+          const jsonResponse = await fetch('http://127.0.0.1:8005/api/v1/speech_to_text', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -410,7 +410,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           console.log('JSON attempt also failed:', jsonError);
         }
       }
-      
+
       if (!response.ok) {
         // Get error details from the last response
         const errorText = await response.text();
