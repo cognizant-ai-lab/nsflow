@@ -11,6 +11,20 @@ Note: To see and use how nsflow client works along with neuro-san library, pleas
 
 ## **Installation & Running nsflow**
 
+Prerequisite: install `ffmpeg` for text-to-speech and speech-to-text support
+
+- On Mac
+```bash
+brew install ffmpeg
+```
+
+- On Linux
+```bash
+sudo apt install ffmpeg
+```
+
+- On windows, follow the [instructions](https://phoenixnap.com/kb/ffmpeg-windows) here.
+
 **nsflow** can be installed and run in **two different ways:**
 
 ### **1️⃣ Run nsflow using pypi package**

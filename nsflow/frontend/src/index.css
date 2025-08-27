@@ -800,7 +800,7 @@ input:focus {
   color: white;
   padding: 0.5rem 1rem;
   border-radius: 6px;
-  min-height: 60px;
+  min-height: 28px;
   height: auto;
   transition: all 0.2s ease-in-out;
   font-weight: 500;
