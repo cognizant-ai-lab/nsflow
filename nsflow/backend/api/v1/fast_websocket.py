@@ -16,10 +16,12 @@ This is the FastAPI endpoints for streaming_chat, logs, connectivity & function
 For now, we have separate end-points for OpenAPI specs
 """
 
+import json
 from fastapi import APIRouter, WebSocket
 
 from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.trust.rai_service import RaiService
 
 router = APIRouter(prefix="/api/v1/ws")
 
@@ -52,3 +54,17 @@ async def websocket_slydata(websocket: WebSocket, agent_name: str):
     """WebSocket route for sly_data streaming."""
     manager = LogsRegistry.register(agent_name)
     await manager.handle_sly_data_websocket(websocket)
+
+
+@router.websocket("/sustainability/{agent_name}")
+async def websocket_sustainability(websocket: WebSocket, agent_name: str):
+    """WebSocket endpoint for real-time sustainability metrics updates"""
+    try:
+        service = RaiService.get_instance()
+        await service.handle_websocket(websocket, agent_name)
+    except Exception as e:
+        print(f"Sustainability WebSocket error for {agent_name}: {e}")
+        try:
+            await websocket.close()
+        except Exception:
+            pass  # Already closed

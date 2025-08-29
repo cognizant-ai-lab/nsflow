@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { FaGithub, FaBookOpen } from "react-icons/fa";
 import { SiFastapi } from "react-icons/si";
 import { useApiPort } from "../context/ApiPortContext";
+import SustainabilityScore from "./SustainabilityScore";
 
 const InfoPanel = () => {
   const { apiUrl } = useApiPort();
@@ -51,7 +52,11 @@ const InfoPanel = () => {
       <div className="logs-header flex justify-between items-center mb-2">
         <h2 className="text-white text-lg">Info</h2>
       </div>
-      <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md">
+      <div className="logs-messages overflow-y-auto max-h-[28rem] min-h-[10rem] p-2 bg-gray-800 border border-gray-600 rounded-md mb-2">
+        {/* New SustainabilityScore Component */}
+    <SustainabilityScore />
+      </div>
+      <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md ">
         {/* Resources */}
         <div className="space-y-2">
           <p className="font-bold text-gray-400">Resources:</p>
