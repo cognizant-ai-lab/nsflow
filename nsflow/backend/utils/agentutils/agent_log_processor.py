@@ -18,6 +18,7 @@ import logging
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.trust.rai_service import RaiService
 
 
 class AgentLogProcessor(MessageProcessor):
@@ -31,6 +32,7 @@ class AgentLogProcessor(MessageProcessor):
         """
         self.logs_manager = LogsRegistry.register(agent_name)
         self.sid: str = sid
+        self.agent_name = agent_name
 
     async def async_process_message(self, chat_message_dict: Dict[str, Any], message_type: ChatMessageType):
         """
@@ -86,3 +88,4 @@ class AgentLogProcessor(MessageProcessor):
 
         if token_accounting:
             await self.logs_manager.log_event(f"{token_accounting_str}", "NeuroSan")
+            await RaiService.get_instance().update_metrics_from_token_accounting(token_accounting, self.agent_name)
