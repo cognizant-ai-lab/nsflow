@@ -15,6 +15,7 @@ import { PanelGroup, Panel, PanelResizeHandle, ImperativePanelHandle } from "rea
 import { FaDownload, FaRegStopCircle } from "react-icons/fa";
 import { ImBin2 } from "react-icons/im";
 import { Mic } from "lucide-react";
+import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
@@ -23,6 +24,7 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
+  const { apiUrl } = useApiPort();
   const { activeNetwork, chatMessages, addChatMessage, addSlyDataMessage, chatWs } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
   const [newMessage, setNewMessage] = useState("");
@@ -164,7 +166,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     
     // TODO: Implement text-to-speech functionality here
     try {
-      const response = await fetch("http://127.0.0.1:8005/api/v1/text_to_speech", {
+      const response = await fetch(`${apiUrl}/api/v1/text_to_speech`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -341,7 +343,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       }
       
       // Send to speech-to-text endpoint
-      let response = await fetch('http://127.0.0.1:8005/api/v1/speech_to_text', {
+      let response = await fetch(`${apiUrl}/api/v1/speech_to_text`, {
         method: 'POST',
         body: formData,
       });
@@ -361,7 +363,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           const altFormData = new FormData();
           altFormData.append(fieldName, audioBlob, 'recording.mp3');
           
-          const altResponse = await fetch('http://127.0.0.1:8005/api/v1/speech_to_text', {
+          const altResponse = await fetch(`${apiUrl}/api/v1/speech_to_text`, {
             method: 'POST',
             body: altFormData,
           });
@@ -389,7 +391,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           const uint8Array = new Uint8Array(arrayBuffer);
           const base64String = btoa(String.fromCharCode(...uint8Array));
           
-          const jsonResponse = await fetch('http://127.0.0.1:8005/api/v1/speech_to_text', {
+          const jsonResponse = await fetch(`${apiUrl}/api/v1/speech_to_text`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
