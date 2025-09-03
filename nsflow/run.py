@@ -48,8 +48,9 @@ class NsFlowRunner:
         # Default Configuration
         self.config: Dict[str, Any] = {
             "server_host": os.getenv("NEURO_SAN_SERVER_HOST", "localhost"),
-            "server_port": int(os.getenv("NEURO_SAN_GRPC_SERVER_PORT", "30011")),
-            "server_connection": str(os.getenv("NEURO_SAN_SERVER_CONNECTION", "grpc")),
+            "server_grpc_port": int(os.getenv("NEURO_SAN_SERVER_GRPC_PORT", "30011")),
+            "server_http_port": int(os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "8080")),
+            "server_connection": str(os.getenv("NEURO_SAN_SERVER_CONNECTION", "http")),
             "manifest_update_period_seconds": int(os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")),
             "default_sly_data": str(os.getenv("DEFAULT_SLY_DATA", "")),
             "nsflow_host": os.getenv("NSFLOW_HOST", "localhost"),
@@ -105,12 +106,12 @@ class NsFlowRunner:
             "--server-host", type=str, default=self.config["server_host"], help="Host address for the Neuro SAN server"
         )
         parser.add_argument(
-            "--server-port", type=int, default=self.config["server_port"], help="Neuro SAN server port"
+            "--server-port", type=int, default=self.config["server_http_port"], help="Neuro SAN server port"
         )
         group = parser.add_argument_group(title="Session Type", description="How will we connect to neuro-san?")
         group.add_argument(
             "--connection",
-            default="grpc",
+            default="http",
             type=str,
             choices=["grpc", "http", "https"],
             help="""
@@ -212,7 +213,8 @@ The type of connection to initiate. Choices are to connect to:
 
         server_env = {
             "NEURO_SAN_SERVER_HOST": "server_host",
-            "NEURO_SAN_GRPC_SERVER_PORT": "server_port",
+            "NEURO_SAN_SERVER_GRPC_PORT": "server_grpc_port",
+            "NEURO_SAN_SERVER_HTTP_PORT": "server_http_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",
             "DEFAULT_SLY_DATA": "default_sly_data"
@@ -292,14 +294,14 @@ The type of connection to initiate. Choices are to connect to:
             sys.executable,
             "-u",
             "-m",
-            "neuro_san.service.agent_main_loop",
-            "--port",
-            str(self.config["server_port"]),
+            "neuro_san.service.main_loop.server_main_loop",
+            "--http_port",
+            str(self.config["server_http_port"]),
         ]
         self.server_process = self.start_process(
             command, "Neuro SAN", os.path.join(self.config["nsflow_log_dir"], "server.log")
         )
-        self.logger.info("NeuroSan server started on port: %s", self.config["server_port"])
+        self.logger.info("NeuroSan server started on port: %s", self.config["server_http_port"])
 
     def start_fastapi(self):
         """Start FastAPI backend."""
@@ -384,14 +386,14 @@ The type of connection to initiate. Choices are to connect to:
 
         if not client_only:
             if self.config["server_host"] == "localhost" and self.is_port_open(
-                self.config["server_host"], self.config["server_port"]
+                self.config["server_host"], self.config["server_http_port"]
             ):
                 self.logger.error(
                     "\n"
                     + "=" * 50
                     + "\nCannot start neuro-san server while the port %s is already in use.\n"
                     + "=" * 50,
-                    self.config["server_port"],
+                    self.config["server_http_port"],
                 )
             else:
                 self.start_neuro_san()

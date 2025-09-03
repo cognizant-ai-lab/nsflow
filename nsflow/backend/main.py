@@ -39,11 +39,13 @@ NSFLOW_PORT = int(os.getenv("NSFLOW_PORT", "4173"))
 
 def initialize_ns_config_from_env():
     """Initialize default NeuroSan config into registry using env variables."""
+    default_port = int(os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "8080"))
     if os.getenv("NSFLOW_CLIENT_ONLY", "False").lower() == "true":
         logging.info("CLIENT-ONLY mode detected. Starting client with default neuro-san configs.")
-    default_connection = os.getenv("NEURO_SAN_SERVER_CONNECTION", "grpc")
+    default_connection = os.getenv("NEURO_SAN_SERVER_CONNECTION", "http")
     default_host = os.getenv("NEURO_SAN_SERVER_HOST", "localhost")
-    default_port = int(os.getenv("NEURO_SAN_GRPC_SERVER_PORT", "30011"))
+    if default_connection == "grpc":
+        default_port = int(os.getenv("NEURO_SAN_GRPC_SERVER_PORT", "30011"))
     NsConfigsRegistry.set_current(default_connection, default_host, default_port)
     logging.info("[Startup] Default NsConfig set to %s://%s:%s", default_connection, default_host, default_port)
 

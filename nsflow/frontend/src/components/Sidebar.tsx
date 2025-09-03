@@ -27,7 +27,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
   const [tempHost, setTempHost] = useState(host);
   const [tempPort, setTempPort] = useState<number | undefined>(port);
-  const [tempConnectionType, setTempConnectionType] = useState<string>("grpc");
+  const [tempConnectionType, setTempConnectionType] = useState<string>(connectionType ?? "http");
   const [initialized, setInitialized] = useState(false);
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
@@ -53,7 +53,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       setInitialized(true);
       handleNeurosanConnect(connectionType, host, port, false); // skip setConfig on first load
     }
-  }, [isReady, isNsReady, apiUrl, host, port]);
+  }, [isReady, isNsReady, apiUrl, host, port, connectionType]);
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 30000) => {
     const controller = new AbortController();
@@ -161,14 +161,14 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
         <label className="sidebar-text block mb-1">Type:</label>
           <div className="flex flex-wrap gap-1 mb-1 text-white">
-            {["grpc", "http", "https"].map((type) => (
+            {["http", "grpc", "https"].map((type) => (
               <label key={type} className="flex items-center gap-1">
                 <input
                   type="radio"
                   name="connectionType"
                   value={type}
                   checked={tempConnectionType === type}
-                  onChange={() => setTempConnectionType(type)}
+                  onChange={() => setConnectionType(type)}
                 />
                 {type}
               </label>
@@ -196,7 +196,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         />
 
         <button
-          onClick={() => handleNeurosanConnect(tempConnectionType, tempHost, tempPort, true)}
+          onClick={() => handleNeurosanConnect(connectionType, tempHost, tempPort, true)}
           className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
         >
           Connect
