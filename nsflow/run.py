@@ -295,7 +295,6 @@ The type of connection to initiate. Choices are to connect to:
             "-u",
             "-m",
             "neuro_san.service.main_loop.server_main_loop",
-            # "neuro_san.service.agent_main_loop",
             "--http_port",
             str(self.config["server_http_port"]),
         ]
