@@ -1,0 +1,110 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug to help us improve the project.
+title: "[BUG] <brief description>"
+labels: [bug]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐞 Describe the Bug
+        A clear and concise description of what the bug is.
+
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: Bug Description
+      description: Please describe the problem you're encountering.
+      placeholder: "e.g., When I click on X, I get a Y error instead of Z"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 🔁 To Reproduce
+        Steps to reproduce the behavior:
+
+        ```
+        1. Go to '...'
+        2. Type '....'
+        3. Click on '...'
+        4. See error
+        ```
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Reproduction Steps
+      description: Share step-by-step instructions to reproduce the issue.
+      placeholder: "1. Go to '...'\n2. Click on '...'\n3. See error"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: ✅ Expected Behavior
+      description: What did you expect to happen?
+      placeholder: "e.g., The system should return a 200 OK response."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: ❌ Actual Behavior
+      description: What actually happened instead?
+      placeholder: "e.g., It throws a 500 Internal Server Error"
+    validations:
+      required: true
+
+  - type: input
+    id: screenshots
+    attributes:
+      label: 🖼️ Screenshots (Optional)
+      description: Paste a link to screenshots or drag and drop images below.
+      placeholder: "e.g., https://imgur.com/abc123"
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 🧩 Versions
+        Please fill in the version information below.
+
+  - type: input
+    id: os_version
+    attributes:
+      label: OS
+      placeholder: "e.g., Windows 11, macOS 14.5, Ubuntu 22.04"
+    validations:
+      required: true
+
+  - type: input
+    id: python_version
+    attributes:
+      label: Python Version
+      placeholder: "e.g., 3.13.5"
+    validations:
+      required: true
+
+  - type: input
+    id: repo_version
+    attributes:
+      label: Repo / Neuro-SAN Version
+      description: Specify the relevant version of the project.
+      placeholder: "e.g., 0.1.5 or Neuro-SAN 0.5.18"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 🧠 Additional Context
+      description: Add any other context or logs that might help us debug this issue.
+      placeholder: "e.g., Only happens when using Safari, or after restarting the server..."
+    validations:
+      required: false
