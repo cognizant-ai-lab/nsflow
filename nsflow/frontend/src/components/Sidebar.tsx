@@ -29,6 +29,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tempPort, setTempPort] = useState<number | undefined>(port);
   const [tempConnectionType, setTempConnectionType] = useState<string>(connectionType ?? "http");
   const [initialized, setInitialized] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -41,11 +42,6 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     if (connectionType?.trim()) setTempConnectionType(connectionType);
     console.log(">>>> NeuroSanContext config updated:", { host, port, connectionType });
   }, [host, port, connectionType]);
-
-
-  useEffect(() => {
-    networksEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [networks]);
 
   // Initial connect only once if host and port exist
   useEffect(() => {
@@ -84,7 +80,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
       const data = await response.json();
       const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
-      setNetworks(agentNames || []);
+      setNetworks((agentNames || []).sort((a: string, b: string) => a.localeCompare(b)));
     } catch (err: any) {
       const message = err.name === "AbortError"
         ? "[x] Connection timed out. Check if the server is up and running."
@@ -154,35 +150,34 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   };
 
   return (
-    <aside className="sidebar h-full sidebar p-4 flex flex-col gap-3 border-r">
-      <span className="text-lg font-bold sidebar-text-large">Agent Networks</span>
+    <aside className="sidebar h-full sidebar p-4 flex flex-col gap-2 border-r">
+      <span className="text-lg font-bold leading-none sidebar-text-large">Agent Networks</span>
 
       {/* NeuroSan Host/Port Section */}
-      <div className="sidebar-api-input p-2 bg-gray-800 rounded sidebar-text">
-        <label className="sidebar-text block mb-1">Type:</label>
-          <div className="flex flex-wrap gap-1 mb-1 text-white">
-            {["http", "grpc", "https"].map((type) => (
-              <label key={type} className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="connectionType"
-                  value={type}
-                  checked={tempConnectionType === type}
-                  onChange={() => setConnectionType(type)}
-                />
-                {type}
-              </label>
-            ))}
-          </div>
-        <label className="sidebar-text">NeuroSan Host:</label>
+      <div className="sidebar-api-input p-1 bg-gray-800 rounded sidebar-text gap-2">
+        <div className="flex flex-wrap gap-1 mb-1 text-white">
+          {["http", "grpc", "https"].map((type) => (
+            <label key={type} className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="connectionType"
+                value={type}
+                checked={tempConnectionType === type}
+                onChange={() => setConnectionType(type)}
+              />
+              {type}
+            </label>
+          ))}
+        </div>
+        <label className="sidebar-text">NeuroSan Server Host:</label>
         <input
           type="text"
           value={tempHost ?? ""}
           onChange={(e) => setTempHost(e.target.value)}
-          className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
+          className="w-full bg-gray-500 text-white p-0.5 rounded mt-1 sidebar-text"
         />
 
-        <label className="sidebar-text mt-2 block">NeuroSan Port:</label>
+        <label className="sidebar-text mt-2 block">NeuroSan Server Port:</label>
         <input
           type="number"
           min="1024"
@@ -192,19 +187,30 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             const val = e.target.value;
             setTempPort(val === "" ? undefined : Number(val));
           }}
-          className="w-full bg-gray-500 text-white p-1 rounded mt-1 sidebar-text"
+          className="w-full bg-gray-500 text-white p-0.5 rounded mt-1 sidebar-text"
         />
 
         <button
           onClick={() => handleNeurosanConnect(connectionType, tempHost, tempPort, true)}
-          className="w-full mt-2 p-1 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
+          className="w-full mt-2 p-0.5 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
         >
           Connect
         </button>
       </div>
 
+      {/* Search Box */}
+      <div className="sidebar-api-input p-1 bg-gray-800 rounded sidebar-text mt-2">
+        <input
+          type="text"
+          placeholder="Search Agents..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-gray-500 text-white p-0.5 text-sm rounded sidebar-text"
+        />
+      </div>
+
       {/* Networks Display */}
-      <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-1 bg-gray-900 max-h-[70vh]">
+      <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-0.1 bg-gray-900 max-h-[70vh]">
         {loading && <p className="sidebar-text-large">Loading...</p>}
         {error && <p className="text-red-500">{error.split('\n').map((line, idx) => (
           <span key={idx}>
@@ -212,10 +218,13 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             <br />
           </span>
         ))}</p>}
-        {networks.map((network) => (
-          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text">
+        {networks
+        .filter((network) =>
+            network.toLowerCase().includes(searchQuery.toLowerCase())
+        ).map((network) => (
+          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text-agents">
             <button
-              className={`sidebar-btn w-full text-left p-1 text-sm rounded cursor-pointer transition-all sidebar-text
+              className={`sidebar-btn w-full text-left p-0.5 text-sm rounded cursor-pointer transition-all sidebar-text-agents
                 ${activeNetwork === network ? "active-network" : ""}`}
               onClick={() => handleNetworkSelection(network)}
             >
