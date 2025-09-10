@@ -59,7 +59,7 @@ const InfoPanel = () => {
       <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md ">
         {/* Resources */}
         <div className="space-y-2">
-          <p className="font-bold text-gray-400">Resources:</p>
+          <p className="font-bold text-gray-400">Resources</p>
           
           {/* Versions Display */}
           <div className="info-panel flex items-center">

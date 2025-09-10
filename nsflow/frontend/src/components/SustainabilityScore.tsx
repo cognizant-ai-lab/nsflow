@@ -162,9 +162,9 @@ const SustainabilityScore: React.FC = () => {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold" style={{ color: 'var(--text-color)' }}>
+        <p className="font-bold" style={{ color: 'var(--text-color)' }}>
           Sustainability Score
-        </h3>
+        </p>
         <div className="flex items-center gap-2">
           {connectionStatus === 'connected' && (
             <div className="flex items-center gap-1">
