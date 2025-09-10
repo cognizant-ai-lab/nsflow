@@ -160,7 +160,7 @@ const SustainabilityScore: React.FC = () => {
   }, [sustainabilityWsUrl, activeNetwork]);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold" style={{ color: 'var(--text-color)' }}>
           Sustainability Score
@@ -186,16 +186,16 @@ const SustainabilityScore: React.FC = () => {
       </div>
       
       <div 
-        className="grid grid-cols-5 gap-3 p-4 rounded-lg"
+        className="grid grid-cols-4 gap-2 p-2 rounded-lg"
         style={{ 
           backgroundColor: 'var(--config-input-bg)',
           border: '1px solid var(--border-color)'
         }}
       >
         {SUSTAINABILITY_METRICS.map((metric) => (
-          <div key={metric.key} className="text-center">
+          <div key={metric.key} className="flex flex-col items-center">
             <div 
-              className="text-xl mb-2 hover:scale-110 transition-transform"
+              className="text-xl mb-1 hover:scale-110 transition-transform"
             
             >
               {metric.icon}
@@ -208,7 +208,7 @@ const SustainabilityScore: React.FC = () => {
                 {metric.label}
               </div>
               <div 
-                className="text-sm font-semibold" 
+                className="text-xs font-semibold" 
                 style={{ color: 'var(--text-color)' }}
               >
                 {values[metric.key]}
