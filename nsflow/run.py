@@ -208,7 +208,7 @@ The type of connection to initiate. Choices are to connect to:
             "NSFLOW_DEV_MODE": "dev",
             "NSFLOW_CLIENT_ONLY": "client_only",
             "VITE_API_PROTOCOL": "vite_api_protocol",
-            "VITE_WS_PROTOCOL": "vite_ws_protocol"
+            "VITE_WS_PROTOCOL": "vite_ws_protocol",
         }
 
         server_env = {

@@ -9,6 +9,12 @@ Note: To see and use how nsflow client works along with neuro-san library, pleas
 
 ---
 
+## **Enabling/Disabling text-to-speech and speech-to-text**
+
+For local development (when you run the backend and frontend separately), you should set VITE_USE_SPEECH in the nsflow/frontend/.env.development file to "true" or "false" to enable/disable text-to-speech and speech-to-text. The frontend development server reads this file directly.
+
+---
+
 ## **Installation & Running nsflow**
 
 Prerequisite: install `ffmpeg` for text-to-speech and speech-to-text support
