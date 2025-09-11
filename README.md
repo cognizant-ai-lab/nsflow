@@ -13,8 +13,6 @@ Note: To see and use how nsflow client works along with neuro-san library, pleas
 
 For local development (when you run the backend and frontend separately), you should set VITE_USE_SPEECH in the nsflow/frontend/.env.development file to "true" or "false" to enable/disable text-to-speech and speech-to-text. The frontend development server reads this file directly.
 
-For a production build (when you run the application using python -m nsflow.run without the --dev flag), you would set USE_SPEECH to "true" or "false" in your main .env file. The run.py script then automatically passes this setting to the frontend.
-
 ---
 
 ## **Installation & Running nsflow**
