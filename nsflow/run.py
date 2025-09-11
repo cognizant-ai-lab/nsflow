@@ -58,6 +58,7 @@ class NsFlowRunner:
             "nsflow_log_level": os.getenv("NSFLOW_LOG_LEVEL", "info"),
             "vite_api_protocol": os.getenv("VITE_API_PROTOCOL", "http"),
             "vite_ws_protocol": os.getenv("VITE_WS_PROTOCOL", "ws"),
+            "use_speech": os.getenv("USE_SPEECH", "false"),
             "thinking_file": os.getenv("THINKING_FILE", thinking_file_path),
             "thinking_dir": os.getenv("THINKING_DIR", thinking_dir_path),
             # Ensure all paths are resolved relative to `self.root_dir`
@@ -208,7 +209,8 @@ The type of connection to initiate. Choices are to connect to:
             "NSFLOW_DEV_MODE": "dev",
             "NSFLOW_CLIENT_ONLY": "client_only",
             "VITE_API_PROTOCOL": "vite_api_protocol",
-            "VITE_WS_PROTOCOL": "vite_ws_protocol"
+            "VITE_WS_PROTOCOL": "vite_ws_protocol",
+            "VITE_USE_SPEECH": "use_speech",
         }
 
         server_env = {

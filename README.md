@@ -9,6 +9,18 @@ Note: To see and use how nsflow client works along with neuro-san library, pleas
 
 ---
 
+## **Configuration**
+
+You can configure **nsflow** using environment variables. Create a `.env` file in the root of the project and add the following variables as needed:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `USE_SPEECH` | Set to `true` to enable speech-to-text and text-to-speech features. | `false` |
+| `API_PORT` | The port for the FastAPI backend. | `4173` |
+| `API_HOST` | The host for the FastAPI backend. | `127.0.0.1` |
+
+---
+
 ## **Installation & Running nsflow**
 
 Prerequisite: install `ffmpeg` for text-to-speech and speech-to-text support

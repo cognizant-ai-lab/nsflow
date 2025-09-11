@@ -31,6 +31,7 @@ type Props = {
   onTextToSpeech?: (text: string, index: number) => void;
   renderSenderLabel?: (msg: Message) => string;
   getMessageClass?: (msg: Message) => string;
+  useSpeech?: boolean;
 };
 
 const ScrollableMessageContainer: React.FC<Props> = ({
@@ -38,6 +39,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   copiedMessage,
   onCopy,
   onTextToSpeech,
+  useSpeech,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
       ? "User"
@@ -67,7 +69,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
             <div className="font-bold mb-1 flex justify-between items-center">
               <span>{renderSenderLabel(msg)}</span>
               <div className="flex items-center space-x-1">
-                {onTextToSpeech && (
+                {useSpeech && onTextToSpeech && (
                   <button
                     onClick={() => onTextToSpeech(msg.text, index)}
                     className="text-gray-400 hover:text-white p-1"
