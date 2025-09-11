@@ -24,6 +24,7 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
+  const useSpeech = import.meta.env.VITE_USE_SPEECH === 'true';
   const { apiUrl } = useApiPort();
   const { activeNetwork, chatMessages, addChatMessage, addSlyDataMessage, chatWs } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
@@ -562,6 +563,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               copiedMessage={copiedMessage}
               onCopy={copyToClipboard}
               onTextToSpeech={textToSpeech}
+              useSpeech={useSpeech}
             />
 
             {/* Audio element for playback */}
@@ -617,6 +619,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                 >
                   Send
                 </button>
+                {useSpeech && (
                 <button
                   onMouseDown={startRecording}
                   onMouseUp={stopRecording}
@@ -641,6 +644,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                 >
                   <Mic size={16} className={loading ? 'animate-spin' : isRecording ? 'animate-pulse' : ''} />
                 </button>
+                )}
               </div>
             </div>
             <div
