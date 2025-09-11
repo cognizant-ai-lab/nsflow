@@ -9,15 +9,11 @@ Note: To see and use how nsflow client works along with neuro-san library, pleas
 
 ---
 
-## **Configuration**
+## **Enabling/Disabling text-to-speech and speech-to-text**
 
-You can configure **nsflow** using environment variables. Create a `.env` file in the root of the project and add the following variables as needed:
+For local development (when you run the backend and frontend separately), you should set VITE_USE_SPEECH in the nsflow/frontend/.env.development file to "true" or "false" to enable/disable text-to-speech and speech-to-text. The frontend development server reads this file directly.
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| `USE_SPEECH` | Set to `true` to enable speech-to-text and text-to-speech features. | `false` |
-| `API_PORT` | The port for the FastAPI backend. | `4173` |
-| `API_HOST` | The host for the FastAPI backend. | `127.0.0.1` |
+For a production build (when you run the application using python -m nsflow.run without the --dev flag), you would set USE_SPEECH to "true" or "false" in your main .env file. The run.py script then automatically passes this setting to the frontend.
 
 ---
 
