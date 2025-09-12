@@ -460,7 +460,11 @@ input:focus {
 }
 
 .sidebar-text {
-  font-size: 12px;
+  font-size: 10px;
+}
+
+.sidebar-text-agents {
+  font-size: 11px;
 }
 
 .sidebar-text-large {

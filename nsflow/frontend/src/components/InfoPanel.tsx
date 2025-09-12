@@ -52,14 +52,14 @@ const InfoPanel = () => {
       <div className="logs-header flex justify-between items-center mb-2">
         <h2 className="text-white text-lg">Info</h2>
       </div>
-      <div className="logs-messages overflow-y-auto max-h-[28rem] min-h-[10rem] p-2 bg-gray-800 border border-gray-600 rounded-md mb-2">
+      <div className="logs-messages overflow-y-auto max-h-[18rem] min-h-[8rem] p-2 bg-gray-800 border border-gray-600 rounded-md mb-2">
         {/* New SustainabilityScore Component */}
-    <SustainabilityScore />
+        <SustainabilityScore />
       </div>
       <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md ">
         {/* Resources */}
         <div className="space-y-2">
-          <p className="font-bold text-gray-400">Resources:</p>
+          <p className="font-bold text-gray-400">Resources</p>
           
           {/* Versions Display */}
           <div className="info-panel flex items-center">
