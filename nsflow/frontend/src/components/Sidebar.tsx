@@ -169,7 +169,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             </label>
           ))}
         </div>
-        <label className="sidebar-text">NeuroSan Server Host:</label>
+        <label className="sidebar-text mt-1 ">NeuroSan Server Host:</label>
         <input
           type="text"
           value={tempHost ?? ""}
@@ -177,7 +177,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           className="w-full bg-gray-500 text-white p-0.5 rounded mt-1 sidebar-text"
         />
 
-        <label className="sidebar-text mt-2 block">NeuroSan Server Port:</label>
+        <label className="sidebar-text mt-1 block">NeuroSan Server Port:</label>
         <input
           type="number"
           min="1024"
@@ -199,7 +199,8 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       </div>
 
       {/* Search Box */}
-      <div className="sidebar-api-input p-1 bg-gray-800 rounded sidebar-text mt-2">
+      <div className="sidebar-api-input p-1 bg-gray-800 rounded sidebar-text">
+        <label className="sidebar-text mt-0.5 block">Search Agents</label>
         <input
           type="text"
           placeholder="Search Agents..."
@@ -210,7 +211,8 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       </div>
 
       {/* Networks Display */}
-      <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-0.1 bg-gray-900 max-h-[70vh]">
+      <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-0.1 bg-gray-900 max-h-[70vh] rounded">
+        <label className="sidebar-text ml-1 mt-1 block">Available Agents</label>
         {loading && <p className="sidebar-text-large">Loading...</p>}
         {error && <p className="text-red-500">{error.split('\n').map((line, idx) => (
           <span key={idx}>
