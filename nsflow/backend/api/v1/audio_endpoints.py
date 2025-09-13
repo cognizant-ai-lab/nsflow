@@ -9,15 +9,19 @@
 #
 # END COPYRIGHT
 import logging
-import tempfile
 import os
+import tempfile
 from io import BytesIO
-from pydantic import BaseModel
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
 import speech_recognition as sr
+from fastapi import APIRouter
+from fastapi import File
+from fastapi import HTTPException
+from fastapi import UploadFile
+from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from gtts import gTTS
+from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,11 +47,11 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
     curl -X POST \
         -F "audio=@audio.mp3;type=audio/mpeg" \
-        http://127.0.0.1:8080/api/v1/speech_to_text
+        http://127.0.0.1:8005/api/v1/speech_to_text
     """
     try:
         # Validate file type
-        if not audio.content_type or not audio.content_type.startswith('audio/'):
+        if not audio.content_type or not audio.content_type.startswith("audio/"):
             raise HTTPException(status_code=400, detail="Invalid file type. Please upload an audio file.")
 
         logging.info(f"Received audio file: {audio.filename}, content-type: {audio.content_type}")
@@ -71,12 +75,12 @@ async def speech_to_text(audio: UploadFile = File(...)):
             # Use pydub to convert MP3 to WAV
             try:
                 from pydub import AudioSegment
+
                 audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, "mp3")
                 audio_segment.export(temp_wav_path, format="wav")
             except ImportError:
                 raise HTTPException(
-                    status_code=500,
-                    detail="pydub library not installed. Required for audio conversion."
+                    status_code=500, detail="pydub library not installed. Required for audio conversion."
                 )
 
             # Load the audio file
@@ -125,7 +129,7 @@ async def text_to_speech(request: TextToSpeechRequest):
     curl -X POST \
         -H "Content-Type: application/json" \
         -d '{"text": "Convert text to speech"}' \
-        http://127.0.0.1:8080/api/v1/text_to_speech \
+        http://127.0.0.1:8005/api/v1/text_to_speech \
         --output audio.mp3
     """
     try:
@@ -136,7 +140,7 @@ async def text_to_speech(request: TextToSpeechRequest):
         logging.info(f"Received text for TTS: {text[:50]}...")
 
         # Create gTTS object
-        tts = gTTS(text=text, lang='en', slow=False)
+        tts = gTTS(text=text, lang="en", slow=False)
 
         # Create a BytesIO object to store the audio
         audio_buffer = BytesIO()
@@ -151,7 +155,7 @@ async def text_to_speech(request: TextToSpeechRequest):
         return StreamingResponse(
             BytesIO(audio_buffer.read()),
             media_type="audio/mpeg",
-            headers={"Content-Disposition": "attachment; filename=speech.mp3"}
+            headers={"Content-Disposition": "attachment; filename=speech.mp3"},
         )
 
     except Exception as e:
