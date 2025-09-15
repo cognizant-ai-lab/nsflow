@@ -9,6 +9,7 @@ on:
 
 jobs:
   test:
+    if: github.repository == 'cognizant-ai-lab/nsflow'
     runs-on: ubuntu-latest
     container:
       image: python:3.12-slim
