@@ -24,11 +24,11 @@ from fastapi.responses import JSONResponse
 logging.basicConfig(level=logging.INFO)
 
 # Adjust these to your repo/paths
-REPO_DIR = os.getenv("FASTVLM_REPO_DIR")
-if REPO_DIR is not None:
-    PREDICT = os.path.join(REPO_DIR, "predict.py")
-    DEFAULT_MODEL = os.path.join(REPO_DIR, "checkpoints", "fastvlm_0.5b_stage3")
-    PYTHON_CMD = os.path.join(REPO_DIR, "venv/bin/python")
+current_directory = os.getcwd()
+REPO_DIR = os.path.join(current_directory, "..", "ml-fastvlm")
+PREDICT = os.path.join(REPO_DIR, "predict.py")
+DEFAULT_MODEL = os.path.join(REPO_DIR, "checkpoints", "fastvlm_0.5b_stage3")
+PYTHON_CMD = os.path.join(REPO_DIR, "venv/bin/python")
 
 router = APIRouter(prefix="/api/v1")
 
@@ -61,8 +61,6 @@ async def vqa(
         -F 'model_path=/Users/joe/Projects/ml-fastvlm-FORK/checkpoints/llava-fastvithd_7b_stage3'
     """
     model = model_path or DEFAULT_MODEL
-    if REPO_DIR is None:
-        raise HTTPException(501, "FASTVLM_REPO_DIR environment variable is not set! Set it to the full path to ml-fastvlm repo.")
     if not os.path.exists(PREDICT):
         raise HTTPException(500, f"predict.py not found at {PREDICT}")
     if not os.path.exists(model):
