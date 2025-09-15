@@ -20,6 +20,7 @@ from fastapi import Form
 from fastapi import HTTPException
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
+from werkzeug.utils import secure_filename
 
 logging.basicConfig(level=logging.INFO)
 
@@ -73,6 +74,7 @@ async def vqa(
         model_name = DEFAULT_MODEL_NAME
     if model_name not in ACCEPTABLE_MODEL_NAMES:
         raise HTTPException(500, f"Invalid model name {model_name}!")
+    model_name = secure_filename(model_name)
     model = os.path.join(MODEL_PATH, model_name)
     print(f"model: {model}")
 
