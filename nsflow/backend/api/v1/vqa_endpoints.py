@@ -44,12 +44,12 @@ ACCEPTABLE_MODEL_NAMES = [
 
 router = APIRouter(prefix="/api/v1")
 
-QuestionField = Annotated[str, StringConstraints(min_length=3, max_length=500, strip_whitespace=True)]
+QuestionField = Annotated[str, StringConstraints(min_length=3, max_length=100, strip_whitespace=True)]
 
 
 @router.post("/vqa")
 async def vqa(
-    question: Annotated[QuestionField, Form(...)],
+    question: QuestionField = Form(...),
     image: UploadFile = File(...),
     model_name: Optional[str] = Form(None),
     timeout_sec: int = Form(120),
