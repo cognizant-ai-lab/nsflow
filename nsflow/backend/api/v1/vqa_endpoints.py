@@ -27,8 +27,17 @@ logging.basicConfig(level=logging.INFO)
 current_directory = os.getcwd()
 REPO_DIR = os.path.join(current_directory, "..", "ml-fastvlm")
 PREDICT = os.path.join(REPO_DIR, "predict.py")
-DEFAULT_MODEL = os.path.join(REPO_DIR, "checkpoints", "fastvlm_0.5b_stage3")
+MODEL_PATH = os.path.join(REPO_DIR, "checkpoints")
+DEFAULT_MODEL_NAME = "llava-fastvithd_0.5b_stage3"
 PYTHON_CMD = os.path.join(REPO_DIR, "venv/bin/python")
+ACCEPTABLE_MODEL_NAMES = [
+    "llava-fastvithd_1.5b_stage2",
+    "llava-fastvithd_7b_stage3",
+    "llava-fastvithd_0.5b_stage2",
+    "llava-fastvithd_1.5b_stage3",
+    "llava-fastvithd_0.5b_stage3",
+    "llava-fastvithd_7b_stage2",
+]
 
 router = APIRouter(prefix="/api/v1")
 
@@ -37,7 +46,7 @@ router = APIRouter(prefix="/api/v1")
 async def vqa(
     image: UploadFile = File(...),
     question: str = Form(...),
-    model_path: Optional[str] = Form(None),
+    model_name: Optional[str] = Form(None),
     timeout_sec: int = Form(120),
 ):
     """
@@ -58,9 +67,15 @@ async def vqa(
     curl -X POST http://127.0.0.1:8005/api/v1/vqa \
         -F 'image=@/Users/joe/vacation.jpg' \
         -F 'question=How many people are in the photo?' \
-        -F 'model_path=/Users/joe/Projects/ml-fastvlm-FORK/checkpoints/llava-fastvithd_7b_stage3'
+        -F 'model_name=llava-fastvithd_7b_stage3'
     """
-    model = model_path or DEFAULT_MODEL
+    if model_name is None:
+        model_name = DEFAULT_MODEL_NAME
+    if model_name not in ACCEPTABLE_MODEL_NAMES:
+        raise HTTPException(500, f"Invalid model name {model_name}!")
+    model = os.path.join(MODEL_PATH, model_name)
+    print(f"model: {model}")
+
     if not os.path.exists(PREDICT):
         raise HTTPException(500, f"predict.py not found at {PREDICT}")
     if not os.path.exists(model):
