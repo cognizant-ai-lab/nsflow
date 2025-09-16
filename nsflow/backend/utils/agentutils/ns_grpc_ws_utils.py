@@ -10,12 +10,13 @@
 #
 # END COPYRIGHT
 
+import asyncio
 import json
 import os
 import logging
 import tempfile
-import threading
 from typing import Dict, Any
+import uuid
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -31,7 +32,7 @@ from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcesso
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Initialize a lock
-user_sessions_lock = threading.Lock()
+user_sessions_lock = asyncio.Lock()
 user_sessions = {}
 
 
@@ -90,66 +91,56 @@ class NsGrpcWsUtils:
         Handle incoming WebSocket messages and process them using the gRPC session."""
         websocket = self.websocket
         await websocket.accept()
-        sid = str(websocket.client)
-        # For production, we should use a more secure way to generate session IDs
-        # e.g., UUIDs or secure random strings.
-        # sid = str(uuid.uuid4())
+        sid = str(websocket.client) + "_" + str(uuid.uuid4().hex[:8])
+
         self.active_chat_connections[sid] = websocket
         await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "nsflow")
-        with user_sessions_lock:
-            user_session = user_sessions.get(sid)
-            if not user_session or len(user_session) < 1:
-                # No session found: create a new one
-                user_session = await self.create_user_session(sid)
-                user_sessions[sid] = user_session
-            try:
-                while True:
-                    websocket_data = await websocket.receive_text()
-                    message_data = json.loads(websocket_data)
-                    user_input = message_data.get("message", "")
-                    sly_data = message_data.get("sly_data", {})
-                    # if sly_data:
-                    #     try:
-                    #         sly_data = json.loads(sly_data)
-                    #     except json.JSONDecodeError as e:
-                    #         logging.info("Invalid JSON:", e)
-                    #         await self.logs_manager.log_event(f"{e}\nInvalid sly_data: {sly_data}\n"
-                    #                                         "sly_data should be a valid Dictionary", 
-                    #                                         "NeuroSan")
-                    #         sly_data = {}
 
-                    input_processor = user_session['input_processor']
-                    state = user_session['state']
-                    # Update user input in state
-                    state["user_input"] = user_input
-                    # Update sly_data in state based on user input
-                    state["sly_data"].update(sly_data)
+        async with user_sessions_lock:
+            if sid not in user_sessions:
+                user_sessions[sid] = await self.create_user_session(sid)
+            user_session = user_sessions[sid]
 
-                    # Update the state
-                    state = await input_processor.async_process_once(state)
-                    user_session['state'] = state
-                    last_chat_response = state.get("last_chat_response")
+        try:
+            while True:
+                websocket_data = await websocket.receive_text()
+                message_data = json.loads(websocket_data)
+                user_input = message_data.get("message", "")
+                sly_data = message_data.get("sly_data", {})
 
-                    # Start a background task and pass necessary data
-                    if last_chat_response:
-                        try:
-                            response_str = json.dumps({"message": {"type": "AI", "text": last_chat_response}})
-                            sly_data_str = {"text": state["sly_data"]}
-                            await websocket.send_text(response_str)
-                            await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
-                            await self.logs_manager.sly_data_event(sly_data_str)
-                        except WebSocketDisconnect:
-                            self.active_chat_connections.pop(sid, None)
-                        except RuntimeError as e:
-                            logging.error("Error sending streaming response: %s", e)
-                            self.active_chat_connections.pop(sid, None)
-                
-                    # Do not close WebSocket here; allow continuous interaction
-                    await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
+                input_processor = user_session['input_processor']
+                state = user_session['state']
+                # Update user input in state
+                state["user_input"] = user_input
+                # Update sly_data in state based on user input
+                state["sly_data"].update(sly_data)
 
-            except WebSocketDisconnect:
-                await self.logs_manager.log_event(f"WebSocket chat client disconnected: {sid}", "nsflow")
-                self.active_chat_connections.pop(sid, None)
+                # Update the state
+                state = await input_processor.async_process_once(state)
+                user_session['state'] = state
+                last_chat_response = state.get("last_chat_response")
+
+                # Start a background task and pass necessary data
+                if last_chat_response:
+                    # try:
+                    response_str = json.dumps({"message": {"type": "AI", "text": last_chat_response}})
+                    sly_data_str = {"text": state["sly_data"]}
+                    await websocket.send_text(response_str)
+                    await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
+                    await self.logs_manager.sly_data_event(sly_data_str)
+
+                await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
+
+        except WebSocketDisconnect:
+            await self.logs_manager.log_event(f"WebSocket chat client disconnected: {sid}", "nsflow")
+        except Exception as e:
+            logging.error("Unexpected error in WebSocket handler for %s: %s", sid, e)
+            await self.logs_manager.log_event(f"Error in session {sid}: {e}", "nsflow")
+        finally:
+            # clean up
+            self.active_chat_connections.pop(sid, None)
+            async with user_sessions_lock:
+                user_sessions.pop(sid, None)
 
     async def create_user_session(self, sid: str) -> Dict[str, Any]:
         """method to create a user session with the given WebSocket connection."""
