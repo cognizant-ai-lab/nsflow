@@ -10,9 +10,10 @@
 #
 # END COPYRIGHT
 
-from typing import Dict, Any, Optional, Generator
+import asyncio
 from copy import copy
 import logging
+from typing import Dict, Any, Optional, Generator
 
 from neuro_san.interfaces.agent_session import AgentSession
 from neuro_san.internals.messages.origination import Origination
@@ -22,6 +23,8 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
     """
     Processes AgentCli input by using the neuro-san streaming API.
     """
+    _sentinel = object()
+
     def __init__(self,
                  default_input: str = "",
                  thinking_file: str = None,
@@ -60,11 +63,13 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
         return_state: Dict[str, Any] = copy(state)
         returned_sly_data: Optional[Dict[str, Any]] = None
         chat_responses: Generator[Dict[str, Any], None, None] = self.session.streaming_chat(chat_request)
-        for chat_response in chat_responses:
+        async for chat_response in self.async_wrap_iter(chat_responses):
 
             response: Dict[str, Any] = chat_response.get("response", empty)
             # Use the async version of the message processor
             await self.processor.async_process_message(response)
+            # Optionally add sleep(0) to ensure fair scheduling
+            await asyncio.sleep(0)
 
             # Update the state if there is something to update it with
             chat_context = self.processor.get_chat_context()
@@ -93,3 +98,14 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
         return_state.update(update)
 
         return return_state
+
+    @staticmethod
+    async def async_wrap_iter(sync_iterable):
+        """Safely wraps a synchronous iterable into an async generator."""
+        iterator = iter(sync_iterable)
+        while True:
+            # Use sentinel to avoid StopIteration entirely
+            item = await asyncio.to_thread(next, iterator, AsyncStreamingInputProcessor._sentinel)
+            if item is AsyncStreamingInputProcessor._sentinel:
+                break
+            yield item
