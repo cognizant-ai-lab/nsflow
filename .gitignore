@@ -34,6 +34,7 @@ tree.txt
 test.ipynb
 test.json
 test.py
+TopicMemory.json
 
 # keep the dist for prebuilt_frontend
 !nsflow/prebuilt_frontend/dist/

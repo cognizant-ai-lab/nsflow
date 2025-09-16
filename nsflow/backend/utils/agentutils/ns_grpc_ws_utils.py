@@ -84,7 +84,6 @@ class NsGrpcWsUtils:
         self.logs_manager = LogsRegistry.register(agent_name)
         self.session = self.create_agent_session()
 
-
     # pylint: disable=too-many-function-args
     async def handle_user_input(self):
         """
@@ -144,7 +143,7 @@ class NsGrpcWsUtils:
 
     async def create_user_session(self, sid: str) -> Dict[str, Any]:
         """method to create a user session with the given WebSocket connection."""
-        
+
         # Agent session gets created in init
         chat_filter: Dict[str, Any] = {"chat_filter_type": "MAXIMAL"}
         state: Dict[str, Any] = {
@@ -153,7 +152,7 @@ class NsGrpcWsUtils:
             "chat_filter": chat_filter,
             "sly_data": {},
         }
-        
+
         # agent_session = self.base_utils.get_regular_agent_grpc_session(metadata=metadata)
         input_processor = AsyncStreamingInputProcessor(default_input="",
                                                   thinking_file=self.thinking_file,
@@ -176,7 +175,7 @@ class NsGrpcWsUtils:
             'state': state
         }
         return user_session
-    
+
     def create_agent_session(self):
         """Open a session with the factory"""
          # Open a session with the factory
