@@ -6,6 +6,7 @@ on:
 
 jobs:
   publish:
+    if: github.repository == 'cognizant-ai-lab/nsflow'
     name: Build and Publish
     runs-on: ubuntu-latest
     environment: pypi  # Match this to your configured GitHub Environment.
