@@ -27,8 +27,8 @@ from werkzeug.utils import secure_filename
 logging.basicConfig(level=logging.INFO)
 
 # Adjust these to your repo/paths
-current_directory = os.getcwd()
-REPO_DIR = os.path.join(current_directory, "..", "ml-fastvlm")
+working_directory = os.getcwd()
+REPO_DIR = os.path.join(working_directory, "..", "ml-fastvlm")
 PREDICT = os.path.join(REPO_DIR, "predict.py")
 MODEL_PATH = os.path.join(REPO_DIR, "checkpoints")
 DEFAULT_MODEL_NAME = "llava-fastvithd_0.5b_stage3"
