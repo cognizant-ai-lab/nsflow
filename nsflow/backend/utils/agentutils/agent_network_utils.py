@@ -27,11 +27,6 @@ from neuro_san.internals.interfaces.agent_network_provider import AgentNetworkPr
 
 logging.basicConfig(level=logging.INFO)
 
-# Define the registry directory and other constants
-# Ensure the environment variable is set
-# if not os.getenv("AGENT_MANIFEST_FILE"):
-#     raise ValueError("Environment variable AGENT_MANIFEST_FILE is not set. "
-#                      "Please set it to the path of the agent manifest file.")
 
 AGENT_MANIFEST_FILE = os.getenv("AGENT_MANIFEST_FILE")
 if not AGENT_MANIFEST_FILE:
@@ -97,11 +92,6 @@ class AgentNetworkUtils:
         if not resolved_path.startswith(allowed_dir + os.sep):
             raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
-        # Step 6: Check if file exists and is a file (not a directory)
-        # final_path = Path(resolved_path)
-        # if not final_path.is_file():
-        #     raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
-
         return resolved_path
 
     def list_available_networks(self):
@@ -118,56 +108,6 @@ class AgentNetworkUtils:
         ]
 
         return {"networks": networks}
-
-    # @staticmethod
-    # def load_hocon_config(file_path: str, base_dir: str = ROOT_DIR):
-    #     """
-    #     Load a HOCON file from the given directory and parse it safely.
-    #     Prevents path traversal by ensuring the resolved path stays within the base_dir.
-    #     """
-    #     try:
-    #         # Ensure base_dir is an absolute, normalized path
-    #         base_dir_str = os.path.abspath(str(base_dir))
-    #         file_path_str = os.path.abspath(os.path.join(base_dir_str, str(file_path)))
-
-    #         # Ensure the final path is inside base_dir
-    #         if not file_path_str.startswith(base_dir_str + os.sep):
-    #             raise HTTPException(status_code=403, detail="Access to this file is not allowed")
-
-    #         # Now it is safe to use as a Path
-    #         safe_path = file_path_str
-            
-
-    #         if not os.path.exists(safe_path) or not os.path.isfile(safe_path):
-    #             raise HTTPException(status_code=404, detail="Config file not found")
-            
-    #         # Read file content manually and parse with explicit basedir = REGISTRY_DIR
-    #         basedir = os.path.dirname(os.path.abspath(file_path))
-    #         with open(file_path_str, 'r', encoding='utf-8') as f:
-    #             content = f.read()
-
-    #         # Use REGISTRY_DIR as basedir for resolving includes
-    #         # This ensures "registries/aaosa_basic.hocon" is resolved from REGISTRY_DIR
-    #         config = ConfigFactory.parse_string(content, basedir=basedir)
-
-    #         # Safe to parse
-    #         try:
-    #             config = config.resolve()
-    #         except Exception as e:
-    #             if "Cannot resolve variable" in str(e):
-    #                 # Try again but allow unresolved substitutions (set them to None or keep as string)
-    #                 # config = ConfigFactory.parse_file(str(safe_path), resolve=False)
-    #                 logging.warning("Unresolved substitutions in HOCON. Parsing without resolution: %s", e)
-    #                 config = ConfigFactory.parse_string(content, basedir=basedir)
-    #             else:
-    #                 raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
-    #         return config
-
-    #     except HTTPException:
-    #         raise
-    #     except Exception as e:
-    #         raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
-
         
     def get_agent_network(self, agent_name: str) -> AgentNetwork:
         """
