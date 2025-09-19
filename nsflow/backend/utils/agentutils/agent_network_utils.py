@@ -14,16 +14,19 @@ import re
 import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
+import urllib.parse
 from fastapi import HTTPException
 from pyhocon import ConfigFactory
 
+from neuro_san.internals.graph.registry.agent_network import AgentNetwork
+from neuro_san.client.direct_agent_storage_util import DirectAgentStorageUtil
+from neuro_san.internals.network_providers.agent_network_storage import AgentNetworkStorage
+from neuro_san.session.missing_agent_check import MissingAgentCheck
+from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
+from neuro_san.internals.interfaces.agent_network_provider import AgentNetworkProvider
+
 logging.basicConfig(level=logging.INFO)
 
-# Define the registry directory and other constants
-# Ensure the environment variable is set
-# if not os.getenv("AGENT_MANIFEST_FILE"):
-#     raise ValueError("Environment variable AGENT_MANIFEST_FILE is not set. "
-#                      "Please set it to the path of the agent manifest file.")
 
 AGENT_MANIFEST_FILE = os.getenv("AGENT_MANIFEST_FILE")
 if not AGENT_MANIFEST_FILE:
@@ -59,6 +62,7 @@ class AgentNetworkUtils:
     def __init__(self):
         self.registry_dir = REGISTRY_DIR
         self.fixtures_dir = FIXTURES_DIR
+        self.network_storage: AgentNetworkStorage = DirectAgentStorageUtil.create_network_storage()
 
     def get_test_manifest_path(self):
         """Returns the manifest.hocon path."""
@@ -88,11 +92,6 @@ class AgentNetworkUtils:
         if not resolved_path.startswith(allowed_dir + os.sep):
             raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
-        # Step 6: Check if file exists and is a file (not a directory)
-        # final_path = Path(resolved_path)
-        # if not final_path.is_file():
-        #     raise HTTPException(status_code=404, detail=f"Network file not found: {sanitized_name}.hocon")
-
         return resolved_path
 
     def list_available_networks(self):
@@ -109,40 +108,38 @@ class AgentNetworkUtils:
         ]
 
         return {"networks": networks}
-
-    @staticmethod
-    def load_hocon_config(file_path: str, base_dir: str = ROOT_DIR):
+        
+    def get_agent_network(self, agent_name: str) -> AgentNetwork:
         """
-        Load a HOCON file from the given directory and parse it safely.
-        Prevents path traversal by ensuring the resolved path stays within the base_dir.
+        :param agent_name: The name of the agent whose AgentNetwork we want to get.
+                This name can be something in the manifest file (with no file suffix)
+                or a specific full-reference to an agent network's hocon file.
+        :return: The AgentNetwork corresponding to that agent.
         """
-        try:
-            # Ensure base_dir is an absolute, normalized path
-            base_dir_str = os.path.abspath(str(base_dir))
-            file_path_str = os.path.abspath(os.path.join(base_dir_str, str(file_path)))
 
-            # Ensure the final path is inside base_dir
-            if not file_path_str.startswith(base_dir_str + os.sep):
-                raise HTTPException(status_code=403, detail="Access to this file is not allowed")
+        if agent_name is None or len(agent_name) == 0:
+            return None
 
-            # Now it is safe to use as a Path
-            safe_path = file_path_str
+        agent_network: AgentNetwork = None
+        if agent_name.endswith(".hocon") or agent_name.endswith(".json"):
+            # We got a specific file name
+            restorer = AgentNetworkRestorer()
+            agent_network = restorer.restore(file_reference=agent_name)
+        else:
+            # Use the standard stuff available via the manifest file.
+            agent_network_provider: AgentNetworkProvider =\
+                self.network_storage.get_agent_network_provider(agent_name)
+            agent_network = agent_network_provider.get_agent_network()
 
-            if not os.path.exists(safe_path) or not os.path.isfile(safe_path):
-                raise HTTPException(status_code=404, detail="Config file not found")
+        # Common place for nice error messages when networks are not found
+        MissingAgentCheck.check_agent_network(agent_network, agent_name)
 
-            # Safe to parse
-            config = ConfigFactory.parse_file(str(safe_path))
-            return config
+        return agent_network
 
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error parsing HOCON: {str(e)}") from e
-
-    def parse_agent_network(self, file_path: str):
+    def parse_agent_network(self, network_name: str):
         """Parses an agent network from a HOCON configuration file."""
-        config = self.load_hocon_config(file_path)
+        agent_network: AgentNetwork = self.get_Agent_network(network_name)
+        config: Dict[str, Any] = agent_network.get_config()
 
         nodes = []
         edges = []
@@ -161,7 +158,7 @@ class AgentNetworkUtils:
             agent_id = tool.get("name", "unknown_agent")
             node_lookup[agent_id] = tool
 
-        front_man = self.find_front_man(file_path)
+        front_man = agent_network.find_front_man()
 
         if not front_man:
             raise HTTPException(status_code=400, detail="No front-man agent found in network.")
@@ -171,35 +168,14 @@ class AgentNetworkUtils:
 
         return {"nodes": nodes, "edges": edges, "agent_details": agent_details}
 
-    def find_front_man(self, file_path: str):
-        """Finds the front-man agent from the tools list.
-        1. First, check if an agent has a function **without parameters**.
-        2. If all agents have parameters, **fallback to the first agent** in the HOCON file.
-        """
-        front_men: List[str] = []
-        config = self.load_hocon_config(file_path)
-        tools = config.get("tools", [])
-
-        # Ensure all tools have a "command" key
-        for tool in tools:
-            if "command" not in tool:
-                tool["command"] = ""
-
-        # Try to find an agent with a function **without parameters**
-        for tool in tools:
-            if isinstance(tool.get("function"), dict) and "parameters" not in tool["function"]:
-                front_men.append(tool)
-
-        # If no such agent is found, fallback to the **first agent in HOCON**
-        if tools:
-            front_men.append(tools[0])
-
-        if len(front_men) == 0:
-            raise ValueError("No front-man found. "
-                             "One entry's function must not have any parameters defined to be the front man")
-
-        front_man = front_men[0]
-        return front_man
+    @staticmethod
+    def is_url_like(s: str) -> bool:
+        """Simple check to see if a string is URL-like."""
+        try:
+            result = urllib.parse.urlparse(s)
+            return bool(result.netloc) or (result.path and '/' in result.path)
+        except Exception:
+            return False
 
     def process_agent(self, data: AgentData):
         """Recursively processes each agent in the network, capturing hierarchy details."""
@@ -210,7 +186,7 @@ class AgentNetworkUtils:
         sub_networks = []  # Track sub-network tools
 
         for tool_name in data.agent.get("tools", []):
-            if tool_name.startswith("/"):  # Identify sub-network tools
+            if AgentNetworkUtils.is_url_like(tool_name) or tool_name.startswith("/"):  # Identify sub-network tools
                 sub_networks.append(tool_name.lstrip("/"))  # Remove leading `/`
             elif tool_name in data.node_lookup:
                 child_agent = data.node_lookup[tool_name]
@@ -286,11 +262,11 @@ class AgentNetworkUtils:
                 "color": "green",  # Mark sub-network edges as green
             })
 
-    def extract_connectivity_info(self, file_path: str):
+    def extract_connectivity_info(self, network_name: str):
         """Extracts connectivity details from an HOCON network configuration file."""
-        logging.info("utils file_path: %s", file_path)
+        agent_network: AgentNetwork = self.get_Agent_network(network_name)
+        config: Dict[str, Any] = agent_network.get_config()
 
-        config = self.load_hocon_config(file_path)
         tools = config.get("tools", [])
 
         connectivity = []
@@ -315,9 +291,10 @@ class AgentNetworkUtils:
 
         return {"connectivity": connectivity}
 
-    def extract_coded_tool_class(self, file_path: str):
+    def extract_coded_tool_class(self, network_name: str):
         """Extract all the coded tool classes in a list"""
-        config = self.load_hocon_config(file_path)
+        agent_network: AgentNetwork = self.get_Agent_network(network_name)
+        config: Dict[str, Any] = agent_network.get_config()
         tools = config.get("tools", [])
         coded_tool_classes: List[str] = []
         for tool in tools:
@@ -326,48 +303,16 @@ class AgentNetworkUtils:
                 coded_tool_classes.append(class_name)
         return coded_tool_classes
 
-    def get_agent_details(self, config_path: str, agent_name: str) -> Dict[str, Any]:
+    def get_agent_details(self, network_name: str, agent_name: str) -> Dict[str, Any]:
         """
         Retrieves the entire details of an Agent from a HOCON network configuration file.
-        :param config_path: Path to the HOCON configuration file.
+        :param network_name: Name to the agent network HOCON file.
         :param agent_name: Name of the agent to retrieve details for.
         :return: A dictionary containing the agent's details.
         """
-        config = self.load_hocon_config(config_path)
+        config: AgentNetwork = self.get_agent_network(network_name)
 
-        empty_dict = {}
-        empty_list = []
-
-        if "tools" not in config:
-            raise HTTPException(status_code=400, detail="Missing tools section")
-
-        tools = config.get("tools", empty_list)
-        commondefs = config.get("commondefs", empty_dict)
-        agent_data = next((tool for tool in tools if tool.get("name") == agent_name), None)
-
-        if not agent_data:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
-
-        # Start with the agent_data as-is
-        agent_details = dict(agent_data)
-
-        # Merge global and agent-level llm_config
-        merged_llm_config = dict(config.get("llm_config", empty_dict))
-        if "llm_config" in agent_data:
-            merged_llm_config.update(agent_data["llm_config"])
-        agent_details["llm_config"] = merged_llm_config
-
-        # Check if commondefs are referenced
-        all_values = AgentNetworkUtils.flatten_values(agent_data)
-
-        uses_commondefs = AgentNetworkUtils.detect_commondefs_usage(
-            all_values,
-            commondefs.get("replacement_strings", empty_dict),
-            commondefs.get("replacement_values", empty_dict)
-        )
-
-        if uses_commondefs:
-            agent_details["common_defs"] = commondefs
+        agent_details = config.get_agent_tool_spec(agent_name)
 
         return agent_details
 
