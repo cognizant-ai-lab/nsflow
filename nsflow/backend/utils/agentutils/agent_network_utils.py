@@ -264,7 +264,7 @@ class AgentNetworkUtils:
 
     def extract_connectivity_info(self, network_name: str):
         """Extracts connectivity details from an HOCON network configuration file."""
-        agent_network: AgentNetwork = self.get_Agent_network(network_name)
+        agent_network: AgentNetwork = self.get_agent_network(network_name)
         config: Dict[str, Any] = agent_network.get_config()
 
         tools = config.get("tools", [])
@@ -293,7 +293,7 @@ class AgentNetworkUtils:
 
     def extract_coded_tool_class(self, network_name: str):
         """Extract all the coded tool classes in a list"""
-        agent_network: AgentNetwork = self.get_Agent_network(network_name)
+        agent_network: AgentNetwork = self.get_agent_network(network_name)
         config: Dict[str, Any] = agent_network.get_config()
         tools = config.get("tools", [])
         coded_tool_classes: List[str] = []
