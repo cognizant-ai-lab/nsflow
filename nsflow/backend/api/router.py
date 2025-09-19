@@ -1,4 +1,3 @@
-
 # Copyright (C) 2023-2025 Cognizant Digital Business, Evolutionary AI.
 # All Rights Reserved.
 # Issued under the Academic Public License.
@@ -10,13 +9,14 @@
 #
 # END COPYRIGHT
 from fastapi import APIRouter
-from .v1 import (
-    app_configs,
-    export_endpoints,
-    fast_websocket,
-    agent_flows,
-    fastapi_grpc_endpoints,
-    audio_endpoints)
+
+from .v1 import agent_flows
+from .v1 import app_configs
+from .v1 import audio_endpoints
+from .v1 import export_endpoints
+from .v1 import fast_websocket
+from .v1 import fastapi_grpc_endpoints
+from .v1 import vqa_endpoints
 
 router = APIRouter()
 
@@ -26,3 +26,4 @@ router.include_router(agent_flows.router, tags=["Agent Flows"])
 router.include_router(export_endpoints.router, tags=["Notebook Export"])
 router.include_router(fastapi_grpc_endpoints.router, tags=["Concierge Endpoints"])
 router.include_router(audio_endpoints.router, tags=["Audio Processing"])
+router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
