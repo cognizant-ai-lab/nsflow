@@ -138,7 +138,7 @@ class AgentNetworkUtils:
 
     def parse_agent_network(self, network_name: str):
         """Parses an agent network from a HOCON configuration file."""
-        agent_network: AgentNetwork = self.get_Agent_network(network_name)
+        agent_network: AgentNetwork = self.get_agent_network(network_name)
         config: Dict[str, Any] = agent_network.get_config()
 
         nodes = []
