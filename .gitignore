@@ -20,6 +20,7 @@ wheels_private/
 
 registries/
 coded_tools/
+toolbox/
 generated_notebooks/
 
 # Virtual environments
