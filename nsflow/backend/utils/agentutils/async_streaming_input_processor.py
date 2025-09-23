@@ -93,7 +93,8 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
             "last_chat_response": last_chat_response,
             "user_input": None,
             "sly_data": sly_data,
-            "origin_str": origin_str
+            "origin_str": origin_str,
+            "token_accounting": self.processor.get_token_accounting()
         }
         return_state.update(update)
 

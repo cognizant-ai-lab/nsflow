@@ -28,6 +28,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+ASYNCIO_SLEEP_INTERVAL = 0.5
 
 
 class WebsocketLogsManager:
@@ -47,6 +48,7 @@ class WebsocketLogsManager:
         self.active_log_connections: List[WebSocket] = []
         self.active_internal_chat_connections: List[WebSocket] = []
         self.active_sly_data_connections: List[WebSocket] = []
+        self.active_progress_connections: List[WebSocket] = []
         self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}")
         self.log_buffer: List[Dict] = []
 
@@ -80,6 +82,14 @@ class WebsocketLogsManager:
             self.log_buffer.pop(0)
         # Broadcast to connected clients
         await self.broadcast_to_websocket(log_entry, self.active_log_connections)
+
+    async def progress_event(self, message: Dict[str, Any]):
+        """
+        Send a structured message to all connected clients.
+        :param message: A dictionary representing the chat message and metadata.
+        """
+        entry = {"message": message}
+        await self.broadcast_to_websocket(entry, self.active_progress_connections)
 
     async def internal_chat_event(self, message: Dict[str, Any]):
         """
@@ -159,3 +169,17 @@ class WebsocketLogsManager:
             self.active_sly_data_connections.remove(websocket)
             await self.sly_data_event(f"Sly Data disconnected: {self.agent_name}")
 
+    async def handle_progress_websocket(self, websocket: WebSocket):
+        """
+        Handle a new WebSocket connection for receiving progress.
+        :param websocket: The connected WebSocket instance.
+        """
+        await websocket.accept()
+        self.active_progress_connections.append(websocket)
+        await self.progress_event(f"Progress client connected: {self.agent_name}")
+        try:
+            while True:
+                await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
+        except WebSocketDisconnect:
+            self.active_progress_connections.remove(websocket)
+            await self.sly_data_event(f"Progress client disconnected: {self.agent_name}")

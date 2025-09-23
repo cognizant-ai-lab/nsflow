@@ -115,3 +115,7 @@ Note: The above script's output should show that `./nsflow` dir contains a modul
     sh build_scripts/build_wheel.sh
     ```
 ---
+
+### Enabling Visual Question Answering (VQA) http endpoints
+
+Follow these [instructions](./docs/VQA_README.md)
