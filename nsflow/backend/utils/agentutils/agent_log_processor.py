@@ -77,7 +77,7 @@ class AgentLogProcessor(MessageProcessor):
             # log progress messages if any
             progress = chat_message_dict.get("structure", progress)
             if progress:
-                await self.logs_manager.log_event(f"Progress: {progress}", "nsflow")
+                await self.logs_manager.progress_event(json.dumps({"progress": progress}))
 
         # Get the list of agents that participated in the message
         otrace = chat_message_dict.get("origin", [])
