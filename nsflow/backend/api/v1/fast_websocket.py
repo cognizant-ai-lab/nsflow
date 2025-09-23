@@ -56,6 +56,13 @@ async def websocket_slydata(websocket: WebSocket, agent_name: str):
     await manager.handle_sly_data_websocket(websocket)
 
 
+@router.websocket("/progress/{agent_name}")
+async def websocket_progress(websocket: WebSocket, agent_name: str):
+    """WebSocket route for progress streaming."""
+    manager = LogsRegistry.register(agent_name)
+    await manager.handle_progress_websocket(websocket)
+
+
 @router.websocket("/sustainability/{agent_name}")
 async def websocket_sustainability(websocket: WebSocket, agent_name: str):
     """WebSocket endpoint for real-time sustainability metrics updates"""
