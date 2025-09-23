@@ -28,6 +28,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+ASYNCIO_SLEEP_INTERVAL = 0.5
 
 
 class WebsocketLogsManager:
@@ -178,7 +179,7 @@ class WebsocketLogsManager:
         await self.progress_event(f"Progress client connected: {self.agent_name}")
         try:
             while True:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
         except WebSocketDisconnect:
             self.active_progress_connections.remove(websocket)
             await self.sly_data_event(f"Progress client disconnected: {self.agent_name}")
