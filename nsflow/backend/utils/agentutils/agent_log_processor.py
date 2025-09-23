@@ -48,6 +48,7 @@ class AgentLogProcessor(MessageProcessor):
         otrace = None
         sly_data = None
         token_accounting: Dict[str, Any] = {}
+        progress = None
         
         # Log the original chat_message_dict in full only for debugging on client interface
         # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}")
@@ -58,18 +59,25 @@ class AgentLogProcessor(MessageProcessor):
 
         if message_type not in (ChatMessageType.AGENT,
                                 ChatMessageType.AI,
-                                ChatMessageType.AGENT_TOOL_RESULT):
+                                ChatMessageType.AGENT_TOOL_RESULT,
+                                ChatMessageType.AGENT_PROGRESS):
             # These are framework messages that contain chat context, system prompts or consolidated messages etc.
             # Don't log them. And there's no agent to highlight in the network diagram.
+            # ChatMessageType.AGENT_FRAMEWORK
+            # ChatMessageType.SYSTEM
+            # ChatMessageType.UNKNOWN
+            # We also ignore ChatMessageType.HUMAN message here because that is already available via the ChatPanel
             return
+
         # Get the token accounting information
         if message_type == ChatMessageType.AGENT:
             token_accounting = chat_message_dict.get("structure", token_accounting)
 
-        # # Discard empty messages, don't need it for now
-        # log_text = chat_message_dict.get("text", "").strip()
-        # if log_text == "":
-        #     return
+        if message_type == ChatMessageType.AGENT_PROGRESS:
+            # log progress messages if any
+            progress = chat_message_dict.get("structure", progress)
+            if progress:
+                await self.logs_manager.log_event(f"Progress: {progress}", "nsflow")
 
         # Get the list of agents that participated in the message
         otrace = chat_message_dict.get("origin", [])

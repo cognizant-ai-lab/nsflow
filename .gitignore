@@ -21,6 +21,7 @@ wheels_private/
 registries/
 coded_tools/
 generated_notebooks/
+toolbox/
 
 # Virtual environments
 .venv
