@@ -116,22 +116,9 @@ class AgentNetworkUtils:
         agent_network: AgentNetwork = None
         if agent_network_name is None or len(agent_network_name) == 0:
             return None
-        
-        # check if a file agent_network_name exists with a .hocon or .json extension in the REGISTRY_DIR
-        # we should also check if the file name already has a .hocon or .json extension
-        if agent_network_name.endswith(".hocon") or agent_network_name.endswith(".json"):
-            if os.path.exists(os.path.join(self.registry_dir, agent_network_name)):
-                agent_network_name = os.path.join(self.registry_dir, agent_network_name)
-            else:
-                raise HTTPException(status_code=404, detail=f"Network name '{agent_network_name}' not found.")
-        else:
-            if os.path.exists(os.path.join(self.registry_dir, agent_network_name + ".hocon")):
-                agent_network_name = os.path.join(self.registry_dir, agent_network_name + ".hocon")
-            elif os.path.exists(os.path.join(self.registry_dir, agent_network_name + ".json")):
-                agent_network_name = os.path.join(self.registry_dir, agent_network_name + ".json")
-            else:
-                # raise exception if the file does not exist
-                raise HTTPException(status_code=404, detail=f"Network name '{agent_network_name}' not found.")        
+
+        if not(agent_network_name.endswith(".hocon") or agent_network_name.endswith(".json")):
+            agent_network_name = agent_network_name + ".hocon"
 
         agent_network = self.agent_network_restorer.restore(agent_network_name)
 
