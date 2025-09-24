@@ -17,7 +17,6 @@ from .v1 import export_endpoints
 from .v1 import fast_websocket
 from .v1 import fastapi_grpc_endpoints
 from .v1 import vqa_endpoints
-from .v1 import andeditor
 
 router = APIRouter()
 
@@ -28,4 +27,3 @@ router.include_router(export_endpoints.router, tags=["Notebook Export"])
 router.include_router(fastapi_grpc_endpoints.router, tags=["Concierge Endpoints"])
 router.include_router(audio_endpoints.router, tags=["Audio Processing"])
 router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
-router.include_router(andeditor.router, tags=["Agent Network Designer"])
