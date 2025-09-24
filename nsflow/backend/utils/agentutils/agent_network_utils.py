@@ -19,11 +19,8 @@ from fastapi import HTTPException
 from pyhocon import ConfigFactory
 
 from neuro_san.internals.graph.registry.agent_network import AgentNetwork
-from neuro_san.client.direct_agent_storage_util import DirectAgentStorageUtil
-from neuro_san.internals.network_providers.agent_network_storage import AgentNetworkStorage
 from neuro_san.session.missing_agent_check import MissingAgentCheck
 from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
-from neuro_san.internals.interfaces.agent_network_provider import AgentNetworkProvider
 
 logging.basicConfig(level=logging.INFO)
 
@@ -62,7 +59,7 @@ class AgentNetworkUtils:
     def __init__(self):
         self.registry_dir = REGISTRY_DIR
         self.fixtures_dir = FIXTURES_DIR
-        self.network_storage: AgentNetworkStorage = DirectAgentStorageUtil.create_network_storage()
+        self.agent_network_restorer = AgentNetworkRestorer(REGISTRY_DIR)
 
     def get_test_manifest_path(self):
         """Returns the manifest.hocon path."""
@@ -108,31 +105,38 @@ class AgentNetworkUtils:
         ]
 
         return {"networks": networks}
-        
-    def get_agent_network(self, agent_name: str) -> AgentNetwork:
+    
+    def get_agent_network(self, agent_network_name: str) -> AgentNetwork:
         """
         :param agent_name: The name of the agent whose AgentNetwork we want to get.
                 This name can be something in the manifest file (with no file suffix)
                 or a specific full-reference to an agent network's hocon file.
         :return: The AgentNetwork corresponding to that agent.
         """
-
-        if agent_name is None or len(agent_name) == 0:
-            return None
-
         agent_network: AgentNetwork = None
-        if agent_name.endswith(".hocon") or agent_name.endswith(".json"):
-            # We got a specific file name
-            restorer = AgentNetworkRestorer()
-            agent_network = restorer.restore(file_reference=agent_name)
+        if agent_network_name is None or len(agent_network_name) == 0:
+            return None
+        
+        # check if a file agent_network_name exists with a .hocon or .json extension in the REGISTRY_DIR
+        # we should also check if the file name already has a .hocon or .json extension
+        if agent_network_name.endswith(".hocon") or agent_network_name.endswith(".json"):
+            if os.path.exists(os.path.join(self.registry_dir, agent_network_name)):
+                agent_network_name = os.path.join(self.registry_dir, agent_network_name)
+            else:
+                raise HTTPException(status_code=404, detail=f"Network name '{agent_network_name}' not found.")
         else:
-            # Use the standard stuff available via the manifest file.
-            agent_network_provider: AgentNetworkProvider =\
-                self.network_storage.get_agent_network_provider(agent_name)
-            agent_network = agent_network_provider.get_agent_network()
+            if os.path.exists(os.path.join(self.registry_dir, agent_network_name + ".hocon")):
+                agent_network_name = os.path.join(self.registry_dir, agent_network_name + ".hocon")
+            elif os.path.exists(os.path.join(self.registry_dir, agent_network_name + ".json")):
+                agent_network_name = os.path.join(self.registry_dir, agent_network_name + ".json")
+            else:
+                # raise exception if the file does not exist
+                raise HTTPException(status_code=404, detail=f"Network name '{agent_network_name}' not found.")        
+
+        agent_network = self.agent_network_restorer.restore(agent_network_name)
 
         # Common place for nice error messages when networks are not found
-        MissingAgentCheck.check_agent_network(agent_network, agent_name)
+        MissingAgentCheck.check_agent_network(agent_network, agent_network_name)
 
         return agent_network
 

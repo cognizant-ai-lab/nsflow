@@ -26,7 +26,6 @@ from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/api/v1")
-agent_utils = AgentNetworkUtils()  # Instantiate utility class
 
 
 @router.get("/vite_config.json")
