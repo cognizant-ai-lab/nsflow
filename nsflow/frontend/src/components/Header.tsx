@@ -18,7 +18,7 @@ import { useNavigate } from "react-router-dom";
 
 import ThemeToggle from "./ThemeToggle";
 
-const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
+const Header: React.FC<{ selectedNetwork: string; isEditorPage?: boolean }> = ({ selectedNetwork, isEditorPage = false }) => {
   const { apiUrl } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -102,23 +102,19 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
 
         {/* Home */}
         <button 
-        className="header-btn h-8 px-4 py-1"
-        onClick={() => navigate("/home")}
+          className={`header-btn h-8 px-4 py-1 ${!isEditorPage ? 'bg-blue-600' : ''}`}
+          onClick={() => navigate("/home")}
         >
-            <FaHome className="mr-2" /> Home
+          <FaHome className="mr-2" /> Home
         </button>
 
         {/* Editor */}
-        <a
-          href={`https://neurosan-hocon-editor.streamlit.app/ `}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center text-blue-400 hover:text-blue-300"
+        <button 
+          className={`header-btn h-8 px-4 py-1 ${isEditorPage ? 'bg-blue-600' : ''}`}
+          onClick={() => navigate("/editor")}
         >
-          <button className="header-btn h-8 px-4 py-1" title="Hocon Editor">
-            <FaEdit className="mr-2" /> Editor
-          </button>
-        </a>
+          <FaEdit className="mr-2" /> Editor
+        </button>
         {/* Observe */}
 
         {/* {location.pathname !== "/observability" && (
