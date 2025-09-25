@@ -12,10 +12,10 @@
 import logging
 from fastapi import APIRouter, HTTPException
 
-from nsflow.backend.models.editor_models import (
-    NetworkConnectivity,
-    StateConnectivityResponse, NetworkStateInfo
-)
+from nsflow.backend.models.editor_models import NetworkConnectivity
+from nsflow.backend.models.editor_models import StateConnectivityResponse
+from nsflow.backend.models.editor_models import NetworkStateInfo
+
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
 from nsflow.backend.utils.editor.state_registry import StateRegistry
