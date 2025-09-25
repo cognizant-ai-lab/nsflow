@@ -13,9 +13,6 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Callable
 from threading import Lock
-import asyncio
-
-from nsflow.backend.models.andeditor_models import AgentNetworkState, SharedState
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +24,9 @@ class StateManager:
     """
     
     def __init__(self):
-        self.shared_states: Dict[str, SharedState] = {}
+        # Simple dictionary to store network states
+        # Format: {network_name: {"state": state_dict, "last_updated": timestamp, "source": source}}
+        self.network_states: Dict[str, Dict[str, Any]] = {}
         self.subscribers: List[Callable] = []
         self.state_lock = Lock()
     
@@ -42,20 +41,17 @@ class StateManager:
         """
         try:
             with self.state_lock:
-                # Validate and convert to AgentNetworkState
-                agent_network_state = AgentNetworkState.parse_obj(state_dict)
+                # Simple state storage
+                network_state = {
+                    "state": state_dict,
+                    "last_updated": datetime.now().isoformat(),
+                    "source": source
+                }
                 
-                # Update shared state
-                shared_state = SharedState(
-                    current_network_state=agent_network_state,
-                    last_updated=datetime.now().isoformat(),
-                    source=source
-                )
-                
-                self.shared_states[network_name] = shared_state
+                self.network_states[network_name] = network_state
                 
                 # Notify subscribers
-                self._notify_subscribers(network_name, shared_state)
+                self._notify_subscribers(network_name, network_state)
                 
                 logger.info(f"Updated network state for '{network_name}' from {source}")
                 return True
@@ -64,22 +60,22 @@ class StateManager:
             logger.error(f"Failed to update network state: {e}")
             return False
     
-    def get_network_state(self, network_name: str) -> Optional[SharedState]:
+    def get_network_state(self, network_name: str) -> Optional[Dict[str, Any]]:
         """
         Get the current network state for a given network.
         
         :param network_name: Name of the network
-        :return: SharedState or None if not found
+        :return: State dict or None if not found
         """
         with self.state_lock:
-            return self.shared_states.get(network_name)
+            return self.network_states.get(network_name)
     
-    def get_all_network_states(self) -> Dict[str, SharedState]:
+    def get_all_network_states(self) -> Dict[str, Dict[str, Any]]:
         """Get all current network states"""
         with self.state_lock:
-            return self.shared_states.copy()
+            return self.network_states.copy()
     
-    def subscribe_to_updates(self, callback: Callable[[str, SharedState], None]):
+    def subscribe_to_updates(self, callback: Callable[[str, Dict[str, Any]], None]):
         """
         Subscribe to state updates.
         
@@ -96,11 +92,11 @@ class StateManager:
         if callback in self.subscribers:
             self.subscribers.remove(callback)
     
-    def _notify_subscribers(self, network_name: str, shared_state: SharedState):
+    def _notify_subscribers(self, network_name: str, network_state: Dict[str, Any]):
         """Notify all subscribers of state changes"""
         for callback in self.subscribers:
             try:
-                callback(network_name, shared_state)
+                callback(network_name, network_state)
             except Exception as e:
                 logger.error(f"Error notifying subscriber: {e}")
     
@@ -113,8 +109,8 @@ class StateManager:
         """
         try:
             with self.state_lock:
-                if network_name in self.shared_states:
-                    del self.shared_states[network_name]
+                if network_name in self.network_states:
+                    del self.network_states[network_name]
                     logger.info(f"Cleared network state for '{network_name}'")
                     return True
                 return False
@@ -125,38 +121,103 @@ class StateManager:
     def get_network_names(self) -> List[str]:
         """Get list of all network names that have states"""
         with self.state_lock:
-            return list(self.shared_states.keys())
+            return list(self.network_states.keys())
     
-    async def update_from_logs(self, network_name: str, log_data: Dict[str, Any]):
+    def extract_state_from_progress(self, progress_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Update network state from log data.
-        This method can be called from the log processor.
+        Extract state dictionary from progress message data.
         
-        :param network_name: Name of the network
-        :param log_data: Log data containing state information
+        :param progress_data: Progress data from ChatMessageType.AGENT_PROGRESS
+        :return: State dictionary if found, None otherwise
+        """
+        # Check if progress_data directly contains agent network definition
+        if "agent_network_definition" in progress_data:
+            return progress_data
+        
+        # Check nested structures
+        for _, value in progress_data.items():
+            if isinstance(value, dict) and "agent_network_definition" in value:
+                return value
+        
+        return None
+    
+    def get_state_from_hocon(self, network_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get state by reading from existing HOCON file.
+        This allows us to load state from files already on disk.
+        
+        :param network_name: Name of the network to load from HOCON
+        :return: State dictionary if file exists and can be parsed, None otherwise
         """
         try:
-            # Extract state dictionary from log data
-            # The exact format will depend on how logs are structured
-            if "agent_network_definition" in log_data:
-                state_dict = log_data
-            elif "state_dict" in log_data:
-                state_dict = log_data["state_dict"]
-            else:
-                # Try to construct state from log data
-                state_dict = self._construct_state_from_logs(network_name, log_data)
+            # Import here to avoid circular imports
+            from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
             
+            agent_utils = AgentNetworkUtils()
+            agent_network = agent_utils.get_agent_network(network_name)
+            config = agent_network.get_config()
+            
+            # Convert HOCON config to our state format
+            state_dict = self._convert_hocon_to_state(config, network_name)
+            
+            # Optionally cache this state in memory
             if state_dict:
-                self.update_network_state(network_name, state_dict, source="logs")
-                
+                self.update_network_state(network_name, state_dict, source="hocon_file")
+            
+            return state_dict
+            
         except Exception as e:
-            logger.error(f"Failed to update from logs: {e}")
+            logger.warning(f"Could not load state from HOCON for '{network_name}': {e}")
+            return None
     
-    def _construct_state_from_logs(self, network_name: str, log_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _convert_hocon_to_state(self, hocon_config: Dict[str, Any], network_name: str) -> Dict[str, Any]:
         """
-        Construct state dictionary from log data.
-        This is a placeholder for more sophisticated log parsing.
+        Convert HOCON config format to our state format.
+        
+        :param hocon_config: Raw HOCON configuration
+        :param network_name: Network name to include in state
+        :return: State dictionary in our expected format
         """
-        # This would need to be implemented based on the actual log format
-        # For now, return None if we can't construct a valid state
-        return None
+        try:
+            # Extract tools/agents from HOCON
+            tools = hocon_config.get("tools", [])
+            
+            agent_network_definition = {}
+            for tool in tools:
+                if isinstance(tool, dict) and "name" in tool:
+                    agent_name = tool["name"]
+                    agent_def = {
+                        "instructions": tool.get("instructions", "")
+                    }
+                    
+                    # Extract down_chains from tools field
+                    if "tools" in tool and isinstance(tool["tools"], list):
+                        agent_def["down_chains"] = tool["tools"]
+                    else:
+                        agent_def["down_chains"] = []
+                    
+                    agent_network_definition[agent_name] = agent_def
+            
+            return {
+                "agent_network_definition": agent_network_definition,
+                "agent_network_name": network_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Error converting HOCON to state: {e}")
+            return {}
+    
+    def get_or_load_state(self, network_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get state from memory, or load from HOCON file if not in memory.
+        
+        :param network_name: Name of the network
+        :return: State dictionary from memory or HOCON file
+        """
+        # First try to get from memory
+        memory_state = self.get_network_state(network_name)
+        if memory_state:
+            return memory_state
+        
+        # If not in memory, try to load from HOCON file
+        return self.get_state_from_hocon(network_name)

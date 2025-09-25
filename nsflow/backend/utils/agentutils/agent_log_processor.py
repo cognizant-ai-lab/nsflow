@@ -19,12 +19,14 @@ from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.trust.rai_service import RaiService
+from nsflow.backend.utils.editor.state_registry import StateRegistry
 
 
 class AgentLogProcessor(MessageProcessor):
     """
     Tells the UI there's an agent message to process.
     """
+    AGENT_NETWORK_DESIGNER_NAME = "agent_network_designer"
 
     def __init__(self, agent_name: str, sid: str):
         """
@@ -46,7 +48,6 @@ class AgentLogProcessor(MessageProcessor):
         # initialize different items in response
         internal_chat = None
         otrace = None
-        sly_data = None
         token_accounting: Dict[str, Any] = {}
         progress = None
         
@@ -74,10 +75,29 @@ class AgentLogProcessor(MessageProcessor):
             token_accounting = chat_message_dict.get("structure", token_accounting)
 
         if message_type == ChatMessageType.AGENT_PROGRESS:
+            # logging.info("\n"+"="*30 + "progress message start" + "="*30+"\n")
+            # logging.info(chat_message_dict.get("structure", progress))
+            # logging.info("\n"+"x"*30 + "progress message end" + "x"*30+"\n")
+
             # log progress messages if any
             progress = chat_message_dict.get("structure", progress)
             if progress:
                 await self.logs_manager.progress_event(json.dumps({"progress": progress}))
+
+                # Process state information if this is from agent network designer
+                if self.agent_name == self.AGENT_NETWORK_DESIGNER_NAME:
+                    # Use state registry to get or create a state manager for this session
+                    registry_key, state_manager = StateRegistry.register(
+                        network_name="agent_network_designer", 
+                        session_id=self.sid
+                    )
+                    
+                    state_dict = state_manager.extract_state_from_progress(progress)
+                    
+                    if state_dict:
+                        network_name = state_dict.get("agent_network_name", "unknown_network")
+                        state_manager.update_network_state(network_name, state_dict, source="logs")
+                        logging.info(f"Updated state for network '{network_name}' from agent network designer logs (registry: {registry_key})")
 
         # Get the list of agents that participated in the message
         otrace = chat_message_dict.get("origin", [])
