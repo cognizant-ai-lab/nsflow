@@ -23,7 +23,13 @@ import {
   Paper,
   Divider,
   Tooltip,
-  alpha
+  alpha,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField
 } from '@mui/material';
 import { 
   EditOutlined as EditIcon,
@@ -45,6 +51,9 @@ import { useChatContext } from '../context/ChatContext';
 interface TreeOperationsContextType {
   handleDeleteItem: (id: string) => void;
   handleAddItem: (parentId: string) => void;
+  handleAddWithConflictCheck: (parentId: string) => void;
+  handleUpdateKey: (id: string, newKey: string) => void;
+  handleUpdateValue: (id: string, newValue: any) => void;
   treeData: SlyTreeItem[];
 }
 
@@ -67,6 +76,8 @@ interface SlyTreeItem {
   value?: any;
   type?: 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
   parentId?: string;
+  depth?: number;
+  hasValue?: boolean; // true if item has a primitive value, false if it has children
 }
 
 interface CustomLabelProps extends UseTreeItemLabelSlotOwnProps {
@@ -84,7 +95,7 @@ interface CustomLabelInputProps extends UseTreeItemLabelInputSlotOwnProps {
   value: string;
 }
 
-// Custom Label Component with inline editing
+// Custom Label Component with separate key/value editing
 const CustomLabel = ({
   editing,
   editable,
@@ -96,11 +107,46 @@ const CustomLabel = ({
   ...other
 }: CustomLabelProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [editingKey, setEditingKey] = useState(false);
+  const [editingValue, setEditingValue] = useState(false);
+  const [keyValue, setKeyValue] = useState(itemData?.key || '');
+  const [valueValue, setValueValue] = useState(
+    itemData?.hasValue ? String(itemData.value || '') : ''
+  );
+
+  // Calculate indentation based on depth
+  const indentLevel = (itemData?.depth || 0) * 8; // 8px per level
+
+  const { handleUpdateKey, handleUpdateValue } = useTreeOperations();
+
+  const handleKeySave = () => {
+    if (itemData && keyValue.trim()) {
+      handleUpdateKey(itemData.id, keyValue.trim());
+    }
+    setEditingKey(false);
+  };
+
+  const handleValueSave = () => {
+    if (itemData) {
+      handleUpdateValue(itemData.id, valueValue);
+    }
+    setEditingValue(false);
+  };
+
+  const handleKeyCancel = () => {
+    setKeyValue(itemData?.key || '');
+    setEditingKey(false);
+  };
+
+  const handleValueCancel = () => {
+    setValueValue(itemData?.hasValue ? String(itemData.value || '') : '');
+    setEditingValue(false);
+  };
 
   return (
     <TreeItemLabel
       {...other}
-      editable={editable}
+      editable={false} // We handle editing manually
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       sx={{
@@ -109,6 +155,7 @@ const CustomLabel = ({
         gap: 1,
         py: 0.5,
         px: 1,
+        ml: `${indentLevel}px`,
         borderRadius: 1,
         minHeight: 32,
         transition: 'all 0.2s ease',
@@ -120,10 +167,119 @@ const CustomLabel = ({
       }}
     >
       <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-        {children}
+        {/* Key editing */}
+        {editingKey ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TextField
+              size="small"
+              value={keyValue}
+              onChange={(e) => setKeyValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleKeySave();
+                if (e.key === 'Escape') handleKeyCancel();
+              }}
+              sx={{
+                minWidth: 80,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: alpha('#ffffff', 0.1),
+                  color: 'white',
+                  fontSize: '0.85rem',
+                }
+              }}
+              autoFocus
+            />
+            <IconButton size="small" onClick={handleKeySave} sx={{ color: '#4CAF50' }}>
+              <CheckIcon fontSize="small" />
+            </IconButton>
+            <IconButton size="small" onClick={handleKeyCancel} sx={{ color: '#f44336' }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        ) : (
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 0.5,
+              cursor: 'pointer',
+              color: '#FFB74D', // Orange for keys
+              fontWeight: 600
+            }}
+            onClick={() => setEditingKey(true)}
+          >
+            <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+              {itemData?.key || 'key'}
+            </Typography>
+            {isHovered && (
+              <IconButton size="small" sx={{ color: '#2196F3' }}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
+        )}
+
+        <Typography sx={{ color: '#90A4AE', mx: 0.5 }}>:</Typography>
+
+        {/* Value editing */}
+        {itemData?.hasValue ? (
+          editingValue ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <TextField
+                size="small"
+                value={valueValue}
+                onChange={(e) => setValueValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleValueSave();
+                  if (e.key === 'Escape') handleValueCancel();
+                }}
+                sx={{
+                  minWidth: 100,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: alpha('#ffffff', 0.1),
+                    color: 'white',
+                    fontSize: '0.85rem',
+                  }
+                }}
+                autoFocus
+              />
+              <IconButton size="small" onClick={handleValueSave} sx={{ color: '#4CAF50' }}>
+                <CheckIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" onClick={handleValueCancel} sx={{ color: '#f44336' }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          ) : (
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 0.5,
+                cursor: 'pointer',
+                color: '#81C784', // Green for values
+              }}
+              onClick={() => setEditingValue(true)}
+            >
+              <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                {typeof itemData.value === 'string' 
+                  ? `"${itemData.value}"` 
+                  : String(itemData.value)}
+              </Typography>
+              {isHovered && (
+                <IconButton size="small" sx={{ color: '#2196F3' }}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
+          )
+        ) : (
+          <Typography sx={{ color: '#90A4AE', fontStyle: 'italic' }}>
+            {itemData?.children?.length ? `{${itemData.children.length} items}` : '{}'}
+          </Typography>
+        )}
       </Box>
       
-      {(isHovered || editing) && (
+      {(isHovered || editingKey || editingValue) && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {onAddChild && (
             <Tooltip title="Add child item">
@@ -139,24 +295,6 @@ const CustomLabel = ({
                 }}
               >
                 <AddIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          
-          {editable && (
-            <Tooltip title="Edit">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleItemEditing();
-                }}
-                sx={{ 
-                  color: '#2196F3',
-                  '&:hover': { backgroundColor: alpha('#2196F3', 0.1) }
-                }}
-              >
-                <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
@@ -231,7 +369,7 @@ const CustomLabelInput = React.forwardRef<HTMLInputElement, CustomLabelInputProp
 // Custom Tree Item Component  
 const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
   function CustomTreeItem(props: TreeItemProps, ref: React.Ref<HTMLLIElement>) {
-    const { handleDeleteItem, handleAddItem, treeData } = useTreeOperations();
+    const { handleDeleteItem, handleAddWithConflictCheck, treeData } = useTreeOperations();
     const { interactions, status } = useTreeItemUtils({
       itemId: props.itemId,
       children: props.children,
@@ -261,7 +399,7 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
 
     const handleAddChild = () => {
       if (itemData?.id) {
-        handleAddItem(itemData.id);
+        handleAddWithConflictCheck(itemData.id);
       }
     };
 
@@ -297,6 +435,12 @@ const EditorSlyDataPanel: React.FC = () => {
   const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
   const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>(['root']);
   const [nextId, setNextId] = useState(1);
+  const [conflictDialog, setConflictDialog] = useState<{
+    open: boolean;
+    parentId: string;
+    parentKey: string;
+    currentValue: any;
+  }>({ open: false, parentId: '', parentKey: '', currentValue: null });
 
   // Initialize with empty data structure
   useEffect(() => {
@@ -306,7 +450,9 @@ const EditorSlyDataPanel: React.FC = () => {
         label: 'SlyData Root',
         children: [],
         type: 'object',
-        isKeyValuePair: false
+        isKeyValuePair: false,
+        depth: 0,
+        hasValue: false
       }];
       setTreeData(initialData);
     }
@@ -320,24 +466,26 @@ const EditorSlyDataPanel: React.FC = () => {
   }, [nextId]);
 
   // Convert JSON to tree structure
-  const jsonToTreeData = useCallback((json: any, parentId = 'root'): SlyTreeItem[] => {
+  const jsonToTreeData = useCallback((json: any, parentId = 'root', depth = 0): SlyTreeItem[] => {
     if (!json || typeof json !== 'object') return [];
 
     return Object.entries(json).map(([key, value]) => {
       const id = generateId();
+      const hasValue = typeof value !== 'object' || value === null;
       const item: SlyTreeItem = {
         id,
-        label: `${key}: ${typeof value === 'object' ? '{...}' : JSON.stringify(value)}`,
+        label: hasValue ? `${key}: ${JSON.stringify(value)}` : `${key}`,
         key,
-        value,
+        value: hasValue ? value : undefined,
         parentId,
         isKeyValuePair: true,
         type: Array.isArray(value) ? 'array' : typeof value as any,
+        depth,
+        hasValue,
       };
 
       if (typeof value === 'object' && value !== null) {
-        item.children = jsonToTreeData(value, id);
-        item.label = `${key} ${Array.isArray(value) ? `[${value.length}]` : '{...}'}`;
+        item.children = jsonToTreeData(value, id, depth + 1);
       }
 
       return item;
@@ -361,8 +509,52 @@ const EditorSlyDataPanel: React.FC = () => {
     return result;
   }, []);
 
+  // Handle adding new item with conflict check
+  const handleAddWithConflictCheck = useCallback((parentId: string) => {
+    // Find the parent item
+    const findItem = (items: SlyTreeItem[], id: string): SlyTreeItem | null => {
+      for (const item of items) {
+        if (item.id === id) return item;
+        if (item.children) {
+          const found = findItem(item.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const parentItem = findItem(treeData, parentId);
+    
+    if (parentItem && parentItem.hasValue && parentItem.value !== undefined) {
+      // Show conflict dialog
+      setConflictDialog({
+        open: true,
+        parentId,
+        parentKey: parentItem.key || '',
+        currentValue: parentItem.value
+      });
+    } else {
+      // Safe to add
+      handleAddItem(parentId);
+    }
+  }, [treeData]);
+
   // Handle adding new item
   const handleAddItem = useCallback((parentId?: string) => {
+    // Find parent depth
+    const findDepth = (items: SlyTreeItem[], id: string): number => {
+      for (const item of items) {
+        if (item.id === id) return (item.depth || 0) + 1;
+        if (item.children) {
+          const depth = findDepth(item.children, id);
+          if (depth > 0) return depth;
+        }
+      }
+      return 0;
+    };
+
+    const newDepth = findDepth(treeData, parentId || 'root');
+    
     const newItem: SlyTreeItem = {
       id: generateId(),
       label: 'new_key: "new_value"',
@@ -370,7 +562,9 @@ const EditorSlyDataPanel: React.FC = () => {
       value: 'new_value',
       parentId: parentId || 'root',
       isKeyValuePair: true,
-      type: 'string'
+      type: 'string',
+      depth: newDepth,
+      hasValue: true
     };
 
     setTreeData(prev => {
@@ -379,7 +573,9 @@ const EditorSlyDataPanel: React.FC = () => {
           if (item.id === (parentId || 'root')) {
             return {
               ...item,
-              children: [...(item.children || []), newItem]
+              children: [...(item.children || []), newItem],
+              hasValue: false, // Parent now has children, so no value
+              value: undefined
             };
           }
           if (item.children) {
@@ -397,7 +593,80 @@ const EditorSlyDataPanel: React.FC = () => {
 
     // Expand the parent
     setExpandedItems(prev => [...prev, parentId || 'root']);
-  }, [generateId]);
+  }, [generateId, treeData]);
+
+  // Handle conflict resolution
+  const handleConflictConfirm = () => {
+    handleAddItem(conflictDialog.parentId);
+    setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null });
+  };
+
+  const handleConflictCancel = () => {
+    setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null });
+  };
+
+  // Handle updating key
+  const handleUpdateKey = useCallback((id: string, newKey: string) => {
+    setTreeData(prev => {
+      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => {
+        return items.map(item => {
+          if (item.id === id) {
+            return {
+              ...item,
+              key: newKey,
+              label: item.hasValue ? `${newKey}: ${typeof item.value === 'string' ? `"${item.value}"` : String(item.value)}` : newKey
+            };
+          }
+          if (item.children) {
+            return { ...item, children: updateItem(item.children) };
+          }
+          return item;
+        });
+      };
+      return updateItem(prev);
+    });
+  }, []);
+
+  // Handle updating value
+  const handleUpdateValue = useCallback((id: string, newValue: any) => {
+    setTreeData(prev => {
+      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => {
+        return items.map(item => {
+          if (item.id === id) {
+            // Parse the value
+            let parsedValue = newValue;
+            try {
+              if (typeof newValue === 'string') {
+                if (newValue.startsWith('"') && newValue.endsWith('"')) {
+                  parsedValue = newValue.slice(1, -1);
+                } else if (!isNaN(Number(newValue))) {
+                  parsedValue = Number(newValue);
+                } else if (newValue === 'true' || newValue === 'false') {
+                  parsedValue = newValue === 'true';
+                } else if (newValue === 'null') {
+                  parsedValue = null;
+                }
+              }
+            } catch {
+              parsedValue = newValue;
+            }
+
+            return {
+              ...item,
+              value: parsedValue,
+              type: typeof parsedValue as any,
+              label: `${item.key}: ${typeof parsedValue === 'string' ? `"${parsedValue}"` : String(parsedValue)}`
+            };
+          }
+          if (item.children) {
+            return { ...item, children: updateItem(item.children) };
+          }
+          return item;
+        });
+      };
+      return updateItem(prev);
+    });
+  }, []);
 
   // Handle deleting item
   const handleDeleteItem = useCallback((itemId: string) => {
@@ -475,13 +744,15 @@ const EditorSlyDataPanel: React.FC = () => {
         reader.onload = (event) => {
           try {
             const json = JSON.parse(event.target?.result as string);
-            const newTreeData = jsonToTreeData(json);
+            const newTreeData = jsonToTreeData(json, 'root', 1);
             setTreeData([{
               id: 'root',
               label: 'SlyData Root',
               children: newTreeData,
               type: 'object',
-              isKeyValuePair: false
+              isKeyValuePair: false,
+              depth: 0,
+              hasValue: false
             }]);
             setExpandedItems(['root', ...newTreeData.map(item => item.id)]);
           } catch (error) {
@@ -520,27 +791,29 @@ const EditorSlyDataPanel: React.FC = () => {
           parsedData = JSON.parse(cleanData);
         }
         
-        const newTreeData = jsonToTreeData(parsedData);
+        const newTreeData = jsonToTreeData(parsedData, 'root', 1);
         setTreeData([{
           id: 'root',
           label: 'SlyData Root',
           children: newTreeData,
           type: 'object',
-          isKeyValuePair: false
+          isKeyValuePair: false,
+          depth: 0,
+          hasValue: false
         }]);
         
         // Auto-expand items
         const getAllIds = (items: SlyTreeItem[]): string[] => {
-          const ids: string[] = [];
-          items.forEach(item => {
-            ids.push(item.id);
-            if (item.children) {
-              ids.push(...getAllIds(item.children));
-            }
-          });
-          return ids;
-        };
-        
+        const ids: string[] = [];
+        items.forEach(item => {
+          ids.push(item.id);
+          if (item.children) {
+            ids.push(...getAllIds(item.children));
+          }
+        });
+        return ids;
+      };
+      
         setExpandedItems(['root', ...getAllIds(newTreeData)]);
       } catch (error) {
         console.error('Error processing sly data message:', error);
@@ -590,14 +863,14 @@ const EditorSlyDataPanel: React.FC = () => {
     }
   };
   */
-
-  return (
+    
+    return (
     <Paper 
-      sx={{ 
+        sx={{ 
         height: '100%', 
         backgroundColor: '#1a1a1a',
         color: 'white',
-        display: 'flex',
+          display: 'flex', 
         flexDirection: 'column',
         overflow: 'hidden'
       }}
@@ -639,13 +912,13 @@ const EditorSlyDataPanel: React.FC = () => {
           </Tooltip>
 
           <Tooltip title="Add root item">
-            <IconButton 
-              size="small" 
+              <IconButton 
+                size="small" 
               onClick={() => handleAddItem('root')}
               sx={{ color: '#2196F3' }}
-            >
+              >
               <AddIcon />
-            </IconButton>
+              </IconButton>
           </Tooltip>
         </Box>
       </Box>
@@ -662,6 +935,9 @@ const EditorSlyDataPanel: React.FC = () => {
           <TreeOperationsContext.Provider value={{
             handleDeleteItem,
             handleAddItem,
+            handleAddWithConflictCheck,
+            handleUpdateKey,
+            handleUpdateValue,
             treeData
           }}>
             <RichTreeView
@@ -706,6 +982,46 @@ const EditorSlyDataPanel: React.FC = () => {
           </Box>
         )}
       </Box>
+
+      {/* Conflict Dialog */}
+      <Dialog 
+        open={conflictDialog.open} 
+        onClose={handleConflictCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: 'white', backgroundColor: '#1a1a1a' }}>
+          Replace Current Value?
+        </DialogTitle>
+        <DialogContent sx={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+          <Typography sx={{ mb: 2 }}>
+            The key "{conflictDialog.parentKey}" currently has a value:
+          </Typography>
+          <Box sx={{ 
+            p: 2, 
+            backgroundColor: alpha('#ffffff', 0.1), 
+            borderRadius: 1,
+            fontFamily: 'monospace',
+            mb: 2
+          }}>
+            {typeof conflictDialog.currentValue === 'string' 
+              ? `"${conflictDialog.currentValue}"` 
+              : String(conflictDialog.currentValue)}
+          </Box>
+          <Typography>
+            Adding a child key-value pair will replace this value with a nested object. 
+            Do you want to proceed?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: '#1a1a1a' }}>
+          <Button onClick={handleConflictCancel} sx={{ color: '#f44336' }}>
+            Cancel
+          </Button>
+          <Button onClick={handleConflictConfirm} sx={{ color: '#4CAF50' }}>
+            Replace Value
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };
