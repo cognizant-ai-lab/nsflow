@@ -127,7 +127,7 @@ const CustomLabel = ({
   };
 
   const handleValueSave = () => {
-    if (itemData) {
+    if (itemData && valueValue.trim()) {
       handleUpdateValue(itemData.id, valueValue);
     }
     setEditingValue(false);
@@ -221,7 +221,7 @@ const CustomLabel = ({
         <Typography sx={{ color: '#90A4AE', mx: 0.5 }}>:</Typography>
 
         {/* Value editing */}
-        {itemData?.hasValue ? (
+        {itemData?.hasValue || (!itemData?.children?.length) ? (
           editingValue ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <TextField
@@ -240,6 +240,7 @@ const CustomLabel = ({
                     fontSize: '0.85rem',
                   }
                 }}
+                placeholder={!itemData?.hasValue ? "Enter value..." : ""}
                 autoFocus
               />
               <IconButton size="small" onClick={handleValueSave} sx={{ color: '#4CAF50' }}>
@@ -256,14 +257,19 @@ const CustomLabel = ({
                 alignItems: 'center', 
                 gap: 0.5,
                 cursor: 'pointer',
-                color: '#81C784', // Green for values
+                color: itemData?.hasValue ? '#81C784' : '#90A4AE', // Green for values, gray for empty
               }}
               onClick={() => setEditingValue(true)}
             >
-              <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-                {typeof itemData.value === 'string' 
-                  ? `"${itemData.value}"` 
-                  : String(itemData.value)}
+              <Typography variant="body2" sx={{ 
+                fontSize: '0.85rem',
+                fontStyle: !itemData?.hasValue ? 'italic' : 'normal'
+              }}>
+                {itemData?.hasValue 
+                  ? (typeof itemData.value === 'string' 
+                      ? `"${itemData.value}"` 
+                      : String(itemData.value))
+                  : '{}'}
               </Typography>
               {isHovered && (
                 <IconButton size="small" sx={{ color: '#2196F3' }}>
@@ -274,7 +280,7 @@ const CustomLabel = ({
           )
         ) : (
           <Typography sx={{ color: '#90A4AE', fontStyle: 'italic' }}>
-            {itemData?.children?.length ? `{${itemData.children.length} items}` : '{}'}
+            {`{${itemData.children.length} items}`}
           </Typography>
         )}
       </Box>
@@ -654,6 +660,8 @@ const EditorSlyDataPanel: React.FC = () => {
             return {
               ...item,
               value: parsedValue,
+              hasValue: true, // Now has a value
+              children: undefined, // Remove children when adding a value
               type: typeof parsedValue as any,
               label: `${item.key}: ${typeof parsedValue === 'string' ? `"${parsedValue}"` : String(parsedValue)}`
             };
@@ -672,10 +680,24 @@ const EditorSlyDataPanel: React.FC = () => {
   const handleDeleteItem = useCallback((itemId: string) => {
     setTreeData(prev => {
       const removeItem = (items: SlyTreeItem[]): SlyTreeItem[] => {
-        return items.filter(item => item.id !== itemId).map(item => ({
-          ...item,
-          children: item.children ? removeItem(item.children) : undefined
-        }));
+        return items.filter(item => item.id !== itemId).map(item => {
+          const updatedChildren = item.children ? removeItem(item.children) : undefined;
+          
+          // If this item had children but now has none, convert it to an empty object
+          if (item.children && item.children.length > 0 && (!updatedChildren || updatedChildren.length === 0)) {
+            return {
+              ...item,
+              children: undefined,
+              hasValue: false, // Empty object, but can be edited
+              value: undefined
+            };
+          }
+          
+          return {
+            ...item,
+            children: updatedChildren
+          };
+        });
       };
 
       return removeItem(prev);
