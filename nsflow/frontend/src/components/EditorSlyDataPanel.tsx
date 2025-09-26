@@ -114,9 +114,7 @@ const CustomLabel = ({
     itemData?.hasValue ? String(itemData.value || '') : ''
   );
 
-  // Indentation is now handled at the TreeItem level, so no need of the below line of code
-  // const indentLevel = (itemData?.depth || 0) * 8; // 8px per level
-
+  // Indentation is now handled at the TreeItem level
 
   const { handleUpdateKey, handleUpdateValue } = useTreeOperations();
 
@@ -424,7 +422,7 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
             editing: status.editing,
             toggleItemEditing: interactions.toggleItemEditing,
             itemData,
-            onDelete: itemData?.id !== 'root' ? handleDelete : undefined,
+            onDelete: handleDelete, // All items can be deleted now
             onAddChild: handleAddChild,
           } as CustomLabelProps,
           labelInput: {
@@ -447,7 +445,7 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
 const EditorSlyDataPanel: React.FC = () => {
   const { slyDataMessages } = useChatContext();
   const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
-  const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>(['root']);
+  const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);
   const [nextId, setNextId] = useState(1);
   const [conflictDialog, setConflictDialog] = useState<{
     open: boolean;
@@ -456,19 +454,10 @@ const EditorSlyDataPanel: React.FC = () => {
     currentValue: any;
   }>({ open: false, parentId: '', parentKey: '', currentValue: null });
 
-  // Initialize with empty data structure
+  // Initialize with completely empty data structure
   useEffect(() => {
     if (treeData.length === 0) {
-      const initialData: SlyTreeItem[] = [{
-        id: 'root',
-        label: 'SlyData Root',
-        children: [],
-        type: 'object',
-        isKeyValuePair: false,
-        depth: 0,
-        hasValue: false
-      }];
-      setTreeData(initialData);
+      setTreeData([]); // Start completely empty
     }
   }, [treeData.length]);
 
@@ -555,7 +544,25 @@ const EditorSlyDataPanel: React.FC = () => {
 
   // Handle adding new item
   const handleAddItem = useCallback((parentId?: string) => {
-    // Find parent depth
+    // If adding to empty root (no parentId), add directly to root level
+    if (!parentId) {
+      const newItem: SlyTreeItem = {
+        id: generateId(),
+        label: 'new_key: "new_value"',
+        key: 'new_key',
+        value: 'new_value',
+        parentId: undefined,
+        isKeyValuePair: true,
+        type: 'string',
+        depth: 0,
+        hasValue: true
+      };
+
+      setTreeData(prev => [...prev, newItem]);
+      return;
+    }
+
+    // Find parent depth for nested items
     const findDepth = (items: SlyTreeItem[], id: string): number => {
       for (const item of items) {
         if (item.id === id) return (item.depth || 0) + 1;
@@ -567,14 +574,14 @@ const EditorSlyDataPanel: React.FC = () => {
       return 0;
     };
 
-    const newDepth = findDepth(treeData, parentId || 'root');
+    const newDepth = findDepth(treeData, parentId);
     
     const newItem: SlyTreeItem = {
       id: generateId(),
       label: 'new_key: "new_value"',
       key: 'new_key',
       value: 'new_value',
-      parentId: parentId || 'root',
+      parentId: parentId,
       isKeyValuePair: true,
       type: 'string',
       depth: newDepth,
@@ -584,7 +591,7 @@ const EditorSlyDataPanel: React.FC = () => {
     setTreeData(prev => {
       const updateItems = (items: SlyTreeItem[]): SlyTreeItem[] => {
         return items.map(item => {
-          if (item.id === (parentId || 'root')) {
+          if (item.id === parentId) {
             return {
               ...item,
               children: [...(item.children || []), newItem],
@@ -606,7 +613,7 @@ const EditorSlyDataPanel: React.FC = () => {
     });
 
     // Expand the parent
-    setExpandedItems(prev => [...prev, parentId || 'root']);
+    setExpandedItems(prev => [...prev, parentId]);
   }, [generateId, treeData]);
 
   // Handle conflict resolution
@@ -774,17 +781,9 @@ const EditorSlyDataPanel: React.FC = () => {
         reader.onload = (event) => {
           try {
             const json = JSON.parse(event.target?.result as string);
-            const newTreeData = jsonToTreeData(json, 'root', 1);
-            setTreeData([{
-              id: 'root',
-              label: 'SlyData Root',
-              children: newTreeData,
-              type: 'object',
-              isKeyValuePair: false,
-              depth: 0,
-              hasValue: false
-            }]);
-            setExpandedItems(['root', ...newTreeData.map(item => item.id)]);
+            const newTreeData = jsonToTreeData(json, undefined, 0);
+            setTreeData(newTreeData);
+            setExpandedItems(newTreeData.map(item => item.id));
           } catch (error) {
             console.error('Error parsing JSON:', error);
           }
@@ -797,8 +796,8 @@ const EditorSlyDataPanel: React.FC = () => {
 
   // Handle JSON export
   const handleExportJson = useCallback(() => {
-    const rootItem = treeData.find(item => item.id === 'root');
-    const json = rootItem?.children ? treeDataToJson(rootItem.children) : {};
+    // Export the root-level items directly
+    const json = treeDataToJson(treeData);
     const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -821,17 +820,9 @@ const EditorSlyDataPanel: React.FC = () => {
           parsedData = JSON.parse(cleanData);
         }
         
-        const newTreeData = jsonToTreeData(parsedData, 'root', 1);
-        setTreeData([{
-          id: 'root',
-          label: 'SlyData Root',
-          children: newTreeData,
-          type: 'object',
-          isKeyValuePair: false,
-          depth: 0,
-          hasValue: false
-        }]);
-        
+        const newTreeData = jsonToTreeData(parsedData, undefined, 0);
+      setTreeData(newTreeData);
+      
         // Auto-expand items
         const getAllIds = (items: SlyTreeItem[]): string[] => {
         const ids: string[] = [];
@@ -844,7 +835,7 @@ const EditorSlyDataPanel: React.FC = () => {
         return ids;
       };
       
-        setExpandedItems(['root', ...getAllIds(newTreeData)]);
+      setExpandedItems(getAllIds(newTreeData));
       } catch (error) {
         console.error('Error processing sly data message:', error);
       }
@@ -944,7 +935,7 @@ const EditorSlyDataPanel: React.FC = () => {
           <Tooltip title="Add root item">
               <IconButton 
                 size="small" 
-              onClick={() => handleAddItem('root')}
+              onClick={() => handleAddItem()}
               sx={{ color: '#2196F3' }}
               >
               <AddIcon />
