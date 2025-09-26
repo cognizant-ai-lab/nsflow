@@ -71,7 +71,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     if (!selectedNetwork || !apiUrl) return;
 
     try {
-      const response = await fetch(`${apiUrl}/api/v1/editor/state/connectivity/${selectedNetwork}`);
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
       
       if (!response.ok) {
         console.error(`Failed to fetch network data: ${response.statusText}`);

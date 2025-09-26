@@ -34,6 +34,7 @@ import {
   Refresh as RefreshIcon
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
+import { useChatContext } from "../context/ChatContext";
 
 interface NetworkInfo {
   name: string;
@@ -62,7 +63,9 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
   const [error, setError] = useState("");
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
   const { apiUrl, isReady } = useApiPort();
+  const { chatMessages } = useChatContext();
   const [searchQuery, setSearchQuery] = useState("");
+  const [lastChatMessageCount, setLastChatMessageCount] = useState(0);
   const theme = useTheme();
 
   const networksEndRef = useRef<HTMLDivElement>(null);
@@ -73,7 +76,7 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
 
     try {
       setLoading(true);
-      const response = await fetch(`${apiUrl}/api/v1/editor/state/networks`);
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/state/networks`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch networks: ${response.statusText}`);
@@ -95,7 +98,7 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
     if (!isReady || !apiUrl || !networkName) return;
 
     try {
-      const response = await fetch(`${apiUrl}/api/v1/editor/state/connectivity/${networkName}`);
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${networkName}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch agents for ${networkName}`);
@@ -134,6 +137,26 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
       handleNetworkSelect(firstNetwork.name);
     }
   }, [networks]);
+
+  // Monitor chat messages to refresh networks/agents when new activity occurs
+  useEffect(() => {
+    const currentMessageCount = chatMessages.length;
+    
+    // Only refresh if message count increased and we're not dealing with the initial system message
+    if (currentMessageCount > lastChatMessageCount && currentMessageCount > 1) {
+      console.log(`New chat message detected (${lastChatMessageCount} → ${currentMessageCount}), refreshing networks and agents...`);
+      
+      // Refresh networks and agents after a short delay to allow backend processing
+      setTimeout(() => {
+        fetchNetworks();
+        if (selectedNetwork) {
+          fetchAgents(selectedNetwork);
+        }
+      }, 1000); // 1 second delay to allow backend to process agent creation
+    }
+    
+    setLastChatMessageCount(currentMessageCount);
+  }, [chatMessages.length, lastChatMessageCount, selectedNetwork]);
 
   return (
     <Paper
@@ -340,27 +363,33 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
         <div ref={networksEndRef} />
       </Box>
 
-      {/* Refresh Button */}
+      {/* Manual Refresh Button */}
       <Box sx={{ 
         p: 2, 
         borderTop: `1px solid ${theme.palette.divider}` 
       }}>
         <Button
-          variant="contained"
+          variant="outlined"
           color="primary"
           fullWidth
           size="small"
-          onClick={fetchNetworks}
+          onClick={() => {
+            fetchNetworks();
+            if (selectedNetwork) {
+              fetchAgents(selectedNetwork);
+            }
+          }}
           disabled={loading}
           startIcon={<RefreshIcon />}
           sx={{
             textTransform: 'none',
+            fontSize: '0.75rem',
             '&:disabled': {
-              backgroundColor: alpha(theme.palette.primary.main, 0.3)
+              backgroundColor: alpha(theme.palette.primary.main, 0.1)
             }
           }}
         >
-          {loading ? "Refreshing..." : "Refresh Networks"}
+          {loading ? "Refreshing..." : "Manual Refresh"}
         </Button>
       </Box>
     </Paper>

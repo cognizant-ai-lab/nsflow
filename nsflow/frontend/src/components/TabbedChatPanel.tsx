@@ -26,7 +26,6 @@ import {
 } from "@mui/icons-material";
 import ChatPanel from "./ChatPanel";
 import InternalChatPanel from "./InternalChatPanel";
-import SlyDataPanel from "./SlyDataPanel";
 import EditorSlyDataPanel from "./EditorSlyDataPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
