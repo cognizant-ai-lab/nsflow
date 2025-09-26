@@ -114,8 +114,9 @@ const CustomLabel = ({
     itemData?.hasValue ? String(itemData.value || '') : ''
   );
 
-  // Calculate indentation based on depth
-  const indentLevel = (itemData?.depth || 0) * 8; // 8px per level
+  // Indentation is now handled at the TreeItem level, so no need of the below line of code
+  // const indentLevel = (itemData?.depth || 0) * 8; // 8px per level
+
 
   const { handleUpdateKey, handleUpdateValue } = useTreeOperations();
 
@@ -155,7 +156,7 @@ const CustomLabel = ({
         gap: 1,
         py: 0.5,
         px: 1,
-        ml: `${indentLevel}px`,
+        // ml: `${indentLevel}px`, // Indentation now handled at TreeItem level
         borderRadius: 1,
         minHeight: 32,
         transition: 'all 0.2s ease',
@@ -409,6 +410,8 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
       }
     };
 
+    const indentLevel = (itemData?.depth || 0) * 8; // 8px per level (same as user's change)
+
     return (
       <TreeItem
         {...props}
@@ -430,6 +433,11 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
             handleCancelItemLabelEditing: interactions.handleCancelItemLabelEditing,
             handleSaveItemLabel: interactions.handleSaveItemLabel,
           } as CustomLabelInputProps,
+        }}
+        sx={{
+          '& > .MuiTreeItem-content': {
+            marginLeft: `${indentLevel}px`, // Indent the entire content including collapse arrow
+          }
         }}
       />
     );
@@ -973,11 +981,20 @@ const EditorSlyDataPanel: React.FC = () => {
                 '& .MuiTreeItem-root': {
                   '& .MuiTreeItem-content': {
                     padding: '4px 0',
+                    paddingLeft: '0px !important', // Remove default padding
                     '&:hover': {
                       backgroundColor: 'transparent'
                     },
                     '&.Mui-focused': {
                       backgroundColor: alpha('#2196F3', 0.1)
+                    }
+                  },
+                  '& .MuiTreeItem-iconContainer': {
+                    marginRight: '4px',
+                    minWidth: '24px', // Ensure consistent width
+                    '& .MuiSvgIcon-root': {
+                      color: '#90A4AE',
+                      fontSize: '1rem'
                     }
                   }
                 }
