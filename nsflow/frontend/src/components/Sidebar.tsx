@@ -10,6 +10,25 @@
 //
 // END COPYRIGHT
 import { useEffect, useState, useRef, useCallback } from "react";
+import { 
+  Box, 
+  Typography, 
+  TextField, 
+  Button, 
+  Paper, 
+  FormControl, 
+  FormLabel, 
+  RadioGroup, 
+  FormControlLabel, 
+  Radio, 
+  Alert, 
+  useTheme,
+  alpha
+} from "@mui/material";
+import { 
+  NetworkCheck as NetworkIcon,
+  Search as SearchIcon
+} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -24,6 +43,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const { stopWebSocket, clearChat } = useChatControls();
   const networksEndRef = useRef<HTMLDivElement>(null);
   const { host, port, connectionType, setHost, setPort, setConnectionType, isNsReady } = useNeuroSan();
+  const theme = useTheme();
 
   const [tempHost, setTempHost] = useState(host);
   const [tempPort, setTempPort] = useState<number | undefined>(port);
@@ -150,93 +170,280 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   };
 
   return (
-    <aside className="sidebar h-full sidebar p-4 flex flex-col gap-2 border-r">
-      <span className="text-lg font-bold leading-none sidebar-text-large">Agent Networks</span>
+    <Paper
+      component="aside"
+      elevation={0}
+      sx={{
+        height: '100%',
+        width: '100%', // Take full width of the resizable panel
+        backgroundColor: theme.palette.background.paper,
+        borderRight: `1px solid ${theme.palette.divider}`,
+        display: 'flex',
+        flexDirection: 'column',
+        p: 1,
+        gap: 1,
+        minWidth: 200, // Minimum functional width
+        overflow: 'hidden' // Prevent content overflow when resized small
+      }}
+    >
+      {/* Compact Header */}
+      <Typography variant="subtitle1" sx={{ 
+        fontWeight: 600, 
+        color: theme.palette.text.primary,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+        fontSize: '0.9rem',
+        py: 0.5
+      }}>
+        <NetworkIcon sx={{ fontSize: 18 }} color="primary" />
+        Agent Networks
+      </Typography>
 
-      {/* NeuroSan Host/Port Section */}
-      <div className="sidebar-api-input p-1 bg-gray-800 rounded sidebar-text gap-2">
-        <div className="flex flex-wrap gap-1 mb-1 text-white">
-          {["http", "grpc", "https"].map((type) => (
-            <label key={type} className="flex items-center gap-1">
-              <input
-                type="radio"
-                name="connectionType"
+      {/* Compact NeuroSan Configuration Section */}
+      <Paper
+        elevation={1}
+        sx={{
+          p: 1,
+          backgroundColor: alpha(theme.palette.background.default, 0.5),
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: 1
+        }}
+      >
+        <Typography variant="caption" sx={{ 
+          fontWeight: 600, 
+          color: theme.palette.text.primary,
+          mb: 1,
+          display: 'block',
+          fontSize: '0.75rem'
+        }}>
+          NeuroSan Config
+        </Typography>
+
+        {/* Responsive Connection Type Radio Group */}
+        <FormControl component="fieldset" sx={{ mb: 1 }}>
+          <FormLabel component="legend" sx={{ 
+            fontSize: '0.6rem',
+            color: theme.palette.text.secondary 
+          }}>
+            Type
+          </FormLabel>
+          <RadioGroup
+            row
+            value={tempConnectionType}
+            onChange={(e) => setTempConnectionType(e.target.value)}
+            sx={{ 
+              gap: 0.4,
+              flexWrap: 'wrap' // Allow wrapping on very small widths
+            }}
+          >
+            {["http", "grpc", "https"].map((type) => (
+              <FormControlLabel
+                key={type}
                 value={type}
-                checked={tempConnectionType === type}
-                onChange={() => setConnectionType(type)}
+                control={<Radio 
+                  sx={{
+                  '& .MuiSvgIcon-root': {fontSize: 12},
+                }}
+                  />}
+                label={type}
+                sx={{
+                  mr: 0.5,
+                  minWidth: 'auto', // Allow shrinking
+                  '& .MuiFormControlLabel-label': { 
+                    fontSize: '0.7rem',
+                    color: theme.palette.text.primary
+                  }
+                }}
               />
-              {type}
-            </label>
-          ))}
-        </div>
-        <label className="sidebar-text mt-1 ">NeuroSan Server Host:</label>
-        <input
-          type="text"
+            ))}
+          </RadioGroup>
+        </FormControl>
+
+        {/* Compact Host Input */}
+        <TextField
+          size="small"
+          label="Host"
           value={tempHost ?? ""}
           onChange={(e) => setTempHost(e.target.value)}
-          className="w-full bg-gray-500 text-white p-0.5 rounded mt-1 sidebar-text"
+          sx={{ 
+            mb: 1,
+            '& .MuiInputLabel-root': { fontSize: '0.7rem', py: 0.5 },
+            '& .MuiInputBase-input': { fontSize: '0.7rem', py: 0.5 }
+          }}
+          fullWidth
         />
 
-        <label className="sidebar-text mt-1 block">NeuroSan Server Port:</label>
-        <input
+        {/* Compact Port Input */}
+        <TextField
+          size="small"
+          label="Port"
           type="number"
-          min="1024"
-          max="65535"
+          slotProps={{
+            htmlInput: { min: 1024, max: 65535 }
+          }}
           value={tempPort !== undefined ? tempPort : ""}
           onChange={(e) => {
             const val = e.target.value;
             setTempPort(val === "" ? undefined : Number(val));
           }}
-          className="w-full bg-gray-500 text-white p-0.5 rounded mt-1 sidebar-text"
+          sx={{ 
+            mb: 1,
+            '& .MuiInputLabel-root': { fontSize: '0.7rem', py: 0.5 },
+            '& .MuiInputBase-input': { fontSize: '0.7rem', py: 0.5 }
+          }}
+          fullWidth
         />
 
-        <button
+        {/* Compact Connect Button */}
+        <Button
+          variant="contained"
+          color="success"
+          size="small"
           onClick={() => handleNeurosanConnect(connectionType, tempHost, tempPort, true)}
-          className="w-full mt-2 p-0.5 bg-green-600 hover:bg-green-700 text-white rounded sidebar-text"
+          sx={{ 
+            fontSize: '0.7rem',
+            py: 0.5,
+            '&:hover': {
+              backgroundColor: theme.palette.success.dark
+            }
+          }}
+          fullWidth
         >
           Connect
-        </button>
-      </div>
+        </Button>
+      </Paper>
 
-      {/* Search Box */}
-      <div className="sidebar-api-input p-1 bg-gray-800 rounded sidebar-text">
-        <label className="sidebar-text mt-0.5 block">Search Agents</label>
-        <input
-          type="text"
-          placeholder="Search Agents..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-gray-500 text-white p-0.5 text-sm rounded sidebar-text"
-        />
-      </div>
+      {/* Spacer */}
+      <Box sx={{ height: 4 }} />
 
-      {/* Networks Display */}
-      <div className="sidebar-api-input flex-grow overflow-y-auto p-0 space-y-0.1 bg-gray-900 max-h-[70vh] rounded">
-        <label className="sidebar-text ml-1 mt-1 block">Available Agents</label>
-        {loading && <p className="sidebar-text-large">Loading...</p>}
-        {error && <p className="text-red-500">{error.split('\n').map((line, idx) => (
-          <span key={idx}>
-            {line}
-            <br />
-          </span>
-        ))}</p>}
-        {networks
-        .filter((network) =>
-            network.toLowerCase().includes(searchQuery.toLowerCase())
-        ).map((network) => (
-          <div key={network} className="relative p-1 rounded-md text-sm text-gray-100 sidebar-text-agents">
-            <button
-              className={`sidebar-btn w-full text-left p-0.5 text-sm rounded cursor-pointer transition-all sidebar-text-agents
-                ${activeNetwork === network ? "active-network" : ""}`}
-              onClick={() => handleNetworkSelection(network)}
-            >
-              {network}
-            </button>
-          </div>
-        ))}
-        <div ref={networksEndRef} />
-      </div>
-    </aside>
+      {/* Compact Search Box */}
+      <TextField
+        size="small"
+        label="Search"
+        placeholder="Search..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 16, mr: 0.5 }} />
+            )
+          }
+        }}
+        sx={{
+          '& .MuiInputLabel-root': { fontSize: '0.7rem', py: 0.5 },
+          '& .MuiInputBase-input': { fontSize: '0.7rem', py: 1 }
+        }}
+        fullWidth
+      />
+
+      {/* Compact Networks Display */}
+      <Paper
+        elevation={1}
+        sx={{
+          flexGrow: 1,
+          overflow: 'hidden',
+          backgroundColor: alpha(theme.palette.background.default, 0.3),
+          border: `1px solid ${theme.palette.divider}`,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 1
+        }}
+      >
+        <Typography variant="caption" sx={{ 
+          fontWeight: 600, 
+          color: theme.palette.text.primary,
+          p: 0.5,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          fontSize: '0.75rem'
+        }}>
+          Available Agents
+        </Typography>
+
+        <Box sx={{ 
+          flexGrow: 1, 
+          overflow: 'auto'
+        }}>
+          {loading && (
+            <Typography variant="caption" sx={{ 
+              color: theme.palette.text.secondary,
+              p: 1,
+              textAlign: 'center',
+              display: 'block',
+              fontSize: '0.7rem'
+            }}>
+              Loading...
+            </Typography>
+          )}
+          
+          {error && (
+            <Alert severity="error" sx={{ m: 0.5, fontSize: '0.7rem' }}>
+              {error.split('\n').map((line, idx) => (
+                <span key={idx}>
+                  {line}
+                  <br />
+                </span>
+              ))}
+            </Alert>
+          )}
+
+          <Box sx={{ p: 0.5 }}>
+            {networks
+              .filter((network) =>
+                network.toLowerCase().includes(searchQuery.toLowerCase())
+              )
+              .map((network) => (
+                <Paper
+                  key={network}
+                  elevation={activeNetwork === network ? 2 : 0}
+                  sx={{
+                    mb: 0.5,
+                    borderRadius: 1,
+                    border: `1px solid ${theme.palette.divider}`,
+                    backgroundColor: activeNetwork === network 
+                      ? alpha(theme.palette.primary.main, 0.1) 
+                      : 'transparent',
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                      cursor: 'pointer'
+                    }
+                  }}
+                  onClick={() => handleNetworkSelection(network)}
+                >
+                  <Box sx={{ 
+                    px: 1, 
+                    py: 0.5,
+                    borderLeft: activeNetwork === network 
+                      ? `3px solid ${theme.palette.primary.main}` 
+                      : 'none',
+                    overflow: 'hidden' // Prevent overflow on very small widths
+                  }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: '0.7rem',
+                        color: activeNetwork === network 
+                          ? theme.palette.primary.main 
+                          : theme.palette.text.primary,
+                        fontWeight: activeNetwork === network ? 600 : 400,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block'
+                      }}
+                      title={network} // Show full name on hover
+                    >
+                      {network}
+                    </Typography>
+                  </Box>
+                </Paper>
+              ))}
+          </Box>
+          <div ref={networksEndRef} />
+        </Box>
+      </Paper>
+    </Paper>
   );
 };
 
