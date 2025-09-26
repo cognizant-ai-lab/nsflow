@@ -462,12 +462,87 @@ const EditorSlyDataPanel: React.FC = () => {
     validationError: string | null;
   }>({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
 
-  // Initialize with completely empty data structure
+  const [clearDialog, setClearDialog] = useState(false);
+
+  // Cache keys
+  const CACHE_KEY = 'nsflow-slydata';
+  const CACHE_VERSION = '1.0';
+
+  // Cache management functions
+  const saveSlyDataToCache = useCallback((data: SlyTreeItem[]) => {
+    try {
+      const cacheData = {
+        version: CACHE_VERSION,
+        timestamp: Date.now(),
+        data: data,
+        nextId: nextId
+      };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn('Failed to save SlyData to cache:', error);
+    }
+  }, [CACHE_KEY, CACHE_VERSION, nextId]);
+
+  const loadSlyDataFromCache = useCallback((): { data: SlyTreeItem[]; nextId: number } | null => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+
+      const cacheData = JSON.parse(cached);
+      
+      // Version check
+      if (cacheData.version !== CACHE_VERSION) {
+        localStorage.removeItem(CACHE_KEY);
+        return null;
+      }
+
+      // Data validation
+      if (!Array.isArray(cacheData.data)) {
+        localStorage.removeItem(CACHE_KEY);
+        return null;
+      }
+
+      return {
+        data: cacheData.data,
+        nextId: cacheData.nextId || 1
+      };
+    } catch (error) {
+      console.warn('Failed to load SlyData from cache:', error);
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+  }, [CACHE_KEY, CACHE_VERSION]);
+
+  const clearSlyDataCache = useCallback(() => {
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear SlyData cache:', error);
+    }
+  }, [CACHE_KEY]);
+
+  // Initialize with cached data or empty structure
   useEffect(() => {
     if (treeData.length === 0) {
-      setTreeData([]); // Start completely empty
+      const cached = loadSlyDataFromCache();
+      if (cached && cached.data.length > 0) {
+        setTreeData(cached.data);
+        setNextId(cached.nextId);
+      } else {
+        setTreeData([]); // Start completely empty
+      }
     }
-  }, [treeData.length]);
+  }, [treeData.length, loadSlyDataFromCache]);
+
+  // Save to cache whenever treeData changes
+  useEffect(() => {
+    if (treeData.length > 0) {
+      saveSlyDataToCache(treeData);
+    } else {
+      // Clear cache when data is empty
+      clearSlyDataCache();
+    }
+  }, [treeData, saveSlyDataToCache, clearSlyDataCache]);
 
   // Generate unique ID
   const generateId = useCallback(() => {
@@ -477,31 +552,43 @@ const EditorSlyDataPanel: React.FC = () => {
   }, [nextId]);
 
   // Convert JSON to tree structure
-  const jsonToTreeData = useCallback((json: any, parentId = 'root', depth = 0): SlyTreeItem[] => {
+  const jsonToTreeData = useCallback((json: any, parentId?: string, depth = 0): SlyTreeItem[] => {
     if (!json || typeof json !== 'object') return [];
 
-    return Object.entries(json).map(([key, value]) => {
-      const id = generateId();
-      const hasValue = typeof value !== 'object' || value === null;
-      const item: SlyTreeItem = {
-        id,
-        label: hasValue ? `${key}: ${JSON.stringify(value)}` : `${key}`,
-        key,
-        value: hasValue ? value : undefined,
-        parentId,
-        isKeyValuePair: true,
-        type: Array.isArray(value) ? 'array' : typeof value as any,
-        depth,
-        hasValue,
-      };
+    let idCounter = nextId;
+    const generateLocalId = () => `item_${idCounter++}`;
 
-      if (typeof value === 'object' && value !== null) {
-        item.children = jsonToTreeData(value, id, depth + 1);
-      }
+    const convertObject = (obj: any, currentDepth: number, currentParentId?: string): SlyTreeItem[] => {
+      return Object.entries(obj).map(([key, value]) => {
+        const id = generateLocalId();
+        const hasValue = typeof value !== 'object' || value === null;
+        const item: SlyTreeItem = {
+          id,
+          label: hasValue ? `${key}: ${JSON.stringify(value)}` : `${key}`,
+          key,
+          value: hasValue ? value : undefined,
+          parentId: currentParentId,
+          isKeyValuePair: true,
+          type: Array.isArray(value) ? 'array' : typeof value as any,
+          depth: currentDepth,
+          hasValue,
+        };
 
-      return item;
-    });
-  }, [generateId]);
+        if (typeof value === 'object' && value !== null) {
+          item.children = convertObject(value, currentDepth + 1, id);
+        }
+
+        return item;
+      });
+    };
+
+    const result = convertObject(json, depth, parentId);
+    
+    // Update the nextId state with the final counter value
+    setNextId(idCounter);
+    
+    return result;
+  }, [nextId]);
 
   // Convert tree data to JSON
   const treeDataToJson = useCallback((items: SlyTreeItem[]): any => {
@@ -908,6 +995,25 @@ const EditorSlyDataPanel: React.FC = () => {
     setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
   };
 
+  // Handle clear all confirmation
+  const handleClearAll = () => {
+    setClearDialog(true);
+  };
+
+  // Handle clear all confirm
+  const handleClearConfirm = () => {
+    setTreeData([]);
+    setExpandedItems([]);
+    setNextId(1);
+    clearSlyDataCache();
+    setClearDialog(false);
+  };
+
+  // Handle clear all cancel
+  const handleClearCancel = () => {
+    setClearDialog(false);
+  };
+
   // Handle JSON export
   const handleExportJson = useCallback(() => {
     // Export the root-level items directly
@@ -1047,13 +1153,27 @@ const EditorSlyDataPanel: React.FC = () => {
           </Tooltip>
 
           <Tooltip title="Add root item">
-              <IconButton 
-                size="small" 
+            <IconButton 
+              size="small" 
               onClick={() => handleAddItem()}
               sx={{ color: '#2196F3' }}
-              >
+            >
               <AddIcon />
-              </IconButton>
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Clear all data">
+            <IconButton 
+              size="small" 
+              onClick={handleClearAll}
+              disabled={treeData.length === 0}
+              sx={{ 
+                color: treeData.length > 0 ? '#f44336' : '#555',
+                '&:disabled': { color: '#555' }
+              }}
+            >
+              <DeleteIcon />
+            </IconButton>
           </Tooltip>
         </Box>
       </Box>
@@ -1249,6 +1369,39 @@ const EditorSlyDataPanel: React.FC = () => {
               {importDialog.hasExistingData ? 'Replace Data' : 'Import'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Clear All Confirmation Dialog */}
+      <Dialog 
+        open={clearDialog} 
+        onClose={handleClearCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: 'white', backgroundColor: '#1a1a1a' }}>
+          Clear All SlyData?
+        </DialogTitle>
+        <DialogContent sx={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+          <Typography color="warning.main" sx={{ mb: 2 }}>
+            ⚠️ This will permanently delete all SlyData including:
+          </Typography>
+          <Box sx={{ ml: 2, mb: 2 }}>
+            <Typography>• {treeData.length} root-level item{treeData.length !== 1 ? 's' : ''}</Typography>
+            <Typography>• All nested key-value pairs</Typography>
+            <Typography>• Cached data in browser storage</Typography>
+          </Box>
+          <Typography>
+            This action cannot be undone. Are you sure you want to clear all data?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: '#1a1a1a' }}>
+          <Button onClick={handleClearCancel} sx={{ color: '#90A4AE' }}>
+            Cancel
+          </Button>
+          <Button onClick={handleClearConfirm} sx={{ color: '#f44336' }}>
+            Clear All Data
+          </Button>
         </DialogActions>
       </Dialog>
     </Paper>
