@@ -28,7 +28,8 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField
+  TextField,
+  useTheme
 } from '@mui/material';
 import { 
   EditOutlined as EditIcon,
@@ -116,8 +117,7 @@ const CustomLabel = ({
     itemData?.hasValue ? String(itemData.value || '') : ''
   );
 
-  // Indentation is now handled at the TreeItem level
-
+  const theme = useTheme();
   const { handleUpdateKey, handleUpdateValue } = useTreeOperations();
 
   const handleKeySave = () => {
@@ -182,17 +182,25 @@ const CustomLabel = ({
               sx={{
                 minWidth: 80,
                 '& .MuiOutlinedInput-root': {
-                  backgroundColor: alpha('#ffffff', 0.1),
-                  color: 'white',
+                  backgroundColor: theme.custom.slyData.inputBackground,
+                  color: theme.palette.text.primary,
                   fontSize: '0.85rem',
+                  border: `1px solid ${theme.custom.slyData.borderColor}`,
+                  '&:hover': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                  '&.Mui-focused': {
+                    borderColor: theme.palette.primary.main,
+                    backgroundColor: theme.custom.slyData.focusBackground,
+                  }
                 }
               }}
               autoFocus
             />
-            <IconButton size="small" onClick={handleKeySave} sx={{ color: '#4CAF50' }}>
+            <IconButton size="small" onClick={handleKeySave} sx={{ color: theme.palette.success.main }}>
               <CheckIcon fontSize="small" />
             </IconButton>
-            <IconButton size="small" onClick={handleKeyCancel} sx={{ color: '#f44336' }}>
+            <IconButton size="small" onClick={handleKeyCancel} sx={{ color: theme.palette.error.main }}>
               <CloseIcon fontSize="small" />
             </IconButton>
           </Box>
@@ -203,7 +211,7 @@ const CustomLabel = ({
               alignItems: 'center', 
               gap: 0.5,
               cursor: 'pointer',
-              color: '#FFB74D', // Orange for keys
+              color: theme.custom.slyData.keyColor,
               fontWeight: 600
             }}
             onClick={() => setEditingKey(true)}
@@ -212,14 +220,14 @@ const CustomLabel = ({
               {itemData?.key || 'key'}
             </Typography>
             {isHovered && (
-              <IconButton size="small" sx={{ color: '#2196F3' }}>
+              <IconButton size="small" sx={{ color: theme.palette.primary.main }}>
                 <EditIcon fontSize="small" />
               </IconButton>
             )}
           </Box>
         )}
 
-        <Typography sx={{ color: '#90A4AE', mx: 0.5 }}>:</Typography>
+        <Typography sx={{ color: theme.custom.slyData.separatorColor, mx: 0.5 }}>:</Typography>
 
         {/* Value editing */}
         {itemData?.hasValue || (!itemData?.children?.length) ? (
@@ -236,18 +244,26 @@ const CustomLabel = ({
                 sx={{
                   minWidth: 100,
                   '& .MuiOutlinedInput-root': {
-                    backgroundColor: alpha('#ffffff', 0.1),
-                    color: 'white',
+                    backgroundColor: theme.custom.slyData.inputBackground,
+                    color: theme.palette.text.primary,
                     fontSize: '0.85rem',
+                    border: `1px solid ${theme.custom.slyData.borderColor}`,
+                    '&:hover': {
+                      borderColor: theme.palette.primary.main,
+                    },
+                    '&.Mui-focused': {
+                      borderColor: theme.palette.primary.main,
+                      backgroundColor: theme.custom.slyData.focusBackground,
+                    }
                   }
                 }}
                 placeholder={!itemData?.hasValue ? "Enter value..." : ""}
                 autoFocus
               />
-              <IconButton size="small" onClick={handleValueSave} sx={{ color: '#4CAF50' }}>
+              <IconButton size="small" onClick={handleValueSave} sx={{ color: theme.palette.success.main }}>
                 <CheckIcon fontSize="small" />
               </IconButton>
-              <IconButton size="small" onClick={handleValueCancel} sx={{ color: '#f44336' }}>
+              <IconButton size="small" onClick={handleValueCancel} sx={{ color: theme.palette.error.main }}>
                 <CloseIcon fontSize="small" />
               </IconButton>
             </Box>
@@ -258,7 +274,7 @@ const CustomLabel = ({
                 alignItems: 'center', 
                 gap: 0.5,
                 cursor: 'pointer',
-                color: itemData?.hasValue ? '#81C784' : '#90A4AE', // Green for values, gray for empty
+                color: itemData?.hasValue ? theme.custom.slyData.valueColor : theme.custom.slyData.emptyColor,
               }}
               onClick={() => setEditingValue(true)}
             >
@@ -447,6 +463,7 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
 const EditorSlyDataPanel: React.FC = () => {
   const { slyDataMessages, targetNetwork } = useChatContext();
   const { apiUrl } = useApiPort();
+  const theme = useTheme();
   const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
   const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);
   const [nextId, setNextId] = useState(1);
@@ -668,7 +685,7 @@ const EditorSlyDataPanel: React.FC = () => {
         value: 'new_value',
         parentId: undefined,
         isKeyValuePair: true,
-        type: 'string',
+            type: 'string',
         depth: 0,
         hasValue: true
       };
@@ -996,7 +1013,7 @@ const EditorSlyDataPanel: React.FC = () => {
     if (importDialog.jsonData && !importDialog.validationError) {
       try {
         const newTreeData = jsonToTreeData(importDialog.jsonData, undefined, 0);
-        setTreeData(newTreeData);
+      setTreeData(newTreeData);
         setExpandedItems(newTreeData.map(item => item.id));
         setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
       } catch (error) {
@@ -1094,17 +1111,17 @@ const EditorSlyDataPanel: React.FC = () => {
         
         // Auto-expand to show new structure
         const getAllIds = (items: SlyTreeItem[]): string[] => {
-          const ids: string[] = [];
-          items.forEach(item => {
-            ids.push(item.id);
-            if (item.children) {
-              ids.push(...getAllIds(item.children));
-            }
-          });
-          return ids;
-        };
-        
-        setExpandedItems(getAllIds(newTreeData));
+        const ids: string[] = [];
+        items.forEach(item => {
+          ids.push(item.id);
+          if (item.children) {
+            ids.push(...getAllIds(item.children));
+          }
+        });
+        return ids;
+      };
+      
+      setExpandedItems(getAllIds(newTreeData));
         console.log('SlyData updated from API:', Object.keys(latestData).length, 'root keys');
       } else {
         console.log('No valid sly_data in response:', latestData);
@@ -1186,13 +1203,15 @@ const EditorSlyDataPanel: React.FC = () => {
     
   return (
     <Paper 
+      elevation={1}
       sx={{ 
         height: '100%', 
-        backgroundColor: '#1a1a1a',
-        color: 'white',
+        backgroundColor: theme.palette.background.paper,
+        color: theme.palette.text.primary,
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        border: `1px solid ${theme.palette.divider}`
       }}
     >
       {/* Split Panel Layout */}
@@ -1207,15 +1226,16 @@ const EditorSlyDataPanel: React.FC = () => {
             {/* Fixed Header */}
             <Box sx={{ 
               p: 1.5, 
-              borderBottom: `1px solid ${alpha('#ffffff', 0.1)}`,
+              borderBottom: `1px solid ${theme.palette.divider}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              flexShrink: 0
+              flexShrink: 0,
+              backgroundColor: theme.palette.background.paper
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <DataObjectIcon sx={{ color: '#2196F3', fontSize: '1.25rem' }} />
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                <DataObjectIcon sx={{ color: theme.palette.primary.main, fontSize: '1.25rem' }} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
                   SlyData Editor
                 </Typography>
               </Box>
@@ -1225,7 +1245,11 @@ const EditorSlyDataPanel: React.FC = () => {
                   <IconButton 
                     size="small" 
                     onClick={handleImportJson}
-                    sx={{ color: '#4CAF50', p: 0.5 }}
+                    sx={{ 
+                      color: theme.palette.secondary.main, 
+                      p: 0.5,
+                      '&:hover': { backgroundColor: alpha(theme.palette.secondary.main, 0.1) }
+                    }}
                   >
                     <UploadIcon fontSize="small" />
                   </IconButton>
@@ -1235,7 +1259,11 @@ const EditorSlyDataPanel: React.FC = () => {
                   <IconButton 
                     size="small" 
                     onClick={handleExportJson}
-                    sx={{ color: '#FF9800', p: 0.5 }}
+                    sx={{ 
+                      color: theme.palette.warning.main, 
+                      p: 0.5,
+                      '&:hover': { backgroundColor: alpha(theme.palette.warning.main, 0.1) }
+                    }}
                   >
                     <DownloadIcon fontSize="small" />
                   </IconButton>
@@ -1245,7 +1273,11 @@ const EditorSlyDataPanel: React.FC = () => {
                   <IconButton 
                     size="small" 
                     onClick={() => handleAddItem()}
-                    sx={{ color: '#2196F3', p: 0.5 }}
+                    sx={{ 
+                      color: theme.palette.primary.main, 
+                      p: 0.5,
+                      '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.1) }
+                    }}
                   >
                     <AddIcon fontSize="small" />
                   </IconButton>
@@ -1257,8 +1289,9 @@ const EditorSlyDataPanel: React.FC = () => {
                     onClick={handleClearAll}
                     disabled={treeData.length === 0}
                     sx={{ 
-                      color: treeData.length > 0 ? '#f44336' : '#555',
-                      '&:disabled': { color: '#555' },
+                      color: treeData.length > 0 ? theme.palette.error.main : theme.palette.text.disabled,
+                      '&:disabled': { color: theme.palette.text.disabled },
+                      '&:hover': treeData.length > 0 ? { backgroundColor: alpha(theme.palette.error.main, 0.1) } : undefined,
                       p: 0.5
                     }}
                   >
@@ -1272,7 +1305,8 @@ const EditorSlyDataPanel: React.FC = () => {
             <Box sx={{ 
               flexGrow: 1, 
               overflow: 'auto',
-              p: 1
+              p: 1,
+              backgroundColor: theme.palette.background.paper
             }}>
               {treeData.length > 0 ? (
                 <TreeOperationsContext.Provider value={{
@@ -1291,22 +1325,25 @@ const EditorSlyDataPanel: React.FC = () => {
                     isItemEditable={(item) => Boolean(item?.isKeyValuePair)}
                     slots={{ item: CustomTreeItem }}
                     sx={{
+                      color: theme.palette.text.primary,
                       '& .MuiTreeItem-root': {
                         '& .MuiTreeItem-content': {
                           padding: '4px 0',
-                          paddingLeft: '0px !important', // Remove default padding
+                          paddingLeft: '0px !important',
+                          color: theme.palette.text.primary,
                           '&:hover': {
-                            backgroundColor: 'transparent'
+                            backgroundColor: theme.custom.slyData.hoverBackground
                           },
                           '&.Mui-focused': {
-                            backgroundColor: alpha('#2196F3', 0.1)
+                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                            color: theme.palette.primary.main
                           }
                         },
                         '& .MuiTreeItem-iconContainer': {
                           marginRight: '4px',
-                          minWidth: '24px', // Ensure consistent width
+                          minWidth: '24px',
                           '& .MuiSvgIcon-root': {
-                            color: '#90A4AE',
+                            color: theme.palette.text.secondary,
                             fontSize: '1rem'
                           }
                         }
@@ -1322,13 +1359,13 @@ const EditorSlyDataPanel: React.FC = () => {
                   justifyContent: 'center',
                   height: '100%',
                   gap: 2,
-                  color: alpha('#ffffff', 0.6)
+                  color: theme.palette.text.secondary
                 }}>
-                  <DataObjectIcon sx={{ fontSize: 48 }} />
-                  <Typography variant="body1">
+                  <DataObjectIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
+                  <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>
                     No SlyData available
                   </Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300 }}>
+                  <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
                     Click the + button to add your first key-value pair, or import JSON data.
                   </Typography>
                 </Box>
@@ -1340,7 +1377,7 @@ const EditorSlyDataPanel: React.FC = () => {
         {/* Resizable Splitter */}
         <PanelResizeHandle style={{
           height: '4px',
-          backgroundColor: alpha('#ffffff', 0.1),
+          backgroundColor: theme.palette.divider,
           cursor: 'row-resize',
           transition: 'background-color 0.2s ease'
         }} />
@@ -1351,22 +1388,24 @@ const EditorSlyDataPanel: React.FC = () => {
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            borderTop: `1px solid ${alpha('#ffffff', 0.1)}`
+            borderTop: `1px solid ${theme.palette.divider}`,
+            backgroundColor: theme.palette.background.paper
           }}>
             {/* Fixed Logs Header */}
             <Box sx={{ 
               p: 1.5, 
-              borderBottom: `1px solid ${alpha('#ffffff', 0.1)}`,
+              borderBottom: `1px solid ${theme.palette.divider}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              flexShrink: 0
+              flexShrink: 0,
+              backgroundColor: theme.palette.background.paper
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#90A4AE' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
                   SlyData Logs
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#616161' }}>
+                <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
                   (Message History)
                 </Typography>
               </Box>
@@ -1375,17 +1414,25 @@ const EditorSlyDataPanel: React.FC = () => {
                 <IconButton 
                   size="small" 
                   onClick={downloadLogs}
-                  sx={{ color: '#90A4AE', p: 0.5 }}
+                  sx={{ 
+                    color: theme.palette.text.secondary, 
+                    p: 0.5,
+                    '&:hover': { 
+                      color: theme.palette.primary.main,
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1)
+                    }
+                  }}
                 >
                   <DownloadIcon fontSize="small" />
-                </IconButton>
+              </IconButton>
               </Tooltip>
-            </Box>
+      </Box>
 
             {/* Scrollable Logs Content */}
             <Box sx={{ 
               flexGrow: 1, 
-              overflow: 'auto'
+              overflow: 'auto',
+              backgroundColor: theme.palette.background.paper
             }}>
               <ScrollableMessageContainer
                 messages={slyDataMessages.filter(
@@ -1412,19 +1459,21 @@ const EditorSlyDataPanel: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ color: 'white', backgroundColor: '#1a1a1a' }}>
+        <DialogTitle sx={{ color: theme.palette.text.primary, backgroundColor: theme.palette.background.paper }}>
           Replace Current Value?
         </DialogTitle>
-        <DialogContent sx={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+        <DialogContent sx={{ backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
           <Typography sx={{ mb: 2 }}>
             The key "{conflictDialog.parentKey}" currently has a value:
           </Typography>
           <Box sx={{ 
             p: 2, 
-            backgroundColor: alpha('#ffffff', 0.1), 
+            backgroundColor: alpha(theme.palette.primary.main, 0.1), 
             borderRadius: 1,
             fontFamily: 'monospace',
-            mb: 2
+            mb: 2,
+            color: theme.custom.slyData.valueColor,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`
           }}>
             {typeof conflictDialog.currentValue === 'string' 
               ? `"${conflictDialog.currentValue}"` 
@@ -1435,11 +1484,11 @@ const EditorSlyDataPanel: React.FC = () => {
             Do you want to proceed?
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ backgroundColor: '#1a1a1a' }}>
-          <Button onClick={handleConflictCancel} sx={{ color: '#f44336' }}>
+        <DialogActions sx={{ backgroundColor: theme.palette.background.paper }}>
+          <Button onClick={handleConflictCancel} sx={{ color: theme.palette.error.main }}>
             Cancel
           </Button>
-          <Button onClick={handleConflictConfirm} sx={{ color: '#4CAF50' }}>
+          <Button onClick={handleConflictConfirm} sx={{ color: theme.palette.success.main }}>
             Replace Value
           </Button>
         </DialogActions>
@@ -1452,10 +1501,10 @@ const EditorSlyDataPanel: React.FC = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle sx={{ color: 'white', backgroundColor: '#1a1a1a' }}>
+        <DialogTitle sx={{ color: theme.palette.text.primary, backgroundColor: theme.palette.background.paper }}>
           {importDialog.validationError ? 'Import Error' : 'Import JSON File'}
         </DialogTitle>
-        <DialogContent sx={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+        <DialogContent sx={{ backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
           <Typography sx={{ mb: 2 }}>
             File: <strong>{importDialog.fileName}</strong>
           </Typography>
@@ -1465,17 +1514,17 @@ const EditorSlyDataPanel: React.FC = () => {
               <Typography color="error" sx={{ mb: 2 }}>
                 ❌ Cannot import this file due to the following error:
               </Typography>
-              <Box sx={{ 
+          <Box sx={{ 
                 p: 2, 
                 backgroundColor: alpha('#f44336', 0.1), 
                 borderRadius: 1,
                 border: '1px solid #f44336',
-                fontFamily: 'monospace',
+              fontFamily: 'monospace',
                 mb: 2,
                 color: '#f44336'
               }}>
                 {importDialog.validationError}
-              </Box>
+          </Box>
               <Typography variant="body2" sx={{ color: '#90A4AE' }}>
                 Please fix the JSON file and try importing again.
               </Typography>
@@ -1518,12 +1567,12 @@ const EditorSlyDataPanel: React.FC = () => {
             </>
           )}
         </DialogContent>
-        <DialogActions sx={{ backgroundColor: '#1a1a1a' }}>
-          <Button onClick={handleImportCancel} sx={{ color: '#90A4AE' }}>
+        <DialogActions sx={{ backgroundColor: theme.palette.background.paper }}>
+          <Button onClick={handleImportCancel} sx={{ color: theme.palette.text.secondary }}>
             {importDialog.validationError ? 'Close' : 'Cancel'}
           </Button>
           {!importDialog.validationError && (
-            <Button onClick={handleImportConfirm} sx={{ color: '#4CAF50' }}>
+            <Button onClick={handleImportConfirm} sx={{ color: theme.palette.success.main }}>
               {importDialog.hasExistingData ? 'Replace Data' : 'Import'}
             </Button>
           )}
@@ -1537,10 +1586,10 @@ const EditorSlyDataPanel: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ color: 'white', backgroundColor: '#1a1a1a' }}>
+        <DialogTitle sx={{ color: theme.palette.text.primary, backgroundColor: theme.palette.background.paper }}>
           Clear All SlyData?
         </DialogTitle>
-        <DialogContent sx={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+        <DialogContent sx={{ backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
           <Typography color="warning.main" sx={{ mb: 2 }}>
             ⚠️ This will permanently delete all SlyData including:
           </Typography>
@@ -1553,11 +1602,11 @@ const EditorSlyDataPanel: React.FC = () => {
             This action cannot be undone. Are you sure you want to clear all data?
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ backgroundColor: '#1a1a1a' }}>
-          <Button onClick={handleClearCancel} sx={{ color: '#90A4AE' }}>
+        <DialogActions sx={{ backgroundColor: theme.palette.background.paper }}>
+          <Button onClick={handleClearCancel} sx={{ color: theme.palette.text.secondary }}>
             Cancel
           </Button>
-          <Button onClick={handleClearConfirm} sx={{ color: '#f44336' }}>
+          <Button onClick={handleClearConfirm} sx={{ color: theme.palette.error.main }}>
             Clear All Data
           </Button>
         </DialogActions>

@@ -15,18 +15,21 @@ import AppRoutes from "./routes";
 import { ApiPortProvider } from "../context/ApiPortContext";
 import { NeuroSanProvider } from "../context/NeuroSanContext";
 import { ChatProvider } from "../context/ChatContext";
+import { ThemeProvider } from "../context/ThemeContext";
 
 const App: React.FC = () => {
   return (
-    <ChatProvider>
-      <ApiPortProvider>
-        <NeuroSanProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </NeuroSanProvider>
-      </ApiPortProvider>
-    </ChatProvider>
+    <ThemeProvider>
+      <ChatProvider>
+        <ApiPortProvider>
+          <NeuroSanProvider>
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </NeuroSanProvider>
+        </ApiPortProvider>
+      </ChatProvider>
+    </ThemeProvider>
   );
 };
 

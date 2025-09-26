@@ -9,16 +9,17 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import React, { useState, useRef, useEffect } from "react";
+import * as React from "react";
+import { useState, useRef, useEffect } from "react";
 import { FaUserCircle, FaEdit, FaDownload, FaHome } from "react-icons/fa";
 import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useNavigate } from "react-router-dom";
 
-import ThemeToggle from "./ThemeToggle";
+import MuiThemeToggle from "./MuiThemeToggle";
 
-const Header: React.FC<{ selectedNetwork: string; isEditorPage?: boolean }> = ({ selectedNetwork, isEditorPage = false }) => {
+const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
   const { apiUrl } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -102,19 +103,23 @@ const Header: React.FC<{ selectedNetwork: string; isEditorPage?: boolean }> = ({
 
         {/* Home */}
         <button 
-          className={`header-btn h-8 px-4 py-1 ${!isEditorPage ? 'bg-blue-600' : ''}`}
-          onClick={() => navigate("/home")}
+        className="header-btn h-8 px-4 py-1"
+        onClick={() => navigate("/home")}
         >
-          <FaHome className="mr-2" /> Home
+            <FaHome className="mr-2" /> Home
         </button>
 
         {/* Editor */}
-        <button 
-          className={`header-btn h-8 px-4 py-1 ${isEditorPage ? 'bg-blue-600' : ''}`}
-          onClick={() => navigate("/editor")}
+        <a
+          href={`https://neurosan-hocon-editor.streamlit.app/ `}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center text-blue-400 hover:text-blue-300"
         >
-          <FaEdit className="mr-2" /> Editor
-        </button>
+          <button className="header-btn h-8 px-4 py-1" title="Hocon Editor">
+            <FaEdit className="mr-2" /> Editor
+          </button>
+        </a>
         {/* Observe */}
 
         {/* {location.pathname !== "/observability" && (
@@ -160,7 +165,7 @@ const Header: React.FC<{ selectedNetwork: string; isEditorPage?: boolean }> = ({
 
       {/* Right - Theme Toggle + Profile */}
       <div className="flex items-center gap-4">
-        <ThemeToggle />
+        <MuiThemeToggle />
         <FaUserCircle className="h-8 w-8 text-gray-400 cursor-pointer hover:text-white" />
       </div>
     </header>
