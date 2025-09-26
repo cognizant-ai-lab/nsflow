@@ -464,6 +464,7 @@ const EditorSlyDataPanel: React.FC = () => {
   const { slyDataMessages, targetNetwork } = useChatContext();
   const { apiUrl } = useApiPort();
   const theme = useTheme();
+
   const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
   const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);
   const [nextId, setNextId] = useState(1);
@@ -488,47 +489,71 @@ const EditorSlyDataPanel: React.FC = () => {
   const [lastMessageCount, setLastMessageCount] = useState(0);
 
   // Cache keys
-  const CACHE_KEY = 'nsflow-slydata';
   const CACHE_VERSION = '1.0';
+  
+  // Create network-specific cache key
+  const getCacheKey = useCallback((networkName: string) => {
+    return `nsflow-slydata-${networkName}`;
+  }, []);
 
   // Cache management functions
-  const saveSlyDataToCache = useCallback((data: SlyTreeItem[]) => {
+  const saveSlyDataToCache = useCallback((data: SlyTreeItem[], networkName: string) => {
+    if (!networkName) {
+      console.debug('No network name provided, skipping cache save');
+      return;
+    }
+    
     try {
+      const cacheKey = getCacheKey(networkName);
       const cacheData = {
         version: CACHE_VERSION,
         timestamp: Date.now(),
         data: data,
-        nextId: nextId
+        nextId: nextId,
+        networkName
       };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-      console.debug('Cache saved successfully:', { itemCount: data.length, nextId, timestamp: cacheData.timestamp });
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      console.debug('Cache saved successfully for network:', networkName, { itemCount: data.length, nextId, timestamp: cacheData.timestamp });
     } catch (error) {
-      console.warn('Failed to save SlyData to cache:', error);
+      console.warn('Failed to save SlyData to cache for network:', networkName, error);
     }
-  }, [CACHE_KEY, CACHE_VERSION, nextId]);
+  }, [getCacheKey, CACHE_VERSION, nextId]);
 
-  const loadSlyDataFromCache = useCallback((): { data: SlyTreeItem[]; nextId: number } | null => {
+  const loadSlyDataFromCache = useCallback((networkName: string): { data: SlyTreeItem[]; nextId: number } | null => {
+    if (!networkName) {
+      console.debug('No network name provided, skipping cache load');
+      return null;
+    }
+    
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
+      const cacheKey = getCacheKey(networkName);
+      const cached = localStorage.getItem(cacheKey);
       if (!cached) {
-        console.debug('No cache found');
+        console.debug('No cache found for network:', networkName);
         return null;
       }
 
       const cacheData = JSON.parse(cached);
-      console.debug('Cache found:', { version: cacheData.version, itemCount: cacheData.data?.length, nextId: cacheData.nextId });
+      console.debug('Cache found for network:', networkName, { version: cacheData.version, itemCount: cacheData.data?.length, nextId: cacheData.nextId });
       
       // Version check
       if (cacheData.version !== CACHE_VERSION) {
-        console.warn('Cache version mismatch, clearing cache');
-        localStorage.removeItem(CACHE_KEY);
+        console.warn('Cache version mismatch for network:', networkName, 'clearing cache');
+        localStorage.removeItem(cacheKey);
         return null;
       }
 
       // Data validation
       if (!Array.isArray(cacheData.data)) {
-        console.warn('Invalid cache data format, clearing cache');
-        localStorage.removeItem(CACHE_KEY);
+        console.warn('Invalid cache data format for network:', networkName, 'clearing cache');
+        localStorage.removeItem(cacheKey);
+        return null;
+      }
+
+      // Verify network name matches (extra safety check)
+      if (cacheData.networkName && cacheData.networkName !== networkName) {
+        console.warn('Network name mismatch in cache for:', networkName, 'expected:', networkName, 'found:', cacheData.networkName);
+        localStorage.removeItem(cacheKey);
         return null;
       }
 
@@ -537,49 +562,78 @@ const EditorSlyDataPanel: React.FC = () => {
         nextId: cacheData.nextId || 1
       };
     } catch (error) {
-      console.warn('Failed to load SlyData from cache:', error);
-      localStorage.removeItem(CACHE_KEY);
+      console.warn('Failed to load SlyData from cache for network:', networkName, error);
+      const cacheKey = getCacheKey(networkName);
+      localStorage.removeItem(cacheKey);
       return null;
     }
-  }, [CACHE_KEY, CACHE_VERSION]);
+  }, [getCacheKey, CACHE_VERSION]);
 
-  const clearSlyDataCache = useCallback(() => {
+  const clearSlyDataCache = useCallback((networkName?: string) => {
     try {
-      localStorage.removeItem(CACHE_KEY);
+      if (networkName) {
+        // Clear cache for specific network
+        const cacheKey = getCacheKey(networkName);
+        localStorage.removeItem(cacheKey);
+        console.debug('Cache cleared for network:', networkName);
+      } else {
+        // Clear all slydata caches (legacy support and for clear all functionality)
+        const allKeys = Object.keys(localStorage);
+        const slyDataKeys = allKeys.filter(key => key.startsWith('nsflow-slydata-'));
+        slyDataKeys.forEach(key => localStorage.removeItem(key));
+        console.debug('All SlyData caches cleared:', slyDataKeys.length, 'caches');
+      }
     } catch (error) {
       console.warn('Failed to clear SlyData cache:', error);
     }
-  }, [CACHE_KEY]);
+  }, [getCacheKey]);
 
-  // Initialize with cached data or empty structure
+  // Initialize with cached data or empty structure when network changes
   useEffect(() => {
-    if (!isInitialized) {
-      const cached = loadSlyDataFromCache();
+    if (!isInitialized || !targetNetwork) {
+      if (targetNetwork) {
+        const cached = loadSlyDataFromCache(targetNetwork);
+        if (cached && cached.data.length > 0) {
+          setTreeData(cached.data);
+          setNextId(cached.nextId);
+          console.log('SlyData loaded from cache for network:', targetNetwork, cached.data.length, 'items');
+        } else {
+          setTreeData([]); // Start completely empty
+          console.log('SlyData starting empty for network:', targetNetwork, '- no cache found');
+        }
+        setIsInitialized(true);
+      }
+    }
+  }, [isInitialized, targetNetwork, loadSlyDataFromCache]);
+
+  // Load cached data when switching between networks
+  useEffect(() => {
+    if (isInitialized && targetNetwork) {
+      const cached = loadSlyDataFromCache(targetNetwork);
       if (cached && cached.data.length > 0) {
         setTreeData(cached.data);
         setNextId(cached.nextId);
-        console.log('SlyData loaded from cache:', cached.data.length, 'items');
+        console.log('SlyData loaded from cache for network switch:', targetNetwork, cached.data.length, 'items');
       } else {
-        setTreeData([]); // Start completely empty
-        console.log('SlyData starting empty - no cache found');
+        setTreeData([]); // Start empty for new network
+        console.log('SlyData starting empty for new network:', targetNetwork);
       }
-      setIsInitialized(true);
     }
-  }, [isInitialized, loadSlyDataFromCache]);
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
 
   // Save to cache whenever treeData changes (but only after initialization)
   useEffect(() => {
-    if (isInitialized) {
+    if (isInitialized && targetNetwork) {
       if (treeData.length > 0) {
-        saveSlyDataToCache(treeData);
-        console.log('SlyData saved to cache:', treeData.length, 'items');
+        saveSlyDataToCache(treeData, targetNetwork);
+        console.log('SlyData saved to cache for network:', targetNetwork, treeData.length, 'items');
       } else {
         // Clear cache when data is empty (but only if we're initialized)
-        clearSlyDataCache();
-        console.log('SlyData cache cleared - no items');
+        clearSlyDataCache(targetNetwork);
+        console.log('SlyData cache cleared for network:', targetNetwork, '- no items');
       }
     }
-  }, [treeData, isInitialized, saveSlyDataToCache, clearSlyDataCache]);
+  }, [treeData, isInitialized, targetNetwork, saveSlyDataToCache, clearSlyDataCache]);
 
   // Generate unique ID
   const generateId = useCallback(() => {
@@ -1042,7 +1096,12 @@ const EditorSlyDataPanel: React.FC = () => {
     setTreeData([]);
     setExpandedItems([]);
     setNextId(1);
-    clearSlyDataCache();
+    if (targetNetwork) {
+      clearSlyDataCache(targetNetwork);
+      console.log('SlyData cleared for network:', targetNetwork);
+    } else {
+      clearSlyDataCache(); // Clear all networks if no specific network
+    }
     setClearDialog(false);
     // Keep isInitialized as true since we're intentionally clearing
   };

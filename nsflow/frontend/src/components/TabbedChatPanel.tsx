@@ -192,7 +192,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const tabConfig = [
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },
     ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
-    { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: isEditorMode ? <EditorSlyDataPanel /> : <SlyDataPanel /> },
+    { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
   ];
 

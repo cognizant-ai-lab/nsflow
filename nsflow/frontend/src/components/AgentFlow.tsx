@@ -240,8 +240,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           p: 1,
           backgroundColor: alpha(theme.palette.background.paper, 0.95),
           backdropFilter: 'blur(8px)',
-          minWidth: 140,
-          maxWidth: 160
+          minWidth: 80,
+          maxWidth: 140
         }}
       >
         <Typography variant="caption" sx={{ 
@@ -271,7 +271,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             onTouchEnd={() => setBaseRadius(tempBaseRadius)}
             sx={{
               color: theme.palette.primary.main,
-              height: 4,
+              height: 2,
               '& .MuiSlider-thumb': {
                 width: 8,
                 height: 8
@@ -303,7 +303,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             onTouchEnd={() => setLevelSpacing(tempLevelSpacing)}
             sx={{
               color: theme.palette.secondary.main,
-              height: 4,
+              height: 2,
               '& .MuiSlider-thumb': {
                 width: 8,
                 height: 8
