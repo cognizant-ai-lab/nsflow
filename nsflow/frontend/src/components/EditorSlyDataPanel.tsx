@@ -463,6 +463,7 @@ const EditorSlyDataPanel: React.FC = () => {
   }>({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
 
   const [clearDialog, setClearDialog] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Cache keys
   const CACHE_KEY = 'nsflow-slydata';
@@ -478,6 +479,7 @@ const EditorSlyDataPanel: React.FC = () => {
         nextId: nextId
       };
       localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+      console.debug('Cache saved successfully:', { itemCount: data.length, nextId, timestamp: cacheData.timestamp });
     } catch (error) {
       console.warn('Failed to save SlyData to cache:', error);
     }
@@ -486,18 +488,24 @@ const EditorSlyDataPanel: React.FC = () => {
   const loadSlyDataFromCache = useCallback((): { data: SlyTreeItem[]; nextId: number } | null => {
     try {
       const cached = localStorage.getItem(CACHE_KEY);
-      if (!cached) return null;
+      if (!cached) {
+        console.debug('No cache found');
+        return null;
+      }
 
       const cacheData = JSON.parse(cached);
+      console.debug('Cache found:', { version: cacheData.version, itemCount: cacheData.data?.length, nextId: cacheData.nextId });
       
       // Version check
       if (cacheData.version !== CACHE_VERSION) {
+        console.warn('Cache version mismatch, clearing cache');
         localStorage.removeItem(CACHE_KEY);
         return null;
       }
 
       // Data validation
       if (!Array.isArray(cacheData.data)) {
+        console.warn('Invalid cache data format, clearing cache');
         localStorage.removeItem(CACHE_KEY);
         return null;
       }
@@ -523,26 +531,33 @@ const EditorSlyDataPanel: React.FC = () => {
 
   // Initialize with cached data or empty structure
   useEffect(() => {
-    if (treeData.length === 0) {
+    if (!isInitialized) {
       const cached = loadSlyDataFromCache();
       if (cached && cached.data.length > 0) {
         setTreeData(cached.data);
         setNextId(cached.nextId);
+        console.log('SlyData loaded from cache:', cached.data.length, 'items');
       } else {
         setTreeData([]); // Start completely empty
+        console.log('SlyData starting empty - no cache found');
+      }
+      setIsInitialized(true);
+    }
+  }, [isInitialized, loadSlyDataFromCache]);
+
+  // Save to cache whenever treeData changes (but only after initialization)
+  useEffect(() => {
+    if (isInitialized) {
+      if (treeData.length > 0) {
+        saveSlyDataToCache(treeData);
+        console.log('SlyData saved to cache:', treeData.length, 'items');
+      } else {
+        // Clear cache when data is empty (but only if we're initialized)
+        clearSlyDataCache();
+        console.log('SlyData cache cleared - no items');
       }
     }
-  }, [treeData.length, loadSlyDataFromCache]);
-
-  // Save to cache whenever treeData changes
-  useEffect(() => {
-    if (treeData.length > 0) {
-      saveSlyDataToCache(treeData);
-    } else {
-      // Clear cache when data is empty
-      clearSlyDataCache();
-    }
-  }, [treeData, saveSlyDataToCache, clearSlyDataCache]);
+  }, [treeData, isInitialized, saveSlyDataToCache, clearSlyDataCache]);
 
   // Generate unique ID
   const generateId = useCallback(() => {
@@ -1007,6 +1022,7 @@ const EditorSlyDataPanel: React.FC = () => {
     setNextId(1);
     clearSlyDataCache();
     setClearDialog(false);
+    // Keep isInitialized as true since we're intentionally clearing
   };
 
   // Handle clear all cancel
