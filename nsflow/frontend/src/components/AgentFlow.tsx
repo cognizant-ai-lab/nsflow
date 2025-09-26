@@ -21,11 +21,26 @@ import ReactFlow, {
   EdgeMarkerType,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { 
+  Box, 
+  Button, 
+  Slider, 
+  Typography, 
+  Paper, 
+  Tooltip, 
+  useTheme,
+  alpha
+} from "@mui/material";
+import { 
+  AutoFixHigh as AutoArrangeIcon,
+  Refresh as ResetIcon,
+  ViewCompact as CompactIcon,
+  ViewModule as FullIcon
+} from "@mui/icons-material";
 import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import { useApiPort } from "../context/ApiPortContext";
 import { hierarchicalRadialLayout } from "../utils/hierarchicalRadialLayout";
-import { FaBoxOpen, FaBox } from "react-icons/fa";
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
@@ -35,14 +50,15 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
+  const theme = useTheme();
 
   // ** State for highlighting active agents & edges **
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
   // ** State for actual values (used in API calls) **
-  const [baseRadius, setBaseRadius] = useState(20);
-  const [levelSpacing, setLevelSpacing] = useState(90);
+  const [baseRadius, setBaseRadius] = useState(30);
+  const [levelSpacing, setLevelSpacing] = useState(80);
 
   // ** State for temporary values while scrubbing **
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
@@ -89,7 +105,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         fitView();
         // console.log("received data", data);
         // You can change zoom and center values as needed
-        setViewport({ x: 0, y: 20, zoom: 0.5 }, { duration: 800 });
+        setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
   }, [selectedNetwork, baseRadius, levelSpacing, useCompactMode]);
@@ -146,77 +162,162 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     }
   };
 
-  // ** Updates the temporary value on slider change **
-  const handleSliderChange = (
-    _setter: React.Dispatch<React.SetStateAction<number>>, // unused; prefix with _ to indicate so
-    setTempSetter: React.Dispatch<React.SetStateAction<number>>
-  ) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    setTempSetter(Number(event.target.value));
-  };
-
-  // ** Updates the actual value when scrubbing stops **
-  const handleSliderRelease = (
-    setter: React.Dispatch<React.SetStateAction<number>>,
-    value: number
-  ) => () => {
-    setter(value);
-  };
+  // Note: handleSliderChange and handleSliderRelease functions removed as they're now handled inline
 
   return (
-    <div className="agent-flow-container h-full w-full bg-gray-800 relative">
-      {/* Auto Arrange Button */}
-      <button
-        className="absolute top-2 left-2 p-1 text-xs bg-blue-500 opacity-80 hover:bg-blue-600 text-white rounded-md shadow-md transition-all z-20"
-        onClick={() => {
-          const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
-            nodes,
-            edges,
-            baseRadius,
-            levelSpacing
-          );
-          setNodes(arrangedNodes);
-          setEdges(arrangedEdges);
-          fitView();
+    <Box sx={{ 
+      height: '100%', 
+      width: '100%', 
+      backgroundColor: theme.palette.background.default,
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Top Controls Bar */}
+      <Box sx={{ 
+        position: 'absolute', 
+        top: 8, 
+        left: 8, 
+        zIndex: 20,
+        display: 'flex',
+        gap: 1
+      }}>
+        <Tooltip title="Auto arrange nodes">
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<AutoArrangeIcon />}
+            onClick={() => {
+              const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
+                nodes,
+                edges,
+                baseRadius,
+                levelSpacing
+              );
+              setNodes(arrangedNodes);
+              setEdges(arrangedEdges);
+              fitView();
+            }}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              '&:hover': { backgroundColor: theme.palette.primary.dark },
+              fontSize: '0.75rem',
+              minWidth: 'auto',
+              px: 1.5
+            }}
+          >
+            Arrange
+          </Button>
+        </Tooltip>
+        
+        <Tooltip title="Reset viewport">
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<ResetIcon />}
+            onClick={resetFlow}
+            sx={{
+              backgroundColor: theme.palette.secondary.main,
+              '&:hover': { backgroundColor: theme.palette.secondary.dark },
+              fontSize: '0.75rem',
+              minWidth: 'auto',
+              px: 1.5
+            }}
+          >
+            Reset
+          </Button>
+        </Tooltip>
+      </Box>
+
+      {/* Compact Layout Controls Panel */}
+      <Paper
+        elevation={1}
+        sx={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          zIndex: 20,
+          p: 1,
+          backgroundColor: alpha(theme.palette.background.paper, 0.95),
+          backdropFilter: 'blur(8px)',
+          minWidth: 140,
+          maxWidth: 160
         }}
       >
-        Auto Arrange
-      </button>
-      {/* Reset Button */}
-      <button
-        title="Cleanup the reactflow viewport" 
-        className="absolute top-2 left-24 p-1 text-xs bg-blue-400 hover:bg-red-600 text-white rounded-md shadow-md z-20"
-        onClick={resetFlow}
-      >
-        Reset View
-      </button>
-
-      {/* Sliders for BASE_RADIUS & LEVEL_SPACING */}
-      <div className="slider-container">
-        <div className="slider-group">
-          <label>Base Radius: {tempBaseRadius}px</label>
-          <input
-            type="range"
-            min="10"
-            max="300"
+        <Typography variant="caption" sx={{ 
+          fontWeight: 600, 
+          color: theme.palette.text.secondary,
+          display: 'block',
+          mb: 0.1,
+          fontSize: '0.65rem'
+        }}>
+          Layout
+        </Typography>
+        
+        <Box sx={{ mb: 0.5 }}>
+          <Typography variant="caption" sx={{ 
+            color: theme.palette.text.primary,
+            fontSize: '0.6rem'
+          }}>
+            Radius: {tempBaseRadius}
+          </Typography>
+          <Slider
+            size="small"
             value={tempBaseRadius}
-            onChange={handleSliderChange(setBaseRadius, setTempBaseRadius)}
-            onMouseUp={handleSliderRelease(setBaseRadius, tempBaseRadius)}
-            onTouchEnd={handleSliderRelease(setBaseRadius, tempBaseRadius)}
+            min={10}
+            max={300}
+            onChange={(_, value) => setTempBaseRadius(value as number)}
+            onMouseUp={() => setBaseRadius(tempBaseRadius)}
+            onTouchEnd={() => setBaseRadius(tempBaseRadius)}
+            sx={{
+              color: theme.palette.primary.main,
+              height: 4,
+              '& .MuiSlider-thumb': {
+                width: 8,
+                height: 8
+              },
+              '& .MuiSlider-track': {
+                height: 2
+              },
+              '& .MuiSlider-rail': {
+                height: 2
+              }
+            }}
           />
-        </div>
-        <div className="slider-group">
-          <label>Level Spacing: {tempLevelSpacing}px</label>
-          <input
-            type="range"
-            min="10"
-            max="300"
+        </Box>
+        
+        <Box>
+          <Typography variant="caption" sx={{ 
+            color: theme.palette.text.primary,
+            fontSize: '0.6rem'
+          }}>
+            Spacing: {tempLevelSpacing}
+          </Typography>
+          <Slider
+            size="small"
             value={tempLevelSpacing}
-            onChange={handleSliderChange(setLevelSpacing, setTempLevelSpacing)}
-            onMouseUp={handleSliderRelease(setLevelSpacing, tempLevelSpacing)}
-            onTouchEnd={handleSliderRelease(setLevelSpacing, tempLevelSpacing)}
+            min={10}
+            max={300}
+            onChange={(_, value) => setTempLevelSpacing(value as number)}
+            onMouseUp={() => setLevelSpacing(tempLevelSpacing)}
+            onTouchEnd={() => setLevelSpacing(tempLevelSpacing)}
+            sx={{
+              color: theme.palette.secondary.main,
+              height: 4,
+              '& .MuiSlider-thumb': {
+                width: 8,
+                height: 8
+              },
+              '& .MuiSlider-track': {
+                height: 2
+              },
+              '& .MuiSlider-rail': {
+                height: 2
+              }
+            }}
           />
-        </div>
-      </div>
+        </Box>
+      </Paper>
 
       {/* React Flow Component */}
       <ReactFlow
@@ -229,8 +330,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           ...edge,
           animated: activeEdges.has(`${edge.source}-${edge.target}`),
           style: {
-            strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 3 : 1,
-            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? "#ffcc00" : "var(--agentflow-edge)",
+            strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 4 : 1,
+            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? theme.palette.warning.main : theme.palette.divider,
           },
         }))}
         onNodesChange={onNodesChange}
@@ -240,22 +341,37 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         edgeTypes={edgeTypes}
         minZoom={0.1}
         maxZoom={3}
+        // style={{ backgroundColor: theme.palette.background.default }}
       >
-        <Background />
+        <Background/>
         <Controls>
-          <div className="react-flow__controls-button" title="Toggle connectivity mode">
-            <button
-              onClick={() => setUseCompactMode(!useCompactMode)}
-              className="agent-flow-container p-1 flex items-center justify-center text-white bg-gray-700 hover:bg-gray-600 rounded shadow-sm"
-              title={useCompactMode ? "Switch to compact connectivity" : "Switch to full connectivity"}
-            >
-              {useCompactMode ? <FaBoxOpen size={14} /> : <FaBox size={14} />}
-            </button>
+          <div className="react-flow__controls-button">
+            <Tooltip title={useCompactMode ? "Switch to full connectivity" : "Switch to compact connectivity"}>
+              <Button
+                size="small"
+                onClick={() => setUseCompactMode(!useCompactMode)}
+                sx={{
+                  minWidth: 12,
+                  width: 12,
+                  height: 12,
+                  p: 0,
+                  backgroundColor: theme.palette.background.paper,
+                  border: `1px solid ${theme.palette.divider}`,
+                  color: theme.palette.text.primary,
+                  borderRadius: '4px',
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    borderColor: theme.palette.primary.main
+                  }
+                }}
+              >
+                {useCompactMode ? <CompactIcon sx={{ fontSize: 12 }} /> : <FullIcon sx={{ fontSize: 12 }} />}
+              </Button>
+            </Tooltip>
           </div>
         </Controls>
-
       </ReactFlow>
-    </div>
+    </Box>
   );
 };
 

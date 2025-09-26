@@ -9,7 +9,8 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import React, { useState, useMemo, useEffect } from "react";
+import * as React from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import {
   FaRobot,
@@ -17,12 +18,29 @@ import {
   FaBrain,
   FaMicrochip,
   FaNetworkWired,
-  FaUserSecret,
-  FaChevronDown,
-  FaCheckSquare,
-  FaRegSquare,
-  FaRegCopy
+  FaUserSecret
 } from "react-icons/fa";
+import { 
+  Box, 
+  Paper, 
+  Typography, 
+  Button, 
+  IconButton, 
+  List, 
+  ListItem, 
+  ListItemIcon, 
+  ListItemText, 
+  Tooltip, 
+  useTheme,
+  alpha,
+  Collapse
+} from "@mui/material";
+import { 
+  ExpandMore as ExpandMoreIcon,
+  CheckBox as CheckBoxIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
+  ContentCopy as CopyIcon
+} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 
 // Define the structure of the `data` prop
@@ -65,13 +83,14 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
   const [agentDetails, setAgentDetails] = useState<any>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const [hoveringTooltip, setHoveringTooltip] = useState(false);
+  const theme = useTheme();
   
   // Fix: Explicitly type the state object
   const [selectedTools, setSelectedTools] = useState<Record<string, boolean>>(
-    data.dropdown_tools?.reduce<Record<string, boolean>>((acc, tool) => {
+    data.dropdown_tools?.reduce((acc: Record<string, boolean>, tool: string) => {
       acc[tool] = true;
       return acc;
-    }, {}) || {}
+    }, {} as Record<string, boolean>) || {}
   );
 
   // Fix: Add type for `tool` parameter
@@ -127,171 +146,289 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
   };
 
   return (
-    <div className="relative w-fit h-fit">
+    <Box sx={{ position: 'relative', width: 'fit-content', height: 'fit-content' }}>
       {/* Node Container */}
-      <div
+      <Paper
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`p-3 rounded-lg shadow-md w-48 transition-all ${
-          data.isActive
-            ? "border-2 scale-105 shadow-xl"
-            : ""
-        }`}
-        style={{
-          background: data.isActive ? "var(--agentflow-node-active-bg)" : "var(--agentflow-node-bg)",
-          color: "var(--agentflow-node-text)",
-          borderColor: data.isActive ? "var(--agentflow-node-active-border)" : "var(--agentflow-edge)",
+        elevation={data.isActive ? 8 : 2}
+        sx={{
+          p: 1.5,
+          borderRadius: 2,
+          width: 192, // 48 * 4 = 192px
+          transition: 'all 0.3s ease',
+          transform: data.isActive ? 'scale(1.05)' : 'scale(1)',
+          backgroundColor: data.isActive 
+            ? alpha(theme.palette.primary.main, 0.6) 
+            : alpha(theme.palette.primary.light, 0.6),
+          color: theme.palette.text.primary,
+          border: `2px solid ${data.isActive 
+            ? theme.palette.primary.main 
+            : theme.palette.divider}`,
+          '&:hover': {
+            elevation: 4,
+            borderColor: theme.palette.primary.light
+          }
         }}
       >
         {/* Title Bar */}
-        <div className="flex items-center justify-center bg-blue-700 px-2 py-1 rounded-t-md"
-            style={{ backgroundColor: "var(--agentflow-node-header-bg)", color: "var(--agentflow-node-text)" }}
-        >
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          backgroundColor: data.isActive 
+            ? alpha(theme.palette.secondary.dark, 0.7)
+            : alpha(theme.palette.primary.dark, 0.9),
+          px: 1, 
+          py: 0.5, 
+          borderRadius: '4px 4px 0 0',
+          mb: 1
+        }}>
           {/* Icon */}
-          <Icon className="text-white text-lg mr-2" />
-          <span className="text-sm font-bold ml-2">{data.label}</span>
-        </div>
+          <Icon style={{ color: 'white', fontSize: '1.125rem', marginRight: 8 }} />
+          <Typography variant="body2" sx={{ 
+            fontWeight: 600, 
+            color: 'white',
+            fontSize: '0.875rem'
+          }}>
+            {data.label}
+          </Typography>
+        </Box>
 
         {/* Coded Tools Section */}
         {data.dropdown_tools && data.dropdown_tools.length > 0 && (
-          <div className="coded-tools-section">
+          <Box sx={{ mb: 1 }}>
             {/* Toggle Button */}
-            <button onClick={() => setDropdownOpen(!dropdownOpen)} className="coded-tools-toggle">
-              <span>Coded Tools</span>
-              <FaChevronDown className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
-            </button>
+            <Button
+              size="small"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              endIcon={
+                <ExpandMoreIcon 
+                  sx={{ 
+                    transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s'
+                  }} 
+                />
+              }
+              sx={{
+                width: '100%',
+                justifyContent: 'space-between',
+                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.text.primary,
+                fontSize: '0.75rem',
+                py: 0.5,
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.2)
+                }
+              }}
+            >
+              Coded Tools
+            </Button>
 
             {/* Dropdown List - Multi-select checkboxes */}
-            {dropdownOpen && (
-              <ul className="coded-tools-list">
+            <Collapse in={dropdownOpen}>
+              <List dense sx={{ py: 0 }}>
                 {data.dropdown_tools.map((tool: string) => (
-                  <li key={tool} className="coded-tools-item" onClick={() => toggleToolSelection(tool)}>
-                    {selectedTools[tool] ? <FaCheckSquare /> : <FaRegSquare />}
-                    {tool}
-                  </li>
+                  <ListItem 
+                    key={tool} 
+                    component="div"
+                    onClick={() => toggleToolSelection(tool)}
+                    sx={{ 
+                      py: 0.25,
+                      px: 1,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: alpha(theme.palette.primary.main, 0.1)
+                      }
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 24 }}>
+                      {selectedTools[tool] ? 
+                        <CheckBoxIcon sx={{ fontSize: 16, color: theme.palette.primary.main }} /> : 
+                        <CheckBoxOutlineBlankIcon sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
+                      }
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={tool} 
+                      primaryTypographyProps={{ 
+                        fontSize: '0.7rem',
+                        color: theme.palette.text.primary
+                      }}
+                    />
+                  </ListItem>
                 ))}
-              </ul>
-            )}
-          </div>
+              </List>
+            </Collapse>
+          </Box>
         )}
 
-        {/* Node Body */}
-        <div className="p-3 text-center">
+        {/* Node Body with Handles */}
+        <Box sx={{ p: 1, textAlign: 'center', position: 'abs' }}>
           {/* Correctly render handles with unique keys */}
           {Object.entries(handlePositions).map(([key, position]) => (
             <React.Fragment key={key}>
-              <Handle type="target" position={position} id={`${key}-target`} />
-              <Handle type="source" position={position} id={`${key}-source`} />
+              <Handle 
+                type="target" 
+                position={position} 
+                id={`${key}-target`}
+                style={{ 
+                  backgroundColor: theme.palette.primary.main,
+                  border: `2px solid ${theme.palette.background.paper}`,
+                  width: 8,
+                  height: 8
+                }} 
+              />
+              <Handle 
+                type="source" 
+                position={position} 
+                id={`${key}-source`}
+                style={{ 
+                  backgroundColor: theme.palette.secondary.main,
+                  border: `2px solid ${theme.palette.background.paper}`,
+                  width: 8,
+                  height: 8
+                }} 
+              />
             </React.Fragment>
           ))}
-        </div>
-      </div>
+        </Box>
+      </Paper>
 
       {/* Tooltip on hover */}
       {showTooltip && agentDetails && (
-        <div className="agent-tooltip nodrag absolute left-52 top-0 w-[340px]"
-            onMouseEnter={handleTooltipEnter}
-            onMouseLeave={handleTooltipLeave}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
+        <Paper
+          className="nodrag"
+          elevation={4}
+          onMouseEnter={handleTooltipEnter}
+          onMouseLeave={handleTooltipLeave}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            position: 'absolute',
+            left: 208, // 52 * 4 = 208px
+            top: 0,
+            width: 340,
+            p: 2,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            zIndex: 1000
+          }}
         >
-          <div className="flex justify-between items-center mb-2">
-            <div className="tooltip-title font-bold text-sm">{agentDetails.name}</div>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ 
+              fontWeight: 600, 
+              color: theme.palette.text.primary 
+            }}>
+              {agentDetails.name}
+            </Typography>
             {agentDetails.error === undefined && (
-              <button
-                className="text-gray-400 hover:text-white"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(JSON.stringify(agentDetails, null, 2));
-                }}
-                title="Copy details"
-              >
-                <FaRegCopy size={14} />
-              </button>
+              <Tooltip title="Copy details">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(JSON.stringify(agentDetails, null, 2));
+                  }}
+                  sx={{ 
+                    color: theme.palette.text.secondary,
+                    '&:hover': { color: theme.palette.primary.main }
+                  }}
+                >
+                  <CopyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             )}
-          </div>
+          </Box>
 
           {agentDetails.error ? (
-            <div className="tooltip-section italic text-gray-400 text-sm">
+            <Typography variant="body2" sx={{ 
+              fontStyle: 'italic', 
+              color: theme.palette.text.secondary 
+            }}>
               {agentDetails.error}
-            </div>
+            </Typography>
           ) : (
-            <>
+            <Box>
               {agentDetails.llm_config && (
-                <div className="tooltip-section">
-                  <span className="tooltip-label">LLM Config:</span>{" "}
-                  {Object.entries(agentDetails.llm_config)
-                    .map(([key, val]) => `${key}: ${val}`)
-                    .join(", ")}
-                </div>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.text.primary 
+                  }}>
+                    LLM Config:{" "}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                    {Object.entries(agentDetails.llm_config)
+                      .map(([key, val]) => `${key}: ${val}`)
+                      .join(", ")}
+                  </Typography>
+                </Box>
               )}
               {agentDetails.function && (
-                <div className="tooltip-section">
-                  <span className="tooltip-label">Function:</span>{" "}
-                  {typeof agentDetails.function === "string"
-                    ? agentDetails.function
-                    : agentDetails.function.description}
-                </div>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.text.primary 
+                  }}>
+                    Function:{" "}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                    {typeof agentDetails.function === "string"
+                      ? agentDetails.function
+                      : agentDetails.function.description}
+                  </Typography>
+                </Box>
               )}
               {agentDetails.command && (
-                <div className="tooltip-section">
-                  <span className="tooltip-label">Command:</span> {agentDetails.command}
-                </div>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.text.primary 
+                  }}>
+                    Command:{" "}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                    {agentDetails.command}
+                  </Typography>
+                </Box>
               )}
               {agentDetails.instructions && (
-                <div className="tooltip-section">
-                  <span className="tooltip-label">Instructions:</span>
-                  <div className="mt-1">{agentDetails.instructions}</div>
-                </div>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.text.primary,
+                    display: 'block'
+                  }}>
+                    Instructions:
+                  </Typography>
+                  <Typography variant="caption" sx={{ 
+                    color: theme.palette.text.secondary,
+                    display: 'block',
+                    mt: 0.5
+                  }}>
+                    {agentDetails.instructions}
+                  </Typography>
+                </Box>
               )}
               {agentDetails.tools?.length > 0 && (
-                <div className="tooltip-section">
-                  <span className="tooltip-label">Tools:</span> {agentDetails.tools.join(", ")}
-                </div>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.text.primary 
+                  }}>
+                    Tools:{" "}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                    {agentDetails.tools.join(", ")}
+                  </Typography>
+                </Box>
               )}
-            </>
+            </Box>
           )}
 
-          {/* {agentDetails.common_defs && (
-            <div className="tooltip-section">
-              <div className="tooltip-label mb-1">Common Defs:</div>
-
-              {agentDetails.common_defs.replacement_strings && (
-                <div className="mb-1">
-                  <span className="tooltip-italic-label">Strings:</span>
-                  <ul>
-                    {Object.entries(agentDetails.common_defs.replacement_strings).map(
-                      ([key, val]) => (
-                        <li key={key}>
-                          <strong>{key}:</strong> {val}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                </div>
-              )}
-
-              {agentDetails.common_defs.replacement_values && (
-                <div>
-                  <span className="tooltip-italic-label">Values:</span>
-                  <ul>
-                    {Object.entries(agentDetails.common_defs.replacement_values).map(
-                      ([key, val]) => (
-                        <li key={key}>
-                          <strong>{key}:</strong>{" "}
-                          {typeof val === "string" ? val : JSON.stringify(val)}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )} */}
-        </div>
+        </Paper>
       )}
-
-    </div>
+    </Box>
   );
 };
 

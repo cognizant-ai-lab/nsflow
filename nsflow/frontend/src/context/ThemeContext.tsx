@@ -52,6 +52,7 @@ const lightTheme = createTheme({
     text: {
       primary: '#0f172a', // Slate-900 (darker for better contrast)
       secondary: '#475569', // Slate-600 (darker secondary)
+      disabled: '#94a3b8', // Slate-400 (darker disabled
     },
     divider: '#e2e8f0', // Slate-200
   },
@@ -103,6 +104,7 @@ const darkTheme = createTheme({
     text: {
       primary: '#f8fafc', // Slate-50 (lighter for better contrast)
       secondary: '#cbd5e1', // Slate-300 (lighter secondary)
+      disabled: '#64748b', // Slate-500 (lighter disabled)
     },
     divider: '#334155', // Slate-700
   },
