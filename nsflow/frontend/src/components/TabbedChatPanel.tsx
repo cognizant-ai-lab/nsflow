@@ -10,6 +10,20 @@
 //
 // END COPYRIGHT
 import { useState, useRef, useEffect } from "react";
+import { 
+  Box, 
+  Tabs, 
+  Tab, 
+  Paper, 
+  useTheme,
+  alpha 
+} from "@mui/material";
+import { 
+  Chat as ChatIcon,
+  BugReport as InternalIcon,
+  DataObject as SlyDataIcon,
+  Settings as ConfigIcon 
+} from "@mui/icons-material";
 import ChatPanel from "./ChatPanel";
 import InternalChatPanel from "./InternalChatPanel";
 import SlyDataPanel from "./SlyDataPanel";
@@ -24,6 +38,7 @@ interface TabbedChatPanelProps {
 const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "config">("chat");
   const { wsUrl } = useApiPort();
+  const theme = useTheme();
   const { 
     activeNetwork,
     targetNetwork,
@@ -172,34 +187,87 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     return () => {
       console.log("WebSockets for old network are closed.");
     };
-  }, [targetNetwork, wsUrl]);
+   }, [targetNetwork, wsUrl]);
+
+  const tabConfig = [
+    { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },
+    ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
+    { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: isEditorMode ? <EditorSlyDataPanel /> : <SlyDataPanel /> },
+    ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
+  ];
+
+  const activeTabIndex = tabConfig.findIndex(tab => tab.id === activeTab);
 
   return (
-    <div className="tabbed-chat-panel">
-      {/* Tabs */}
-      <div className="tabbed-tabs">
-        {(isEditorMode ? ["chat", "slydata"] : ["chat", "internal", "slydata", "config"]).map((tab) => (
-          <button
-            key={tab}
-            title={tab === "chat" ? "Chat" : tab === "internal" ? "Internal Chat" : tab === "slydata" ? "SlyData" : "Configuration"}
-            onClick={() => setActiveTab(tab as "chat" | "internal" | "slydata" | "config")}
-            className={`tabbed-tab ${
-                activeTab === tab ? "tabbed-tab-active" : "tabbed-tab-inactive"
-              }`}
-          >
-            {tab === "chat" ? "Chat" : tab === "internal" ? "InternalChat" : tab === "slydata" ? "SlyData" : "Config"}
-          </button>
-        ))}
-      </div>
+    <Paper 
+      elevation={1}
+      sx={{ 
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
+        overflow: 'hidden'
+      }}
+    >
+      {/* MUI Tabs */}
+      <Box sx={{ 
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        backgroundColor: theme.palette.background.paper
+      }}>
+        <Tabs
+          value={activeTabIndex}
+          onChange={(_, newValue) => setActiveTab(tabConfig[newValue].id as any)}
+          variant="fullWidth"
+          sx={{
+            minHeight: 48,
+            '& .MuiTab-root': {
+              minHeight: 48,
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              textTransform: 'none',
+              color: theme.palette.text.secondary,
+              '&.Mui-selected': {
+                color: theme.palette.primary.main,
+                fontWeight: 600,
+              },
+              '&:hover': {
+                color: theme.palette.primary.main,
+                backgroundColor: alpha(theme.palette.primary.main, 0.04),
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: theme.palette.primary.main,
+              height: 3,
+            }
+          }}
+        >
+          {tabConfig.map((tab) => (
+            <Tab
+              key={tab.id}
+              icon={tab.icon}
+              label={tab.label}
+              iconPosition="start"
+              sx={{
+                gap: 1,
+                '& .MuiSvgIcon-root': {
+                  fontSize: '1.125rem'
+                }
+              }}
+            />
+          ))}
+        </Tabs>
+      </Box>
 
       {/* Content */}
-      <div className="tabbed-content">
-        {activeTab === "chat" && <ChatPanel />}
-        {activeTab === "internal" && !isEditorMode && <InternalChatPanel />}
-        {activeTab === "slydata" && (isEditorMode ? <EditorSlyDataPanel /> : <SlyDataPanel />)}
-        {activeTab === "config" && !isEditorMode && <ConfigPanel selectedNetwork={activeNetwork} />}
-      </div>
-    </div>
+      <Box sx={{ 
+        flexGrow: 1,
+        overflow: 'hidden',
+        backgroundColor: theme.palette.background.default
+      }}>
+        {tabConfig[activeTabIndex]?.component}
+      </Box>
+    </Paper>
   );
 };
 

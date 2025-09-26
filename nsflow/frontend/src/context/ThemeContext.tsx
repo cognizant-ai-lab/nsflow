@@ -9,7 +9,8 @@
 //
 // END COPYRIGHT
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import * as React from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createTheme, ThemeProvider as MuiThemeProvider, Theme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
 
@@ -49,8 +50,8 @@ const lightTheme = createTheme({
       paper: '#ffffff',
     },
     text: {
-      primary: '#1e293b', // Slate-800
-      secondary: '#64748b', // Slate-500
+      primary: '#0f172a', // Slate-900 (darker for better contrast)
+      secondary: '#475569', // Slate-600 (darker secondary)
     },
     divider: '#e2e8f0', // Slate-200
   },
@@ -100,8 +101,8 @@ const darkTheme = createTheme({
       paper: '#1e293b', // Slate-800
     },
     text: {
-      primary: '#f1f5f9', // Slate-100
-      secondary: '#94a3b8', // Slate-400
+      primary: '#f8fafc', // Slate-50 (lighter for better contrast)
+      secondary: '#cbd5e1', // Slate-300 (lighter secondary)
     },
     divider: '#334155', // Slate-700
   },
@@ -162,14 +163,14 @@ declare module '@mui/material/styles' {
 const augmentedLightTheme = createTheme(lightTheme, {
   custom: {
     slyData: {
-      keyColor: '#d97706', // Amber-600
-      valueColor: '#059669', // Emerald-600
-      emptyColor: '#64748b', // Slate-500
-      separatorColor: '#94a3b8', // Slate-400
+      keyColor: '#b45309', // Amber-700 (darker for better contrast)
+      valueColor: '#047857', // Emerald-700 (darker for better contrast)
+      emptyColor: '#475569', // Slate-600 (darker)
+      separatorColor: '#64748b', // Slate-500 (darker)
       hoverBackground: '#f1f5f9', // Slate-100
       focusBackground: '#dbeafe', // Blue-100
       inputBackground: '#ffffff',
-      borderColor: '#e2e8f0', // Slate-200
+      borderColor: '#d1d5db', // Gray-300 (slightly darker border)
     },
   },
 });
@@ -177,12 +178,12 @@ const augmentedLightTheme = createTheme(lightTheme, {
 const augmentedDarkTheme = createTheme(darkTheme, {
   custom: {
     slyData: {
-      keyColor: '#fbbf24', // Amber-400
-      valueColor: '#34d399', // Emerald-300
-      emptyColor: '#94a3b8', // Slate-400
-      separatorColor: '#64748b', // Slate-500
+      keyColor: '#fcd34d', // Amber-300 (lighter for better contrast)
+      valueColor: '#6ee7b7', // Emerald-200 (lighter for better contrast)
+      emptyColor: '#cbd5e1', // Slate-300 (lighter)
+      separatorColor: '#94a3b8', // Slate-400 (lighter)
       hoverBackground: '#334155', // Slate-700
-      focusBackground: '#1e40af', // Blue-800 with opacity
+      focusBackground: '#1e40af', // Blue-800
       inputBackground: '#374151', // Gray-700
       borderColor: '#475569', // Slate-600
     },
@@ -209,7 +210,7 @@ interface ThemeProviderProps {
   children: ReactNode;
 }
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }: ThemeProviderProps) => {
   // Check for saved theme preference or default to light mode
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('nsflow-theme-mode');

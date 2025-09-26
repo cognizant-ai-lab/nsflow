@@ -9,7 +9,8 @@
 //
 // END COPYRIGHT
 
-import React, { useState, useEffect } from "react";
+import * as React from "react";
+import { useState, useEffect } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import EditorAgentFlow from "../../components/EditorAgentFlow";
@@ -19,25 +20,30 @@ import EditorLogsPanel from "../../components/EditorLogsPanel";
 import Header from "../../components/Header";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
-import { ChatProvider } from "../../context/ChatContext";
+import { ChatProvider, useChatContext } from "../../context/ChatContext";
 import { getInitialTheme } from "../../utils/theme";
 
-const Editor: React.FC = () => {
+const EditorContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+  const { setIsEditorMode } = useChatContext();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", getInitialTheme());
-  }, []);
+    // Set editor mode when component mounts
+    setIsEditorMode(true);
+    
+    // Clean up on unmount (set back to false)
+    return () => setIsEditorMode(false);
+  }, [setIsEditorMode]);
 
   return (
-    <ChatProvider>
-      <ReactFlowProvider>
-        <ApiPortProvider>
-          <NeuroSanProvider>
-            <div className="h-screen w-screen bg-gray-900 flex flex-col">
-              <div className="h-14">
-                <Header selectedNetwork={selectedNetwork} isEditorPage={true} />
-              </div>
+    <ReactFlowProvider>
+      <ApiPortProvider>
+        <NeuroSanProvider>
+          <div className="h-screen w-screen bg-gray-900 flex flex-col">
+            <div className="h-14">
+              <Header selectedNetwork={selectedNetwork} />
+            </div>
 
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={15} minSize={10} maxSize={25}>
@@ -59,12 +65,19 @@ const Editor: React.FC = () => {
                 </Panel>
               </PanelGroup>
 
-              {/* Expandable Logs Panel in bottom left */}
-              <EditorLogsPanel />
-            </div>
-          </NeuroSanProvider>
-        </ApiPortProvider>
-      </ReactFlowProvider>
+            {/* Expandable Logs Panel in bottom left */}
+            <EditorLogsPanel />
+          </div>
+        </NeuroSanProvider>
+      </ApiPortProvider>
+    </ReactFlowProvider>
+  );
+};
+
+const Editor: React.FC = () => {
+  return (
+    <ChatProvider>
+      <EditorContent />
     </ChatProvider>
   );
 };
