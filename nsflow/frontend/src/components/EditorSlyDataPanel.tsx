@@ -454,6 +454,14 @@ const EditorSlyDataPanel: React.FC = () => {
     currentValue: any;
   }>({ open: false, parentId: '', parentKey: '', currentValue: null });
 
+  const [importDialog, setImportDialog] = useState<{
+    open: boolean;
+    fileName: string;
+    jsonData: any;
+    hasExistingData: boolean;
+    validationError: string | null;
+  }>({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
+
   // Initialize with completely empty data structure
   useEffect(() => {
     if (treeData.length === 0) {
@@ -626,6 +634,73 @@ const EditorSlyDataPanel: React.FC = () => {
     setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null });
   };
 
+  // Validate JSON structure for SlyData compatibility
+  const validateJsonForSlyData = (data: any): string | null => {
+    try {
+      if (data === null || data === undefined) {
+        return "JSON data cannot be null or undefined";
+      }
+
+      if (typeof data !== 'object') {
+        return "Root element must be an object, not a primitive value";
+      }
+
+      if (Array.isArray(data)) {
+        return "Root element must be an object, not an array";
+      }
+
+      // Check for circular references
+      const seen = new WeakSet();
+      const checkCircular = (obj: any): boolean => {
+        if (obj && typeof obj === 'object') {
+          if (seen.has(obj)) return true;
+          seen.add(obj);
+          
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              if (checkCircular(obj[key])) return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      if (checkCircular(data)) {
+        return "JSON contains circular references which are not supported";
+      }
+
+      // Check for valid key types
+      const validateKeys = (obj: any, path = ''): string | null => {
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              if (typeof key !== 'string') {
+                return `Invalid key type at ${path}${key}. Keys must be strings`;
+              }
+              if (key.trim() === '') {
+                return `Empty key found at ${path}. Keys cannot be empty`;
+              }
+              
+              const value = obj[key];
+              if (value && typeof value === 'object' && !Array.isArray(value)) {
+                const nestedError = validateKeys(value, `${path}${key}.`);
+                if (nestedError) return nestedError;
+              }
+            }
+          }
+        }
+        return null;
+      };
+
+      const keyError = validateKeys(data);
+      if (keyError) return keyError;
+
+      return null; // Valid
+    } catch (error) {
+      return `Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  };
+
   // Handle updating key
   const handleUpdateKey = useCallback((id: string, newKey: string) => {
     setTreeData(prev => {
@@ -779,20 +854,59 @@ const EditorSlyDataPanel: React.FC = () => {
       if (file) {
         const reader = new FileReader();
         reader.onload = (event) => {
+          let jsonData = null;
+          let validationError = null;
+
+          // Try to parse JSON
           try {
-            const json = JSON.parse(event.target?.result as string);
-            const newTreeData = jsonToTreeData(json, undefined, 0);
-            setTreeData(newTreeData);
-            setExpandedItems(newTreeData.map(item => item.id));
-          } catch (error) {
-            console.error('Error parsing JSON:', error);
+            jsonData = JSON.parse(event.target?.result as string);
+          } catch (parseError) {
+            validationError = `Invalid JSON format: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}`;
           }
+
+          // If JSON parsed successfully, validate structure
+          if (!validationError && jsonData !== null) {
+            validationError = validateJsonForSlyData(jsonData);
+          }
+
+          // Show import dialog
+          setImportDialog({
+            open: true,
+            fileName: file.name,
+            jsonData,
+            hasExistingData: treeData.length > 0,
+            validationError
+          });
         };
         reader.readAsText(file);
       }
     };
     input.click();
-  }, [jsonToTreeData]);
+  }, [treeData.length, validateJsonForSlyData]);
+
+  // Handle import confirmation
+  const handleImportConfirm = () => {
+    if (importDialog.jsonData && !importDialog.validationError) {
+      try {
+        const newTreeData = jsonToTreeData(importDialog.jsonData, undefined, 0);
+        setTreeData(newTreeData);
+        setExpandedItems(newTreeData.map(item => item.id));
+        setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
+      } catch (error) {
+        console.error('Error importing JSON:', error);
+        // Update dialog with conversion error
+        setImportDialog(prev => ({
+          ...prev,
+          validationError: `Error converting JSON to tree structure: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }));
+      }
+    }
+  };
+
+  // Handle import cancellation
+  const handleImportCancel = () => {
+    setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
+  };
 
   // Handle JSON export
   const handleExportJson = useCallback(() => {
@@ -1050,6 +1164,91 @@ const EditorSlyDataPanel: React.FC = () => {
           <Button onClick={handleConflictConfirm} sx={{ color: '#4CAF50' }}>
             Replace Value
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Import Confirmation Dialog */}
+      <Dialog 
+        open={importDialog.open} 
+        onClose={handleImportCancel}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: 'white', backgroundColor: '#1a1a1a' }}>
+          {importDialog.validationError ? 'Import Error' : 'Import JSON File'}
+        </DialogTitle>
+        <DialogContent sx={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+          <Typography sx={{ mb: 2 }}>
+            File: <strong>{importDialog.fileName}</strong>
+          </Typography>
+
+          {importDialog.validationError ? (
+            <>
+              <Typography color="error" sx={{ mb: 2 }}>
+                ❌ Cannot import this file due to the following error:
+              </Typography>
+              <Box sx={{ 
+                p: 2, 
+                backgroundColor: alpha('#f44336', 0.1), 
+                borderRadius: 1,
+                border: '1px solid #f44336',
+                fontFamily: 'monospace',
+                mb: 2,
+                color: '#f44336'
+              }}>
+                {importDialog.validationError}
+              </Box>
+              <Typography variant="body2" sx={{ color: '#90A4AE' }}>
+                Please fix the JSON file and try importing again.
+              </Typography>
+            </>
+          ) : (
+            <>
+              {importDialog.hasExistingData && (
+                <>
+                  <Typography color="warning.main" sx={{ mb: 2 }}>
+                    ⚠️ This will replace all existing SlyData with the imported data.
+                  </Typography>
+                  <Typography sx={{ mb: 2 }}>
+                    Current SlyData contains {treeData.length} root-level item{treeData.length !== 1 ? 's' : ''}.
+                  </Typography>
+                </>
+              )}
+
+              <Typography sx={{ mb: 2 }}>
+                📁 Preview of data to import:
+              </Typography>
+              <Box sx={{ 
+                p: 2, 
+                backgroundColor: alpha('#4CAF50', 0.1), 
+                borderRadius: 1,
+                border: '1px solid #4CAF50',
+                fontFamily: 'monospace',
+                mb: 2,
+                maxHeight: 300,
+                overflow: 'auto',
+                fontSize: '0.85rem'
+              }}>
+                <pre>{JSON.stringify(importDialog.jsonData, null, 2)}</pre>
+              </Box>
+
+              <Typography>
+                {importDialog.hasExistingData 
+                  ? 'Do you want to replace the existing data with this imported data?' 
+                  : 'Import this JSON data into SlyData?'}
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: '#1a1a1a' }}>
+          <Button onClick={handleImportCancel} sx={{ color: '#90A4AE' }}>
+            {importDialog.validationError ? 'Close' : 'Cancel'}
+          </Button>
+          {!importDialog.validationError && (
+            <Button onClick={handleImportConfirm} sx={{ color: '#4CAF50' }}>
+              {importDialog.hasExistingData ? 'Replace Data' : 'Import'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Paper>
