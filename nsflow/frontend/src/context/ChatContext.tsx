@@ -13,7 +13,7 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 type Message = {
   sender: "system" | "internal" | "user" | "agent" | string;
-  text: string;
+  text: string | object; // Allow objects for SlyData messages;
   network?: string;
   otrace?: string[];
 };
@@ -30,6 +30,9 @@ type ChatContextType = {
   setSlyDataMessages: (messages: Message[]) => void;
   activeNetwork: string;
   setActiveNetwork: (network: string) => void;
+  isEditorMode: boolean;
+  setIsEditorMode: (isEditor: boolean) => void;
+  targetNetwork: string; // Computed network based on mode
   chatWs: WebSocket | null;
   internalChatWs: WebSocket | null;
   slyDataWs: WebSocket | null;
@@ -53,11 +56,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     { sender: "system", text: "Welcome to sly_data logs." },
   ]);
   const [activeNetwork, setActiveNetwork] = useState<string>("");
+  const [isEditorMode, setIsEditorMode] = useState<boolean>(false);
   const [chatWs, setChatWs] = useState<WebSocket | null>(null);
   const [internalChatWs, setInternalChatWs] = useState<WebSocket | null>(null);
   const [slyDataWs, setSlyDataWs] = useState<WebSocket | null>(null);
   const [newSlyData, setNewSlyData] = useState<string>("");
 
+  // Centralized network logic
+  const targetNetwork = isEditorMode ? "agent_network_editor" : activeNetwork;
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
   const addInternalChatMessage = (msg: Message) => {
@@ -80,6 +86,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       setSlyDataMessages,
       activeNetwork, 
       setActiveNetwork,
+      isEditorMode,
+      setIsEditorMode,
+      targetNetwork,
       chatWs,
       setChatWs,
       internalChatWs,

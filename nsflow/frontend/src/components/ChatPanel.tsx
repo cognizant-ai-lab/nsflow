@@ -11,10 +11,23 @@
 // END COPYRIGHT
 import { useState, useEffect, useRef } from "react";
 import { PanelGroup, Panel, PanelResizeHandle, ImperativePanelHandle } from "react-resizable-panels";
-
-import { FaDownload, FaRegStopCircle } from "react-icons/fa";
-import { ImBin2 } from "react-icons/im";
-import { Mic } from "lucide-react";
+import { 
+  Box, 
+  Typography, 
+  IconButton, 
+  Paper, 
+  Tooltip, 
+  Button,
+  useTheme,
+  alpha
+} from "@mui/material";
+import { 
+  Download as DownloadIcon,
+  StopCircle as StopIcon,
+  Delete as DeleteIcon,
+  Mic as MicIcon,
+  Send as SendIcon
+} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
@@ -26,6 +39,7 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const useSpeech = import.meta.env.VITE_USE_SPEECH === 'true';
   const { apiUrl } = useApiPort();
+  const theme = useTheme();
   const { activeNetwork, chatMessages, addChatMessage, addSlyDataMessage, chatWs } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
   const [newMessage, setNewMessage] = useState("");
@@ -76,7 +90,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       if (currentMessageCount > previousMessageCount) {
         const lastMessage = chatMessages[chatMessages.length - 1];
         console.log('Last message sender:', lastMessage.sender);
-        console.log('Last message text:', lastMessage.text.substring(0, 50) + '...');
+        const messageText = typeof lastMessage.text === 'string' ? lastMessage.text : JSON.stringify(lastMessage.text);
+        console.log('Last message text:', messageText.substring(0, 50) + '...');
         
         // Check if the last message is from an agent
         if (lastMessage.sender === "agent") {
@@ -90,7 +105,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           lastMessageCountRef.current = currentMessageCount;
           
           // Store the current message text to ensure we're playing the right one
-          const messageToPlay = lastMessage.text;
+          const messageToPlay = typeof lastMessage.text === 'string' ? lastMessage.text : JSON.stringify(lastMessage.text);
           const messageIndex = chatMessages.length - 1;
           
           // Call textToSpeech directly with the agent's message
@@ -504,8 +519,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     
     console.log(`MP3 encoding complete. Generated ${mp3Data.length} chunks`);
     
-    // Create blob
-    const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+    // Create blob - convert Uint8Array to Uint8Array for proper typing
+    const mp3Blob = new Blob(mp3Data.map(chunk => new Uint8Array(chunk)), { type: 'audio/mp3' });
     console.log(`MP3 blob created: ${mp3Blob.size} bytes`);
     return mp3Blob;
   };
@@ -540,22 +555,57 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   
 
   return (
-    <div className="chat-panel h-full w-full">
+    <Paper
+      elevation={0}
+      sx={{
+        height: '100%',
+        backgroundColor: theme.palette.background.paper,
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
       <PanelGroup direction="vertical">
         {/* Panel 1: Header + Message List */}
         <Panel ref={messagePanelRef} defaultSize={75} minSize={30}>
-          <div className="flex flex-col h-full p-4 overflow-hidden">
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100%', 
+            p: 2, 
+            overflow: 'hidden' 
+          }}>
             {/* Header */}
-            <div className="logs-header flex justify-between items-center mb-2">
-              <h2 className="text-lg font-bold">{title}</h2>
-              <button
-                onClick={downloadMessages}
-                className="logs-download-btn hover:text-white p-1"
-                title="Download Messages"
-              >
-                <FaDownload size={18} />
-              </button>
-            </div>
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              mb: 2,
+              pb: 1,
+              borderBottom: `1px solid ${theme.palette.divider}`
+            }}>
+              <Typography variant="h6" sx={{ 
+                fontWeight: 600, 
+                color: theme.palette.text.primary 
+              }}>
+                {title}
+              </Typography>
+              
+              <Tooltip title="Download Messages">
+                <IconButton
+                  size="small"
+                  onClick={downloadMessages}
+                  sx={{ 
+                    color: theme.palette.text.secondary,
+                    '&:hover': { 
+                      color: theme.palette.primary.main,
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1)
+                    }
+                  }}
+                >
+                  <DownloadIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
 
             {/* Scrollable Message Container */}
             <ScrollableMessageContainer
@@ -567,36 +617,56 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             />
 
             {/* Audio element for playback */}
-            <div className="mt-2">
-              <audio ref={audioRef} controls className="w-full" />
-            </div>
+            <Box sx={{ mt: 2 }}>
+              <audio ref={audioRef} controls style={{ width: '100%' }} />
+            </Box>
 
-          </div>
+          </Box>
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="bg-gray-700 h-1 cursor-row-resize" />
+        <PanelResizeHandle style={{
+          height: '4px',
+          backgroundColor: theme.palette.divider,
+          cursor: 'row-resize',
+          transition: 'background-color 0.2s ease'
+        }} />
 
         {/* Panel 2: Inputs (chat + sly_data) */}
         <Panel ref={inputPanelRef} defaultSize={25} minSize={15}>
           <div className="p-4 space-y-2 bg-[var(--chat-bg)]">
             {/* Chat controls */}
-            <div className="flex justify-end space-x-4 mt-1">
-              <button
-                onClick={clearChat}
-                className="logs-download-btn bg-white-700 hover:bg-orange-400 text-white p-1 rounded-md"
-                title="Clear Chat"
-              >
-                <ImBin2 size={12} />
-              </button>
-              <button
-                onClick={stopWebSocket}
-                className="chat-stop-btn bg-white-700 hover:bg-red-500 text-white p-1 rounded-md"
-                title="Stop Chat"
-              >
-                <FaRegStopCircle size={12} />
-              </button>
-            </div>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
+              <Tooltip title="Clear Chat">
+                <IconButton
+                  size="small"
+                  onClick={() => clearChat()}
+                  sx={{ 
+                    color: theme.palette.warning.main,
+                    '&:hover': { 
+                      backgroundColor: alpha(theme.palette.warning.main, 0.1)
+                    }
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Stop Chat">
+                <IconButton
+                  size="small"
+                  onClick={() => stopWebSocket()}
+                  sx={{ 
+                    color: theme.palette.error.main,
+                    '&:hover': { 
+                      backgroundColor: alpha(theme.palette.error.main, 0.1)
+                    }
+                  }}
+                >
+                  <StopIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
 
             {/* Message input */}
             <div className="chat-input mt-2 flex gap-2 items-end">
@@ -612,40 +682,73 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   }
                 }}
               />
-              <div className="flex flex-col gap-1">
-                <button
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Button
+                  variant="contained"
                   onClick={sendMessage}
-                  className="chat-send-btn"
+                  sx={{
+                    backgroundColor: theme.palette.primary.main,
+                    '&:hover': {
+                      backgroundColor: theme.palette.primary.dark
+                    },
+                    minWidth: 80
+                  }}
+                  startIcon={<SendIcon />}
                 >
                   Send
-                </button>
+                </Button>
                 {useSpeech && (
-                <button
-                  onMouseDown={startRecording}
-                  onMouseUp={stopRecording}
-                  onMouseLeave={stopRecording}
-                  onTouchStart={startRecording}
-                  onTouchEnd={stopRecording}
-                  className={`flex items-center justify-center p-2 rounded-md transition-colors ${
-                    loading
-                      ? 'bg-blue-600 text-white cursor-not-allowed'
-                      : isRecording 
-                      ? 'bg-red-600 text-white' 
-                      : 'chat-send-btn'
-                  }`}
-                  title={
+                  <Tooltip title={
                     loading
                       ? "Converting speech to text..."
                       : isRecording 
                       ? "Recording... Release to stop" 
                       : "Hold to record audio"
-                  }
-                  disabled={loading}
-                >
-                  <Mic size={16} className={loading ? 'animate-spin' : isRecording ? 'animate-pulse' : ''} />
-                </button>
+                  }>
+                    <IconButton
+                      onMouseDown={startRecording}
+                      onMouseUp={stopRecording}
+                      onMouseLeave={stopRecording}
+                      onTouchStart={startRecording}
+                      onTouchEnd={stopRecording}
+                      disabled={loading}
+                      sx={{
+                        backgroundColor: loading
+                          ? theme.palette.info.main
+                          : isRecording 
+                          ? theme.palette.error.main 
+                          : theme.palette.primary.main,
+                        color: 'white',
+                        '&:hover': {
+                          backgroundColor: loading
+                            ? theme.palette.info.dark
+                            : isRecording 
+                            ? theme.palette.error.dark 
+                            : theme.palette.primary.dark
+                        },
+                        '&.Mui-disabled': {
+                          backgroundColor: theme.palette.action.disabled,
+                          color: theme.palette.action.disabled
+                        }
+                      }}
+                    >
+                      <MicIcon 
+                        sx={{ 
+                          animation: loading ? 'spin 1s linear infinite' : isRecording ? 'pulse 1s ease-in-out infinite' : 'none',
+                          '@keyframes spin': {
+                            '0%': { transform: 'rotate(0deg)' },
+                            '100%': { transform: 'rotate(360deg)' }
+                          },
+                          '@keyframes pulse': {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { opacity: 0.5 }
+                          }
+                        }} 
+                      />
+                    </IconButton>
+                  </Tooltip>
                 )}
-              </div>
+              </Box>
             </div>
             <div
               onClick={toggleSlyData}
@@ -698,7 +801,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           </div>
         </Panel>
       </PanelGroup>
-    </div>
+    </Paper>
   );
 };
 

@@ -9,14 +9,15 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import React, { useState, useRef, useEffect } from "react";
+import * as React from "react";
+import { useState, useRef, useEffect } from "react";
 import { FaUserCircle, FaEdit, FaDownload, FaHome } from "react-icons/fa";
 import { FaArrowsRotate } from "react-icons/fa6";
 import { ImPower  } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useNavigate } from "react-router-dom";
 
-import ThemeToggle from "./ThemeToggle";
+import MuiThemeToggle from "./MuiThemeToggle";
 
 const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
   const { apiUrl } = useApiPort();
@@ -164,7 +165,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
 
       {/* Right - Theme Toggle + Profile */}
       <div className="flex items-center gap-4">
-        <ThemeToggle />
+        <MuiThemeToggle />
         <FaUserCircle className="h-8 w-8 text-gray-400 cursor-pointer hover:text-white" />
       </div>
     </header>

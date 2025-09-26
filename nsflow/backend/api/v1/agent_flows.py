@@ -49,6 +49,24 @@ async def get_agent_network(network_name: str):
     return JSONResponse(content=res)
 
 
+@router.get("/slydata/{network_name}", responses={200: {"description": "Latest SlyData found"},
+                                                  404: {"description": "No SlyData available"}})
+def get_latest_sly_data(network_name: str):
+    """Retrieves the latest sly_data for a given network."""
+    logging.info("Fetching latest sly_data for network: %s", network_name)
+    try:
+        latest_data = NsGrpcWsUtils.get_latest_sly_data(network_name)
+        
+        if not latest_data:
+            raise HTTPException(status_code=404, detail=f"No sly_data available for network '{network_name}'")
+        
+        return JSONResponse(content={"network_name": network_name, "sly_data": latest_data})
+        
+    except Exception as e:
+        logging.exception("Failed to retrieve sly_data for network %s: %s", network_name, e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve sly_data") from e
+
+
 @router.get("/compact_connectivity/{network_name}", responses={200: {"description": "Connectivity Info"},
                                                        404: {"description": "HOCON file not found"}})
 def get_connectivity_info(network_name: str):
