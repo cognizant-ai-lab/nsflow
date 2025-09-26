@@ -12,7 +12,7 @@
 
 export type Message = {
     sender: "user" | "agent" | "system" | "internal" | string;
-    text: string;
+    text: string | object;
     network?: string;
   };
   

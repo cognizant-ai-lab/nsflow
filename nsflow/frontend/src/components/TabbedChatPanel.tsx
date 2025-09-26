@@ -26,6 +26,9 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const { wsUrl } = useApiPort();
   const { 
     activeNetwork,
+    targetNetwork,
+    isEditorMode: contextIsEditorMode,
+    setIsEditorMode,
     addChatMessage,
     addInternalChatMessage,
     addSlyDataMessage,
@@ -39,10 +42,14 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
+  // Set editor mode in context when prop changes
   useEffect(() => {
-    // In editor mode, default to agent_network_editor
-    const targetNetwork = isEditorMode ? "agent_network_editor" : activeNetwork;
-    
+    if (contextIsEditorMode !== isEditorMode) {
+      setIsEditorMode(isEditorMode);
+    }
+  }, [isEditorMode, contextIsEditorMode, setIsEditorMode]);
+
+  useEffect(() => {
     if (!targetNetwork) return;
 
     // Close old WebSockets before creating new ones
@@ -165,7 +172,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     return () => {
       console.log("WebSockets for old network are closed.");
     };
-  }, [activeNetwork, wsUrl, isEditorMode]);
+  }, [targetNetwork, wsUrl]);
 
   return (
     <div className="tabbed-chat-panel">

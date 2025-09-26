@@ -21,7 +21,6 @@ import {
   Typography, 
   IconButton, 
   Paper,
-  Divider,
   Tooltip,
   alpha,
   Dialog,
@@ -41,11 +40,14 @@ import {
   Download as DownloadIcon,
   Upload as UploadIcon
 } from '@mui/icons-material';
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
+import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import {
   UseTreeItemLabelInputSlotOwnProps,
   UseTreeItemLabelSlotOwnProps,
 } from '@mui/x-tree-view/useTreeItem';
 import { useChatContext } from '../context/ChatContext';
+import { useApiPort } from '../context/ApiPortContext';
 
 // Create context for tree operations
 interface TreeOperationsContextType {
@@ -443,7 +445,8 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
 );
 
 const EditorSlyDataPanel: React.FC = () => {
-  const { slyDataMessages } = useChatContext();
+  const { slyDataMessages, targetNetwork } = useChatContext();
+  const { apiUrl } = useApiPort();
   const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
   const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);
   const [nextId, setNextId] = useState(1);
@@ -464,6 +467,8 @@ const EditorSlyDataPanel: React.FC = () => {
 
   const [clearDialog, setClearDialog] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
+  const [lastMessageCount, setLastMessageCount] = useState(0);
 
   // Cache keys
   const CACHE_KEY = 'nsflow-slydata';
@@ -1030,6 +1035,85 @@ const EditorSlyDataPanel: React.FC = () => {
     setClearDialog(false);
   };
 
+  // Functions for the logs section
+  const copyToClipboard = (text: string, index: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedMessage(index);
+      setTimeout(() => setCopiedMessage(null), 1000);
+    });
+  };
+
+  const downloadLogs = () => {
+    const logText = slyDataMessages
+      .map((msg) => `${msg.sender}: ${typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}`)
+      .join("\n");
+
+    const blob = new Blob([logText], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "slydata_logs.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // Function to fetch latest sly_data from API
+  const fetchLatestSlyData = useCallback(async () => {
+    if (!targetNetwork) {
+      console.debug('No target network, skipping sly_data fetch');
+      return;
+    }
+
+    const fetchUrl = `${apiUrl}/api/v1/slydata/${targetNetwork}`;
+    console.log('Fetching sly_data from:', fetchUrl);
+
+    try {
+      const response = await fetch(fetchUrl);
+      console.log('API Response status:', response.status);
+      
+      if (response.status === 404) {
+        console.debug('No sly_data available for network:', targetNetwork);
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API Error: HTTP ${response.status}: ${response.statusText}`, errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('API Response data:', result);
+      const latestData = result.sly_data;
+
+      if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
+        console.log('Processing sly_data:', latestData);
+        // Convert to tree data and update
+        const newTreeData = jsonToTreeData(latestData, undefined, 0);
+        setTreeData(newTreeData);
+        
+        // Auto-expand to show new structure
+        const getAllIds = (items: SlyTreeItem[]): string[] => {
+          const ids: string[] = [];
+          items.forEach(item => {
+            ids.push(item.id);
+            if (item.children) {
+              ids.push(...getAllIds(item.children));
+            }
+          });
+          return ids;
+        };
+        
+        setExpandedItems(getAllIds(newTreeData));
+        console.log('SlyData updated from API:', Object.keys(latestData).length, 'root keys');
+      } else {
+        console.log('No valid sly_data in response:', latestData);
+      }
+    } catch (error) {
+      console.error('Failed to fetch latest sly_data:', error);
+    }
+  }, [targetNetwork, apiUrl, jsonToTreeData]);
+
   // Handle JSON export
   const handleExportJson = useCallback(() => {
     // Export the root-level items directly
@@ -1043,40 +1127,19 @@ const EditorSlyDataPanel: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [treeData, treeDataToJson]);
 
-  // Process sly data messages when they change
+  // Monitor message count changes to fetch latest sly_data
+  // Only fetches when new messages arrive (not continuous)
   useEffect(() => {
-    if (slyDataMessages.length > 0) {
-      const latestMessage = slyDataMessages[slyDataMessages.length - 1];
-      try {
-        // Try to parse the message as JSON
-        let parsedData = latestMessage.text;
-        if (typeof parsedData === 'string') {
-          // Remove markdown code block formatting
-          const cleanData = parsedData.replace(/```json\n|\n```/g, '').trim();
-          parsedData = JSON.parse(cleanData);
-        }
-        
-        const newTreeData = jsonToTreeData(parsedData, undefined, 0);
-      setTreeData(newTreeData);
-      
-        // Auto-expand items
-        const getAllIds = (items: SlyTreeItem[]): string[] => {
-        const ids: string[] = [];
-        items.forEach(item => {
-          ids.push(item.id);
-          if (item.children) {
-            ids.push(...getAllIds(item.children));
-          }
-        });
-        return ids;
-      };
-      
-      setExpandedItems(getAllIds(newTreeData));
-      } catch (error) {
-        console.error('Error processing sly data message:', error);
-      }
+    const currentMessageCount = slyDataMessages.length;
+    
+    // Only fetch if message count increased and we're not dealing with the initial system message
+    if (currentMessageCount > lastMessageCount && currentMessageCount > 1) {
+      console.log(`New sly_data message detected (${lastMessageCount} → ${currentMessageCount}), fetching latest state...`);
+      fetchLatestSlyData();
     }
-  }, [slyDataMessages, jsonToTreeData]);
+    
+    setLastMessageCount(currentMessageCount);
+  }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
 
   /*
   // Example backend integration functions:
@@ -1121,148 +1184,227 @@ const EditorSlyDataPanel: React.FC = () => {
   };
   */
     
-    return (
+  return (
     <Paper 
-        sx={{ 
+      sx={{ 
         height: '100%', 
         backgroundColor: '#1a1a1a',
         color: 'white',
-          display: 'flex', 
+        display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden'
       }}
     >
-      {/* Header */}
-      <Box sx={{ 
-        p: 2, 
-        borderBottom: `1px solid ${alpha('#ffffff', 0.1)}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <DataObjectIcon sx={{ color: '#2196F3' }} />
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            SlyData Editor
-          </Typography>
-        </Box>
-        
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Tooltip title="Import JSON">
-            <IconButton 
-              size="small" 
-              onClick={handleImportJson}
-              sx={{ color: '#4CAF50' }}
-            >
-              <UploadIcon />
-            </IconButton>
-          </Tooltip>
-          
-          <Tooltip title="Export JSON">
-            <IconButton 
-              size="small" 
-              onClick={handleExportJson}
-              sx={{ color: '#FF9800' }}
-            >
-              <DownloadIcon />
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title="Add root item">
-            <IconButton 
-              size="small" 
-              onClick={() => handleAddItem()}
-              sx={{ color: '#2196F3' }}
-            >
-              <AddIcon />
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title="Clear all data">
-            <IconButton 
-              size="small" 
-              onClick={handleClearAll}
-              disabled={treeData.length === 0}
-              sx={{ 
-                color: treeData.length > 0 ? '#f44336' : '#555',
-                '&:disabled': { color: '#555' }
-              }}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Box>
-
-      <Divider sx={{ borderColor: alpha('#ffffff', 0.1) }} />
-
-      {/* Tree Content */}
-      <Box sx={{ 
-        flexGrow: 1, 
-        overflow: 'auto',
-        p: 1
-      }}>
-        {treeData.length > 0 ? (
-          <TreeOperationsContext.Provider value={{
-            handleDeleteItem,
-            handleAddItem,
-            handleAddWithConflictCheck,
-            handleUpdateKey,
-            handleUpdateValue,
-            treeData
-          }}>
-            <RichTreeView
-              items={treeData}
-              expandedItems={expandedItems}
-              onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
-              onItemLabelChange={handleLabelChange}
-              isItemEditable={(item) => Boolean(item?.isKeyValuePair)}
-              slots={{ item: CustomTreeItem }}
-              sx={{
-                '& .MuiTreeItem-root': {
-                  '& .MuiTreeItem-content': {
-                    padding: '4px 0',
-                    paddingLeft: '0px !important', // Remove default padding
-                    '&:hover': {
-                      backgroundColor: 'transparent'
-                    },
-                    '&.Mui-focused': {
-                      backgroundColor: alpha('#2196F3', 0.1)
-                    }
-                  },
-                  '& .MuiTreeItem-iconContainer': {
-                    marginRight: '4px',
-                    minWidth: '24px', // Ensure consistent width
-                    '& .MuiSvgIcon-root': {
-                      color: '#90A4AE',
-                      fontSize: '1rem'
-                    }
-                  }
-                }
-              }}
-            />
-          </TreeOperationsContext.Provider>
-        ) : (
+      {/* Split Panel Layout */}
+      <PanelGroup direction="vertical">
+        {/* Top Panel: Editable SlyData Tree (60% default) */}
+        <Panel defaultSize={60} minSize={30}>
           <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'center', 
-            justifyContent: 'center',
             height: '100%',
-            gap: 2,
-            color: alpha('#ffffff', 0.6)
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <DataObjectIcon sx={{ fontSize: 48 }} />
-            <Typography variant="body1">
-              No SlyData available
-            </Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300 }}>
-              Click the + button to add your first key-value pair, or import JSON data.
-            </Typography>
-          </Box>
-        )}
-      </Box>
+            {/* Fixed Header */}
+            <Box sx={{ 
+              p: 1.5, 
+              borderBottom: `1px solid ${alpha('#ffffff', 0.1)}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <DataObjectIcon sx={{ color: '#2196F3', fontSize: '1.25rem' }} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  SlyData Editor
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <Tooltip title="Import JSON">
+                  <IconButton 
+                    size="small" 
+                    onClick={handleImportJson}
+                    sx={{ color: '#4CAF50', p: 0.5 }}
+                  >
+                    <UploadIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Export JSON">
+                  <IconButton 
+                    size="small" 
+                    onClick={handleExportJson}
+                    sx={{ color: '#FF9800', p: 0.5 }}
+                  >
+                    <DownloadIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
 
+                <Tooltip title="Add root item">
+                  <IconButton 
+                    size="small" 
+                    onClick={() => handleAddItem()}
+                    sx={{ color: '#2196F3', p: 0.5 }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip title="Clear all data">
+                  <IconButton 
+                    size="small" 
+                    onClick={handleClearAll}
+                    disabled={treeData.length === 0}
+                    sx={{ 
+                      color: treeData.length > 0 ? '#f44336' : '#555',
+                      '&:disabled': { color: '#555' },
+                      p: 0.5
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+
+            {/* Scrollable Tree Content */}
+            <Box sx={{ 
+              flexGrow: 1, 
+              overflow: 'auto',
+              p: 1
+            }}>
+              {treeData.length > 0 ? (
+                <TreeOperationsContext.Provider value={{
+                  handleDeleteItem,
+                  handleAddItem,
+                  handleAddWithConflictCheck,
+                  handleUpdateKey,
+                  handleUpdateValue,
+                  treeData
+                }}>
+                  <RichTreeView
+                    items={treeData}
+                    expandedItems={expandedItems}
+                    onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
+                    onItemLabelChange={handleLabelChange}
+                    isItemEditable={(item) => Boolean(item?.isKeyValuePair)}
+                    slots={{ item: CustomTreeItem }}
+                    sx={{
+                      '& .MuiTreeItem-root': {
+                        '& .MuiTreeItem-content': {
+                          padding: '4px 0',
+                          paddingLeft: '0px !important', // Remove default padding
+                          '&:hover': {
+                            backgroundColor: 'transparent'
+                          },
+                          '&.Mui-focused': {
+                            backgroundColor: alpha('#2196F3', 0.1)
+                          }
+                        },
+                        '& .MuiTreeItem-iconContainer': {
+                          marginRight: '4px',
+                          minWidth: '24px', // Ensure consistent width
+                          '& .MuiSvgIcon-root': {
+                            color: '#90A4AE',
+                            fontSize: '1rem'
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </TreeOperationsContext.Provider>
+              ) : (
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  height: '100%',
+                  gap: 2,
+                  color: alpha('#ffffff', 0.6)
+                }}>
+                  <DataObjectIcon sx={{ fontSize: 48 }} />
+                  <Typography variant="body1">
+                    No SlyData available
+                  </Typography>
+                  <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300 }}>
+                    Click the + button to add your first key-value pair, or import JSON data.
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </Panel>
+
+        {/* Resizable Splitter */}
+        <PanelResizeHandle style={{
+          height: '4px',
+          backgroundColor: alpha('#ffffff', 0.1),
+          cursor: 'row-resize',
+          transition: 'background-color 0.2s ease'
+        }} />
+
+        {/* Bottom Panel: Live SlyData Logs (40% default) */}
+        <Panel defaultSize={40} minSize={20}>
+          <Box sx={{ 
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            borderTop: `1px solid ${alpha('#ffffff', 0.1)}`
+          }}>
+            {/* Fixed Logs Header */}
+            <Box sx={{ 
+              p: 1.5, 
+              borderBottom: `1px solid ${alpha('#ffffff', 0.1)}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#90A4AE' }}>
+                  SlyData Logs
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#616161' }}>
+                  (Message History)
+                </Typography>
+              </Box>
+              
+              <Tooltip title="Download logs">
+                <IconButton 
+                  size="small" 
+                  onClick={downloadLogs}
+                  sx={{ color: '#90A4AE', p: 0.5 }}
+                >
+                  <DownloadIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {/* Scrollable Logs Content */}
+            <Box sx={{ 
+              flexGrow: 1, 
+              overflow: 'auto'
+            }}>
+              <ScrollableMessageContainer
+                messages={slyDataMessages.filter(
+                  (msg) => {
+                    const text = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+                    return text.trim().length > 0 && text.trim() !== "{}";
+                  }
+                )}
+                copiedMessage={copiedMessage}
+                onCopy={copyToClipboard}
+                renderSenderLabel={(msg: any) => msg.network || msg.sender}
+                getMessageClass={() => "chat-msg chat-msg-agent"}
+              />
+            </Box>
+          </Box>
+        </Panel>
+      </PanelGroup>
+
+      {/* All dialogs remain the same */}
       {/* Conflict Dialog */}
       <Dialog 
         open={conflictDialog.open} 
