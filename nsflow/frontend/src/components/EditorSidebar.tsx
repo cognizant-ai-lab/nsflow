@@ -10,8 +10,30 @@
 // END COPYRIGHT
 
 import { useEffect, useState, useRef } from "react";
+import { 
+  Box, 
+  Typography, 
+  TextField, 
+  Button, 
+  Paper, 
+  Select, 
+  MenuItem, 
+  FormControl, 
+  InputLabel, 
+  Card, 
+  CardContent, 
+  Chip, 
+  InputAdornment, 
+  useTheme,
+  alpha
+} from "@mui/material";
+import { 
+  NetworkCheck as NetworkIcon,
+  Search as SearchIcon,
+  SmartToy as RobotIcon,
+  Refresh as RefreshIcon
+} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
-import { FaSearch, FaNetworkWired, FaRobot } from "react-icons/fa";
 
 interface NetworkInfo {
   name: string;
@@ -41,6 +63,7 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
   const { apiUrl, isReady } = useApiPort();
   const [searchQuery, setSearchQuery] = useState("");
+  const theme = useTheme();
 
   const networksEndRef = useRef<HTMLDivElement>(null);
 
@@ -113,122 +136,234 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
   }, [networks]);
 
   return (
-    <div className="h-full bg-gray-800 border-r border-gray-700 flex flex-col">
+    <Paper
+      elevation={0}
+      sx={{
+        height: '100%',
+        backgroundColor: theme.palette.background.paper,
+        borderRight: `1px solid ${theme.palette.divider}`,
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center">
-          <FaNetworkWired className="mr-2 text-blue-400" />
+      <Box sx={{ 
+        p: 2, 
+        borderBottom: `1px solid ${theme.palette.divider}` 
+      }}>
+        <Typography variant="h6" sx={{ 
+          fontWeight: 600, 
+          color: theme.palette.text.primary,
+          mb: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          <NetworkIcon color="primary" />
           Agent Networks
-        </h2>
+        </Typography>
 
         {/* Network Selection */}
         {loading && (
-          <div className="text-gray-400 text-sm">Loading networks...</div>
+          <Typography variant="body2" sx={{ 
+            color: theme.palette.text.secondary 
+          }}>
+            Loading networks...
+          </Typography>
         )}
 
         {error && (
-          <div className="text-red-400 text-sm mb-2">{error}</div>
+          <Typography variant="body2" sx={{ 
+            color: theme.palette.error.main,
+            mb: 1
+          }}>
+            {error}
+          </Typography>
         )}
 
         {!loading && networks.length > 0 && (
-          <select
-            value={selectedNetwork}
-            onChange={(e) => handleNetworkSelect(e.target.value)}
-            className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:border-blue-400 focus:outline-none"
-          >
-            <option value="">Select a network...</option>
-            {networks.map((network) => (
-              <option key={network.name} value={network.name}>
-                {network.name} ({network.agent_count || 0} agents)
-              </option>
-            ))}
-          </select>
+          <FormControl fullWidth size="small">
+            <InputLabel>Select a network</InputLabel>
+            <Select
+              value={selectedNetwork}
+              label="Select a network"
+              onChange={(e) => handleNetworkSelect(e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.divider
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.primary.main
+                }
+              }}
+            >
+              <MenuItem value="">
+                <em>Select a network...</em>
+              </MenuItem>
+              {networks.map((network) => (
+                <MenuItem key={network.name} value={network.name}>
+                  {network.name} ({network.agent_count || 0} agents)
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         )}
-      </div>
+      </Box>
 
       {/* Search Box */}
       {selectedNetwork && (
-        <div className="p-4 border-b border-gray-700">
-          <div className="relative">
-            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm" />
-            <input
-              type="text"
-              placeholder="Search agents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:border-blue-400 focus:outline-none"
-            />
-          </div>
-        </div>
+        <Box sx={{ 
+          p: 2, 
+          borderBottom: `1px solid ${theme.palette.divider}` 
+        }}>
+          <TextField
+            size="small"
+            placeholder="Search agents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            fullWidth
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 18 }} />
+                  </InputAdornment>
+                )
+              }
+            }}
+            sx={{
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: theme.palette.divider
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: theme.palette.primary.main
+              }
+            }}
+          />
+        </Box>
       )}
 
       {/* Agents List */}
-      <div className="flex-1 overflow-y-auto">
+      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
         {selectedNetwork && (
-          <div className="p-2">
-            <h3 className="text-sm font-medium text-gray-300 mb-2 px-2 flex items-center">
-              <FaRobot className="mr-2 text-green-400" />
+          <Box sx={{ p: 1 }}>
+            <Typography variant="subtitle2" sx={{ 
+              fontWeight: 600, 
+              color: theme.palette.text.primary,
+              mb: 1,
+              px: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1
+            }}>
+              <RobotIcon sx={{ color: theme.palette.success.main, fontSize: 18 }} />
               Agents ({filteredAgents.length})
-            </h3>
+            </Typography>
 
             {filteredAgents.length === 0 && (
-              <div className="text-gray-400 text-sm px-2">
+              <Typography variant="body2" sx={{ 
+                color: theme.palette.text.secondary,
+                px: 1,
+                textAlign: 'center',
+                py: 2
+              }}>
                 {searchQuery ? "No agents match your search" : "No agents found"}
-              </div>
+              </Typography>
             )}
 
             {filteredAgents.map((agent) => (
-              <div
+              <Card
                 key={agent.id}
-                className="mb-2 p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors border-l-4 border-blue-400"
+                elevation={1}
+                sx={{
+                  mb: 1,
+                  borderLeft: `4px solid ${theme.palette.primary.main}`,
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                    boxShadow: theme.shadows[2]
+                  },
+                  transition: 'all 0.2s ease'
+                }}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="text-white text-sm font-medium mb-1">
-                      {agent.data.label}
-                    </h4>
-                    <p className="text-gray-300 text-xs mb-2 line-clamp-3">
-                      {agent.data.instructions || "No instructions provided"}
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        agent.data.is_defined 
-                          ? 'bg-green-600 text-green-100' 
-                          : 'bg-orange-600 text-orange-100'
-                      }`}>
-                        {agent.data.is_defined ? 'Defined' : 'Referenced'}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {agent.type}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Typography variant="body2" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.text.primary,
+                    mb: 0.5
+                  }}>
+                    {agent.data.label}
+                  </Typography>
+                  
+                  <Typography variant="caption" sx={{ 
+                    color: theme.palette.text.secondary,
+                    mb: 1,
+                    lineHeight: 1.3,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical'
+                  }}>
+                    {agent.data.instructions || "No instructions provided"}
+                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip 
+                      label={agent.data.is_defined ? 'Defined' : 'Referenced'}
+                      size="small"
+                      color={agent.data.is_defined ? 'success' : 'warning'}
+                      sx={{ fontSize: '0.65rem', height: 20 }}
+                    />
+                    <Typography variant="caption" sx={{ 
+                      color: theme.palette.text.secondary,
+                      fontSize: '0.65rem'
+                    }}>
+                      {agent.type}
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
             ))}
-          </div>
+          </Box>
         )}
 
         {!selectedNetwork && (
-          <div className="p-4 text-gray-400 text-sm text-center">
+          <Typography variant="body2" sx={{ 
+            color: theme.palette.text.secondary,
+            textAlign: 'center',
+            p: 2
+          }}>
             Select a network to view its agents
-          </div>
+          </Typography>
         )}
 
         <div ref={networksEndRef} />
-      </div>
+      </Box>
 
       {/* Refresh Button */}
-      <div className="p-4 border-t border-gray-700">
-        <button
+      <Box sx={{ 
+        p: 2, 
+        borderTop: `1px solid ${theme.palette.divider}` 
+      }}>
+        <Button
+          variant="contained"
+          color="primary"
+          fullWidth
+          size="small"
           onClick={fetchNetworks}
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
           disabled={loading}
+          startIcon={<RefreshIcon />}
+          sx={{
+            textTransform: 'none',
+            '&:disabled': {
+              backgroundColor: alpha(theme.palette.primary.main, 0.3)
+            }
+          }}
         >
           {loading ? "Refreshing..." : "Refresh Networks"}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Box>
+    </Paper>
   );
 };
 

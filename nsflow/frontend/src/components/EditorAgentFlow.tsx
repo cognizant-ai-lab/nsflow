@@ -24,6 +24,12 @@ import ReactFlow, {
   NodeMouseHandler,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  useTheme 
+} from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
@@ -47,6 +53,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
+  const theme = useTheme();
   
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -87,7 +94,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         ...edge,
         markerEnd: "arrowclosed" as EdgeMarkerType,
         style: {
-          stroke: "#64748b",
+          stroke: theme.palette.divider,
           strokeWidth: 2,
         },
         type: "floating",
@@ -143,7 +150,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         id: `edge-${params.source}-${params.target}`,
         markerEnd: "arrowclosed" as EdgeMarkerType,
         style: {
-          stroke: "#64748b",
+          stroke: theme.palette.divider,
           strokeWidth: 2,
         },
         type: "floating",
@@ -203,7 +210,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   }, [selectedNetwork]);
 
   return (
-    <div className="h-full bg-gray-900 relative">
+    <Box sx={{ 
+      height: '100%', 
+      backgroundColor: theme.palette.background.default,
+      position: 'relative' 
+    }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -221,11 +232,16 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         }}
         fitView
         attributionPosition="bottom-left"
+        // style={{ backgroundColor: theme.palette.background.default }}
       >
-        <Background color="#374151" />
+        <Background/>
         <Controls 
           position="top-right"
-          className="bg-gray-800 border border-gray-600"
+          style={{
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: '8px'
+          }}
         />
       </ReactFlow>
 
@@ -243,28 +259,69 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
       {/* Network Info Panel */}
       {selectedNetwork && (
-        <div className="absolute top-4 left-4 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white text-sm shadow-lg">
-          <h3 className="font-semibold mb-1">Editing: {selectedNetwork}</h3>
-          <div className="text-gray-300">
-            <div>Nodes: {nodes.length}</div>
-            <div>Edges: {edges.length}</div>
+        <Paper
+          elevation={3}
+          sx={{
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            p: 2,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 2,
+            minWidth: 200
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ 
+            fontWeight: 600, 
+            color: theme.palette.text.primary,
+            mb: 1
+          }}>
+            Editing: {selectedNetwork}
+          </Typography>
+          
+          <Box sx={{ color: theme.palette.text.secondary }}>
+            <Typography variant="body2">
+              Nodes: {nodes.length}
+            </Typography>
+            <Typography variant="body2">
+              Edges: {edges.length}
+            </Typography>
             {selectedNodeId && (
-              <div className="mt-2 pt-2 border-t border-gray-600">
-                Selected: {selectedNodeId}
-              </div>
+              <Box sx={{ 
+                mt: 1, 
+                pt: 1, 
+                borderTop: `1px solid ${theme.palette.divider}` 
+              }}>
+                <Typography variant="body2" sx={{ 
+                  color: theme.palette.primary.main,
+                  fontWeight: 500
+                }}>
+                  Selected: {selectedNodeId}
+                </Typography>
+              </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Paper>
       )}
 
       {!selectedNetwork && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-gray-400 text-lg">
+        <Box sx={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <Typography variant="h6" sx={{ 
+            color: theme.palette.text.secondary,
+            textAlign: 'center'
+          }}>
             Select a network from the sidebar to start editing
-          </div>
-        </div>
+          </Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 };
 

@@ -10,7 +10,18 @@
 //
 // END COPYRIGHT
 import { useState, useEffect, useRef } from "react";
-import { FaDownload } from "react-icons/fa";
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  IconButton, 
+  Tooltip, 
+  useTheme,
+  alpha
+} from "@mui/material";
+import { 
+  Download as DownloadIcon 
+} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
@@ -32,6 +43,7 @@ const LogsPanel = () => {
   ]);
   const { activeNetwork} = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -83,32 +95,106 @@ const LogsPanel = () => {
   };
 
   return (
-    <div className="logs-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
-      <div className="logs-header flex justify-between items-center mb-2">
-        <h2 className="text-white text-lg">Logs</h2>
-        <button onClick={downloadLogs} className="logs-download-btn">
-          <FaDownload />
-        </button>
-      </div>
-      <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md">
+    <Paper
+      elevation={1}
+      sx={{
+        p: 2,
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 2,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 1,
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        pb: 0
+      }}>
+        <Typography variant="h6" sx={{ 
+          color: theme.palette.text.primary,
+          fontWeight: 600
+        }}>
+          Logs
+        </Typography>
+        <Tooltip title="Download Logs">
+          <IconButton 
+            onClick={downloadLogs}
+            size="small"
+            sx={{ 
+              color: theme.palette.primary.main,
+              '&:hover': {
+                backgroundColor: alpha(theme.palette.primary.main, 0.1)
+              }
+            }}
+          >
+            <DownloadIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {/* Logs Messages */}
+      <Paper
+        variant="outlined"
+        sx={{
+          flexGrow: 1,
+          overflow: 'auto',
+          maxHeight: '24rem',
+          p: 1,
+          backgroundColor: alpha(theme.palette.background.default, 0.5),
+          border: `1px solid ${theme.palette.divider}`
+        }}
+      >
         {logs.length > 0 ? (
           logs.map((log, index) => (
-            <p key={index} className="text-sm text-gray-300">
-              <span className="text-gray-400">[{log.timestamp}]</span>
-              <span className="text-green-400">: {log.agent}</span>
-              <span className={`font-semibold ${log.source === "NeuroSan" ? "text-yellow-500" : "text-blue-500"}`}>
-                {" "}
-                ({log.source})
-              </span>
+            <Typography
+              key={index}
+              variant="body2"
+              sx={{
+                fontSize: '0.8rem',
+                color: theme.palette.text.secondary,
+                fontFamily: 'monospace',
+                lineHeight: 1.4,
+                mb: 0.25
+              }}
+            >
+              <Box component="span" sx={{ color: theme.palette.text.disabled }}>
+                [{log.timestamp}]
+              </Box>
+              <Box component="span" sx={{ color: theme.palette.success.main }}>
+                : {log.agent}
+              </Box>
+              <Box 
+                component="span" 
+                sx={{ 
+                  fontWeight: 600,
+                  color: log.source === "NeuroSan" 
+                    ? theme.palette.warning.main 
+                    : theme.palette.info.main
+                }}
+              >
+                {" "}({log.source})
+              </Box>
               : {log.message}
-            </p>
+            </Typography>
           ))
         ) : (
-          <p className="text-gray-400">No logs available.</p>
+          <Typography variant="body2" sx={{ 
+            color: theme.palette.text.disabled,
+            textAlign: 'center',
+            py: 2
+          }}>
+            No logs available.
+          </Typography>
         )}
         <div ref={messagesEndRef} />
-      </div>
-    </div>
+      </Paper>
+    </Paper>
   );
 };
 
