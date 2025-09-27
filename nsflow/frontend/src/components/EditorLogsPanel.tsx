@@ -9,14 +9,74 @@
 //
 // END COPYRIGHT
 
-import React, { useState, useRef, useEffect } from "react";
-import { FaChevronUp, FaChevronDown, FaTerminal, FaBroom } from "react-icons/fa";
+import * as React from "react";
+import { useState, useRef, useEffect } from "react";
+import { 
+  Box, 
+  Paper, 
+  Typography, 
+  IconButton, 
+  useTheme,
+  alpha,
+  Collapse 
+} from "@mui/material";
+import { 
+  ExpandLess as ChevronUpIcon,
+  ExpandMore as ChevronDownIcon,
+  Terminal as TerminalIcon,
+  Clear as ClearIcon
+} from "@mui/icons-material";
 import LogsPanel from "./LogsPanel";
 
 const EditorLogsPanel: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [sidebarWidth, setSidebarWidth] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
+
+  // Track sidebar width for dynamic positioning
+  useEffect(() => {
+    const updateSidebarWidth = () => {
+      // Find the sidebar container more reliably - look for EditorSidebar's Paper element
+      const sidebarContainer = document.querySelector('[data-panel-group] > [data-panel]:first-child') as HTMLElement;
+      
+      if (sidebarContainer) {
+        const width = sidebarContainer.offsetWidth;
+        setSidebarWidth(width);
+      } else {
+        // Fallback to a percentage-based calculation if we can't find the exact element
+        const screenWidth = window.innerWidth;
+        const estimatedSidebarWidth = Math.max(screenWidth * 0.15, 160); // 15% of screen or min 160px
+        setSidebarWidth(estimatedSidebarWidth);
+      }
+    };
+
+    // Initial measurement with a slight delay to ensure DOM is ready
+    const timer = setTimeout(updateSidebarWidth, 100);
+
+    // Listen for window resize
+    window.addEventListener('resize', updateSidebarWidth);
+
+    // Use MutationObserver to detect when panels are resized
+    const observer = new MutationObserver(updateSidebarWidth);
+    const panelGroup = document.querySelector('[data-panel-group]');
+    
+    if (panelGroup) {
+      observer.observe(panelGroup, { 
+        attributes: true, 
+        childList: true, 
+        subtree: true,
+        attributeFilter: ['style']
+      });
+    }
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateSidebarWidth);
+      observer.disconnect();
+    };
+  }, []);
 
   // Handle clicking outside to collapse
   useEffect(() => {
@@ -45,71 +105,121 @@ const EditorLogsPanel: React.FC = () => {
   };
 
   return (
-    <div
+    <Paper
       ref={panelRef}
-      className={`
-        fixed bottom-4 left-4 z-40 bg-gray-800 border border-gray-600 rounded-lg shadow-xl
-        transition-all duration-300 ease-in-out
-        ${isExpanded 
-          ? 'w-96 h-80' 
-          : 'w-20 h-10'
-        }
-      `}
+      elevation={8}
+      sx={{
+        position: 'fixed',
+        bottom: 16,
+        left: sidebarWidth + 16, // Position just after sidebar edge with 16px gap
+        zIndex: 40,
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 2,
+        transition: 'all 0.3s ease-in-out',
+        width: isExpanded ? 800 : 80, // Increased expanded width from 384 to 500
+        height: isExpanded ? 360 : 40, // Slightly increased height too
+        overflow: 'hidden'
+      }}
     >
       {/* Header/Toggle Button */}
-      <div
-        className={`
-          flex items-center justify-between p-2 cursor-pointer
-          ${isExpanded ? 'border-b border-gray-600' : ''}
-        `}
+      <Box
         onClick={toggleExpanded}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 1,
+          cursor: 'pointer',
+          borderBottom: isExpanded ? `1px solid ${theme.palette.divider}` : 'none',
+          '&:hover': {
+            backgroundColor: alpha(theme.palette.primary.main, 0.05)
+          }
+        }}
       >
         {isExpanded ? (
           <>
-            <div className="flex items-center space-x-2">
-              <FaTerminal className="text-green-400" size={14} />
-              <span className="text-white text-sm font-medium">Logs</span>
-            </div>
-            <div className="flex items-center space-x-2">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TerminalIcon sx={{ color: theme.palette.success.main, fontSize: 16 }} />
+              <Typography variant="body2" sx={{ 
+                color: theme.palette.text.primary,
+                fontWeight: 500,
+                fontSize: '0.8rem'
+              }}>
+                Logs
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {logs.length > 0 && (
-                <button
+                <IconButton
+                  size="small"
                   onClick={(e) => {
                     e.stopPropagation();
                     clearLogs();
                   }}
-                  className="text-gray-400 hover:text-white p-1"
+                  sx={{
+                    color: theme.palette.text.secondary,
+                    '&:hover': { color: theme.palette.text.primary },
+                    p: 0.5
+                  }}
                   title="Clear logs"
                 >
-                  <FaBroom size={12} />
-                </button>
+                  <ClearIcon sx={{ fontSize: 14 }} />
+                </IconButton>
               )}
-              <FaChevronDown className="text-gray-400" size={12} />
-            </div>
+              <ChevronDownIcon sx={{ color: theme.palette.text.secondary, fontSize: 16 }} />
+            </Box>
           </>
         ) : (
-          <div className="flex items-center space-x-2 w-full justify-center">
-            <FaTerminal className="text-green-400" size={12} />
-            <span className="text-white text-xs">Logs</span>
-            <FaChevronUp className="text-gray-400" size={10} />
-          </div>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 0.5, 
+            width: '100%', 
+            justifyContent: 'center' 
+          }}>
+            <TerminalIcon sx={{ color: theme.palette.success.main, fontSize: 16 }} />
+            <Typography variant="caption" sx={{ 
+              color: theme.palette.text.primary,
+              fontSize: '0.65rem'
+            }}>
+              Logs
+            </Typography>
+            <ChevronUpIcon sx={{ color: theme.palette.text.secondary, fontSize: 12 }} />
+          </Box>
         )}
-      </div>
+      </Box>
 
       {/* Expanded Content */}
-      {isExpanded && (
-        <div className="h-full pb-10 overflow-hidden">
-          {/* Use the existing LogsPanel component */}
-          <div className="h-full">
-            <LogsPanel />
-          </div>
-        </div>
-      )}
+      <Collapse in={isExpanded} timeout={300}>
+        <Box sx={{ 
+          height: 312, // 360 - 48 (header height)
+          overflow: 'hidden',
+          backgroundColor: theme.palette.background.default
+        }}>
+          <LogsPanel />
+        </Box>
+      </Collapse>
 
       {/* Collapsed state indicator */}
       {!isExpanded && logs.length > 0 && (
-        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+        <Box sx={{
+          position: 'absolute',
+          top: -4,
+          right: -4,
+          width: 12,
+          height: 12,
+          backgroundColor: theme.palette.error.main,
+          borderRadius: '50%',
+          animation: 'pulse 2s infinite',
+          '@keyframes pulse': {
+            '0%': { opacity: 1 },
+            '50%': { opacity: 0.5 },
+            '100%': { opacity: 1 }
+          }
+        }} />
       )}
-    </div>
+    </Paper>
   );
 };
 
