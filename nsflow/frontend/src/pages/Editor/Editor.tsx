@@ -65,7 +65,7 @@ const EditorContent: React.FC = () => {
                 </Panel>
               </PanelGroup>
 
-            {/* Expandable Logs Panel in bottom left */}
+            {/* Expandable Logs Panel in bottom center-left */}
             <EditorLogsPanel />
           </div>
         </NeuroSanProvider>

@@ -26,7 +26,7 @@ import {
   alpha
 } from "@mui/material";
 import { 
-  NetworkCheck as NetworkIcon,
+  HubTwoTone as NetworkIcon,
   Search as SearchIcon
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
@@ -182,7 +182,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         flexDirection: 'column',
         p: 1,
         gap: 1,
-        minWidth: 200, // Minimum functional width
+        minWidth: 100, // Minimum functional width
         overflow: 'hidden' // Prevent content overflow when resized small
       }}
     >

@@ -28,7 +28,7 @@ import {
   alpha
 } from "@mui/material";
 import { 
-  NetworkCheck as NetworkIcon,
+  PolylineTwoTone as NetworkIcon,
   Search as SearchIcon,
   SmartToy as RobotIcon,
   Refresh as RefreshIcon
