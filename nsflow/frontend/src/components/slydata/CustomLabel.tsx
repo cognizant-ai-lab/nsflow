@@ -212,7 +212,7 @@ const CustomLabel: React.FC<CustomLabelProps> = ({
                 size="small"
                 sx={{ color: theme.palette.primary.main }}
               >
-                <EditIcon fontSize="small" />
+                <EditIcon fontSize="inherit" />
               </IconButton>
             )}
           </Box>
@@ -326,7 +326,7 @@ const CustomLabel: React.FC<CustomLabelProps> = ({
                   size="small"
                   sx={{ color: '#2196F3' }}
                 >
-                  <EditIcon fontSize="small" />
+                  <EditIcon fontSize="inherit" />
                 </IconButton>
               )}
             </Box>
@@ -336,9 +336,10 @@ const CustomLabel: React.FC<CustomLabelProps> = ({
             sx={{
               color: `${theme.custom.slyData.emptyColor} !important`,
               fontStyle: 'italic',
+              fontSize: '0.85rem',
             }}
           >
-            {`{${itemData?.children?.length || 0} items}`}
+            {`{${itemData?.children?.length || 0} item(s)}`}
           </Typography>
         )}
       </Box>
