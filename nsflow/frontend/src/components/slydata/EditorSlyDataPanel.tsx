@@ -63,7 +63,7 @@ const EditorSlyDataPanel: React.FC = () => {
         }
         setLastMessageCount(slyDataMessages.length); // baseline for this mount
         setHasLocalEdits(false); // new network, no pending local edits
-        setIsInitialized(true);
+        // setIsInitialized(true);
     }
   }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
 
@@ -335,6 +335,7 @@ const EditorSlyDataPanel: React.FC = () => {
   useEffect(() => {
     const currentMessageCount = slyDataMessages.length;
     if (currentMessageCount > lastMessageCount && currentMessageCount > 1) fetchLatestSlyData();
+    console.log(`New sly_data message detected (${lastMessageCount} → ${currentMessageCount}), fetching latest state...`);
     setLastMessageCount(currentMessageCount);
   }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
 
@@ -371,12 +372,12 @@ const EditorSlyDataPanel: React.FC = () => {
                 </Tooltip>
                 <Tooltip title="Import JSON">
                   <IconButton size="small" onClick={handleImportJson} sx={{ color: theme.palette.secondary.main, p: 0.5, '&:hover': { backgroundColor: alpha(theme.palette.secondary.main, 0.1) } }}>
-                    <UploadIcon fontSize="small" />
+                    <DownloadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Export JSON">
                   <IconButton size="small" onClick={handleExportJson} sx={{ color: theme.palette.warning.main, p: 0.5, '&:hover': { backgroundColor: alpha(theme.palette.warning.main, 0.1) } }}>
-                    <DownloadIcon fontSize="small" />
+                    <UploadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Add root item">

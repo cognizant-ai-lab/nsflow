@@ -183,49 +183,53 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         gap: 1
       }}>
         <Tooltip title="Auto arrange nodes">
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<AutoArrangeIcon />}
-            onClick={() => {
-              const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
-                nodes,
-                edges,
-                baseRadius,
-                levelSpacing
-              );
-              setNodes(arrangedNodes);
-              setEdges(arrangedEdges);
-              fitView();
-            }}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              '&:hover': { backgroundColor: theme.palette.primary.dark },
-              fontSize: '0.75rem',
-              minWidth: 'auto',
-              px: 1.5
-            }}
-          >
-            Arrange
-          </Button>
+          <span style={{ display: 'inline-block' }}>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AutoArrangeIcon />}
+              onClick={() => {
+                const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
+                  nodes,
+                  edges,
+                  baseRadius,
+                  levelSpacing
+                );
+                setNodes(arrangedNodes);
+                setEdges(arrangedEdges);
+                fitView();
+              }}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                '&:hover': { backgroundColor: theme.palette.primary.dark },
+                fontSize: '0.75rem',
+                minWidth: 'auto',
+                px: 1.5
+              }}
+            >
+              Arrange
+            </Button>
+          </span>
         </Tooltip>
         
         <Tooltip title="Reset viewport">
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<ResetIcon />}
-            onClick={resetFlow}
-            sx={{
-              backgroundColor: theme.palette.secondary.main,
-              '&:hover': { backgroundColor: theme.palette.secondary.dark },
-              fontSize: '0.75rem',
-              minWidth: 'auto',
-              px: 1.5
-            }}
-          >
-            Reset
-          </Button>
+          <span style={{ display: 'inline-block' }}>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<ResetIcon />}
+              onClick={resetFlow}
+              sx={{
+                backgroundColor: theme.palette.secondary.main,
+                '&:hover': { backgroundColor: theme.palette.secondary.dark },
+                fontSize: '0.75rem',
+                minWidth: 'auto',
+                px: 1.5
+              }}
+            >
+              Reset
+            </Button>
+          </span>
         </Tooltip>
       </Box>
 
@@ -347,26 +351,28 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         <Controls>
           <div className="react-flow__controls-button">
             <Tooltip title={useCompactMode ? "Switch to full connectivity" : "Switch to compact connectivity"}>
-              <Button
-                size="small"
-                onClick={() => setUseCompactMode(!useCompactMode)}
-                sx={{
-                  minWidth: 12,
-                  width: 12,
-                  height: 12,
-                  p: 0,
-                  backgroundColor: theme.palette.background.paper,
-                  border: `1px solid ${theme.palette.divider}`,
-                  color: theme.palette.text.primary,
-                  borderRadius: '4px',
-                  '&:hover': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                    borderColor: theme.palette.primary.main
-                  }
-                }}
-              >
-                {useCompactMode ? <CompactIcon sx={{ fontSize: 12 }} /> : <FullIcon sx={{ fontSize: 12 }} />}
-              </Button>
+              <span style={{ display: 'inline-block' }}>
+                <Button
+                  size="small"
+                  onClick={() => setUseCompactMode(!useCompactMode)}
+                  sx={{
+                    minWidth: 12,
+                    width: 12,
+                    height: 12,
+                    p: 0,
+                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    color: theme.palette.text.primary,
+                    borderRadius: '4px',
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                      borderColor: theme.palette.primary.main
+                    }
+                  }}
+                >
+                  {useCompactMode ? <CompactIcon sx={{ fontSize: 12 }} /> : <FullIcon sx={{ fontSize: 12 }} />}
+                </Button>
+              </span>
             </Tooltip>
           </div>
         </Controls>
