@@ -46,7 +46,7 @@ const EditorContent: React.FC = () => {
             </div>
 
               <PanelGroup direction="horizontal">
-                <Panel defaultSize={15} minSize={10} maxSize={25}>
+                <Panel defaultSize={12} minSize={10} maxSize={25}>
                   {/* Editor Sidebar */}
                   <EditorSidebar onSelectNetwork={setSelectedNetwork} />
                 </Panel>
@@ -59,7 +59,7 @@ const EditorContent: React.FC = () => {
                 
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
-                <Panel defaultSize={30} minSize={15} maxSize={40}>
+                <Panel defaultSize={33} minSize={15} maxSize={40}>
                   {/* TabbedChatPanel with Chat and SlyData */}
                   <TabbedChatPanel isEditorMode={true} />
                 </Panel>

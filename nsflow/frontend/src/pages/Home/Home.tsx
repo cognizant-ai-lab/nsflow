@@ -48,15 +48,15 @@ const Home: React.FC = () => {
                   <Sidebar onSelectNetwork={setSelectedNetwork} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                <Panel defaultSize={56} minSize={40}>
+                <Panel defaultSize={55} minSize={40}>
                   <PanelGroup direction="vertical">
-                    <Panel defaultSize={60} minSize={50} maxSize={85}>
+                    <Panel defaultSize={66} minSize={50} maxSize={85}>
                       {/* AgentFlow */}
                       <AgentFlow selectedNetwork={selectedNetwork} />
                     </Panel>
                     <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
 
-                    <Panel defaultSize={30} minSize={20} maxSize={40}>
+                    <Panel defaultSize={34} minSize={20} maxSize={40}>
                       <PanelGroup direction="horizontal">
                         <Panel defaultSize={50} minSize={30} maxSize={70}>
                           {/* LogsPanel */}
@@ -72,7 +72,7 @@ const Home: React.FC = () => {
                   </PanelGroup>
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                <Panel defaultSize={32} minSize={15} maxSize={40}>
+                <Panel defaultSize={33} minSize={15} maxSize={40}>
                   {/* Pass selectedNetwork to ChatPanel */}
                   {/* TabbedChatPanel */}
                   <TabbedChatPanel />

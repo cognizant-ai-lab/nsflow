@@ -41,7 +41,7 @@ const LogsPanel = () => {
     { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "System initialized." },
     { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "Frontend app loaded successfully." },
   ]);
-  const { activeNetwork} = useChatContext();
+  const { targetNetwork} = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
 
@@ -51,15 +51,15 @@ const LogsPanel = () => {
   }, [logs]);
 
   useEffect(() => {
-    if (!wsUrl || !activeNetwork) return; // Prevents WebSocket from connecting before port is set
+    if (!wsUrl || !targetNetwork) return; // Prevents WebSocket from connecting before port is set
 
     setLogs((prevLogs) => [
       ...prevLogs,
-      { timestamp: getCurrentTimestamp(), agent: `${activeNetwork}`, source: "Frontend", message: `Connected to ${wsUrl}` },
+      { timestamp: getCurrentTimestamp(), agent: `${targetNetwork}`, source: "Frontend", message: `Connected to ${wsUrl}` },
     ]);
 
     // WebSocket for real-time logs
-    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${activeNetwork}`);
+    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${targetNetwork}`);
     
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event) => {
@@ -78,7 +78,7 @@ const LogsPanel = () => {
     return () => {
       ws.close();
     };
-  }, [activeNetwork, wsUrl]);
+  }, [targetNetwork, wsUrl]);
 
   const downloadLogs = () => {
     const logText = logs

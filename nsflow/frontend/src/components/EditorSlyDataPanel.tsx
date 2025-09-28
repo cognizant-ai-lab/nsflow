@@ -1276,7 +1276,7 @@ const EditorSlyDataPanel: React.FC = () => {
       {/* Split Panel Layout */}
       <PanelGroup direction="vertical">
         {/* Top Panel: Editable SlyData Tree (60% default) */}
-        <Panel defaultSize={60} minSize={30}>
+        <Panel defaultSize={64} minSize={30}>
           <Box sx={{ 
             height: '100%',
             display: 'flex',
@@ -1442,7 +1442,7 @@ const EditorSlyDataPanel: React.FC = () => {
         }} />
 
         {/* Bottom Panel: Live SlyData Logs (40% default) */}
-        <Panel defaultSize={40} minSize={20}>
+        <Panel defaultSize={36} minSize={20}>
           <Box sx={{ 
             height: '100%',
             display: 'flex',
