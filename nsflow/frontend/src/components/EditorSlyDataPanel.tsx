@@ -28,8 +28,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField,
-  useTheme
+  TextField
 } from '@mui/material';
 import { 
   EditOutlined as EditIcon,
@@ -51,6 +50,7 @@ import {
 } from '@mui/x-tree-view/useTreeItem';
 import { useChatContext } from '../context/ChatContext';
 import { useApiPort } from '../context/ApiPortContext';
+import { useTheme } from '../context/ThemeContext';
 
 // Create context for tree operations
 interface TreeOperationsContextType {
@@ -119,7 +119,7 @@ const CustomLabel = ({
     itemData?.hasValue ? String(itemData.value || '') : ''
   );
 
-  const theme = useTheme();
+  const { theme } = useTheme();
   const { handleUpdateKey, handleUpdateValue } = useTreeOperations();
 
   const handleKeySave = () => {
@@ -218,7 +218,14 @@ const CustomLabel = ({
             }}
             onClick={() => setEditingKey(true)}
           >
-            <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                fontSize: '0.85rem',
+                color: `${theme.custom.slyData.keyColor} !important`,
+                fontWeight: 600
+              }}
+            >
               {itemData?.key || 'key'}
             </Typography>
             {isHovered && (
@@ -280,10 +287,14 @@ const CustomLabel = ({
               }}
               onClick={() => setEditingValue(true)}
             >
-              <Typography variant="body2" sx={{ 
-                fontSize: '0.85rem',
-                fontStyle: !itemData?.hasValue ? 'italic' : 'normal'
-              }}>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  fontSize: '0.85rem',
+                  fontStyle: !itemData?.hasValue ? 'italic' : 'normal',
+                  color: `${itemData?.hasValue ? theme.custom.slyData.valueColor : theme.custom.slyData.emptyColor} !important`
+                }}
+              >
                 {itemData?.hasValue 
                   ? (typeof itemData.value === 'string' 
                       ? `"${itemData.value}"` 
@@ -298,7 +309,12 @@ const CustomLabel = ({
             </Box>
           )
         ) : (
-          <Typography sx={{ color: '#90A4AE', fontStyle: 'italic' }}>
+          <Typography 
+            sx={{ 
+              color: `${theme.custom.slyData.emptyColor} !important`, 
+              fontStyle: 'italic' 
+            }}
+          >
             {`{${itemData.children.length} items}`}
           </Typography>
         )}
@@ -333,8 +349,8 @@ const CustomLabel = ({
                   onDelete();
                 }}
                 sx={{ 
-                  color: '#f44336',
-                  '&:hover': { backgroundColor: alpha('#f44336', 0.1) }
+                  color: theme.custom.slyData.deleteIconColor,
+                  '&:hover': { backgroundColor: alpha(theme.custom.slyData.deleteIconColor, 0.1) }
                 }}
               >
                 <DeleteIcon fontSize="small" />
@@ -351,6 +367,7 @@ const CustomLabel = ({
 const CustomLabelInput = React.forwardRef<HTMLInputElement, CustomLabelInputProps>(
   function CustomLabelInput(props: CustomLabelInputProps, ref: React.Ref<HTMLInputElement>) {
     const { handleCancelItemLabelEditing, handleSaveItemLabel, value, ...other } = props;
+    const { theme } = useTheme();
 
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
@@ -361,8 +378,8 @@ const CustomLabelInput = React.forwardRef<HTMLInputElement, CustomLabelInputProp
           sx={{
             flexGrow: 1,
             '& .MuiOutlinedInput-root': {
-              backgroundColor: alpha('#ffffff', 0.1),
-              color: 'white',
+              backgroundColor: theme.custom.slyData.inputBackground,
+              color: theme.palette.text.primary,
               fontSize: '0.85rem',
               fontFamily: 'Monaco, "Cascadia Code", "SF Mono", consolas, monospace',
             }
@@ -374,7 +391,7 @@ const CustomLabelInput = React.forwardRef<HTMLInputElement, CustomLabelInputProp
           onClick={(event: React.MouseEvent) => {
             handleSaveItemLabel(event, value);
           }}
-          sx={{ color: '#4CAF50' }}
+          sx={{ color: theme.custom.slyData.addIconColor }}
         >
           <CheckIcon fontSize="small" />
         </IconButton>
@@ -382,7 +399,7 @@ const CustomLabelInput = React.forwardRef<HTMLInputElement, CustomLabelInputProp
           color="error" 
           size="small" 
           onClick={handleCancelItemLabelEditing}
-          sx={{ color: '#f44336' }}
+          sx={{ color: theme.custom.slyData.deleteIconColor }}
         >
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -465,7 +482,7 @@ const CustomTreeItem = React.forwardRef<HTMLLIElement, TreeItemProps>(
 const EditorSlyDataPanel: React.FC = () => {
   const { slyDataMessages, targetNetwork } = useChatContext();
   const { apiUrl } = useApiPort();
-  const theme = useTheme();
+  const { theme } = useTheme();
 
   const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
   const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);

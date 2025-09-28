@@ -141,6 +141,10 @@ declare module '@mui/material/styles' {
         focusBackground: string;
         inputBackground: string;
         borderColor: string;
+        editIconColor: string;
+        addIconColor: string;
+        deleteIconColor: string;
+        labelHoverBackground: string;
       };
     };
   }
@@ -156,6 +160,10 @@ declare module '@mui/material/styles' {
         focusBackground?: string;
         inputBackground?: string;
         borderColor?: string;
+        editIconColor?: string;
+        addIconColor?: string;
+        deleteIconColor?: string;
+        labelHoverBackground?: string;
       };
     };
   }
@@ -173,6 +181,10 @@ const augmentedLightTheme = createTheme(lightTheme, {
       focusBackground: '#dbeafe', // Blue-100
       inputBackground: '#ffffff',
       borderColor: '#d1d5db', // Gray-300 (slightly darker border)
+      editIconColor: '#2563eb', // Blue-600
+      addIconColor: '#10b981', // Emerald-500
+      deleteIconColor: '#ef4444', // Red-500
+      labelHoverBackground: '#f8fafc', // Slate-50
     },
   },
 });
@@ -188,6 +200,10 @@ const augmentedDarkTheme = createTheme(darkTheme, {
       focusBackground: '#1e40af', // Blue-800
       inputBackground: '#374151', // Gray-700
       borderColor: '#475569', // Slate-600
+      editIconColor: '#60a5fa', // Blue-400
+      addIconColor: '#34d399', // Emerald-400
+      deleteIconColor: '#f87171', // Red-400
+      labelHoverBackground: '#1e293b', // Slate-800
     },
   },
 });
