@@ -41,39 +41,47 @@ const EditorSlyDataPanel: React.FC = () => {
   const [clearDialog, setClearDialog] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
-  const [lastMessageCount, setLastMessageCount] = useState(0);
+  // before: const [lastMessageCount, setLastMessageCount] = useState(0);
+  const [lastMessageCount, setLastMessageCount] = useState(() => slyDataMessages.length);
 
+  const [hasLocalEdits, setHasLocalEdits] = useState(false);
+  
   const nextIdRef = useRef<number>(nextId);
   nextIdRef.current = nextId;
 
   const { saveSlyDataToCache, loadSlyDataFromCache, clearSlyDataCache } = useSlyDataCache();
 
-  // Initialization with cache per-network
+  // Bootstrap: run once per mount when a targetNetwork appears
   useEffect(() => {
     if (!isInitialized && targetNetwork) {
-      const cached = loadSlyDataFromCache(targetNetwork);
-      if (cached && cached.data.length > 0) {
+        const cached = loadSlyDataFromCache(targetNetwork);
+        if (cached && cached.data.length > 0) {
         setTreeData(cached.data);
         setNextId(cached.nextId);
-      } else {
+        } else {
         setTreeData([]);
-      }
-      setIsInitialized(true);
+        }
+        setLastMessageCount(slyDataMessages.length); // baseline for this mount
+        setHasLocalEdits(false); // new network, no pending local edits
+        setIsInitialized(true);
     }
-  }, [isInitialized, targetNetwork, loadSlyDataFromCache]);
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
 
-  // Swap networks -> reload cache
-  useEffect(() => {
-    if (isInitialized && targetNetwork) {
-      const cached = loadSlyDataFromCache(targetNetwork);
-      if (cached && cached.data.length > 0) {
+    // Network swap: reload cache for the new network (no need to flip isInitialized here)
+    useEffect(() => {
+      if (isInitialized && targetNetwork) {
+        const cached = loadSlyDataFromCache(targetNetwork);
+        if (cached && cached.data.length > 0) {
         setTreeData(cached.data);
         setNextId(cached.nextId);
-      } else {
+        } else {
         setTreeData([]);
+        }
+        setLastMessageCount(slyDataMessages.length); // reset baseline for this network
+        setHasLocalEdits(false);  // new network, no pending local edits
       }
-    }
-  }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
+    }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
+
 
   // Persist cache when data changes
   useEffect(() => {
@@ -84,6 +92,22 @@ const EditorSlyDataPanel: React.FC = () => {
       clearSlyDataCache(targetNetwork);
     }
   }, [treeData, isInitialized, targetNetwork, saveSlyDataToCache, clearSlyDataCache, nextId]);
+
+  // helper: apply and persist *immediately*
+    const applyAndCache = useCallback(
+    (compute: (prev: SlyTreeItem[]) => SlyTreeItem[], nextIdOverride?: number) => {
+        setTreeData(prev => {
+        const updated = compute(prev);
+        if (targetNetwork) {
+            const nextToSave = typeof nextIdOverride === 'number' ? nextIdOverride : nextIdRef.current;
+            saveSlyDataToCache(updated, targetNetwork, nextToSave);
+        }
+        return updated;
+        });
+        setHasLocalEdits(true);
+    },
+    [saveSlyDataToCache, targetNetwork]
+    );
 
   const generateId = useCallback(() => {
     const id = `item_${nextIdRef.current}`;
@@ -114,7 +138,7 @@ const EditorSlyDataPanel: React.FC = () => {
   const handleAddItem = useCallback((parentId?: string) => {
     if (!parentId) {
       const newItem: SlyTreeItem = { id: generateId(), label: 'new_key: "new_value"', key: 'new_key', value: 'new_value', parentId: undefined, isKeyValuePair: true, type: 'string', depth: 0, hasValue: true };
-      setTreeData((prev) => [...prev, newItem]);
+      applyAndCache((prev) => [...prev, newItem]);
       return;
     }
     const findDepth = (items: SlyTreeItem[], id: string): number => {
@@ -129,7 +153,7 @@ const EditorSlyDataPanel: React.FC = () => {
     };
     const newDepth = findDepth(treeData, parentId);
     const newItem: SlyTreeItem = { id: generateId(), label: 'new_key: "new_value"', key: 'new_key', value: 'new_value', parentId, isKeyValuePair: true, type: 'string', depth: newDepth, hasValue: true };
-    setTreeData((prev) => {
+    applyAndCache((prev) => {
       const updateItems = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
         if (item.id === parentId) return { ...item, children: [...(item.children || []), newItem], hasValue: false, value: undefined };
         if (item.children) return { ...item, children: updateItems(item.children) };
@@ -138,13 +162,13 @@ const EditorSlyDataPanel: React.FC = () => {
       return updateItems(prev);
     });
     setExpandedItems((prev) => [...prev, parentId]);
-  }, [generateId, treeData]);
+  }, [generateId, treeData, applyAndCache]);
 
   const handleConflictConfirm = () => { handleAddItem(conflictDialog.parentId); setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null }); };
   const handleConflictCancel = () => { setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null }); };
 
   const handleUpdateKey = useCallback((id: string, newKey: string) => {
-    setTreeData((prev) => {
+    applyAndCache((prev) => {
       const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
         if (item.id === id) {
           return { ...item, key: newKey, label: item.hasValue ? `${newKey}: ${typeof item.value === 'string' ? `"${item.value}"` : String(item.value)}` : newKey };
@@ -154,10 +178,10 @@ const EditorSlyDataPanel: React.FC = () => {
       });
       return updateItem(prev);
     });
-  }, []);
+  }, [applyAndCache]);
 
   const handleUpdateValue = useCallback((id: string, newValue: any) => {
-    setTreeData((prev) => {
+    applyAndCache((prev) => {
       const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
         if (item.id === id) {
           let parsedValue: any = newValue;
@@ -176,10 +200,10 @@ const EditorSlyDataPanel: React.FC = () => {
       });
       return updateItem(prev);
     });
-  }, []);
+  }, [applyAndCache]);
 
   const handleDeleteItem = useCallback((itemId: string) => {
-    setTreeData((prev) => {
+    applyAndCache((prev) => {
       const removeItem = (items: SlyTreeItem[]): SlyTreeItem[] => items
         .filter((item) => item.id !== itemId)
         .map((item) => {
@@ -191,10 +215,10 @@ const EditorSlyDataPanel: React.FC = () => {
         });
       return removeItem(prev);
     });
-  }, []);
+  }, [applyAndCache]);
 
   const handleLabelChange = useCallback((itemId: TreeViewItemId, newLabel: string) => {
-    setTreeData((prev) => {
+    applyAndCache((prev) => {
       const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
         if (item.id === itemId) {
           const match = newLabel.match(/^([^:]+):\s*(.+)$/);
@@ -216,7 +240,7 @@ const EditorSlyDataPanel: React.FC = () => {
       });
       return updateItem(prev);
     });
-  }, []);
+  }, [applyAndCache]);
 
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
@@ -239,12 +263,18 @@ const EditorSlyDataPanel: React.FC = () => {
 
   const handleImportConfirm = () => {
     if (importDialog.jsonData && !importDialog.validationError) {
-      const localRef = { current: nextIdRef.current };
-      const newTreeData = jsonToTreeData(importDialog.jsonData, localRef, undefined, 0);
-      setTreeData(newTreeData);
-      setExpandedItems(newTreeData.map((i) => i.id));
-      setNextId(localRef.current);
-      setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
+        const localRef = { current: nextIdRef.current };
+        const newTreeData = jsonToTreeData(importDialog.jsonData, localRef, undefined, 0);
+
+        // Save immediately to cache so a quick panel switch won't lose it
+        if (targetNetwork) saveSlyDataToCache(newTreeData, targetNetwork, localRef.current);
+
+        setTreeData(newTreeData);
+        setExpandedItems(newTreeData.map(i => i.id));
+        setNextId(localRef.current);
+        setHasLocalEdits(true);
+
+        setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
     }
   };
   const handleImportCancel = () => setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
@@ -274,22 +304,33 @@ const EditorSlyDataPanel: React.FC = () => {
   const fetchLatestSlyData = useCallback(async () => {
     if (!targetNetwork) return;
     const fetchUrl = `${apiUrl}/api/v1/slydata/${targetNetwork}`;
+
     try {
-      const response = await fetch(fetchUrl);
-      if (response.status === 404) return;
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      const result = await response.json();
-      const latestData = result.sly_data;
-      if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
+        const response = await fetch(fetchUrl);
+        if (response.status === 404) return;
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        const result = await response.json();
+        const latestData = result.sly_data;
+
+        if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
+        // ⛔ If the user has edited locally, do not overwrite their view
+        if (hasLocalEdits) return;
+
         const localRef = { current: nextIdRef.current };
         const newTreeData = jsonToTreeData(latestData, localRef, undefined, 0);
         setTreeData(newTreeData);
-        const allIds = getAllItemIds(newTreeData);
-        setExpandedItems(allIds);
+        setExpandedItems(getAllItemIds(newTreeData));
         setNextId(localRef.current);
-      }
-    } catch (e) { console.error('Failed to fetch latest sly_data:', e); }
-  }, [targetNetwork, apiUrl]);
+
+        // persist to cache
+        if (targetNetwork) saveSlyDataToCache(newTreeData, targetNetwork, localRef.current);
+        }
+    } catch (e) {
+        console.error('Failed to fetch latest sly_data:', e);
+    }
+    }, [apiUrl, targetNetwork, hasLocalEdits, saveSlyDataToCache]);
+
 
   useEffect(() => {
     const currentMessageCount = slyDataMessages.length;
