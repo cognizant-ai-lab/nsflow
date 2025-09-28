@@ -88,7 +88,7 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
     },
     {
       icon: FaPlus,
-      label: "Add Agent",
+      label: "Add Child Agent",
       onClick: () => onAdd(x, y),
       className: "hover:bg-purple-600",
     },
