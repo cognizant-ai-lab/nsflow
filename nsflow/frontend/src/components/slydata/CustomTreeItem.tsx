@@ -13,7 +13,7 @@ import React from 'react';
 import { TreeItem, type TreeItemProps } from '@mui/x-tree-view/TreeItem';
 import { useTreeItemUtils } from '@mui/x-tree-view/hooks';
 import type { UseTreeItemLabelInputSlotOwnProps, UseTreeItemLabelSlotOwnProps } from '@mui/x-tree-view/useTreeItem';
-import { CustomLabel } from './CustomLabel';
+import CustomLabel from './CustomLabel';
 import { CustomLabelInput } from './CustomLabelInput';
 import { useTreeOperations } from '../../context/TreeOperationsContext';
 import { getAllNestedItems } from '../../utils/slydata/jsonTree';

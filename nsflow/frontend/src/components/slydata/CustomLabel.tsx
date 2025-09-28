@@ -9,9 +9,15 @@
 //
 // END COPYRIGHT
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, IconButton, TextField, Tooltip, Typography, alpha } from '@mui/material';
-import { Check as CheckIcon, Close as CloseIcon, Add as AddIcon, Delete as DeleteIcon, EditOutlined as EditIcon } from '@mui/icons-material';
+import {
+  Check as CheckIcon,
+  Close as CloseIcon,
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  EditOutlined as EditIcon,
+} from '@mui/icons-material';
 import { TreeItemLabel } from '@mui/x-tree-view/TreeItem';
 import type { UseTreeItemLabelSlotOwnProps } from '@mui/x-tree-view/useTreeItem';
 import { useTheme } from '../../context/ThemeContext';
@@ -27,69 +33,313 @@ interface CustomLabelProps extends UseTreeItemLabelSlotOwnProps {
   itemData?: SlyTreeItem;
 }
 
-export const CustomLabel: React.FC<CustomLabelProps> = ({ editing, editable, children, toggleItemEditing, onDelete, onAddChild, itemData, ...other }) => {
+const CustomLabel: React.FC<CustomLabelProps> = ({
+  editing,
+  editable,
+  children,
+  toggleItemEditing,
+  onDelete,
+  onAddChild,
+  itemData,
+  ...other
+}) => {
   const [isHovered, setIsHovered] = useState(false);
   const [editingKey, setEditingKey] = useState(false);
   const [editingValue, setEditingValue] = useState(false);
   const [keyValue, setKeyValue] = useState(itemData?.key || '');
-  const [valueValue, setValueValue] = useState(itemData?.hasValue ? String(itemData.value ?? '') : '');
+  const [valueValue, setValueValue] = useState(
+    itemData?.hasValue ? String(itemData.value ?? '') : ''
+  );
+
   const { theme } = useTheme();
   const { handleUpdateKey, handleUpdateValue } = useTreeOperations();
 
+  // Stop propagation so the tree doesn't consume keyboard/mouse events while editing
+  const stopAll = useMemo(
+    () => (e: React.SyntheticEvent) => {
+      e.stopPropagation();
+    },
+    []
+  );
+  const stopAllKeyboard = useMemo(
+    () => (e: React.KeyboardEvent) => {
+      e.stopPropagation();
+    },
+    []
+  );
+
   const handleKeySave = () => {
-    if (itemData && keyValue.trim()) handleUpdateKey(itemData.id, keyValue.trim());
+    if (itemData && keyValue.trim()) {
+      handleUpdateKey(itemData.id, keyValue.trim());
+    }
     setEditingKey(false);
   };
+
   const handleValueSave = () => {
-    if (itemData && valueValue.trim()) handleUpdateValue(itemData.id, valueValue);
+    if (itemData && valueValue.trim()) {
+      handleUpdateValue(itemData.id, valueValue);
+    }
     setEditingValue(false);
   };
-  const handleKeyCancel = () => { setKeyValue(itemData?.key || ''); setEditingKey(false); };
-  const handleValueCancel = () => { setValueValue(itemData?.hasValue ? String(itemData.value ?? '') : ''); setEditingValue(false); };
+
+  const handleKeyCancel = () => {
+    setKeyValue(itemData?.key || '');
+    setEditingKey(false);
+  };
+
+  const handleValueCancel = () => {
+    setValueValue(itemData?.hasValue ? String(itemData.value ?? '') : '');
+    setEditingValue(false);
+  };
 
   return (
     <TreeItemLabel
       {...other}
-      editable={false}
+      editable={false} // manual editing UX
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, px: 1, borderRadius: 1, minHeight: 32, transition: 'all 0.2s ease', '&:hover': { backgroundColor: alpha('#ffffff', 0.08) }, fontFamily: 'Monaco, "Cascadia Code", "SF Mono", consolas, monospace', fontSize: '0.85rem' }}
+      // ensure clicks inside label don't focus/activate the tree item
+      onClick={stopAll}
+      onDoubleClick={stopAll}
+      onMouseDown={stopAll}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        py: 0.5,
+        px: 1,
+        borderRadius: 1,
+        minHeight: 32,
+        transition: 'all 0.2s ease',
+        '&:hover': {
+          backgroundColor: alpha('#ffffff', 0.08),
+        },
+        fontFamily: 'Monaco, "Cascadia Code", "SF Mono", consolas, monospace',
+        fontSize: '0.85rem',
+      }}
     >
       <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
         {/* Key editing */}
         {editingKey ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <TextField size="small" value={keyValue} onChange={(e) => setKeyValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleKeySave(); if (e.key === 'Escape') handleKeyCancel(); }} sx={{ minWidth: 80, '& .MuiOutlinedInput-root': { backgroundColor: theme.custom.slyData.inputBackground, color: theme.palette.text.primary, fontSize: '0.85rem', border: `1px solid ${theme.custom.slyData.borderColor}`, '&:hover': { borderColor: theme.palette.primary.main }, '&.Mui-focused': { borderColor: theme.palette.primary.main, backgroundColor: theme.custom.slyData.focusBackground } } }} autoFocus />
-            <IconButton size="small" onClick={handleKeySave} sx={{ color: theme.palette.success.main }}><CheckIcon fontSize="small" /></IconButton>
-            <IconButton size="small" onClick={handleKeyCancel} sx={{ color: theme.palette.error.main }}><CloseIcon fontSize="small" /></IconButton>
+            <TextField
+              size="small"
+              value={keyValue}
+              onChange={(e) => {
+                e.stopPropagation();
+                setKeyValue(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') handleKeySave();
+                if (e.key === 'Escape') handleKeyCancel();
+              }}
+              onKeyUp={stopAllKeyboard}
+              onClick={stopAll}
+              onMouseDown={stopAll}
+              onFocus={stopAll}
+              sx={{
+                minWidth: 80,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: theme.custom.slyData.inputBackground,
+                  color: theme.palette.text.primary,
+                  fontSize: '0.85rem',
+                  border: `1px solid ${theme.custom.slyData.borderColor}`,
+                  '&:hover': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                  '&.Mui-focused': {
+                    borderColor: theme.palette.primary.main,
+                    backgroundColor: theme.custom.slyData.focusBackground,
+                  },
+                },
+              }}
+              autoFocus
+            />
+            <IconButton
+              size="small"
+              onMouseDown={stopAll}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleKeySave();
+              }}
+              onKeyDown={stopAllKeyboard}
+              sx={{ color: theme.palette.success.main }}
+            >
+              <CheckIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              onMouseDown={stopAll}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleKeyCancel();
+              }}
+              onKeyDown={stopAllKeyboard}
+              sx={{ color: theme.palette.error.main }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', color: theme.custom.slyData.keyColor, fontWeight: 600 }} onClick={() => setEditingKey(true)}>
-            <Typography variant="body2" sx={{ fontSize: '0.85rem', color: `${theme.custom.slyData.keyColor} !important`, fontWeight: 600 }}>{itemData?.key || 'key'}</Typography>
-            {isHovered && (<IconButton size="small" sx={{ color: theme.palette.primary.main }}><EditIcon fontSize="small" /></IconButton>)}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              cursor: 'pointer',
+              color: theme.custom.slyData.keyColor,
+              fontWeight: 600,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingKey(true);
+            }}
+            onMouseDown={stopAll}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                fontSize: '0.85rem',
+                color: `${theme.custom.slyData.keyColor} !important`,
+                fontWeight: 600,
+              }}
+            >
+              {itemData?.key || 'key'}
+            </Typography>
+            {isHovered && (
+              <IconButton
+                size="small"
+                sx={{ color: theme.palette.primary.main }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            )}
           </Box>
         )}
 
-        <Typography sx={{ color: theme.custom.slyData.separatorColor, mx: 0.5 }}>:</Typography>
+        <Typography sx={{ color: theme.custom.slyData.separatorColor, mx: 0.5 }}>
+          :
+        </Typography>
 
         {/* Value editing */}
-        {itemData?.hasValue || (!itemData?.children?.length) ? (
+        {itemData?.hasValue || !itemData?.children?.length ? (
           editingValue ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <TextField size="small" value={valueValue} onChange={(e) => setValueValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleValueSave(); if (e.key === 'Escape') handleValueCancel(); }} sx={{ minWidth: 100, '& .MuiOutlinedInput-root': { backgroundColor: theme.custom.slyData.inputBackground, color: theme.palette.text.primary, fontSize: '0.85rem', border: `1px solid ${theme.custom.slyData.borderColor}`, '&:hover': { borderColor: theme.palette.primary.main }, '&.Mui-focused': { borderColor: theme.palette.primary.main, backgroundColor: theme.custom.slyData.focusBackground } } }} placeholder={!itemData?.hasValue ? 'Enter value...' : ''} autoFocus />
-              <IconButton size="small" onClick={handleValueSave} sx={{ color: theme.palette.success.main }}><CheckIcon fontSize="small" /></IconButton>
-              <IconButton size="small" onClick={handleValueCancel} sx={{ color: theme.palette.error.main }}><CloseIcon fontSize="small" /></IconButton>
+              <TextField
+                size="small"
+                value={valueValue}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  setValueValue(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') handleValueSave();
+                  if (e.key === 'Escape') handleValueCancel();
+                }}
+                onKeyUp={stopAllKeyboard}
+                onClick={stopAll}
+                onMouseDown={stopAll}
+                onFocus={stopAll}
+                sx={{
+                  minWidth: 100,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: theme.custom.slyData.inputBackground,
+                    color: theme.palette.text.primary,
+                    fontSize: '0.85rem',
+                    border: `1px solid ${theme.custom.slyData.borderColor}`,
+                    '&:hover': {
+                      borderColor: theme.palette.primary.main,
+                    },
+                    '&.Mui-focused': {
+                      borderColor: theme.palette.primary.main,
+                      backgroundColor: theme.custom.slyData.focusBackground,
+                    },
+                  },
+                }}
+                placeholder={!itemData?.hasValue ? 'Enter value...' : ''}
+                autoFocus
+              />
+              <IconButton
+                size="small"
+                onMouseDown={stopAll}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleValueSave();
+                }}
+                onKeyDown={stopAllKeyboard}
+                sx={{ color: theme.palette.success.main }}
+              >
+                <CheckIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                onMouseDown={stopAll}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleValueCancel();
+                }}
+                onKeyDown={stopAllKeyboard}
+                sx={{ color: theme.palette.error.main }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', color: itemData?.hasValue ? theme.custom.slyData.valueColor : theme.custom.slyData.emptyColor }} onClick={() => setEditingValue(true)}>
-              <Typography variant="body2" sx={{ fontSize: '0.85rem', fontStyle: !itemData?.hasValue ? 'italic' : 'normal', color: `${itemData?.hasValue ? theme.custom.slyData.valueColor : theme.custom.slyData.emptyColor} !important` }}>
-                {itemData?.hasValue ? (typeof itemData.value === 'string' ? `"${itemData.value}"` : String(itemData.value)) : '{}'}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                cursor: 'pointer',
+                color: itemData?.hasValue
+                  ? theme.custom.slyData.valueColor
+                  : theme.custom.slyData.emptyColor,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingValue(true);
+              }}
+              onMouseDown={stopAll}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontSize: '0.85rem',
+                  fontStyle: !itemData?.hasValue ? 'italic' : 'normal',
+                  color: `${
+                    itemData?.hasValue
+                      ? theme.custom.slyData.valueColor
+                      : theme.custom.slyData.emptyColor
+                  } !important`,
+                }}
+              >
+                {itemData?.hasValue
+                  ? typeof itemData.value === 'string'
+                    ? `"${itemData.value}"`
+                    : String(itemData.value)
+                  : '{}'}
               </Typography>
-              {isHovered && (<IconButton size="small" sx={{ color: '#2196F3' }}><EditIcon fontSize="small" /></IconButton>)}
+              {isHovered && (
+                <IconButton
+                  size="small"
+                  sx={{ color: '#2196F3' }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              )}
             </Box>
           )
         ) : (
-          <Typography sx={{ color: `${(theme as any).custom.slyData.emptyColor} !important`, fontStyle: 'italic' }}>{`{${itemData?.children?.length || 0} items}`}</Typography>
+          <Typography
+            sx={{
+              color: `${theme.custom.slyData.emptyColor} !important`,
+              fontStyle: 'italic',
+            }}
+          >
+            {`{${itemData?.children?.length || 0} items}`}
+          </Typography>
         )}
       </Box>
 
@@ -97,14 +347,44 @@ export const CustomLabel: React.FC<CustomLabelProps> = ({ editing, editable, chi
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {onAddChild && (
             <Tooltip title="Add child item">
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); onAddChild(); }} sx={{ color: '#4CAF50', '&:hover': { backgroundColor: alpha('#4CAF50', 0.1) } }}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddChild();
+                }}
+                onMouseDown={stopAll}
+                onKeyDown={stopAllKeyboard}
+                sx={{
+                  color: '#4CAF50',
+                  '&:hover': { backgroundColor: alpha('#4CAF50', 0.1) },
+                }}
+              >
                 <AddIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
+
           {onDelete && (
             <Tooltip title="Delete">
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); onDelete(); }} sx={{ color: (theme as any).custom.slyData.deleteIconColor, '&:hover': { backgroundColor: alpha((theme as any).custom.slyData.deleteIconColor, 0.1) } }}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                onMouseDown={stopAll}
+                onKeyDown={stopAllKeyboard}
+                sx={{
+                  color: theme.custom.slyData.deleteIconColor,
+                  '&:hover': {
+                    backgroundColor: alpha(
+                      theme.custom.slyData.deleteIconColor,
+                      0.1
+                    ),
+                  },
+                }}
+              >
                 <DeleteIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -114,3 +394,5 @@ export const CustomLabel: React.FC<CustomLabelProps> = ({ editing, editable, chi
     </TreeItemLabel>
   );
 };
+
+export default CustomLabel;
