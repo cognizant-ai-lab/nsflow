@@ -24,12 +24,15 @@ import {
   ExpandLess as ChevronUpIcon,
   ExpandMore as ChevronDownIcon,
   Terminal as TerminalIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  PushPin as PinIcon,
+  PushPinOutlined as UnpinIcon
 } from "@mui/icons-material";
 import LogsPanel from "./LogsPanel";
 
 const EditorLogsPanel: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [sidebarWidth, setSidebarWidth] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -78,26 +81,31 @@ const EditorLogsPanel: React.FC = () => {
     };
   }, []);
 
-  // Handle clicking outside to collapse
+  // Handle clicking outside to collapse when not pinned
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
-        if (isExpanded) {
+        if (isExpanded && !isPinned) {
           setIsExpanded(false);
         }
       }
     };
 
-    if (isExpanded) {
+    if (isExpanded && !isPinned) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [isExpanded]);
+  }, [isExpanded, isPinned]);
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
+  };
+
+  const togglePinned = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the expand/collapse
+    setIsPinned(!isPinned);
   };
 
   const clearLogs = () => {
@@ -149,7 +157,7 @@ const EditorLogsPanel: React.FC = () => {
                 Logs
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {logs.length > 0 && (
                 <IconButton
                   size="small"
@@ -162,11 +170,30 @@ const EditorLogsPanel: React.FC = () => {
                     '&:hover': { color: theme.palette.text.primary },
                     p: 0.5
                   }}
-                  title="Clear logs"
+                  title="Minimize logs"
                 >
                   <ClearIcon sx={{ fontSize: 14 }} />
                 </IconButton>
               )}
+              <IconButton
+                size="small"
+                onClick={togglePinned}
+                sx={{
+                  color: isPinned ? theme.palette.primary.main : theme.palette.text.secondary,
+                  '&:hover': { 
+                    color: isPinned ? theme.palette.primary.dark : theme.palette.text.primary,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1)
+                  },
+                  p: 0.5
+                }}
+                title={isPinned ? "Unpin (auto-close on outside click)" : "Pin (stay open)"}
+              >
+                {isPinned ? (
+                  <PinIcon sx={{ fontSize: 14 }} />
+                ) : (
+                  <UnpinIcon sx={{ fontSize: 14 }} />
+                )}
+              </IconButton>
               <ChevronDownIcon sx={{ color: theme.palette.text.secondary, fontSize: 16 }} />
             </Box>
           </>

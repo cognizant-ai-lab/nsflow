@@ -39,7 +39,9 @@ import {
   Delete as DeleteIcon,
   DataObject as DataObjectIcon,
   Download as DownloadIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  ExpandMore as ExpandAllIcon,
+  ExpandLess as CollapseAllIcon
 } from '@mui/icons-material';
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
@@ -1203,6 +1205,30 @@ const EditorSlyDataPanel: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [treeData, treeDataToJson]);
 
+  // Helper function to get all item IDs recursively
+  const getAllItemIds = useCallback((items: SlyTreeItem[]): string[] => {
+    const ids: string[] = [];
+    items.forEach(item => {
+      ids.push(item.id);
+      if (item.children && item.children.length > 0) {
+        ids.push(...getAllItemIds(item.children));
+      }
+    });
+    return ids;
+  }, []);
+
+  // Handle expand/collapse all
+  const handleExpandCollapseAll = useCallback(() => {
+    if (expandedItems.length === 0 || expandedItems.length < treeData.length) {
+      // Expand all - get all item IDs
+      const allIds = getAllItemIds(treeData);
+      setExpandedItems(allIds);
+    } else {
+      // Collapse all
+      setExpandedItems([]);
+    }
+  }, [expandedItems.length, treeData, getAllItemIds]);
+
   // Monitor message count changes to fetch latest sly_data
   // Only fetches when new messages arrive (not continuous)
   useEffect(() => {
@@ -1299,7 +1325,27 @@ const EditorSlyDataPanel: React.FC = () => {
                 </Typography>
               </Box>
               
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title={expandedItems.length === 0 || expandedItems.length < treeData.length ? "Expand All" : "Collapse All"}>
+                  <IconButton 
+                    size="small" 
+                    onClick={handleExpandCollapseAll}
+                    disabled={treeData.length === 0}
+                    sx={{ 
+                      color: treeData.length > 0 ? theme.palette.info.main : theme.palette.text.disabled,
+                      p: 0.5,
+                      '&:hover': treeData.length > 0 ? { backgroundColor: alpha(theme.palette.info.main, 0.1) } : undefined,
+                      '&:disabled': { color: theme.palette.text.disabled }
+                    }}
+                  >
+                    {expandedItems.length === 0 || expandedItems.length < treeData.length ? (
+                      <ExpandAllIcon fontSize="small" />
+                    ) : (
+                      <CollapseAllIcon fontSize="small" />
+                    )}
+                  </IconButton>
+                </Tooltip>
+
                 <Tooltip title="Import JSON">
                   <IconButton 
                     size="small" 

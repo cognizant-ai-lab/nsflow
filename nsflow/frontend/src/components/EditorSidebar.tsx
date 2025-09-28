@@ -174,15 +174,18 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
         p: 2, 
         borderBottom: `1px solid ${theme.palette.divider}` 
       }}>
-        <Typography variant="h6" sx={{ 
+        {/* Compact Header */}
+        <Typography variant="subtitle1" sx={{ 
           fontWeight: 600, 
           color: theme.palette.text.primary,
-          mb: 2,
           display: 'flex',
           alignItems: 'center',
-          gap: 1
+          gap: 1,
+          fontSize: '0.9rem',
+          py: 0.5,
+          mb: 1
         }}>
-          <NetworkIcon color="primary" />
+          <NetworkIcon sx={{ fontSize: 18 }} color="primary" />
           Agent Networks
         </Typography>
 
@@ -308,7 +311,7 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
                   transition: 'all 0.2s ease'
                 }}
               >
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <CardContent sx={{ p: 0.5, '&:last-child': { pb: 0.5 } }}>
                   <Typography variant="body2" sx={{ 
                     fontWeight: 600, 
                     color: theme.palette.text.primary,
@@ -320,14 +323,14 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
                   <Typography variant="caption" sx={{ 
                     color: theme.palette.text.secondary,
                     mb: 1,
-                    lineHeight: 1.3,
+                    lineHeight: 1,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     display: '-webkit-box',
-                    WebkitLineClamp: 3,
+                    WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical'
                   }}>
-                    {agent.data.instructions || "No instructions provided"}
+                    {agent.data.instructions || "No instructions provided."}
                   </Typography>
                   
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -335,11 +338,11 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
                       label={agent.data.is_defined ? 'Defined' : 'Referenced'}
                       size="small"
                       color={agent.data.is_defined ? 'success' : 'warning'}
-                      sx={{ fontSize: '0.65rem', height: 20 }}
+                      sx={{ fontSize: '0.6rem', height: 15 }}
                     />
                     <Typography variant="caption" sx={{ 
                       color: theme.palette.text.secondary,
-                      fontSize: '0.65rem'
+                      fontSize: '0.6rem'
                     }}>
                       {agent.type}
                     </Typography>
