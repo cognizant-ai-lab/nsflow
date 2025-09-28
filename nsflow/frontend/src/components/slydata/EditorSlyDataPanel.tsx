@@ -334,7 +334,7 @@ const EditorSlyDataPanel: React.FC = () => {
 
   useEffect(() => {
     const currentMessageCount = slyDataMessages.length;
-    if (currentMessageCount > lastMessageCount && currentMessageCount > 1) fetchLatestSlyData();
+    if (currentMessageCount > lastMessageCount) fetchLatestSlyData();
     console.log(`New sly_data message detected (${lastMessageCount} → ${currentMessageCount}), fetching latest state...`);
     setLastMessageCount(currentMessageCount);
   }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
