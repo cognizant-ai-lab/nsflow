@@ -14,8 +14,7 @@ import {
   Box, 
   Tabs, 
   Tab, 
-  Paper, 
-  useTheme,
+  Paper,
   alpha 
 } from "@mui/material";
 import { 
@@ -30,6 +29,7 @@ import EditorSlyDataPanel from "./EditorSlyDataPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { useTheme } from '../context/ThemeContext';
 interface TabbedChatPanelProps {
   isEditorMode?: boolean;
 }
@@ -37,7 +37,7 @@ interface TabbedChatPanelProps {
 const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "config">("chat");
   const { wsUrl } = useApiPort();
-  const theme = useTheme();
+  const { theme } = useTheme();
   const { 
     activeNetwork,
     targetNetwork,

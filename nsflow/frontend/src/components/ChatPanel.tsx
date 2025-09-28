@@ -18,7 +18,7 @@ import {
   Paper, 
   Tooltip, 
   Button,
-  useTheme,
+  TextField,
   alpha
 } from "@mui/material";
 import { 
@@ -31,6 +31,7 @@ import {
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
+import { useTheme } from "../context/ThemeContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import { Mp3Encoder } from "@breezystack/lamejs";
 
@@ -39,7 +40,7 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const useSpeech = import.meta.env.VITE_USE_SPEECH === 'true';
   const { apiUrl } = useApiPort();
-  const theme = useTheme();
+  const { theme } = useTheme();
   const { activeNetwork, chatMessages, addChatMessage, addSlyDataMessage, chatWs } = useChatContext();
   const { stopWebSocket, clearChat } = useChatControls();
   const [newMessage, setNewMessage] = useState("");
@@ -579,7 +580,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               display: 'flex', 
               justifyContent: 'space-between', 
               alignItems: 'center', 
-              mb: 2,
+              mb: 1,
               pb: 1,
               borderBottom: `1px solid ${theme.palette.divider}`
             }}>
@@ -617,8 +618,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             />
 
             {/* Audio element for playback */}
-            <Box sx={{ mt: 2 }}>
-              <audio ref={audioRef} controls style={{ width: '100%' }} />
+            <Box sx={{ mt: 0.5, pb: 0, pt: 0.5, borderTop: theme => `1px solid ${theme.palette.divider}` }}>
+              <audio ref={audioRef} controls style={{ width: '100%', height: '28px'}} />
             </Box>
 
           </Box>
@@ -634,7 +635,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
         {/* Panel 2: Inputs (chat + sly_data) */}
         <Panel ref={inputPanelRef} defaultSize={25} minSize={15}>
-          <div className="p-4 space-y-2 bg-[var(--chat-bg)]">
+          <div className="p-2 space-y-2 bg-[var(--chat-bg)]">
             {/* Chat controls */}
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
               <Tooltip title="Clear Chat">
@@ -669,16 +670,39 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             </Box>
 
             {/* Message input */}
-            <div className="chat-input mt-2 flex gap-2 items-end">
-              <textarea
+            <Box sx={{ mt: 2, display: 'flex', gap: 2, alignItems: 'flex-end' }}>
+              <TextField
+                multiline
+                minRows={2}
+                maxRows={6}
                 placeholder="Type a message..."
-                className="chat-input-box"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
+                  }
+                }}
+                sx={{
+                  flexGrow: 1,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: theme.palette.background.paper,
+                    color: theme.palette.text.primary,
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: theme.palette.primary.main,
+                      }
+                    },
+                    '&.Mui-focused': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: theme.palette.primary.main,
+                        borderWidth: 2,
+                      }
+                    }
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.divider,
                   }
                 }}
               />
@@ -749,7 +773,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   </Tooltip>
                 )}
               </Box>
-            </div>
+            </Box>
             <div
               onClick={toggleSlyData}
               className="sly-data-btn flex items-center cursor-pointer text-sm text-white mb-1"

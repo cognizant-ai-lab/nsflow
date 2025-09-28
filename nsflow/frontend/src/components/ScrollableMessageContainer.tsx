@@ -18,8 +18,7 @@ import {
   Typography, 
   IconButton, 
   Paper, 
-  Tooltip, 
-  useTheme,
+  Tooltip,
   alpha,
   Chip
 } from "@mui/material";
@@ -29,6 +28,7 @@ import {
 } from "@mui/icons-material";
 
 import { Message } from "../types/chat";
+import { useTheme } from "../context/ThemeContext";
 
 // type Message = {
 //   sender: "user" | "agent" | "system";
@@ -68,7 +68,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
     }`
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const theme = useTheme();
+  const { theme } = useTheme();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -108,7 +108,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
     <Box sx={{ 
       flexGrow: 1, 
       overflow: 'auto', 
-      pr: 1,
+      pr: 0.5,
       backgroundColor: theme.palette.background.default
     }}>
       <Box sx={{ 
@@ -126,7 +126,8 @@ const ScrollableMessageContainer: React.FC<Props> = ({
               key={index}
               elevation={1}
               sx={{
-                p: 1.5,
+                p: 0.5,
+                pb: 0,
                 backgroundColor: colors.backgroundColor,
                 color: colors.color,
                 maxWidth: msg.sender === "user" ? "75%" : "90%",
@@ -144,7 +145,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 alignItems: 'center', 
-                mb: 0.5,
+                mb: 0,
                 minHeight: '20px'
               }}>
                 <Chip
