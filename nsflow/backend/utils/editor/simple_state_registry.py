@@ -19,6 +19,7 @@ import os
 import uuid
 from typing import Dict, Optional, List, Tuple, Any
 import logging
+from werkzeug.utils import secure_filename
 
 from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR as EXPORT_ROOT_DIR
 from nsflow.backend.utils.editor.simple_state_manager import SimpleStateManager
@@ -352,7 +353,7 @@ class SimpleStateRegistry:
             else:
                 # use EXPORT_ROOT_DIR with network name
                 network_name = manager.current_state.get("network_name", f"network_{design_id[:8]}")
-                filename = f"{network_name}.hocon"
+                filename = secure_filename(f"{network_name}.hocon")
                 sanitized_path = os.path.normpath(os.path.join(EXPORT_ROOT_DIR, filename))
             
             # Export to HOCON format
