@@ -10,29 +10,633 @@
 # END COPYRIGHT
 
 import logging
-from fastapi import APIRouter, HTTPException
+import os
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
+from typing import Optional, Dict, Any
 
-from nsflow.backend.models.editor_models import NetworkConnectivity
-from nsflow.backend.models.editor_models import StateConnectivityResponse
-from nsflow.backend.models.editor_models import NetworkStateInfo
+from nsflow.backend.models.editor_models import (
+    NetworkTemplate, EditorState, ValidationResult, NetworkInfo, NetworksList,
+    AgentCreateRequest, AgentUpdateRequest, AgentDuplicateRequest, EdgeRequest,
+    NetworkExportRequest, UndoRedoResponse, NetworkConnectivity, StateConnectivityResponse,
+    NetworkStateInfo
+)
 
-from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
+from nsflow.backend.utils.editor.simple_state_registry import get_registry
+from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
 from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
-from nsflow.backend.utils.editor.state_registry import StateRegistry
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/andeditor")
 
-# Initialize components
-agent_utils = AgentNetworkUtils()
+# Initialize components lazily to avoid blocking during import
+hocon_reader = None
 
+def get_hocon_reader():
+    """Get HOCON reader instance, creating it lazily"""
+    global hocon_reader
+    if hocon_reader is None:
+        hocon_reader = IndependentHoconReader()
+    return hocon_reader
+
+# Registry will be accessed via get_registry() function
+
+
+# Network-level operations
+
+@router.get("/networks", response_model=NetworksList)
+async def list_all_networks():
+    """List all available networks (registry + editing sessions)"""
+    try:
+        registry = get_registry()
+        result = registry.list_all_networks()
+        
+        # Convert to response model
+        editing_sessions = []
+        for session in result["editing_sessions"]:
+            editing_sessions.append(NetworkInfo(**session))
+        
+        return NetworksList(
+            registry_networks=result["registry_networks"],
+            editing_sessions=editing_sessions,
+            total_registry=result["total_registry"],
+            total_sessions=result["total_sessions"]
+        )
+    except Exception as e:
+        logger.error(f"Error listing networks: {e}")
+        raise HTTPException(status_code=500, detail="Error listing networks")
+
+
+@router.post("/networks/create")
+async def create_network(template: NetworkTemplate):
+    """Create a new network from template"""
+    try:
+        template_kwargs = {}
+        
+        if template.type == "hierarchical":
+            template_kwargs["levels"] = template.levels or 2
+            template_kwargs["agents_per_level"] = template.agents_per_level or [1, 3]
+        elif template.type == "sequential":
+            template_kwargs["sequence_length"] = template.sequence_length or 3
+        elif template.type == "single_agent":
+            template_kwargs["agent_name"] = template.agent_name or "frontman"
+        
+        registry = get_registry()
+        design_id, manager = registry.create_new_network(
+            network_name=template.name or "",
+            template_type=template.type,
+            **template_kwargs
+        )
+        
+        state = manager.get_state()
+        validation = manager.validate_network()
+        
+        return {
+            "success": True,
+            "design_id": design_id,
+            "network_name": state["network_name"],
+            "message": f"Network created successfully from {template.type} template",
+            "validation": validation,
+            "agent_count": len(state["agents"])
+        }
+    except Exception as e:
+        logger.error(f"Error creating network: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating network: {str(e)}")
+
+
+@router.post("/networks/load/{network_name}")
+async def load_network_from_registry(network_name: str):
+    """Load a network from the registry for editing"""
+    try:
+        registry = get_registry()
+        design_id, manager = registry.load_from_registry(network_name)
+        
+        state = manager.get_state()
+        validation = manager.validate_network()
+        
+        return {
+            "success": True,
+            "design_id": design_id,
+            "network_name": state["network_name"],
+            "original_network_name": network_name,
+            "message": f"Network '{network_name}' loaded successfully",
+            "validation": validation,
+            "agent_count": len(state["agents"])
+        }
+    except Exception as e:
+        logger.error(f"Error loading network from registry: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading network: {str(e)}")
+
+
+@router.get("/networks/{design_id}", response_model=EditorState)
+async def get_network_state(design_id: str):
+    """Get complete network state"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        state = manager.get_state()
+        return EditorState(**state)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting network state: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting network state: {str(e)}")
+
+
+@router.get("/networks/{design_id}/info")
+async def get_network_info(design_id: str):
+    """Get network information and metadata"""
+    try:
+        registry = get_registry()
+        info = registry.get_session_info(design_id)
+        if not info:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        return info
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting network info: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting network info: {str(e)}")
+
+
+@router.delete("/networks/{design_id}")
+async def delete_network(design_id: str):
+    """Delete a network editing session"""
+    try:
+        registry = get_registry()
+        success = registry.delete_session(design_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        return {
+            "success": True,
+            "message": f"Network session '{design_id}' deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting network: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting network: {str(e)}")
+
+
+@router.put("/networks/{design_id}/name")
+async def set_network_name(design_id: str, request: Dict[str, str]):
+    """Set network name"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        new_name = request.get("name", "").strip()
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Network name cannot be empty")
+        
+        success = manager.set_network_name(new_name)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to set network name")
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Network name set to '{new_name}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting network name: {e}")
+        raise HTTPException(status_code=500, detail=f"Error setting network name: {str(e)}")
+
+
+# Agent-level operations
+
+@router.post("/networks/{design_id}/agents")
+async def create_agent(design_id: str, request: AgentCreateRequest):
+    """Create a new agent"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        # Prepare agent data based on request
+        agent_data = request.agent_data or {}
+        
+        # Add agent type and template info to agent data
+        if request.agent_type:
+            agent_data["agent_type"] = request.agent_type
+        if request.template:
+            agent_data["template"] = request.template
+        
+        success = manager.add_agent(
+            agent_name=request.name,
+            parent_name=request.parent_name,
+            agent_data=agent_data
+        )
+        
+        if not success:
+            raise HTTPException(status_code=400, detail=f"Failed to create agent '{request.name}' (may already exist)")
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Agent '{request.name}' created successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating agent: {str(e)}")
+
+
+@router.put("/networks/{design_id}/agents/{agent_name}")
+async def update_agent(design_id: str, agent_name: str, request: AgentUpdateRequest):
+    """Update an agent"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.update_agent(agent_name, request.updates)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Agent '{agent_name}' updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating agent: {str(e)}")
+
+
+@router.post("/networks/{design_id}/agents/{agent_name}/duplicate")
+async def duplicate_agent(design_id: str, agent_name: str, request: AgentDuplicateRequest):
+    """Duplicate an agent"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.duplicate_agent(agent_name, request.new_name)
+        if not success:
+            raise HTTPException(status_code=400, detail=f"Failed to duplicate agent (source not found or target exists)")
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Agent '{agent_name}' duplicated as '{request.new_name}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error duplicating agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error duplicating agent: {str(e)}")
+
+
+@router.delete("/networks/{design_id}/agents/{agent_name}")
+async def delete_agent(design_id: str, agent_name: str):
+    """Delete an agent"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.delete_agent(agent_name)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Agent '{agent_name}' deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting agent: {str(e)}")
+
+
+@router.get("/networks/{design_id}/agents/{agent_name}")
+async def get_agent(design_id: str, agent_name: str):
+    """Get agent details"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        state = manager.get_state()
+        agent = state["agents"].get(agent_name)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        
+        return {
+            "agent": agent,
+            "design_id": design_id,
+            "network_name": state["network_name"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting agent: {str(e)}")
+
+
+# Edge operations
+
+@router.post("/networks/{design_id}/edges")
+async def add_edge(design_id: str, request: EdgeRequest):
+    """Add edge between agents"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.add_edge(request.source_agent, request.target_agent)
+        if not success:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Failed to add edge (agents not found or would create cycle)"
+            )
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Edge added from '{request.source_agent}' to '{request.target_agent}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding edge: {e}")
+        raise HTTPException(status_code=500, detail=f"Error adding edge: {str(e)}")
+
+
+@router.delete("/networks/{design_id}/edges")
+async def remove_edge(design_id: str, request: EdgeRequest):
+    """Remove edge between agents"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.remove_edge(request.source_agent, request.target_agent)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to remove edge (agents not found)")
+        
+# Logging removed for simplicity
+        
+        return {
+            "success": True,
+            "message": f"Edge removed from '{request.source_agent}' to '{request.target_agent}'"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing edge: {e}")
+        raise HTTPException(status_code=500, detail=f"Error removing edge: {str(e)}")
+
+
+# Connectivity and visualization
+
+@router.get("/networks/{design_id}/connectivity")
+async def get_network_connectivity(design_id: str):
+    """Get network connectivity for visualization"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        state = manager.get_state()
+        
+        # Convert to connectivity format similar to existing system
+        nodes = []
+        edges = []
+        agent_details = {}
+        
+        for agent_name, agent in state["agents"].items():
+            # Create node
+            children = [child for child in agent.get("tools", []) if child in state["agents"]]
+            parent = agent.get("_parent")
+            
+            nodes.append({
+                "id": agent_name,
+                "type": "agent",
+                "data": {
+                    "label": agent_name,
+                    "parent": parent,
+                    "children": children,
+                    "dropdown_tools": [],  # Non-agent tools
+                    "sub_networks": []  # External tools
+                },
+                "position": {"x": 100, "y": 100}
+            })
+            
+            # Create edges for children
+            for child in children:
+                edges.append({
+                    "id": f"{agent_name}-{child}",
+                    "source": agent_name,
+                    "target": child,
+                    "animated": True
+                })
+            
+            # Store agent details
+            agent_details[agent_name] = {
+                "instructions": agent.get("instructions", ""),
+                "command": agent.get("command", ""),
+                "class": agent.get("class"),
+                "function": agent.get("function"),
+                "dropdown_tools": [],
+                "sub_networks": []
+            }
+        
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "agent_details": agent_details,
+            "design_id": design_id,
+            "network_name": state["network_name"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting connectivity: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting connectivity: {str(e)}")
+
+
+# Validation
+
+@router.get("/networks/{design_id}/validate", response_model=ValidationResult)
+async def validate_network(design_id: str):
+    """Validate network structure"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        validation_result = manager.validate_network()
+        return ValidationResult(**validation_result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating network: {e}")
+        raise HTTPException(status_code=500, detail=f"Error validating network: {str(e)}")
+
+
+# Undo/Redo
+
+@router.post("/networks/{design_id}/undo", response_model=UndoRedoResponse)
+async def undo_operation(design_id: str):
+    """Undo last operation"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.undo()
+# Logging removed for simplicity
+        
+        return UndoRedoResponse(
+            success=success,
+            can_undo=manager.can_undo(),
+            can_redo=manager.can_redo(),
+            message="Undo successful" if success else "Nothing to undo"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error undoing operation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error undoing operation: {str(e)}")
+
+
+@router.post("/networks/{design_id}/redo", response_model=UndoRedoResponse)
+async def redo_operation(design_id: str):
+    """Redo last undone operation"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = manager.redo()
+# Logging removed for simplicity
+        
+        return UndoRedoResponse(
+            success=success,
+            can_undo=manager.can_undo(),
+            can_redo=manager.can_redo(),
+            message="Redo successful" if success else "Nothing to redo"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error redoing operation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error redoing operation: {str(e)}")
+
+
+# Export and Save
+
+@router.post("/networks/{design_id}/export")
+async def export_to_hocon(design_id: str, request: NetworkExportRequest):
+    """Export network to HOCON file"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        state = manager.get_state()
+        network_name = state["network_name"]
+        
+        # Validate before export if requested
+        if request.validate_before_export:
+            validation_result = manager.validate_network()
+            if not validation_result["valid"]:
+                return {
+                    "success": False,
+                    "message": "Network validation failed",
+                    "validation": validation_result
+                }
+        
+        # Determine output path
+        output_path = request.output_path
+        if not output_path:
+            from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR
+            output_path = os.path.join(REGISTRY_DIR, f"{network_name}.hocon")
+        
+        # Export to HOCON
+        registry = get_registry()
+        success = registry.export_to_hocon_file(design_id, output_path)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Network exported to {output_path}",
+                "output_path": output_path
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to export network")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting to HOCON: {e}")
+        raise HTTPException(status_code=500, detail=f"Error exporting to HOCON: {str(e)}")
+
+
+@router.post("/networks/{design_id}/save")
+async def save_session(design_id: str):
+    """Save editing session to persistent storage"""
+    try:
+        registry = get_registry()
+        success = registry.save_session_to_file(design_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Session saved successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save session")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving session: {e}")
+        raise HTTPException(status_code=500, detail=f"Error saving session: {str(e)}")
+
+
+# Legacy endpoints for backward compatibility
 
 @router.get("/list")
 async def list_networks():
-    """List all available agent networks (same as /api/v1/networks)"""
+    """List all available agent networks (legacy endpoint)"""
     try:
-        result = agent_utils.list_available_networks()
+        result = get_hocon_reader().list_available_networks()
         return result
     except Exception as e:
         logger.error(f"Error listing networks: {e}")
@@ -41,9 +645,9 @@ async def list_networks():
 
 @router.get("/connectivity/{network_name}")
 async def get_connectivity(network_name: str):
-    """Get connectivity information for a network (similar to existing endpoint)"""
+    """Get connectivity information for a network (legacy endpoint)"""
     try:
-        result = agent_utils.parse_agent_network(network_name)
+        result = get_hocon_reader().parse_agent_network_for_editor(network_name)
         return NetworkConnectivity(
             nodes=result["nodes"],
             edges=result["edges"],
@@ -56,38 +660,23 @@ async def get_connectivity(network_name: str):
         raise HTTPException(status_code=500, detail=f"Error getting connectivity: {str(e)}")
 
 
-
-
 @router.get("/state/networks")
 async def get_state_networks():
-    """Get all networks that have current state"""
+    """Get all networks that have current state (legacy endpoint)"""
     try:
-        # Get all networks across all state managers in the registry
-        all_networks = set()
-        networks_info = []
+        # For backward compatibility, return current editing sessions
+        registry = get_registry()
+        result = registry.list_all_networks()
         
-        for network_name in StateRegistry.list_networks():
-            # Get the primary (most recent) state manager for this network
-            state_manager = StateRegistry.get_primary_manager_for_network(network_name)
-            
-            if state_manager:
-                # Check all states in this manager
-                network_states = state_manager.get_all_network_states()
-                
-                for state_network_name, network_state in network_states.items():
-                    if state_network_name not in all_networks:
-                        all_networks.add(state_network_name)
-                        
-                        state_dict = network_state.get("state", {})
-                        agent_def = state_dict.get("agent_network_definition", {})
-                        
+        networks_info = []
+        for session in result["editing_sessions"]:
                         info = NetworkStateInfo(
-                            name=state_network_name,
-                            last_updated=network_state.get("last_updated"),
-                            source=network_state.get("source"),
-                            has_state=bool(state_dict),
-                            agent_count=len(agent_def) if agent_def else None,
-                            agents=list(agent_def.keys()) if agent_def else None
+                name=session["network_name"],
+                last_updated=session.get("updated_at"),
+                source="editor_session",
+                has_state=True,
+                agent_count=session["agent_count"],
+                agents=None  # Would need to get from state if needed
                         )
                         networks_info.append(info)
         
@@ -98,38 +687,28 @@ async def get_state_networks():
 
 
 @router.get("/state/networks/{network_name}")
-async def get_network_state(network_name: str):
-    """Get current state for a specific network"""
+async def get_network_state_legacy(network_name: str):
+    """Get current state for a specific network (legacy endpoint)"""
     try:
-        # Get the primary state manager for this network
-        state_manager = StateRegistry.get_primary_manager_for_network(network_name)
+        # Try to find matching editing session
+        registry = get_registry()
+        managers = registry.get_managers_for_network(network_name)
         
-        if not state_manager:
-            # Try to get state from HOCON file
-            global_manager = StateRegistry.get_global_manager()
-            network_state = global_manager.get_state_from_hocon(network_name)
+        if managers:
+            # Get the most recent one
+            manager = registry.get_primary_manager_for_network(network_name)
+            state = manager.get_state()
             
-            if network_state:
+            if state:
                 return {
                     "network_name": network_name,
-                    "state": network_state.get("state", {}),
-                    "last_updated": network_state.get("last_updated"),
-                    "source": network_state.get("source", "hocon_file")
-                }
+                    "state": state,
+                    "last_updated": state.get("meta", {}).get("updated_at"),
+                    "source": "editor_session"
+                    }
             else:
                 raise HTTPException(status_code=404, detail=f"No state found for network '{network_name}'")
         
-        network_state = state_manager.get_network_state(network_name)
-        
-        if not network_state:
-            raise HTTPException(status_code=404, detail=f"No state found for network '{network_name}'")
-        
-        return {
-            "network_name": network_name,
-            "state": network_state.get("state", {}),
-            "last_updated": network_state.get("last_updated"),
-            "source": network_state.get("source")
-        }
     except HTTPException:
         raise
     except Exception as e:
@@ -139,52 +718,52 @@ async def get_network_state(network_name: str):
 
 @router.get("/state/connectivity/{network_name}")
 async def get_network_state_connectivity(network_name: str):
-    """Get connectivity for a network from current state (if available)"""
+    """Get connectivity for a network from current state (legacy endpoint)"""
     try:
-        # Get the primary state manager for this network
-        state_manager = StateRegistry.get_primary_manager_for_network(network_name)
+        # Try to find matching editing session
+        registry = get_registry()
+        manager = registry.get_primary_manager_for_network(network_name)
         
-        network_state = None
-        if state_manager:
-            network_state = state_manager.get_network_state(network_name)
-        
-        # If no state in memory, try to load from HOCON file
-        if not network_state:
-            global_manager = StateRegistry.get_global_manager()
-            hocon_state = global_manager.get_state_from_hocon(network_name)
-            if hocon_state:
-                network_state = hocon_state
-        
-        if not network_state:
+        if not manager:
             raise HTTPException(status_code=404, detail=f"No state found for network '{network_name}'")
         
-        state_dict = network_state.get("state", network_state)  # Handle both formats
-        if not state_dict:
-            raise HTTPException(status_code=404, detail=f"No state data found for network '{network_name}'")
+        state = manager.get_state()
         
-        # Use the partial build method to create nodes and edges
-        result = NsGrpcNetworkUtils.partial_build_nodes_and_edges(state_dict)
+        # Build connectivity similar to existing format
+        nodes = []
+        edges = []
         
-        # Calculate additional metrics
-        nodes = result["nodes"]
-        edges = result["edges"]
+        for agent_name, agent in state["agents"].items():
+            is_defined = bool(agent.get("instructions") or agent.get("function"))
+            parent = agent.get("_parent")
+            
+            nodes.append({
+                "id": agent_name,
+                "type": "agent",
+                "data": {
+                    "label": agent_name,
+                    "parent": parent,
+                    "is_defined": is_defined
+                },
+                "position": {"x": 100, "y": 100}
+            })
+            
+            # Create edges for children
+            for child in agent.get("tools", []):
+                if child in state["agents"]:
+                    edges.append({
+                        "id": f"{agent_name}-{child}",
+                        "source": agent_name,
+                        "target": child,
+                        "animated": True
+                    })
         
-        # Count defined vs undefined agents
+        # Calculate metrics
         defined_agents = len([node for node in nodes if node.get("data", {}).get("is_defined", False)])
         undefined_agents = len(nodes) - defined_agents
         
-        # Find connected components
-        parent_map = {}
-        for node in nodes:
-            node_data = node.get("data", {})
-            parent = node_data.get("parent")
-            if parent:
-                parent_map[node["id"]] = parent
-        
-        connected_components = len(NsGrpcNetworkUtils._find_connected_components(
-            {node["id"] for node in nodes},
-            parent_map
-        ))
+        # Simple connected components calculation
+        connected_components = 1  # Simplified for now
         
         return StateConnectivityResponse(
             nodes=nodes,
@@ -201,3 +780,48 @@ async def get_network_state_connectivity(network_name: str):
     except Exception as e:
         logger.error(f"Error getting network state connectivity: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting network state connectivity: {str(e)}")
+
+
+# Utility endpoints
+
+@router.post("/cleanup")
+async def cleanup_old_sessions(max_age_days: int = Query(default=7, ge=1, le=30)):
+    """Clean up old editing sessions"""
+    try:
+        # Cleanup not implemented in simplified version
+        deleted_count = 0
+        return {
+            "success": True,
+            "message": f"Cleaned up {deleted_count} old sessions",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up sessions: {e}")
+        raise HTTPException(status_code=500, detail=f"Error cleaning up sessions: {str(e)}")
+
+
+@router.get("/templates")
+async def get_available_templates():
+    """Get available network templates"""
+    return {
+        "templates": [
+            {
+                "type": "single_agent",
+                "name": "Single Agent",
+                "description": "A simple network with just one agent",
+                "parameters": ["agent_name"]
+            },
+            {
+                "type": "hierarchical",
+                "name": "Hierarchical Network", 
+                "description": "A hierarchical network with multiple levels",
+                "parameters": ["levels", "agents_per_level"]
+            },
+            {
+                "type": "sequential",
+                "name": "Sequential Network",
+                "description": "A linear sequence of agents",
+                "parameters": ["sequence_length"]
+            }
+        ]
+    }

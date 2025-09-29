@@ -9,11 +9,127 @@
 #
 # END COPYRIGHT
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Dict, List, Optional, Any, Union
 
 
-# Most of these models are flexible to allow user-defined properties for manual editing of agent networks.
+# Extended models for comprehensive editor functionality
+
+class NetworkTemplate(BaseModel):
+    """Template configuration for creating new networks"""
+    type: str = Field(..., description="Template type: single_agent, hierarchical, sequential")
+    name: Optional[str] = Field(None, description="Network name")
+    
+    # Template-specific parameters
+    levels: Optional[int] = Field(None, description="Number of levels for hierarchical template")
+    agents_per_level: Optional[List[int]] = Field(None, description="Agents per level for hierarchical")
+    sequence_length: Optional[int] = Field(None, description="Length for sequential template")
+    agent_name: Optional[str] = Field(None, description="Agent name for single agent template")
+
+
+class EditorState(BaseModel):
+    """Complete editor state structure"""
+    design_id: str = Field(..., description="Unique identifier for this design session")
+    network_name: str = Field(..., description="Network name")
+    meta: Dict[str, Any] = Field(..., description="Metadata")
+    top_level: Dict[str, Any] = Field(..., description="Top-level configuration")
+    agents: Dict[str, Dict[str, Any]] = Field(..., description="Agent definitions")
+    
+    class Config:
+        extra = "allow"
+
+
+class ValidationResult(BaseModel):
+    """Network validation result"""
+    valid: bool = Field(..., description="Whether network is valid")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+
+
+class NetworkInfo(BaseModel):
+    """Network information summary"""
+    design_id: str = Field(..., description="Design ID")
+    network_name: str = Field(..., description="Network name")
+    original_network_name: Optional[str] = Field(None, description="Original network name if loaded from registry")
+    source: str = Field(..., description="Source: new, registry, copilot")
+    agent_count: int = Field(..., description="Number of agents")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+    can_undo: bool = Field(default=False, description="Whether undo is available")
+    can_redo: bool = Field(default=False, description="Whether redo is available")
+    validation: Optional[ValidationResult] = Field(None, description="Validation status")
+
+
+class NetworksList(BaseModel):
+    """List of all available networks"""
+    registry_networks: List[str] = Field(..., description="Networks available in registry")
+    editing_sessions: List[NetworkInfo] = Field(..., description="Current editing sessions")
+    total_registry: int = Field(..., description="Total registry networks")
+    total_sessions: int = Field(..., description="Total editing sessions")
+
+
+class AgentCreateRequest(BaseModel):
+    """Request to create a new agent"""
+    name: str = Field(..., description="Agent name")
+    parent_name: Optional[str] = Field(None, description="Parent agent name")
+    agent_data: Optional[Dict[str, Any]] = Field(None, description="Agent configuration")
+    # Additional fields for compatibility
+    agent_type: str = Field(default="conversational", description="Type of agent (conversational or coded_tool)")
+    template: Optional[str] = Field(None, description="Template to base agent on")
+    
+    @field_validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Agent name cannot be empty")
+        return v.strip()
+    
+    @field_validator('agent_type')
+    def validate_agent_type(cls, v):
+        if v not in ['conversational', 'coded_tool']:
+            raise ValueError("Agent type must be 'conversational' or 'coded_tool'")
+        return v
+
+
+class AgentUpdateRequest(BaseModel):
+    """Request to update an agent"""
+    updates: Dict[str, Any] = Field(..., description="Fields to update")
+    
+    class Config:
+        extra = "allow"
+
+
+class AgentDuplicateRequest(BaseModel):
+    """Request to duplicate an agent"""
+    new_name: str = Field(..., description="Name for the duplicated agent")
+    
+    @field_validator('new_name')
+    def validate_new_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError("New agent name cannot be empty")
+        return v.strip()
+
+
+class EdgeRequest(BaseModel):
+    """Request to add/remove edges between agents"""
+    source_agent: str = Field(..., description="Source agent name")
+    target_agent: str = Field(..., description="Target agent name")
+
+
+class NetworkExportRequest(BaseModel):
+    """Request to export network to HOCON"""
+    output_path: Optional[str] = Field(None, description="Output file path")
+    validate_before_export: bool = Field(default=True, description="Validate before export")
+
+
+class UndoRedoResponse(BaseModel):
+    """Response for undo/redo operations"""
+    success: bool = Field(..., description="Whether operation succeeded")
+    can_undo: bool = Field(..., description="Whether undo is still available")
+    can_redo: bool = Field(..., description="Whether redo is still available")
+    message: str = Field(..., description="Result message")
+
+
+# Legacy models for backward compatibility
 class LLMConfig(BaseModel):
     """Model for LLM configuration - can contain any user-defined properties"""
     class_: Optional[str] = Field(None, alias="class", description="LLM class type")
@@ -69,7 +185,7 @@ class NetworkTitle(BaseModel):
     """Model for network title/name"""
     title: str = Field(..., description="Network title/name")
 
-    @validator('title')
+    @field_validator('title')
     def validate_title(cls, v):
         import re
         if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
@@ -125,17 +241,7 @@ class OperationResult(BaseModel):
     errors: Optional[List[str]] = Field(None, description="Error messages if any")
 
 
-class AgentCreateRequest(BaseModel):
-    """Model for creating new agents"""
-    name: str = Field(..., description="Agent name")
-    agent_type: str = Field(default="conversational", description="Type of agent (conversational or coded_tool)")
-    template: Optional[str] = Field(None, description="Template to base agent on")
-    
-    @validator('agent_type')
-    def validate_agent_type(cls, v):
-        if v not in ['conversational', 'coded_tool']:
-            raise ValueError("Agent type must be 'conversational' or 'coded_tool'")
-        return v
+# AgentCreateRequest moved up to avoid duplication
 
 
 class NetworkCreateRequest(BaseModel):
@@ -144,7 +250,7 @@ class NetworkCreateRequest(BaseModel):
     template: Optional[str] = Field(None, description="Template network to copy from")
     add_to_manifest: bool = Field(default=True, description="Whether to add to manifest.hocon")
     
-    @validator('name')
+    @field_validator('name')
     def validate_name(cls, v):
         import re
         if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
