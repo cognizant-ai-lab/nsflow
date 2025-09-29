@@ -20,6 +20,7 @@ import uuid
 from typing import Dict, Optional, List, Tuple, Any
 import logging
 
+from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR as EXPORT_ROOT_DIR
 from nsflow.backend.utils.editor.simple_state_manager import SimpleStateManager
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
 
@@ -328,7 +329,7 @@ class SimpleStateRegistry:
             logger.error(f"Failed to save session to file: {e}")
             return False
     
-    def export_to_hocon_file(self, design_id: str, output_path: str) -> bool:
+    def export_to_hocon_file(self, design_id: str, output_path: Optional[str] = "") -> bool:
         """Export editing session to HOCON file"""
         manager = self.managers.get(design_id)
         if not manager:
@@ -341,17 +342,30 @@ class SimpleStateRegistry:
                 logger.error(f"Network validation failed: {validation_result['errors']}")
                 return False
             
+            if output_path is not None:
+                # Validate and sanitize output path
+                sanitized_path = os.path.normpath(os.path.abspath(output_path))
+                export_root = os.path.normpath(os.path.abspath(EXPORT_ROOT_DIR))
+                if not sanitized_path.startswith(export_root):
+                    logger.error(f"Refused export for path outside of export root: {sanitized_path}")
+                    return False
+            else:
+                # use EXPORT_ROOT_DIR with network name
+                network_name = manager.current_state.get("network_name", f"network_{design_id[:8]}")
+                filename = f"{network_name}.hocon"
+                sanitized_path = os.path.normpath(os.path.join(EXPORT_ROOT_DIR, filename))
+            
             # Export to HOCON format
             hocon_config = manager.export_to_hocon()
-            
+
             # Convert to HOCON string (simplified - in production you'd use pyhocon)
             # For now, we'll save as JSON with HOCON-like formatting
             hocon_content = self._dict_to_hocon_string(hocon_config)
             
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(sanitized_path, 'w', encoding='utf-8') as f:
                 f.write(hocon_content)
             
-            logger.info(f"Exported network to {output_path}")
+            logger.info(f"Exported network to {sanitized_path}")
             return True
             
         except Exception as e:
