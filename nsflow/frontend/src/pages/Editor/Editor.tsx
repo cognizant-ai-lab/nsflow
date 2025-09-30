@@ -25,6 +25,7 @@ import { getInitialTheme } from "../../utils/theme";
 
 const EditorContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const { setIsEditorMode } = useChatContext();
 
   useEffect(() => {
@@ -35,6 +36,16 @@ const EditorContent: React.FC = () => {
     // Clean up on unmount (set back to false)
     return () => setIsEditorMode(false);
   }, [setIsEditorMode]);
+
+  // Callback to refresh sidebar when new networks are created
+  const handleNetworkCreated = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  // Callback to select a network in sidebar
+  const handleNetworkSelected = (networkName: string) => {
+    setSelectedNetwork(networkName);
+  };
 
   return (
     <ReactFlowProvider>
@@ -48,13 +59,21 @@ const EditorContent: React.FC = () => {
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={12} minSize={10} maxSize={25}>
                   {/* Editor Sidebar */}
-                  <EditorSidebar onSelectNetwork={setSelectedNetwork} />
+                  <EditorSidebar 
+                    onSelectNetwork={setSelectedNetwork} 
+                    refreshTrigger={refreshTrigger}
+                    externalSelectedNetwork={selectedNetwork}
+                  />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
                 <Panel defaultSize={55} minSize={40}>
                   {/* Editable AgentFlow */}
-                  <EditorAgentFlow selectedNetwork={selectedNetwork} />
+                  <EditorAgentFlow 
+                    selectedNetwork={selectedNetwork}
+                    onNetworkCreated={handleNetworkCreated}
+                    onNetworkSelected={handleNetworkSelected}
+                  />
                 </Panel>
                 
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />

@@ -33,6 +33,7 @@ import {
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
+import EditorPalette from "./EditorPalette";
 import { useApiPort } from "../context/ApiPortContext";
 
 const nodeTypes = { agent: EditableAgentNode };
@@ -48,7 +49,15 @@ interface StateConnectivityResponse {
   undefined_agents: number;
 }
 
-const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
+const EditorAgentFlow = ({ 
+  selectedNetwork, 
+  onNetworkCreated, 
+  onNetworkSelected 
+}: { 
+  selectedNetwork: string;
+  onNetworkCreated: () => void;
+  onNetworkSelected: (networkName: string) => void;
+}) => {
   const { apiUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -213,114 +222,131 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     <Box sx={{ 
       height: '100%', 
       backgroundColor: theme.palette.background.default,
-      position: 'relative' 
+      position: 'relative',
+      display: 'flex'
     }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={onNodeClick}
-        onNodeContextMenu={onNodeContextMenu}
-        onPaneClick={onPaneClick}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultEdgeOptions={{
-          type: "floating",
-          markerEnd: "arrowclosed" as EdgeMarkerType,
-        }}
-        fitView
-        attributionPosition="bottom-left"
-        // style={{ backgroundColor: theme.palette.background.default }}
-      >
-        <Background/>
-        <Controls 
-          position="top-right"
-          style={{
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: '8px'
-          }}
-        />
-      </ReactFlow>
-
-      {/* Context Menu */}
-      <AgentContextMenu
-        visible={contextMenu.visible}
-        x={contextMenu.x}
-        y={contextMenu.y}
-        nodeId={contextMenu.nodeId}
-        onEdit={handleEditAgent}
-        onDelete={handleDeleteAgent}
-        onAdd={handleAddAgent}
-        onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
+      {/* Editor Palette */}
+      <EditorPalette 
+        onNetworkCreated={onNetworkCreated}
+        onNetworkSelected={onNetworkSelected}
       />
-
-      {/* Network Info Panel */}
-      {selectedNetwork && (
-        <Paper
-          elevation={3}
-          sx={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            p: 2,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 2,
-            minWidth: 200
+      
+      {/* Main Flow Area */}
+      <Box sx={{ 
+        flexGrow: 1, 
+        position: 'relative',
+        marginLeft: '64px', // Account for collapsed palette width
+        transition: theme.transitions.create('margin', {
+          easing: theme.transitions.easing.sharp,
+          duration: theme.transitions.duration.enteringScreen,
+        })
+      }}>
+          <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onNodeContextMenu={onNodeContextMenu}
+          onPaneClick={onPaneClick}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultEdgeOptions={{
+            type: "floating",
+            markerEnd: "arrowclosed" as EdgeMarkerType,
           }}
+          fitView
+          attributionPosition="bottom-left"
         >
-          <Typography variant="subtitle1" sx={{ 
-            fontWeight: 600, 
-            color: theme.palette.text.primary,
-            mb: 1
-          }}>
-            Editing: {selectedNetwork}
-          </Typography>
-          
-          <Box sx={{ color: theme.palette.text.secondary }}>
-            <Typography variant="body2">
-              Nodes: {nodes.length}
-            </Typography>
-            <Typography variant="body2">
-              Edges: {edges.length}
-            </Typography>
-            {selectedNodeId && (
-              <Box sx={{ 
-                mt: 1, 
-                pt: 1, 
-                borderTop: `1px solid ${theme.palette.divider}` 
-              }}>
-                <Typography variant="body2" sx={{ 
-                  color: theme.palette.primary.main,
-                  fontWeight: 500
-                }}>
-                  Selected: {selectedNodeId}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </Paper>
-      )}
+          <Background/>
+          <Controls 
+            position="top-right"
+            style={{
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: '8px'
+            }}
+          />
+        </ReactFlow>
 
-      {!selectedNetwork && (
-        <Box sx={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <Typography variant="h6" sx={{ 
-            color: theme.palette.text.secondary,
-            textAlign: 'center'
+        {/* Context Menu */}
+        <AgentContextMenu
+          visible={contextMenu.visible}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodeId={contextMenu.nodeId}
+          onEdit={handleEditAgent}
+          onDelete={handleDeleteAgent}
+          onAdd={handleAddAgent}
+          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
+        />
+
+        {/* Network Info Panel */}
+        {selectedNetwork && (
+          <Paper
+            elevation={3}
+            sx={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              p: 2,
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: 2,
+              minWidth: 200
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ 
+              fontWeight: 600, 
+              color: theme.palette.text.primary,
+              mb: 1
+            }}>
+              Editing: {selectedNetwork}
+            </Typography>
+            
+            <Box sx={{ color: theme.palette.text.secondary }}>
+              <Typography variant="body2">
+                Nodes: {nodes.length}
+              </Typography>
+              <Typography variant="body2">
+                Edges: {edges.length}
+              </Typography>
+              {selectedNodeId && (
+                <Box sx={{ 
+                  mt: 1, 
+                  pt: 1, 
+                  borderTop: `1px solid ${theme.palette.divider}` 
+                }}>
+                  <Typography variant="body2" sx={{ 
+                    color: theme.palette.primary.main,
+                    fontWeight: 500
+                  }}>
+                    Selected: {selectedNodeId}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+        )}
+
+        {!selectedNetwork && (
+          <Box sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            Select a network from the sidebar to start editing
-          </Typography>
-        </Box>
-      )}
+            <Typography variant="h6" sx={{ 
+              color: theme.palette.text.secondary,
+              textAlign: 'center'
+            }}>
+              Select a network from the sidebar to start editing
+            </Typography>
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 };

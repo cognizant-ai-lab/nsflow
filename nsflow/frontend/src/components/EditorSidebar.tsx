@@ -16,16 +16,17 @@ import {
   TextField, 
   Button, 
   Paper, 
-  Select, 
-  MenuItem, 
-  FormControl, 
-  InputLabel, 
   Card, 
   CardContent, 
   Chip, 
   InputAdornment, 
   useTheme,
-  alpha
+  alpha,
+  Popper,
+  MenuItem,
+  MenuList,
+  ClickAwayListener,
+  Grow
 } from "@mui/material";
 import { 
   PolylineTwoTone as NetworkIcon,
@@ -36,13 +37,34 @@ import {
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 
-interface NetworkInfo {
-  name: string;
-  last_updated?: string;
+
+interface EditingSession {
+  design_id: string;
+  network_name: string;
+  original_network_name?: string;
+  source: string;
+  agent_count: number;
+  created_at: string;
+  updated_at: string;
+  can_undo: boolean;
+  can_redo: boolean;
+  validation?: any;
+}
+
+interface NetworksResponse {
+  registry_networks: string[];
+  editing_sessions: EditingSession[];
+  total_registry: number;
+  total_sessions: number;
+}
+
+interface NetworkOption {
+  id: string; // design_id for editing sessions, network name for registry
+  display_name: string;
+  type: 'registry' | 'editing_session';
+  agent_count: number;
   source?: string;
-  has_state: boolean;
-  agent_count?: number;
-  agents?: string[];
+  design_id?: string; // Only for editing sessions
 }
 
 interface AgentNode {
@@ -56,12 +78,21 @@ interface AgentNode {
   };
 }
 
-const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
-  const [networks, setNetworks] = useState<NetworkInfo[]>([]);
+const EditorSidebar = ({ 
+  onSelectNetwork, 
+  refreshTrigger,
+  externalSelectedNetwork 
+}: { 
+  onSelectNetwork: (network: string) => void;
+  refreshTrigger?: number; // Used to trigger refresh from external components
+  externalSelectedNetwork?: string; // Network selected externally (from EditorPalette)
+}) => {
+  const [networkOptions, setNetworkOptions] = useState<NetworkOption[]>([]);
   const [agents, setAgents] = useState<AgentNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+  const [selectedNetworkId, setSelectedNetworkId] = useState<string>("");
+  const [selectedNetworkOption, setSelectedNetworkOption] = useState<NetworkOption | null>(null);
   const { apiUrl, isReady } = useApiPort();
   const { chatMessages } = useChatContext();
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,6 +100,11 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
   const theme = useTheme();
 
   const networksEndRef = useRef<HTMLDivElement>(null);
+  
+  // Custom dropdown state
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownSearchQuery, setDropdownSearchQuery] = useState("");
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   // Fetch networks with state
   const fetchNetworks = async () => {
@@ -76,14 +112,30 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
 
     try {
       setLoading(true);
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/state/networks`);
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch networks: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      setNetworks(data.networks || []);
+      const data: NetworksResponse = await response.json();
+      
+      // Convert only editing sessions to network options (registry networks handled by EditorPalette)
+      const options: NetworkOption[] = [];
+      
+      // Add editing sessions only
+      data.editing_sessions.forEach(session => {
+        options.push({
+          id: session.design_id,
+          display_name: session.network_name,
+          type: 'editing_session',
+          agent_count: session.agent_count,
+          source: session.source,
+          design_id: session.design_id
+        });
+      });
+      
+      setNetworkOptions(options);
       setError("");
     } catch (err: any) {
       console.error("Error fetching networks:", err);
@@ -93,15 +145,16 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
     }
   };
 
-  // Fetch agents for selected network
-  const fetchAgents = async (networkName: string) => {
-    if (!isReady || !apiUrl || !networkName) return;
+  // Fetch agents for selected network (only editing sessions now)
+  const fetchAgents = async (networkOption: NetworkOption) => {
+    if (!isReady || !apiUrl || !networkOption) return;
 
     try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${networkName}`);
+      // All networks in sidebar are editing sessions, so use the new connectivity endpoint
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${networkOption.design_id}/connectivity`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch agents for ${networkName}`);
+        throw new Error(`Failed to fetch agents for ${networkOption.display_name}`);
       }
 
       const data = await response.json();
@@ -113,10 +166,14 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
   };
 
   // Handle network selection
-  const handleNetworkSelect = (networkName: string) => {
-    setSelectedNetwork(networkName);
-    onSelectNetwork(networkName);
-    fetchAgents(networkName);
+  const handleNetworkSelect = (networkId: string) => {
+    const networkOption = networkOptions.find(option => option.id === networkId);
+    if (!networkOption) return;
+    
+    setSelectedNetworkId(networkId);
+    setSelectedNetworkOption(networkOption);
+    onSelectNetwork(networkOption.display_name);
+    fetchAgents(networkOption);
   };
 
   // Filter agents based on search query
@@ -125,18 +182,58 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
     agent.data.instructions.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Filter network options based on dropdown search
+  const filteredNetworkOptions = networkOptions.filter((option) =>
+    option.display_name.toLowerCase().includes(dropdownSearchQuery.toLowerCase())
+  );
+
+  // Handle dropdown toggle
+  const handleDropdownToggle = () => {
+    setDropdownOpen(!dropdownOpen);
+    setDropdownSearchQuery("");
+  };
+
+  // Handle dropdown close
+  const handleDropdownClose = () => {
+    setDropdownOpen(false);
+    setDropdownSearchQuery("");
+  };
+
+  // Handle network selection from dropdown
+  const handleDropdownNetworkSelect = (networkId: string) => {
+    handleNetworkSelect(networkId);
+    handleDropdownClose();
+  };
+
   // Initial load
   useEffect(() => {
     fetchNetworks();
   }, [isReady, apiUrl]);
 
+  // Refresh when external trigger changes (from EditorPalette)
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchNetworks();
+    }
+  }, [refreshTrigger]);
+
   // Auto-select first network if available
   useEffect(() => {
-    if (networks.length > 0 && !selectedNetwork) {
-      const firstNetwork = networks[0];
-      handleNetworkSelect(firstNetwork.name);
+    if (networkOptions.length > 0 && !selectedNetworkId) {
+      const firstNetwork = networkOptions[0];
+      handleNetworkSelect(firstNetwork.id);
     }
-  }, [networks]);
+  }, [networkOptions]);
+
+  // Handle external network selection (from EditorPalette)
+  useEffect(() => {
+    if (externalSelectedNetwork && networkOptions.length > 0) {
+      const networkOption = networkOptions.find(option => option.display_name === externalSelectedNetwork);
+      if (networkOption && networkOption.id !== selectedNetworkId) {
+        handleNetworkSelect(networkOption.id);
+      }
+    }
+  }, [externalSelectedNetwork, networkOptions, selectedNetworkId]);
 
   // Monitor chat messages to refresh networks/agents when new activity occurs
   useEffect(() => {
@@ -149,14 +246,14 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
       // Refresh networks and agents after a short delay to allow backend processing
       setTimeout(() => {
         fetchNetworks();
-        if (selectedNetwork) {
-          fetchAgents(selectedNetwork);
+        if (selectedNetworkOption) {
+          fetchAgents(selectedNetworkOption);
         }
       }, 1000); // 1 second delay to allow backend to process agent creation
     }
     
     setLastChatMessageCount(currentMessageCount);
-  }, [chatMessages.length, lastChatMessageCount, selectedNetwork]);
+  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption]);
 
   return (
     <Paper
@@ -207,37 +304,112 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
           </Typography>
         )}
 
-        {!loading && networks.length > 0 && (
-          <FormControl fullWidth size="small">
-            <InputLabel>Select a network</InputLabel>
-            <Select
-              value={selectedNetwork}
-              label="Select a network"
-              onChange={(e) => handleNetworkSelect(e.target.value)}
+        {!loading && networkOptions.length > 0 && (
+          <Box ref={anchorRef}>
+            <TextField
+              size="small"
+              label="Select editing session"
+              value={selectedNetworkOption?.display_name || ""}
+              onClick={handleDropdownToggle}
+              slotProps={{
+                input: {
+                  readOnly: true
+                }
+              }}
+              fullWidth
               sx={{
+                cursor: 'pointer',
                 '& .MuiOutlinedInput-notchedOutline': {
                   borderColor: theme.palette.divider
                 },
                 '&:hover .MuiOutlinedInput-notchedOutline': {
                   borderColor: theme.palette.primary.main
+                },
+                '& .MuiInputBase-input': {
+                  cursor: 'pointer'
                 }
               }}
+            />
+            <Popper
+              open={dropdownOpen}
+              anchorEl={anchorRef.current}
+              placement="bottom-start"
+              style={{ zIndex: 1300, width: '400px' }}
+              transition
             >
-              <MenuItem value="">
-                <em>Select a network...</em>
-              </MenuItem>
-              {networks.map((network) => (
-                <MenuItem key={network.name} value={network.name}>
-                  {network.name} ({network.agent_count || 0} agents)
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              {({ TransitionProps }) => (
+                <Grow {...TransitionProps}>
+                  <Paper elevation={8} sx={{ mt: 0.5, maxHeight: 300, overflow: 'auto' }}>
+                    <ClickAwayListener onClickAway={handleDropdownClose}>
+                      <Box>
+                        {/* Search within dropdown */}
+                        <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                          <TextField
+                            size="small"
+                            placeholder="Search networks..."
+                            value={dropdownSearchQuery}
+                            onChange={(e) => setDropdownSearchQuery(e.target.value)}
+                            fullWidth
+                            slotProps={{
+                              input: {
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 18 }} />
+                                  </InputAdornment>
+                                )
+                              }
+                            }}
+                          />
+                        </Box>
+                        <MenuList>
+                          {filteredNetworkOptions.length === 0 ? (
+                            <MenuItem disabled>
+                              <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
+                                No networks found
+                              </Typography>
+                            </MenuItem>
+                          ) : (
+                            filteredNetworkOptions.map((option) => (
+                              <MenuItem
+                                key={option.id}
+                                onClick={() => handleDropdownNetworkSelect(option.id)}
+                                selected={option.id === selectedNetworkId}
+                                sx={{ minWidth: 350 }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                                  <Box sx={{ flexGrow: 1 }}>
+                                    <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontWeight: option.id === selectedNetworkId ? 600 : 400 }}>
+                                      {option.display_name}
+                                    </Typography>
+                                  </Box>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                                      ({option.agent_count} agents)
+                                    </Typography>
+                                    <Chip 
+                                      label="Editing"
+                                      size="small"
+                                      color="secondary"
+                                      sx={{ fontSize: '0.6rem', height: 16 }}
+                                    />
+                                  </Box>
+                                </Box>
+                              </MenuItem>
+                            ))
+                          )}
+                        </MenuList>
+                      </Box>
+                    </ClickAwayListener>
+                  </Paper>
+                </Grow>
+              )}
+            </Popper>
+          </Box>
         )}
       </Box>
 
       {/* Search Box */}
-      {selectedNetwork && (
+      {selectedNetworkOption && (
         <Box sx={{ 
           p: 2, 
           borderBottom: `1px solid ${theme.palette.divider}` 
@@ -271,7 +443,7 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
 
       {/* Agents List */}
       <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-        {selectedNetwork && (
+        {selectedNetworkOption && (
           <Box sx={{ p: 1 }}>
             <Typography variant="subtitle2" sx={{ 
               fontWeight: 600, 
@@ -353,7 +525,7 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
           </Box>
         )}
 
-        {!selectedNetwork && (
+        {!selectedNetworkOption && (
           <Typography variant="body2" sx={{ 
             color: theme.palette.text.secondary,
             textAlign: 'center',
@@ -378,8 +550,8 @@ const EditorSidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string)
           size="small"
           onClick={() => {
             fetchNetworks();
-            if (selectedNetwork) {
-              fetchAgents(selectedNetwork);
+            if (selectedNetworkOption) {
+              fetchAgents(selectedNetworkOption);
             }
           }}
           disabled={loading}
