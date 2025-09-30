@@ -89,6 +89,8 @@ class OperationStore:
           Agent-level:
           - add_agent(name, parent=None, agent_data=None)
           - create_agent_with_parent(name, parent, agent_data=None)  # Atomic: add_agent + add_edge
+          - add_toolbox_agent(name, toolbox, parent=None)  # Add toolbox agent
+          - create_toolbox_agent_with_parent(name, toolbox, parent)  # Atomic: add_toolbox_agent + add_edge
           - delete_agent(name)
           - update_agent(name, updates)
           - duplicate_agent(agent_name, new_name)
@@ -213,6 +215,55 @@ class OperationStore:
             # inverse: delete_agent (which will also remove the edge)
             return {"op": "delete_agent", "args": {"name": name}}
 
+        if op == "add_toolbox_agent":
+            # manager.add_agent(agent_name, parent_name=None, agent_data=None) -> bool
+            name = args["name"]
+            toolbox = args["toolbox"]
+            parent = args.get("parent")
+            
+            # Create agent data for toolbox agent
+            agent_data = {
+                "name": name,
+                "toolbox": toolbox,
+                "agent_type": "toolbox",
+                "instructions": f"Toolbox agent using {toolbox}"
+            }
+            
+            ok = self.manager.add_agent(name, parent, agent_data)
+            if not ok:
+                raise RuntimeError("add_toolbox_agent failed")
+            # inverse: delete_agent(name)
+            return {"op": "delete_agent", "args": {"name": name}}
+
+        if op == "create_toolbox_agent_with_parent":
+            # Atomic operation: add_toolbox_agent + add_edge
+            name = args["name"]
+            toolbox = args["toolbox"]
+            parent = args["parent"]
+            
+            # Create agent data for toolbox agent
+            agent_data = {
+                "name": name,
+                "toolbox": toolbox,
+                "agent_type": "toolbox",
+                "instructions": f"Toolbox agent using {toolbox}"
+            }
+            
+            # First add the agent without parent
+            ok = self.manager.add_agent(name, None, agent_data)
+            if not ok:
+                raise RuntimeError("create_toolbox_agent_with_parent: add_agent failed")
+            
+            # Then add the edge to parent
+            ok = self.manager.add_edge(parent, name)
+            if not ok:
+                # Rollback: remove the agent we just added
+                self.manager.delete_agent(name)
+                raise RuntimeError("create_toolbox_agent_with_parent: add_edge failed")
+            
+            # inverse: delete_agent (which will also remove the edge)
+            return {"op": "delete_agent", "args": {"name": name}}
+
         if op == "delete_agent":
             name = args["name"]
             # capture full agent & relationships BEFORE deletion
@@ -332,6 +383,23 @@ class OperationStore:
             if not ok: raise RuntimeError("add_agent failed (undo/redo)")
             return
 
+        if op == "add_toolbox_agent":
+            name = args["name"]
+            toolbox = args["toolbox"]
+            parent = args.get("parent")
+            
+            # Create agent data for toolbox agent
+            agent_data = {
+                "name": name,
+                "toolbox": toolbox,
+                "agent_type": "toolbox",
+                "instructions": f"Toolbox agent using {toolbox}"
+            }
+            
+            ok = self.manager.add_agent(name, parent, agent_data)
+            if not ok: raise RuntimeError("add_toolbox_agent failed (undo/redo)")
+            return
+
         if op == "create_agent_with_parent":
             # Atomic operation: add_agent + add_edge
             name = args["name"]
@@ -348,6 +416,32 @@ class OperationStore:
                 # Rollback: remove the agent we just added
                 self.manager.delete_agent(name)
                 raise RuntimeError("create_agent_with_parent: add_edge failed (undo/redo)")
+            return
+
+        if op == "create_toolbox_agent_with_parent":
+            # Atomic operation: add_toolbox_agent + add_edge
+            name = args["name"]
+            toolbox = args["toolbox"]
+            parent = args["parent"]
+            
+            # Create agent data for toolbox agent
+            agent_data = {
+                "name": name,
+                "toolbox": toolbox,
+                "agent_type": "toolbox",
+                "instructions": f"Toolbox agent using {toolbox}"
+            }
+            
+            # First add the agent without parent
+            ok = self.manager.add_agent(name, None, agent_data)
+            if not ok: raise RuntimeError("create_toolbox_agent_with_parent: add_agent failed (undo/redo)")
+            
+            # Then add the edge to parent
+            ok = self.manager.add_edge(parent, name)
+            if not ok:
+                # Rollback: remove the agent we just added
+                self.manager.delete_agent(name)
+                raise RuntimeError("create_toolbox_agent_with_parent: add_edge failed (undo/redo)")
             return
 
         if op == "delete_agent":

@@ -12,7 +12,7 @@
 import logging
 import os
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict
+from typing import Dict, Optional
 
 from nsflow.backend.models.editor_models import NetworkTemplate
 from nsflow.backend.models.editor_models import TemplateType
@@ -31,9 +31,13 @@ from nsflow.backend.models.editor_models import StateConnectivityResponse
 from nsflow.backend.models.editor_models import NetworkStateInfo
 from nsflow.backend.models.editor_models import TopLevelConfig
 from nsflow.backend.models.editor_models import TopLevelConfigUpdateRequest
+from nsflow.backend.models.editor_models import ToolboxAgent
+from nsflow.backend.models.editor_models import ToolboxAgentCreateRequest
+from nsflow.backend.models.editor_models import ToolboxInfo
 
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
+from nsflow.backend.utils.editor.toolbox_service import get_toolbox_service
 
 logger = logging.getLogger(__name__)
 
@@ -604,6 +608,134 @@ async def remove_edge(design_id: str, request: EdgeRequest):
     except Exception as e:
         logger.error(f"Error removing edge: {e}")
         raise HTTPException(status_code=500, detail=f"Error removing edge: {str(e)}")
+
+
+# Toolbox operations
+
+@router.get("/toolbox/tools", response_model=ToolboxInfo)
+async def get_available_tools(toolbox_info_file: Optional[str] = Query(None, description="Path to toolbox info file")):
+    """Get list of available tools from toolbox"""
+    try:
+        toolbox_service = get_toolbox_service(toolbox_info_file)
+        tools_result = toolbox_service.get_available_tools()
+        
+        if isinstance(tools_result, str):
+            # Error message returned
+            return ToolboxInfo(tools=None, error=tools_result)
+        else:
+            # Tools dictionary returned
+            return ToolboxInfo(tools=tools_result, error=None)
+    except Exception as e:
+        logger.error(f"Error getting toolbox tools: {e}")
+        error_msg = f"Toolbox is currently not available: {str(e)}"
+        return ToolboxInfo(tools=None, error=error_msg)
+
+
+@router.post("/networks/{design_id}/toolbox-agent")
+async def create_toolbox_agent(design_id: str, request: ToolboxAgentCreateRequest):
+    """Create a new toolbox agent with undo/redo support"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        # Note: We don't validate tool existence to keep it simple
+        # Users can check available tools via GET /toolbox/tools if needed
+        
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            if request.parent_name:
+                # Atomic operation: create toolbox agent with parent
+                operation_store.apply({
+                    "op": "create_toolbox_agent_with_parent",
+                    "args": {
+                        "name": request.name,
+                        "toolbox": request.toolbox,
+                        "parent": request.parent_name
+                    }
+                })
+            else:
+                # Simple toolbox agent creation without parent
+                operation_store.apply({
+                    "op": "add_toolbox_agent",
+                    "args": {
+                        "name": request.name,
+                        "toolbox": request.toolbox,
+                        "parent": None
+                    }
+                })
+        else:
+            # Fallback to direct manager call
+            agent_data = request.to_agent_data_dict()
+            success = manager.add_agent(
+                agent_name=request.name,
+                parent_name=request.parent_name,
+                agent_data=agent_data
+            )
+            if not success:
+                raise HTTPException(status_code=400, detail=f"Failed to create toolbox agent '{request.name}' (may already exist)")
+        
+        parent_msg = f" with parent '{request.parent_name}'" if request.parent_name else ""
+        return {
+            "success": True,
+            "message": f"Toolbox agent '{request.name}' created successfully{parent_msg}",
+            "agent_name": request.name,
+            "toolbox": request.toolbox,
+            "parent_name": request.parent_name,
+            "agent_type": "toolbox"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating toolbox agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating toolbox agent: {str(e)}")
+
+
+@router.delete("/networks/{design_id}/toolbox-agent/{agent_name}")
+async def delete_toolbox_agent(design_id: str, agent_name: str):
+    """Delete a toolbox agent (same as deleting any agent)"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        # Verify it's a toolbox agent
+        state = manager.get_state()
+        agent = state["agents"].get(agent_name)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        
+        if agent.get("agent_type") != "toolbox":
+            raise HTTPException(status_code=400, detail=f"Agent '{agent_name}' is not a toolbox agent")
+        
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "delete_agent",
+                "args": {
+                    "name": agent_name
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.delete_agent(agent_name)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        
+        return {
+            "success": True,
+            "message": f"Toolbox agent '{agent_name}' deleted successfully",
+            "toolbox": agent.get("toolbox")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting toolbox agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting toolbox agent: {str(e)}")
 
 
 # Connectivity and visualization

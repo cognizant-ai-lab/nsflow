@@ -466,3 +466,67 @@ class TopLevelConfigUpdateRequest(BaseModel):
     
     class Config:
         extra = "allow"
+
+
+class ToolboxAgent(BaseModel):
+    """Model for toolbox-based agents (simplified structure)"""
+    name: str = Field(..., description="Agent name", examples=["data_processor", "web_scraper"])
+    toolbox: str = Field(..., description="Toolbox tool name", examples=["DataAnalyzer", "WebScraper", "FileProcessor"])
+    
+    @field_validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Agent name cannot be empty")
+        return v.strip()
+    
+    @field_validator('toolbox')
+    def validate_toolbox(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Toolbox tool name cannot be empty")
+        return v.strip()
+    
+    def to_agent_data_dict(self) -> Dict[str, Any]:
+        """Convert to agent data dictionary for SimpleStateManager"""
+        return {
+            "name": self.name,
+            "toolbox": self.toolbox,
+            "agent_type": "toolbox",
+            "instructions": f"Toolbox agent using {self.toolbox}"
+        }
+
+
+class ToolboxAgentCreateRequest(BaseModel):
+    """Request to create a toolbox agent"""
+    name: str = Field(..., description="Agent name", examples=["data_processor", "web_scraper"])
+    toolbox: str = Field(..., description="Toolbox tool name", examples=["DataAnalyzer", "WebScraper"])
+    parent_name: Optional[str] = Field(None, description="Parent agent name", examples=["frontman", "coordinator"])
+    
+    @field_validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Agent name cannot be empty")
+        return v.strip()
+    
+    @field_validator('toolbox')
+    def validate_toolbox(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Toolbox tool name cannot be empty")
+        return v.strip()
+    
+    def to_agent_data_dict(self) -> Dict[str, Any]:
+        """Convert to agent data dictionary for SimpleStateManager"""
+        return {
+            "name": self.name,
+            "toolbox": self.toolbox,
+            "agent_type": "toolbox",
+            "instructions": f"Toolbox agent using {self.toolbox}"
+        }
+
+
+class ToolboxInfo(BaseModel):
+    """Model for toolbox information"""
+    tools: Optional[Dict[str, Any]] = Field(None, description="Available tools in the toolbox")
+    error: Optional[str] = Field(None, description="Error message if toolbox not available")
+    
+    class Config:
+        extra = "allow"
