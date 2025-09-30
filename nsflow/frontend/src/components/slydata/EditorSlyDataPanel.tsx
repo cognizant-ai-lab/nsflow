@@ -11,7 +11,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, IconButton, Paper, Tooltip, Typography, alpha } from '@mui/material';
-import { Add as AddIcon, DataObject as DataObjectIcon, Delete as DeleteIcon, Download as DownloadIcon, ExpandLess as CollapseAllIcon, ExpandMore as ExpandAllIcon, Upload as UploadIcon } from '@mui/icons-material';
+import { Add as AddIcon, DataObject as DataObjectIcon, Delete as DeleteIcon, Download as DownloadIcon, ExpandLess as CollapseAllIcon, ExpandMore as ExpandAllIcon, Upload as UploadIcon, Info as InfoIcon } from '@mui/icons-material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import type { TreeViewItemId } from '@mui/x-tree-view/models';
@@ -363,6 +363,32 @@ const EditorSlyDataPanel: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DataObjectIcon sx={{ color: theme.palette.primary.main, fontSize: '1.25rem' }} />
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>SlyData Editor</Typography>
+                <Tooltip 
+                  title={
+                    <Box sx={{ p: 1, maxWidth: 350 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, color: 'inherit' }}>
+                        🔒 Security Warning
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'inherit', lineHeight: 1.4 }}>
+                        We strongly recommend to not set secrets as values within any sly data here or in any source file, including HOCON files. 
+                        These files tend to creep into source control repos, and it is generally not considered a good practice to expose secrets by checking them in.
+                      </Typography>
+                    </Box>
+                  }
+                  placement="bottom-start"
+                  arrow
+                >
+                  <InfoIcon 
+                    sx={{ 
+                      color: theme.palette.warning.main, 
+                      fontSize: '1rem', 
+                      cursor: 'help',
+                      '&:hover': { 
+                        color: theme.palette.warning.dark 
+                      }
+                    }} 
+                  />
+                </Tooltip>
               </Box>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Tooltip title={expandedItems.length === 0 || expandedItems.length < treeData.length ? 'Expand All' : 'Collapse All'}>

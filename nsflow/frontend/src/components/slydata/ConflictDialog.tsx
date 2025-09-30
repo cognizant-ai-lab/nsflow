@@ -21,11 +21,11 @@ export const ConflictDialog: React.FC<{ state: ConflictDialogState; onConfirm: (
     <Dialog open={state.open} onClose={onCancel} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ color: theme.palette.text.primary, backgroundColor: theme.palette.background.paper }}>Replace Current Value?</DialogTitle>
       <DialogContent sx={{ backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
-        <Typography sx={{ mb: 2 }}>The key "{state.parentKey}" currently has a value:</Typography>
+        <Typography sx={{ mb: 2, color: theme.palette.text.primary }}>The key "{state.parentKey}" currently has a value:</Typography>
         <Box sx={{ p: 2, backgroundColor: alpha(theme.palette.primary.main, 0.1), borderRadius: 1, fontFamily: 'monospace', mb: 2, color: theme.custom.slyData.valueColor, border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}` }}>
           {typeof state.currentValue === 'string' ? `"${state.currentValue}"` : String(state.currentValue)}
         </Box>
-        <Typography>Adding a child key-value pair will replace this value with a nested object. Do you want to proceed?</Typography>
+        <Typography sx={{ color: theme.palette.text.primary }}>Adding a child key-value pair will replace this value with a nested object. Do you want to proceed?</Typography>
       </DialogContent>
       <DialogActions sx={{ backgroundColor: theme.palette.background.paper }}>
         <Button onClick={onCancel} sx={{ color: theme.palette.error.main }}>Cancel</Button>
