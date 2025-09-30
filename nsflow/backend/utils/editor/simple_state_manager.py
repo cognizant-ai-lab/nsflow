@@ -736,3 +736,42 @@ class SimpleStateManager:
         except Exception as e:
             logger.error(f"Failed to update network state: {e}")
             return False
+    
+    def get_top_level_config(self) -> Dict[str, Any]:
+        """Get current top-level configuration"""
+        return deepcopy(self.current_state.get("top_level", {}))
+    
+    def update_top_level_config(self, updates: Dict[str, Any]) -> bool:
+        """Update top-level configuration"""
+        try:
+            self._save_to_history()
+            
+            # Get current top-level config
+            top_level = self.current_state["top_level"]
+            
+            # Apply updates
+            for key, value in updates.items():
+                if value is not None:
+                    top_level[key] = value
+            
+            self.current_state["meta"]["updated_at"] = datetime.now().isoformat()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update top-level config: {e}")
+            return False
+    
+    def restore_top_level_config(self, config: Dict[str, Any]) -> bool:
+        """Restore complete top-level configuration (used for undo/redo)"""
+        try:
+            self._save_to_history()
+            
+            # Replace the entire top-level config
+            self.current_state["top_level"] = deepcopy(config)
+            
+            self.current_state["meta"]["updated_at"] = datetime.now().isoformat()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to restore top-level config: {e}")
+            return False

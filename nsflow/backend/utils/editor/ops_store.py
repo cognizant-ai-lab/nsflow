@@ -84,6 +84,7 @@ class OperationStore:
           Network-level:
           - set_network_name(name)
           - update_network_state(network_name, state_dict, source)
+          - update_top_level_config(updates)
           
           Agent-level:
           - add_agent(name, parent=None, agent_data=None)
@@ -167,6 +168,17 @@ class OperationStore:
             if not ok:
                 raise RuntimeError("update_network_state failed")
             return {"op": "restore_full_state", "args": {"state": current_state}}
+
+        if op == "update_top_level_config":
+            updates = args["updates"]
+            # Save current top-level config as inverse
+            current_top_level = copy.deepcopy(before.get("top_level", {}))
+            ok = self.manager.update_top_level_config(updates)
+            if not ok:
+                raise RuntimeError("update_top_level_config failed")
+            
+            # Create inverse: restore the complete previous top-level config
+            return {"op": "restore_top_level_config", "args": {"config": current_top_level}}
 
         # Agent-level operations
         if op == "add_agent":
@@ -274,6 +286,15 @@ class OperationStore:
             self.manager.current_state = copy.deepcopy(state)
             return {"op": "restore_full_state", "args": {"state": copy.deepcopy(self.manager.get_state())}}
 
+        if op == "restore_top_level_config":
+            # Restore complete top-level config (used as inverse for update_top_level_config)
+            config = args["config"]
+            current_top_level = copy.deepcopy(before.get("top_level", {}))
+            ok = self.manager.restore_top_level_config(config)
+            if not ok:
+                raise RuntimeError("restore_top_level_config failed")
+            return {"op": "restore_top_level_config", "args": {"config": current_top_level}}
+
         raise NotImplementedError(f"Unknown op: {op}")
 
     def _execute(self, op: str, args: Dict[str, Any]) -> None:
@@ -291,8 +312,18 @@ class OperationStore:
             if not ok: raise RuntimeError("update_network_state failed (undo/redo)")
             return
 
+        if op == "update_top_level_config":
+            ok = self.manager.update_top_level_config(args["updates"])
+            if not ok: raise RuntimeError("update_top_level_config failed (undo/redo)")
+            return
+
         if op == "restore_full_state":
             self.manager.current_state = copy.deepcopy(args["state"])
+            return
+
+        if op == "restore_top_level_config":
+            ok = self.manager.restore_top_level_config(args["config"])
+            if not ok: raise RuntimeError("restore_top_level_config failed (undo/redo)")
             return
 
         # Agent-level operations

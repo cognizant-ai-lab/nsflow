@@ -29,6 +29,8 @@ from nsflow.backend.models.editor_models import UndoRedoResponse
 from nsflow.backend.models.editor_models import NetworkConnectivity
 from nsflow.backend.models.editor_models import StateConnectivityResponse
 from nsflow.backend.models.editor_models import NetworkStateInfo
+from nsflow.backend.models.editor_models import TopLevelConfig
+from nsflow.backend.models.editor_models import TopLevelConfigUpdateRequest
 
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
@@ -261,6 +263,67 @@ async def set_network_name(design_id: str, request: Dict[str, str]):
     except Exception as e:
         logger.error(f"Error setting network name: {e}")
         raise HTTPException(status_code=500, detail=f"Error setting network name: {str(e)}")
+
+
+@router.get("/networks/{design_id}/config", response_model=TopLevelConfig)
+async def get_top_level_config(design_id: str):
+    """Get top-level network configuration"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        config = manager.get_top_level_config()
+        return TopLevelConfig(**config)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting top-level config: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting top-level config: {str(e)}")
+
+
+@router.put("/networks/{design_id}/config")
+async def update_top_level_config(design_id: str, request: TopLevelConfigUpdateRequest):
+    """Update top-level network configuration with undo/redo support"""
+    try:
+        registry = get_registry()
+        manager = registry.get_manager(design_id)
+        if not manager:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        # Convert request to updates dictionary
+        updates = request.to_updates_dict()
+        
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
+        
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "update_top_level_config",
+                "args": {
+                    "updates": updates
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.update_top_level_config(updates)
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to update top-level config")
+        
+        return {
+            "success": True,
+            "message": "Top-level configuration updated successfully",
+            "updated_fields": list(updates.keys()),
+            "updates": updates
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating top-level config: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating top-level config: {str(e)}")
 
 
 # Agent-level operations
