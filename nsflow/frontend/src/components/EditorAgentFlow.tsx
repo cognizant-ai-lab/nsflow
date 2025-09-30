@@ -28,13 +28,19 @@ import {
   Box, 
   Typography, 
   Paper, 
-  useTheme 
+  useTheme,
+  IconButton,
+  Tooltip,
+  Slider,
+  alpha
 } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
 import EditorPalette from "./EditorPalette";
 import { useApiPort } from "../context/ApiPortContext";
+import { createLayoutManager } from "../utils/agentLayoutManager";
+import { AccountTree as LayoutIcon } from "@mui/icons-material";
 
 const nodeTypes = { agent: EditableAgentNode };
 const edgeTypes = { floating: FloatingEdge };
@@ -64,6 +70,18 @@ const EditorAgentFlow = ({
   const { fitView } = useReactFlow();
   const theme = useTheme();
   
+  // Layout control state (similar to AgentFlow)
+  const [baseRadius, setBaseRadius] = useState(150);
+  const [levelSpacing, setLevelSpacing] = useState(200);
+  const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
+  const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
+  
+  // Layout manager for position caching and intelligent layout
+  const layoutManager = selectedNetwork ? createLayoutManager(selectedNetwork, {
+    baseRadius,
+    levelSpacing
+  }) : null;
+  
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
@@ -90,7 +108,7 @@ const EditorAgentFlow = ({
       const data: StateConnectivityResponse = await response.json();
       
       // Transform nodes to include selection state
-      const transformedNodes = data.nodes.map((node: Node) => ({
+      const rawNodes = data.nodes.map((node: Node) => ({
         ...node,
         data: {
           ...node.data,
@@ -109,13 +127,27 @@ const EditorAgentFlow = ({
         type: "floating",
       }));
 
-      setNodes(transformedNodes);
+      // Apply intelligent layout with position caching
+      let finalNodes = rawNodes;
+      
+      if (layoutManager && rawNodes.length > 0) {
+        try {
+          const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
+          finalNodes = layoutResult.nodes;
+          console.log(`Applied layout for ${selectedNetwork}: ${finalNodes.length} nodes, cached: ${layoutManager.hasCachedPositions()}`);
+        } catch (error) {
+          console.warn('Failed to apply layout, using raw positions:', error);
+          finalNodes = rawNodes;
+        }
+      }
+
+      setNodes(finalNodes);
       setEdges(transformedEdges);
 
-      // Auto-fit view after loading
+      // Auto-fit view after loading (similar to AgentFlow)
       setTimeout(() => {
         fitView({ padding: 0.1, duration: 800 });
-      }, 100);
+      }, 150);
 
     } catch (error) {
       console.error("Error fetching network data:", error);
@@ -186,6 +218,41 @@ const EditorAgentFlow = ({
     );
   }, [setNodes]);
 
+  // Handle nodes change (including position updates)
+  const handleNodesChange = useCallback((changes: any[]) => {
+    onNodesChange(changes);
+    
+    // Save positions when nodes are moved (simplified approach)
+    const positionChanges = changes.filter(change => change.type === 'position' && change.dragging === false);
+    if (positionChanges.length > 0 && layoutManager) {
+      // Debounce position saving
+      setTimeout(() => {
+        setNodes(currentNodes => {
+          layoutManager.savePositions(currentNodes);
+          return currentNodes;
+        });
+      }, 500);
+    }
+  }, [onNodesChange, layoutManager, setNodes]);
+
+  // Force layout recalculation
+  const handleForceLayout = useCallback(() => {
+    if (layoutManager && nodes.length > 0) {
+      try {
+        const layoutResult = layoutManager.forceLayout(nodes, edges);
+        setNodes(layoutResult.nodes);
+        // Keep existing edges as they are already transformed
+        
+        // Fit view after layout
+        setTimeout(() => {
+          fitView({ padding: 0.1, duration: 800 });
+        }, 100);
+      } catch (error) {
+        console.warn('Failed to force layout:', error);
+      }
+    }
+  }, [layoutManager, nodes, edges, setNodes, fitView]);
+
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
     console.log("Edit agent:", nodeId);
@@ -208,7 +275,7 @@ const EditorAgentFlow = ({
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
-  // Load data when network changes
+  // Load data when network changes or layout parameters change (similar to AgentFlow)
   useEffect(() => {
     if (selectedNetwork) {
       fetchNetworkData();
@@ -216,7 +283,16 @@ const EditorAgentFlow = ({
       setNodes([]);
       setEdges([]);
     }
-  }, [selectedNetwork]);
+  }, [selectedNetwork, baseRadius, levelSpacing]);
+
+  // Update temp values when actual values change
+  useEffect(() => {
+    setTempBaseRadius(baseRadius);
+  }, [baseRadius]);
+
+  useEffect(() => {
+    setTempLevelSpacing(levelSpacing);
+  }, [levelSpacing]);
 
   return (
     <Box sx={{ 
@@ -235,100 +311,212 @@ const EditorAgentFlow = ({
       <Box sx={{ 
         flexGrow: 1, 
         position: 'relative',
-        marginLeft: '64px', // Account for collapsed palette width
-        transition: theme.transitions.create('margin', {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.enteringScreen,
-        })
+        backgroundColor: theme.palette.background.default
       }}>
-          <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onNodeContextMenu={onNodeContextMenu}
-          onPaneClick={onPaneClick}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          defaultEdgeOptions={{
-            type: "floating",
-            markerEnd: "arrowclosed" as EdgeMarkerType,
+        <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneClick={onPaneClick}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={{
+          type: "floating",
+          markerEnd: "arrowclosed" as EdgeMarkerType,
+        }}
+        fitView
+        attributionPosition="bottom-left"
+      >
+        <Background/>
+        <Controls 
+          position="top-right"
+          style={{
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: '8px'
           }}
-          fitView
-          attributionPosition="bottom-left"
-        >
-          <Background/>
-          <Controls 
-            position="top-right"
-            style={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: '8px'
-            }}
-          />
-        </ReactFlow>
-
-        {/* Context Menu */}
-        <AgentContextMenu
-          visible={contextMenu.visible}
-          x={contextMenu.x}
-          y={contextMenu.y}
-          nodeId={contextMenu.nodeId}
-          onEdit={handleEditAgent}
-          onDelete={handleDeleteAgent}
-          onAdd={handleAddAgent}
-          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
         />
+      </ReactFlow>
 
-        {/* Network Info Panel */}
-        {selectedNetwork && (
-          <Paper
-            elevation={3}
-            sx={{
-              position: 'absolute',
-              top: 16,
-              left: 16,
-              p: 2,
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: 2,
-              minWidth: 200
-            }}
-          >
+      {/* Context Menu */}
+      <AgentContextMenu
+        visible={contextMenu.visible}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        nodeId={contextMenu.nodeId}
+        onEdit={handleEditAgent}
+        onDelete={handleDeleteAgent}
+        onAdd={handleAddAgent}
+        onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
+      />
+
+      {/* Network Info Panel */}
+      {selectedNetwork && (
+        <Paper
+          elevation={3}
+          sx={{
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            p: 2,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 2,
+            minWidth: 200
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="subtitle1" sx={{ 
               fontWeight: 600, 
-              color: theme.palette.text.primary,
-              mb: 1
+              color: theme.palette.text.primary
             }}>
               Editing: {selectedNetwork}
             </Typography>
-            
-            <Box sx={{ color: theme.palette.text.secondary }}>
-              <Typography variant="body2">
-                Nodes: {nodes.length}
+            <Tooltip title="Reorganize Layout">
+              <IconButton
+                size="small"
+                onClick={handleForceLayout}
+                disabled={nodes.length === 0}
+                sx={{
+                  color: theme.palette.primary.main,
+                  '&:hover': {
+                    backgroundColor: theme.palette.primary.main + '20'
+                  }
+                }}
+              >
+                <LayoutIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          
+          <Box sx={{ color: theme.palette.text.secondary }}>
+            <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
+              Nodes: {nodes.length}
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
+              Edges: {edges.length}
+            </Typography>
+            {layoutManager && (
+              <Typography variant="caption" sx={{ 
+                color: layoutManager.hasCachedPositions() ? theme.palette.success.main : theme.palette.text.secondary,
+                fontSize: '0.7rem'
+              }}>
+                {layoutManager.hasCachedPositions() ? '● Positions cached' : '○ No cache'}
               </Typography>
-              <Typography variant="body2">
-                Edges: {edges.length}
-              </Typography>
-              {selectedNodeId && (
-                <Box sx={{ 
-                  mt: 1, 
-                  pt: 1, 
-                  borderTop: `1px solid ${theme.palette.divider}` 
+            )}
+            {selectedNodeId && (
+              <Box sx={{ 
+                mt: 1, 
+                pt: 1, 
+                borderTop: `1px solid ${theme.palette.divider}` 
+              }}>
+                <Typography variant="body2" sx={{ 
+                  color: theme.palette.primary.main,
+                  fontWeight: 500
                 }}>
-                  <Typography variant="body2" sx={{ 
-                    color: theme.palette.primary.main,
-                    fontWeight: 500
-                  }}>
-                    Selected: {selectedNodeId}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Paper>
-        )}
+                  Selected: {selectedNodeId}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Paper>
+      )}
+
+      {/* Layout Controls Panel */}
+      {selectedNetwork && (
+        <Paper
+          elevation={1}
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 60, // Move left to avoid ReactFlow controls
+            zIndex: 20,
+            p: 1,
+            backgroundColor: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(8px)',
+            minWidth: 80,
+            maxWidth: 140
+          }}
+        >
+          <Typography variant="caption" sx={{ 
+            fontWeight: 600, 
+            color: theme.palette.text.secondary,
+            display: 'block',
+            mb: 0.1,
+            fontSize: '0.6rem'
+          }}>
+            Layout Controls
+          </Typography>
+          
+          <Box sx={{ mb: 0 }}>
+            <Typography variant="caption" sx={{ 
+              color: theme.palette.text.primary,
+              fontSize: '0.6rem'
+            }}>
+              Radius: {tempBaseRadius}
+            </Typography>
+            <Slider
+              size="small"
+              value={tempBaseRadius}
+              min={10}
+              max={300}
+              onChange={(_, value) => setTempBaseRadius(value as number)}
+              onMouseUp={() => setBaseRadius(tempBaseRadius)}
+              onTouchEnd={() => setBaseRadius(tempBaseRadius)}
+              sx={{
+                color: theme.palette.primary.main,
+                height: 2,
+                '& .MuiSlider-thumb': {
+                  width: 8,
+                  height: 8
+                },
+                '& .MuiSlider-track': {
+                  height: 2
+                },
+                '& .MuiSlider-rail': {
+                  height: 2
+                }
+              }}
+            />
+          </Box>
+          
+          <Box>
+            <Typography variant="caption" sx={{ 
+              color: theme.palette.text.primary,
+              fontSize: '0.6rem'
+            }}>
+              Spacing: {tempLevelSpacing}
+            </Typography>
+            <Slider
+              size="small"
+              value={tempLevelSpacing}
+              min={10}
+              max={300}
+              onChange={(_, value) => setTempLevelSpacing(value as number)}
+              onMouseUp={() => setLevelSpacing(tempLevelSpacing)}
+              onTouchEnd={() => setLevelSpacing(tempLevelSpacing)}
+              sx={{
+                color: theme.palette.secondary.main,
+                height: 2,
+                '& .MuiSlider-thumb': {
+                  width: 8,
+                  height: 8
+                },
+                '& .MuiSlider-track': {
+                  height: 2
+                },
+                '& .MuiSlider-rail': {
+                  height: 2
+                }
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
 
         {!selectedNetwork && (
           <Box sx={{

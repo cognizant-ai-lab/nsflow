@@ -120,7 +120,7 @@ const EditorLogsPanel: React.FC = () => {
         position: 'fixed',
         bottom: 16,
         left: sidebarWidth + 16, // Position just after sidebar edge with 16px gap
-        zIndex: 40,
+        zIndex: theme.zIndex.drawer + 1, // Above all drawers and palettes
         backgroundColor: theme.palette.background.paper,
         border: `1px solid ${theme.palette.divider}`,
         borderRadius: 2,

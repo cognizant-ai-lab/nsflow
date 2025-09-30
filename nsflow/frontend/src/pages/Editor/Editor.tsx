@@ -25,7 +25,6 @@ import { getInitialTheme } from "../../utils/theme";
 
 const EditorContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
-  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const { setIsEditorMode } = useChatContext();
 
   useEffect(() => {
@@ -39,7 +38,9 @@ const EditorContent: React.FC = () => {
 
   // Callback to refresh sidebar when new networks are created
   const handleNetworkCreated = () => {
-    setRefreshTrigger(prev => prev + 1);
+    // Note: Current sidebar doesn't support refresh trigger
+    // This is a placeholder for future enhancement
+    console.log('Network created - sidebar refresh not implemented');
   };
 
   // Callback to select a network in sidebar
@@ -59,11 +60,7 @@ const EditorContent: React.FC = () => {
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={12} minSize={10} maxSize={25}>
                   {/* Editor Sidebar */}
-                  <EditorSidebar 
-                    onSelectNetwork={setSelectedNetwork} 
-                    refreshTrigger={refreshTrigger}
-                    externalSelectedNetwork={selectedNetwork}
-                  />
+                  <EditorSidebar onSelectNetwork={setSelectedNetwork} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
