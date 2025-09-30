@@ -12,19 +12,26 @@
 import logging
 import os
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
-from typing import Optional, Dict, Any
+from typing import Dict
 
-from nsflow.backend.models.editor_models import (
-    NetworkTemplate, TemplateType, EditorState, ValidationResult, NetworkInfo, NetworksList,
-    AgentCreateRequest, AgentUpdateRequest, AgentDuplicateRequest, EdgeRequest,
-    NetworkExportRequest, UndoRedoResponse, NetworkConnectivity, StateConnectivityResponse,
-    NetworkStateInfo
-)
+from nsflow.backend.models.editor_models import NetworkTemplate
+from nsflow.backend.models.editor_models import TemplateType
+from nsflow.backend.models.editor_models import EditorState
+from nsflow.backend.models.editor_models import ValidationResult
+from nsflow.backend.models.editor_models import NetworkInfo
+from nsflow.backend.models.editor_models import NetworksList
+from nsflow.backend.models.editor_models import AgentCreateRequest
+from nsflow.backend.models.editor_models import AgentUpdateRequest
+from nsflow.backend.models.editor_models import AgentDuplicateRequest
+from nsflow.backend.models.editor_models import EdgeRequest
+from nsflow.backend.models.editor_models import NetworkExportRequest
+from nsflow.backend.models.editor_models import UndoRedoResponse
+from nsflow.backend.models.editor_models import NetworkConnectivity
+from nsflow.backend.models.editor_models import StateConnectivityResponse
+from nsflow.backend.models.editor_models import NetworkStateInfo
 
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
-from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
 
 logger = logging.getLogger(__name__)
 
@@ -304,10 +311,12 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
                 raise HTTPException(status_code=400, detail=f"Failed to create agent '{request.name}' (may already exist)")
         
         parent_msg = f" with parent '{request.parent_name}'" if request.parent_name else ""
+        inferred_type = request.infer_agent_type()
         return {
             "success": True,
             "message": f"Agent '{request.name}' created successfully{parent_msg}",
             "parent_name": request.parent_name,
+            "agent_type": inferred_type,
             "agent_properties": agent_data
         }
     except HTTPException:

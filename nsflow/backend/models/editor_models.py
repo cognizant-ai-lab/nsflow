@@ -144,21 +144,52 @@ class NetworksList(BaseModel):
     total_sessions: int = Field(..., description="Total editing sessions")
 
 
+class LLMConfig(BaseModel):
+    """Model for LLM configuration - flexible structure for any LLM provider"""
+    # Common LLM parameters
+    model_name: Optional[str] = Field(None, description="Model name", examples=["gpt-4o"])
+    class_: Optional[str] = Field(None, alias="class", description="LLM class type", examples=[None])
+    
+    # Advanced parameters
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Temperature setting (0.0-2.0)", examples=[0.7])
+    max_tokens: Optional[int] = Field(None, gt=0, description="Maximum tokens to generate", examples=[2000, 4000, 1000])
+    api_key: Optional[str] = Field(None, description="API key", examples=["sk-..."])
+    api_base: Optional[str] = Field(None, description="API base URL", examples=["https://api.openai.com/v1"])
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0, description="Top-p sampling (0.0-1.0)", examples=[0.9, 0.8, 1.0])
+    reasoning: Optional[bool] = Field(None, 
+                                      description="Controls the reasoning/thinking mode for supported models. If None (Default), The model will use its default reasoning behavior.", 
+                                      examples=[True, False])
+    
+    # Allow any additional custom fields for flexibility
+    class Config:
+        extra = "allow"
+        allow_population_by_field_name = True
+
+
 class BaseAgentProperties(BaseModel):
     """Base class containing all common agent properties"""
     # Core agent properties
-    instructions: Optional[str] = Field(None, description="Agent instructions")
-    function: Optional[Dict[str, Any]] = Field(None, description="Agent function definition")
-    class_: Optional[str] = Field(None, alias="class", description="Coded tool class")
-    command: Optional[str] = Field(None, description="Agent command template")
-    tools: Optional[List[str]] = Field(None, description="List of downstream agent names")
-    toolbox: Optional[str] = Field(None, description="Toolbox reference")
-    args: Optional[Dict[str, Any]] = Field(None, description="Agent arguments")
-    allow: Optional[Dict[str, Any]] = Field(None, description="Allow configuration")
-    display_as: Optional[str] = Field(None, description="Display name")
-    max_message_history: Optional[int] = Field(None, description="Maximum message history")
-    verbose: Optional[bool] = Field(None, description="Verbose mode")
-    llm_config: Optional[Dict[str, Any]] = Field(None, description="LLM configuration")
+    instructions: Optional[str] = Field(None, description="Agent instructions", examples=["You are a helpful assistant", "Analyze the data and provide insights"])
+    function: Optional[Dict[str, Any]] = Field(None, description="Agent function definition", examples=[{"description": "Get weather info", "parameters": {"type": "object"}}])
+    class_: Optional[str] = Field(None, alias="class", description="Coded tool class (makes this a coded tool agent)", examples=["WeatherTool", "DataAnalyzer"])
+    command: Optional[str] = Field(None, description="Agent command template", examples=[None])
+    tools: Optional[List[str]] = Field(None, description="List of downstream agent names", examples=[["agent1", "agent2"], ["data_processor"]])
+    toolbox: Optional[str] = Field(None, description="Toolbox reference (makes this a toolbox agent)", examples=[None])
+    args: Optional[Dict[str, Any]] = Field(None, description="Agent arguments", examples=[{"timeout": 30, "retries": 3}])
+    allow: Optional[Dict[str, Any]] = Field(None, description="Allow configuration", examples=[{"tools": ["web_search"], "functions": ["get_weather"]}])
+    display_as: Optional[str] = Field(None, description="Display name", examples=["Data Analyst", "Weather Assistant"])
+    max_message_history: Optional[int] = Field(None, description="Maximum message history", examples=[10, 50, 100])
+    verbose: Optional[bool] = Field(None, description="Verbose mode", examples=[True, False])
+    
+    # LLM configuration - optional, only shown when needed
+    llm_config: Optional[Union[LLMConfig, Dict[str, Any]]] = Field(
+        default=None, 
+        description="LLM configuration (optional - only specify if you need custom LLM settings)",
+        examples=[
+            {"model_name": "gpt-4o", "temperature": 0.7},
+            {"model_name": "claude-3-sonnet", "max_tokens": 4000}
+        ]
+    )
     
     class Config:
         extra = "allow"
@@ -168,15 +199,14 @@ class BaseAgentProperties(BaseModel):
 class AgentCreateRequest(BaseAgentProperties):
     """Request to create a new agent"""
     # Required field
-    name: str = Field(..., description="Agent name")
+    name: str = Field(..., description="Agent name", examples=["agent_zoho", "agent_barry", "frontman"])
     
     # Optional parent relationship
-    parent_name: Optional[str] = Field(None, description="Parent agent name")
+    parent_name: Optional[str] = Field(None, description="Parent agent name", examples=["frontman"])
     
     # Legacy fields for backward compatibility
     agent_data: Optional[Dict[str, Any]] = Field(None, description="Legacy agent configuration")
-    agent_type: str = Field(default="conversational", description="Type of agent (conversational or coded_tool)")
-    template: Optional[str] = Field(None, description="Template to base agent on")
+    template: Optional[str] = Field(None, description="Template to base agent on", examples=["basic_agent", "data_processor"])
     
     @field_validator('name')
     def validate_name(cls, v):
@@ -184,25 +214,44 @@ class AgentCreateRequest(BaseAgentProperties):
             raise ValueError("Agent name cannot be empty")
         return v.strip()
     
-    @field_validator('agent_type')
-    def validate_agent_type(cls, v):
-        if v not in ['conversational', 'coded_tool']:
-            raise ValueError("Agent type must be 'conversational' or 'coded_tool'")
-        return v
+    def infer_agent_type(self) -> str:
+        """Infer agent type based on provided fields"""
+        # Get the model dump to check the actual values
+        model_data = self.model_dump()
+        class_value = model_data.get('class_')
+        
+        if class_value:
+            return "coded_tool"
+        elif self.toolbox:
+            return "toolbox"
+        else:
+            return "conversational"
     
     def to_agent_data_dict(self) -> Dict[str, Any]:
-        """Convert to agent data dictionary, filtering out None values"""
+        """Convert to agent data dictionary, filtering out None values and handling LLMConfig"""
         agent_data = {}
         
         # Add all non-None fields (excluding name and parent_name which are handled separately)
-        exclude_fields = {"name", "parent_name", "agent_data", "agent_type", "template"}
+        exclude_fields = {"name", "parent_name", "agent_data", "agent_type", "template", "llm_config"}
         for field_name, field_value in self.dict(exclude_none=True, by_alias=True).items():
             if field_name not in exclude_fields and field_value is not None:
                 agent_data[field_name] = field_value
         
-        # Add agent_type and template if provided
-        if self.agent_type:
-            agent_data["agent_type"] = self.agent_type
+        # Handle LLM config specially - convert LLMConfig to dict and filter None values
+        if self.llm_config is not None:
+            if isinstance(self.llm_config, LLMConfig):
+                # Convert LLMConfig to dict, excluding None values
+                llm_dict = self.llm_config.dict(exclude_none=True, by_alias=True)
+                if llm_dict:  # Only add if there are actual values
+                    agent_data["llm_config"] = llm_dict
+            elif isinstance(self.llm_config, dict):
+                # Filter None values from dict
+                llm_dict = {k: v for k, v in self.llm_config.items() if v is not None}
+                if llm_dict:  # Only add if there are actual values
+                    agent_data["llm_config"] = llm_dict
+        
+        # Add inferred agent_type and template if provided
+        agent_data["agent_type"] = self.infer_agent_type()
         if self.template:
             agent_data["template"] = self.template
         
@@ -222,13 +271,27 @@ class AgentUpdateRequest(BaseAgentProperties):
     updates: Optional[Dict[str, Any]] = Field(None, description="Legacy updates field")
     
     def to_updates_dict(self) -> Dict[str, Any]:
-        """Convert to updates dictionary, filtering out None values"""
+        """Convert to updates dictionary, filtering out None values and handling LLMConfig"""
         updates = {}
         
-        # Add all non-None fields
+        # Add all non-None fields (excluding llm_config which is handled specially)
+        exclude_fields = {"updates", "llm_config"}
         for field_name, field_value in self.dict(exclude_none=True, by_alias=True).items():
-            if field_name != "updates" and field_value is not None:
+            if field_name not in exclude_fields and field_value is not None:
                 updates[field_name] = field_value
+        
+        # Handle LLM config specially - convert LLMConfig to dict and filter None values
+        if self.llm_config is not None:
+            if isinstance(self.llm_config, LLMConfig):
+                # Convert LLMConfig to dict, excluding None values
+                llm_dict = self.llm_config.dict(exclude_none=True, by_alias=True)
+                if llm_dict:  # Only add if there are actual values
+                    updates["llm_config"] = llm_dict
+            elif isinstance(self.llm_config, dict):
+                # Filter None values from dict
+                llm_dict = {k: v for k, v in self.llm_config.items() if v is not None}
+                if llm_dict:  # Only add if there are actual values
+                    updates["llm_config"] = llm_dict
         
         # Merge with legacy updates field if provided
         if self.updates:
@@ -277,130 +340,12 @@ class UndoRedoResponse(BaseModel):
     message: str = Field(..., description="Result message")
 
 
-# Legacy models for backward compatibility
-class LLMConfig(BaseModel):
-    """Model for LLM configuration - can contain any user-defined properties"""
-    class_: Optional[str] = Field(None, alias="class", description="LLM class type")
-    model_name: Optional[str] = Field(None, description="Model name")
-    use_model: Optional[str] = Field(None, description="Alternative model field")
-    temperature: Optional[float] = Field(None, description="Temperature setting")
-    max_tokens: Optional[int] = Field(None, description="Maximum tokens")
-    api_key: Optional[str] = Field(None, description="API key")
-    api_base: Optional[str] = Field(None, description="API base URL")
-    
-    # Allow any additional fields
-    class Config:
-        extra = "allow"
-        allow_population_by_field_name = True
-
-
-class FunctionParameters(BaseModel):
-    """Model for function parameters - follows OpenAI schema"""
-    type: str = Field(default="object", description="Parameter type (always object for top level)")
-    properties: Optional[Dict[str, Any]] = Field(None, description="Parameter properties")
-    required: Optional[List[str]] = Field(None, description="Required parameter names")
-    
-    class Config:
-        extra = "allow"
-
-
-class AgentFunction(BaseModel):
-    """Model for agent function definition"""
-    description: str = Field(..., description="Function description")
-    parameters: Optional[FunctionParameters] = Field(None, description="Function parameters")
-    
-    class Config:
-        extra = "allow"
-
-
-class Agent(BaseModel):
-    """Model for individual agent - flexible to allow user-defined properties"""
-    name: str = Field(..., description="Agent name")
-    function: Optional[Union[AgentFunction, Dict[str, Any]]] = Field(None, description="Agent function")
-    instructions: Optional[str] = Field(None, description="Agent instructions")
-    command: Optional[str] = Field(None, description="Agent command template")
-    tools: Optional[List[str]] = Field(None, description="List of downstream agent names")
-    class_: Optional[str] = Field(None, alias="class", description="Coded tool class")
-    llm_config: Optional[LLMConfig] = Field(None, description="Agent-specific LLM config")
-    allow: Optional[Dict[str, Any]] = Field(None, description="Allow configuration")
-    
-    # Allow any additional fields that users might want to add
-    class Config:
-        extra = "allow"
-
-
-class NetworkTitle(BaseModel):
-    """Model for network title/name"""
-    title: str = Field(..., description="Network title/name")
-
-    @field_validator('title')
-    def validate_title(cls, v):
-        import re
-        if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
-            raise ValueError("Network title must contain only alphanumeric characters, underscores, and hyphens")
-        return v
-
-
-class IncludeStatements(BaseModel):
-    """Model for include statements"""
-    includes: List[str] = Field(default_factory=list, description="List of included HOCON files")
-
-
-class CommonDefs(BaseModel):
-    """Model for common definitions"""
-    replacement_strings: Optional[Dict[str, Any]] = Field(None, description="String replacements")
-    replacement_values: Optional[Dict[str, Any]] = Field(None, description="Value replacements")
-    
-    # Allow any additional common definitions
-    class Config:
-        extra = "allow"
-
-
-class CustomVariables(BaseModel):
-    """Model for custom user-defined variables"""
-    variables: Dict[str, Any] = Field(default_factory=dict, description="Custom variables")
-
-
-class ToolsList(BaseModel):
-    """Model for tools list"""
-    tools: List[str] = Field(default_factory=list, description="List of agent names in the network")
-
-
+# NetworkConnectivity is used by legacy endpoints
 class NetworkConnectivity(BaseModel):
     """Model for network connectivity information"""
     nodes: List[Dict[str, Any]] = Field(..., description="Network nodes")
     edges: List[Dict[str, Any]] = Field(..., description="Network edges")
     agent_details: Dict[str, Any] = Field(..., description="Agent details")
-
-
-class AgentSuggestions(BaseModel):
-    """Model for agent property suggestions"""
-    common_properties: List[str] = Field(..., description="Common agent properties")
-    coded_tool_properties: List[str] = Field(..., description="Properties specific to coded tools")
-    conversational_agent_properties: List[str] = Field(..., description="Properties for conversational agents")
-    function_schema_template: Dict[str, Any] = Field(..., description="Template for function schema")
-
-
-class OperationResult(BaseModel):
-    """Model for operation results"""
-    success: bool = Field(..., description="Whether operation succeeded")
-    message: str = Field(..., description="Result message")
-    data: Optional[Dict[str, Any]] = Field(None, description="Additional result data")
-    errors: Optional[List[str]] = Field(None, description="Error messages if any")
-
-
-class NetworkCreateRequest(BaseModel):
-    """Model for creating new networks"""
-    name: str = Field(..., description="Network name")
-    template: Optional[str] = Field(None, description="Template network to copy from")
-    add_to_manifest: bool = Field(default=True, description="Whether to add to manifest.hocon")
-    
-    @field_validator('name')
-    def validate_name(cls, v):
-        import re
-        if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
-            raise ValueError("Network name must contain only alphanumeric characters, underscores, and hyphens")
-        return v
 
 
 # State Dictionary Models
