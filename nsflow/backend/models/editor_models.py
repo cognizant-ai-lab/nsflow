@@ -11,20 +11,96 @@
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Dict, List, Optional, Any, Union
+from enum import Enum
 
 
 # Extended models for comprehensive editor functionality
 
+class TemplateType(str, Enum):
+    """Available network template types"""
+    SINGLE_AGENT = "single_agent"
+    HIERARCHICAL = "hierarchical"
+    SEQUENTIAL = "sequential"
+
+
 class NetworkTemplate(BaseModel):
     """Template configuration for creating new networks"""
-    type: str = Field(..., description="Template type: single_agent, hierarchical, sequential")
-    name: Optional[str] = Field(None, description="Network name")
+    type: TemplateType = Field(default=TemplateType.SINGLE_AGENT, description="Template type")
+    name: Optional[str] = Field(None, description="Network name (will be auto-generated if not provided)")
     
     # Template-specific parameters
-    levels: Optional[int] = Field(None, description="Number of levels for hierarchical template")
-    agents_per_level: Optional[List[int]] = Field(None, description="Agents per level for hierarchical")
-    sequence_length: Optional[int] = Field(None, description="Length for sequential template")
+    levels: Optional[int] = Field(None, description="Number of levels for hierarchical template (min: 2)")
+    agents_per_level: Optional[List[int]] = Field(None, description="Agents per level for hierarchical (first level always 1)")
+    sequence_length: Optional[int] = Field(None, description="Length for sequential template (min: 2)")
     agent_name: Optional[str] = Field(None, description="Agent name for single agent template")
+    
+    @field_validator('levels')
+    def validate_levels(cls, v, info):
+        # Only validate levels for hierarchical templates
+        template_type = info.data.get('type')
+        if template_type == TemplateType.HIERARCHICAL and v is not None and v < 2:
+            raise ValueError("Hierarchical template must have at least 2 levels")
+        return v
+    
+    @field_validator('sequence_length')
+    def validate_sequence_length(cls, v, info):
+        # Only validate sequence_length for sequential templates
+        template_type = info.data.get('type')
+        if template_type == TemplateType.SEQUENTIAL and v is not None and v < 2:
+            raise ValueError("Sequential template must have at least 2 agents")
+        return v
+    
+    @field_validator('agents_per_level')
+    def validate_agents_per_level(cls, v, info):
+        # Only validate agents_per_level for hierarchical templates
+        template_type = info.data.get('type')
+        if template_type == TemplateType.HIERARCHICAL and v is not None:
+            if len(v) == 0:
+                raise ValueError("agents_per_level cannot be empty")
+            # Auto-correct: first level should always have 1 agent (frontman)
+            if v[0] != 1:
+                v[0] = 1
+            # Ensure all levels have at least 1 agent
+            for i in range(len(v)):
+                if v[i] < 1:
+                    v[i] = 1
+        return v
+    
+    @field_validator('name')
+    def validate_name(cls, v):
+        if v is not None:
+            v = v.strip()
+            if v == "string" or v == "":
+                return None  # Will be auto-generated
+            # Basic name validation
+            import re
+            if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
+                raise ValueError("Network name must contain only alphanumeric characters, underscores, and hyphens")
+        return v
+    
+    def get_corrected_parameters(self) -> Dict[str, Any]:
+        """Get template parameters with corrections applied"""
+        params = {}
+        
+        if self.type == TemplateType.SINGLE_AGENT:
+            params["agent_name"] = self.agent_name or "frontman"
+            
+        elif self.type == TemplateType.HIERARCHICAL:
+            params["levels"] = self.levels or 2
+            if self.agents_per_level:
+                # Ensure we have the right number of levels
+                agents_per_level = list(self.agents_per_level)
+                while len(agents_per_level) < params["levels"]:
+                    agents_per_level.append(2)  # Default 2 agents per additional level
+                agents_per_level = agents_per_level[:params["levels"]]  # Trim if too many
+                params["agents_per_level"] = agents_per_level
+            else:
+                params["agents_per_level"] = [1] + [2] * (params["levels"] - 1)
+                
+        elif self.type == TemplateType.SEQUENTIAL:
+            params["sequence_length"] = self.sequence_length or 3
+            
+        return params
 
 
 class EditorState(BaseModel):
@@ -180,8 +256,17 @@ class EdgeRequest(BaseModel):
 
 class NetworkExportRequest(BaseModel):
     """Request to export network to HOCON"""
-    output_path: Optional[str] = Field(None, description="Output file path")
+    output_path: Optional[str] = Field(None, description="Output file path (auto-generated if not provided)")
     validate_before_export: bool = Field(default=True, description="Validate before export")
+    
+    @field_validator('output_path')
+    def validate_output_path(cls, v):
+        if v is not None:
+            v = v.strip()
+            # Treat "string" as invalid default value (common in API docs)
+            if v == "string" or v == "":
+                return None  # Will be auto-generated
+        return v
 
 
 class UndoRedoResponse(BaseModel):

@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any
 
 from nsflow.backend.models.editor_models import (
-    NetworkTemplate, EditorState, ValidationResult, NetworkInfo, NetworksList,
+    NetworkTemplate, TemplateType, EditorState, ValidationResult, NetworkInfo, NetworksList,
     AgentCreateRequest, AgentUpdateRequest, AgentDuplicateRequest, EdgeRequest,
     NetworkExportRequest, UndoRedoResponse, NetworkConnectivity, StateConnectivityResponse,
     NetworkStateInfo
@@ -70,36 +70,67 @@ async def list_all_networks():
 
 @router.post("/networks/create")
 async def create_network(template: NetworkTemplate):
-    """Create a new network from template"""
+    """Create a new network from template with intelligent defaults and validation"""
     try:
-        template_kwargs = {}
+        # Get corrected template parameters
+        template_kwargs = template.get_corrected_parameters()
         
-        if template.type == "hierarchical":
-            template_kwargs["levels"] = template.levels or 2
-            template_kwargs["agents_per_level"] = template.agents_per_level or [1, 3]
-        elif template.type == "sequential":
-            template_kwargs["sequence_length"] = template.sequence_length or 3
-        elif template.type == "single_agent":
-            template_kwargs["agent_name"] = template.agent_name or "frontman"
+        # Generate network name if not provided or invalid
+        network_name = template.name
+        if not network_name:
+            if template.type == TemplateType.SINGLE_AGENT:
+                network_name = "single_agent_network"
+            elif template.type == TemplateType.HIERARCHICAL:
+                levels = template_kwargs.get("levels", 2)
+                network_name = f"hierarchical_{levels}level_network"
+            elif template.type == TemplateType.SEQUENTIAL:
+                length = template_kwargs.get("sequence_length", 3)
+                network_name = f"sequential_{length}agent_network"
         
         registry = get_registry()
         design_id, manager = registry.create_new_network(
-            network_name=template.name or "",
-            template_type=template.type,
+            network_name=network_name,
+            template_type=template.type.value,
             **template_kwargs
         )
         
         state = manager.get_state()
         validation = manager.validate_network()
         
-        return {
+        # Prepare response with corrections applied
+        corrections_applied = []
+        
+        # Check if we made corrections to the template
+        if template.type == TemplateType.HIERARCHICAL and template.agents_per_level:
+            original_first_level = template.agents_per_level[0] if template.agents_per_level else None
+            corrected_first_level = template_kwargs.get("agents_per_level", [1])[0]
+            if original_first_level != corrected_first_level:
+                corrections_applied.append(f"First level agents corrected from {original_first_level} to {corrected_first_level} (frontman requirement)")
+        
+        if not template.name:
+            corrections_applied.append(f"Network name auto-generated: '{state['network_name']}'")
+        
+        response = {
             "success": True,
             "design_id": design_id,
             "network_name": state["network_name"],
-            "message": f"Network created successfully from {template.type} template",
+            "message": f"Network created successfully from {template.type.value} template",
+            "template_type": template.type.value,
+            "template_parameters": template_kwargs,
             "validation": validation,
             "agent_count": len(state["agents"])
         }
+        
+        if corrections_applied:
+            response["corrections_applied"] = corrections_applied
+            response["message"] += f" (with {len(corrections_applied)} correction(s) applied)"
+        
+        return response
+        
+    except ValueError as e:
+        # Handle validation errors with helpful messages
+        logger.error(f"Validation error creating network: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid template parameters: {str(e)}")
     except Exception as e:
         logger.error(f"Error creating network: {e}")
         raise HTTPException(status_code=500, detail=f"Error creating network: {str(e)}")
@@ -943,26 +974,41 @@ async def cleanup_old_sessions(max_age_days: int = Query(default=7, ge=1, le=30)
 
 @router.get("/templates")
 async def get_available_templates():
-    """Get available network templates"""
+    """Get available network templates with validation rules"""
     return {
         "templates": [
             {
-                "type": "single_agent",
+                "type": TemplateType.SINGLE_AGENT.value,
                 "name": "Single Agent",
-                "description": "A simple network with just one agent",
-                "parameters": ["agent_name"]
+                "description": "A simple network with just one agent (frontman)",
+                "parameters": ["agent_name"],
+                "defaults": {"agent_name": "frontman"},
+                "validation_rules": ["agent_name is optional, defaults to 'frontman'"]
             },
             {
-                "type": "hierarchical",
+                "type": TemplateType.HIERARCHICAL.value,
                 "name": "Hierarchical Network", 
                 "description": "A hierarchical network with multiple levels",
-                "parameters": ["levels", "agents_per_level"]
+                "parameters": ["levels", "agents_per_level"],
+                "defaults": {"levels": 2, "agents_per_level": [1, 2]},
+                "validation_rules": [
+                    "levels must be >= 2",
+                    "agents_per_level[0] is always 1 (frontman)",
+                    "all other levels must have >= 1 agent"
+                ]
             },
             {
-                "type": "sequential",
+                "type": TemplateType.SEQUENTIAL.value,
                 "name": "Sequential Network",
                 "description": "A linear sequence of agents",
-                "parameters": ["sequence_length"]
+                "parameters": ["sequence_length"],
+                "defaults": {"sequence_length": 3},
+                "validation_rules": ["sequence_length must be >= 2"]
             }
-        ]
+        ],
+        "auto_corrections": {
+            "network_name": "Auto-generated if not provided or invalid",
+            "hierarchical_first_level": "First level always corrected to 1 agent (frontman)",
+            "minimum_values": "Parameters below minimum are corrected to minimum valid values"
+        }
     }

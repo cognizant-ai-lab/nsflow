@@ -53,11 +53,7 @@ class SimpleStateManager:
             "top_level": {
                 "llm_config": {
                     "model_name": "gpt-4o",
-                    "temperature": 0.7,
-                    "max_tokens": 2000
                 },
-                "verbose": False,
-                "max_iterations": 20
             },
             "agents": {}
         }
@@ -250,7 +246,15 @@ class SimpleStateManager:
         """Create network from template"""
         try:
             self._save_to_history()
+            
+            # Preserve network_name before reinitializing
+            current_network_name = self.current_state.get("network_name", "")
+            
             self._initialize_empty_state()
+            
+            # Restore network_name after reinitialization
+            if current_network_name:
+                self.current_state["network_name"] = current_network_name
             
             if template_type == "single_agent":
                 self._create_single_agent_template(**kwargs)
