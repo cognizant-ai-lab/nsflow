@@ -87,6 +87,7 @@ class OperationStore:
           
           Agent-level:
           - add_agent(name, parent=None, agent_data=None)
+          - create_agent_with_parent(name, parent, agent_data=None)  # Atomic: add_agent + add_edge
           - delete_agent(name)
           - update_agent(name, updates)
           - duplicate_agent(agent_name, new_name)
@@ -177,6 +178,27 @@ class OperationStore:
             if not ok:
                 raise RuntimeError("add_agent failed")
             # inverse: delete_agent(name)
+            return {"op": "delete_agent", "args": {"name": name}}
+
+        if op == "create_agent_with_parent":
+            # Atomic operation: add_agent + add_edge
+            name = args["name"]
+            parent = args["parent"]
+            agent_data = args.get("agent_data")
+            
+            # First add the agent without parent
+            ok = self.manager.add_agent(name, None, agent_data)
+            if not ok:
+                raise RuntimeError("create_agent_with_parent: add_agent failed")
+            
+            # Then add the edge to parent
+            ok = self.manager.add_edge(parent, name)
+            if not ok:
+                # Rollback: remove the agent we just added
+                self.manager.delete_agent(name)
+                raise RuntimeError("create_agent_with_parent: add_edge failed")
+            
+            # inverse: delete_agent (which will also remove the edge)
             return {"op": "delete_agent", "args": {"name": name}}
 
         if op == "delete_agent":
@@ -277,6 +299,24 @@ class OperationStore:
         if op == "add_agent":
             ok = self.manager.add_agent(args["name"], args.get("parent"), args.get("agent_data"))
             if not ok: raise RuntimeError("add_agent failed (undo/redo)")
+            return
+
+        if op == "create_agent_with_parent":
+            # Atomic operation: add_agent + add_edge
+            name = args["name"]
+            parent = args["parent"]
+            agent_data = args.get("agent_data")
+            
+            # First add the agent without parent
+            ok = self.manager.add_agent(name, None, agent_data)
+            if not ok: raise RuntimeError("create_agent_with_parent: add_agent failed (undo/redo)")
+            
+            # Then add the edge to parent
+            ok = self.manager.add_edge(parent, name)
+            if not ok:
+                # Rollback: remove the agent we just added
+                self.manager.delete_agent(name)
+                raise RuntimeError("create_agent_with_parent: add_edge failed (undo/redo)")
             return
 
         if op == "delete_agent":

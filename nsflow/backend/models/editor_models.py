@@ -68,12 +68,37 @@ class NetworksList(BaseModel):
     total_sessions: int = Field(..., description="Total editing sessions")
 
 
-class AgentCreateRequest(BaseModel):
+class BaseAgentProperties(BaseModel):
+    """Base class containing all common agent properties"""
+    # Core agent properties
+    instructions: Optional[str] = Field(None, description="Agent instructions")
+    function: Optional[Dict[str, Any]] = Field(None, description="Agent function definition")
+    class_: Optional[str] = Field(None, alias="class", description="Coded tool class")
+    command: Optional[str] = Field(None, description="Agent command template")
+    tools: Optional[List[str]] = Field(None, description="List of downstream agent names")
+    toolbox: Optional[str] = Field(None, description="Toolbox reference")
+    args: Optional[Dict[str, Any]] = Field(None, description="Agent arguments")
+    allow: Optional[Dict[str, Any]] = Field(None, description="Allow configuration")
+    display_as: Optional[str] = Field(None, description="Display name")
+    max_message_history: Optional[int] = Field(None, description="Maximum message history")
+    verbose: Optional[bool] = Field(None, description="Verbose mode")
+    llm_config: Optional[Dict[str, Any]] = Field(None, description="LLM configuration")
+    
+    class Config:
+        extra = "allow"
+        allow_population_by_field_name = True
+
+
+class AgentCreateRequest(BaseAgentProperties):
     """Request to create a new agent"""
+    # Required field
     name: str = Field(..., description="Agent name")
+    
+    # Optional parent relationship
     parent_name: Optional[str] = Field(None, description="Parent agent name")
-    agent_data: Optional[Dict[str, Any]] = Field(None, description="Agent configuration")
-    # Additional fields for compatibility
+    
+    # Legacy fields for backward compatibility
+    agent_data: Optional[Dict[str, Any]] = Field(None, description="Legacy agent configuration")
     agent_type: str = Field(default="conversational", description="Type of agent (conversational or coded_tool)")
     template: Optional[str] = Field(None, description="Template to base agent on")
     
@@ -88,14 +113,52 @@ class AgentCreateRequest(BaseModel):
         if v not in ['conversational', 'coded_tool']:
             raise ValueError("Agent type must be 'conversational' or 'coded_tool'")
         return v
-
-
-class AgentUpdateRequest(BaseModel):
-    """Request to update an agent"""
-    updates: Dict[str, Any] = Field(..., description="Fields to update")
     
-    class Config:
-        extra = "allow"
+    def to_agent_data_dict(self) -> Dict[str, Any]:
+        """Convert to agent data dictionary, filtering out None values"""
+        agent_data = {}
+        
+        # Add all non-None fields (excluding name and parent_name which are handled separately)
+        exclude_fields = {"name", "parent_name", "agent_data", "agent_type", "template"}
+        for field_name, field_value in self.dict(exclude_none=True, by_alias=True).items():
+            if field_name not in exclude_fields and field_value is not None:
+                agent_data[field_name] = field_value
+        
+        # Add agent_type and template if provided
+        if self.agent_type:
+            agent_data["agent_type"] = self.agent_type
+        if self.template:
+            agent_data["template"] = self.template
+        
+        # Merge with legacy agent_data field if provided
+        if self.agent_data:
+            agent_data.update(self.agent_data)
+        
+        return agent_data
+
+
+class AgentUpdateRequest(BaseAgentProperties):
+    """Request to update an agent"""
+    # Optional name field for updates
+    name: Optional[str] = Field(None, description="Agent name")
+    
+    # Legacy field for backward compatibility
+    updates: Optional[Dict[str, Any]] = Field(None, description="Legacy updates field")
+    
+    def to_updates_dict(self) -> Dict[str, Any]:
+        """Convert to updates dictionary, filtering out None values"""
+        updates = {}
+        
+        # Add all non-None fields
+        for field_name, field_value in self.dict(exclude_none=True, by_alias=True).items():
+            if field_name != "updates" and field_value is not None:
+                updates[field_name] = field_value
+        
+        # Merge with legacy updates field if provided
+        if self.updates:
+            updates.update(self.updates)
+        
+        return updates
 
 
 class AgentDuplicateRequest(BaseModel):
@@ -117,7 +180,7 @@ class EdgeRequest(BaseModel):
 
 class NetworkExportRequest(BaseModel):
     """Request to export network to HOCON"""
-    output_path: Optional[str] = Field(default=None, description="Output file path")
+    output_path: Optional[str] = Field(None, description="Output file path")
     validate_before_export: bool = Field(default=True, description="Validate before export")
 
 
@@ -239,9 +302,6 @@ class OperationResult(BaseModel):
     message: str = Field(..., description="Result message")
     data: Optional[Dict[str, Any]] = Field(None, description="Additional result data")
     errors: Optional[List[str]] = Field(None, description="Error messages if any")
-
-
-# AgentCreateRequest moved up to avoid duplication
 
 
 class NetworkCreateRequest(BaseModel):

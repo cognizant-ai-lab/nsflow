@@ -44,13 +44,60 @@ class SimpleStateRegistry:
         # Initialize HOCON reader
         self.hocon_reader = IndependentHoconReader()
         
-        # Set up state directory
+        # Note: edited_state_dir is deprecated in favor of ops_store draft persistence
+        # Keeping for backward compatibility but not actively used
         if edited_state_dir:
             self.edited_state_dir = edited_state_dir
         else:
             self.edited_state_dir = os.path.join(self.hocon_reader.registry_dir, "edited_states")
         
-        os.makedirs(self.edited_state_dir, exist_ok=True)
+        # Auto-load existing draft states on startup
+        self._auto_load_draft_states()
+    
+    def _auto_load_draft_states(self):
+        """Auto-load existing draft states on startup to preserve operation history"""
+        try:
+            draft_states = OperationStore.list_all_drafts()
+            loaded_count = 0
+            
+            for draft in draft_states:
+                design_id = draft["design_id"]
+                try:
+                    # Create a new manager
+                    manager = SimpleStateManager(design_id)
+                    
+                    # Load the draft using OperationStore
+                    operation_store = OperationStore.load_draft(design_id, manager)
+                    if operation_store:
+                        # Register the manager and operation store
+                        self.managers[design_id] = manager
+                        self.operation_stores[design_id] = operation_store
+                        
+                        # Get network name from draft
+                        network_name = draft.get("network_name", f"draft_{design_id[:8]}")
+                        
+                        # Update mappings
+                        if network_name not in self.network_to_design_ids:
+                            self.network_to_design_ids[network_name] = []
+                        self.network_to_design_ids[network_name].append(design_id)
+                        
+                        self.design_id_to_info[design_id] = {
+                            "network_name": network_name,
+                            "source": "draft_auto_loaded",
+                            "created_at": draft.get("created_at"),
+                            "loaded_at": draft.get("last_saved")
+                        }
+                        
+                        loaded_count += 1
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to auto-load draft {design_id}: {e}")
+            
+            if loaded_count > 0:
+                logger.info(f"Auto-loaded {loaded_count} draft states with operation history")
+                
+        except Exception as e:
+            logger.error(f"Failed to auto-load draft states: {e}")
     
     def create_new_network(self, network_name: str = "", template_type: str = "single_agent", **template_kwargs) -> Tuple[str, SimpleStateManager]:
         """Create a new network from scratch or template"""
@@ -59,14 +106,16 @@ class SimpleStateRegistry:
         # Create manager
         manager = SimpleStateManager(design_id)
         
-        # Set network name if provided
-        if network_name:
+        # Set network name with proper default
+        if not network_name or network_name.strip() == "":
+            network_name = f"network_{design_id[:8]}"
+        else:
+            # Ensure unique name by appending design_id
             if not network_name.endswith(f"_{design_id[:8]}"):
                 network_name = f"{network_name}_{design_id[:8]}"
-            manager.set_network_name(network_name)
-        else:
-            network_name = f"network_{design_id[:8]}"
-            manager.set_network_name(network_name)
+        
+        # Set the network name in the manager
+        manager.set_network_name(network_name)
         
         # Create from template
         manager.create_from_template(template_type, **template_kwargs)
@@ -315,14 +364,45 @@ class SimpleStateRegistry:
             raise
     
     def delete_session(self, design_id: str) -> bool:
-        """Delete an editing session"""
+        """Delete an editing session and all associated draft files"""
         if design_id not in self.managers:
-            return False
+            # Check if it's a draft that's not currently loaded
+            try:
+                import shutil
+                from werkzeug.utils import secure_filename
+                from nsflow.backend.utils.agentutils.agent_network_utils import ROOT_DIR
+                
+                draft_root = os.path.join(ROOT_DIR, "draft_states")
+                safe_design_id = secure_filename(design_id)
+                draft_path = os.path.join(draft_root, safe_design_id)
+                
+                if os.path.exists(draft_path):
+                    shutil.rmtree(draft_path)
+                    logger.info(f"Deleted draft files for {design_id}")
+                    return True
+                else:
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to delete draft files for {design_id}: {e}")
+                return False
         
         try:
             # Get info before deletion
             info = self.design_id_to_info.get(design_id, {})
             network_name = info.get("network_name", "")
+            
+            # Remove operation store and clean up draft files
+            if design_id in self.operation_stores:
+                operation_store = self.operation_stores[design_id]
+                try:
+                    import shutil
+                    if os.path.exists(operation_store.root):
+                        shutil.rmtree(operation_store.root)
+                        logger.info(f"Deleted draft files at {operation_store.root}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete draft files: {e}")
+                
+                del self.operation_stores[design_id]
             
             # Remove from managers
             del self.managers[design_id]
@@ -340,7 +420,7 @@ class SimpleStateRegistry:
             if design_id in self.design_id_to_info:
                 del self.design_id_to_info[design_id]
             
-            logger.info(f"Deleted session {design_id}")
+            logger.info(f"Deleted session {design_id} and all associated files")
             return True
             
         except Exception as e:
@@ -372,30 +452,17 @@ class SimpleStateRegistry:
         }
     
     def save_session_to_file(self, design_id: str) -> bool:
-        """Save editing session to persistent file"""
-        if not self.edited_state_dir:
-            return False
+        """
+        DEPRECATED: Use operation_store.save_draft() instead.
+        This method is kept for backward compatibility only.
+        """
+        logger.warning("save_session_to_file is deprecated. Use operation_store.save_draft() instead.")
         
-        manager = self.managers.get(design_id)
-        if not manager:
-            return False
+        operation_store = self.operation_stores.get(design_id)
+        if operation_store:
+            return operation_store.save_draft()
         
-        try:
-            network_name = manager.current_state.get("network_name", design_id)
-            filename = f"{network_name}_{design_id}.json"
-            file_path = os.path.join(self.edited_state_dir, filename)
-            
-            success = manager.save_to_file(file_path)
-            
-            if success and design_id in self.design_id_to_info:
-                self.design_id_to_info[design_id]["file_path"] = file_path
-                self.design_id_to_info[design_id]["saved_at"] = manager.current_state["meta"]["updated_at"]
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"Failed to save session to file: {e}")
-            return False
+        return False
     
     def export_to_hocon_file(self, design_id: str, output_path: Optional[str] = "") -> bool:
         """Export editing session to HOCON file"""

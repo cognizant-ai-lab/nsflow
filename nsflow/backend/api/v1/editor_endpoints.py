@@ -166,16 +166,18 @@ async def get_network_info(design_id: str):
 
 @router.delete("/networks/{design_id}")
 async def delete_network(design_id: str):
-    """Delete a network editing session"""
+    """Delete a network editing session and all associated draft files"""
     try:
         registry = get_registry()
+        
+        # Delete the session (includes draft cleanup)
         success = registry.delete_session(design_id)
         if not success:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
         return {
             "success": True,
-            "message": f"Network session '{design_id}' deleted successfully"
+            "message": f"Network session '{design_id}' and all associated files deleted successfully"
         }
     except HTTPException:
         raise
@@ -197,11 +199,20 @@ async def set_network_name(design_id: str, request: Dict[str, str]):
         if not new_name:
             raise HTTPException(status_code=400, detail="Network name cannot be empty")
         
-        success = manager.set_network_name(new_name)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to set network name")
-        
-# Logging removed for simplicity
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "set_network_name",
+                "args": {
+                    "name": new_name
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.set_network_name(new_name)
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to set network name")
         
         return {
             "success": True,
@@ -225,26 +236,32 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
         if not manager:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        # Prepare agent data based on request
-        agent_data = request.agent_data or {}
-        
-        # Add agent type and template info to agent data
-        if request.agent_type:
-            agent_data["agent_type"] = request.agent_type
-        if request.template:
-            agent_data["template"] = request.template
+        # Convert request to agent data using the new unified method
+        agent_data = request.to_agent_data_dict()
         
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "add_agent",
-                "args": {
-                    "name": request.name,
-                    "parent": request.parent_name,
-                    "agent_data": agent_data
-                }
-            })
+            if request.parent_name:
+                # Atomic operation: create agent with parent (add_agent + add_edge)
+                operation_store.apply({
+                    "op": "create_agent_with_parent",
+                    "args": {
+                        "name": request.name,
+                        "parent": request.parent_name,
+                        "agent_data": agent_data
+                    }
+                })
+            else:
+                # Simple agent creation without parent
+                operation_store.apply({
+                    "op": "add_agent",
+                    "args": {
+                        "name": request.name,
+                        "parent": None,
+                        "agent_data": agent_data
+                    }
+                })
         else:
             # Fallback to direct manager call
             success = manager.add_agent(
@@ -255,9 +272,12 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
             if not success:
                 raise HTTPException(status_code=400, detail=f"Failed to create agent '{request.name}' (may already exist)")
         
+        parent_msg = f" with parent '{request.parent_name}'" if request.parent_name else ""
         return {
             "success": True,
-            "message": f"Agent '{request.name}' created successfully"
+            "message": f"Agent '{request.name}' created successfully{parent_msg}",
+            "parent_name": request.parent_name,
+            "agent_properties": agent_data
         }
     except HTTPException:
         raise
@@ -268,22 +288,39 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
 
 @router.put("/networks/{design_id}/agents/{agent_name}")
 async def update_agent(design_id: str, agent_name: str, request: AgentUpdateRequest):
-    """Update an agent"""
+    """Update an agent with structured fields"""
     try:
         registry = get_registry()
         manager = registry.get_manager(design_id)
         if not manager:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.update_agent(agent_name, request.updates)
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        # Convert request to updates dictionary
+        updates = request.to_updates_dict()
         
-# Logging removed for simplicity
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
+        
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "update_agent",
+                "args": {
+                    "name": agent_name,
+                    "updates": updates
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.update_agent(agent_name, updates)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
         
         return {
             "success": True,
-            "message": f"Agent '{agent_name}' updated successfully"
+            "message": f"Agent '{agent_name}' updated successfully",
+            "updated_fields": list(updates.keys())
         }
     except HTTPException:
         raise
@@ -301,11 +338,21 @@ async def duplicate_agent(design_id: str, agent_name: str, request: AgentDuplica
         if not manager:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.duplicate_agent(agent_name, request.new_name)
-        if not success:
-            raise HTTPException(status_code=400, detail=f"Failed to duplicate agent (source not found or target exists)")
-        
-# Logging removed for simplicity
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "duplicate_agent",
+                "args": {
+                    "agent_name": agent_name,
+                    "new_name": request.new_name
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.duplicate_agent(agent_name, request.new_name)
+            if not success:
+                raise HTTPException(status_code=400, detail=f"Failed to duplicate agent (source not found or target exists)")
         
         return {
             "success": True,
@@ -327,11 +374,20 @@ async def delete_agent(design_id: str, agent_name: str):
         if not manager:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.delete_agent(agent_name)
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
-        
-# Logging removed for simplicity
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "delete_agent",
+                "args": {
+                    "name": agent_name
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.delete_agent(agent_name)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
         
         return {
             "success": True,
@@ -381,14 +437,24 @@ async def add_edge(design_id: str, request: EdgeRequest):
         if not manager:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.add_edge(request.source_agent, request.target_agent)
-        if not success:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Failed to add edge (agents not found or would create cycle)"
-            )
-        
-# Logging removed for simplicity
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "add_edge",
+                "args": {
+                    "src": request.source_agent,
+                    "dst": request.target_agent
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.add_edge(request.source_agent, request.target_agent)
+            if not success:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Failed to add edge (agents not found or would create cycle)"
+                )
         
         return {
             "success": True,
@@ -410,11 +476,21 @@ async def remove_edge(design_id: str, request: EdgeRequest):
         if not manager:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.remove_edge(request.source_agent, request.target_agent)
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to remove edge (agents not found)")
-        
-# Logging removed for simplicity
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "remove_edge",
+                "args": {
+                    "src": request.source_agent,
+                    "dst": request.target_agent
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.remove_edge(request.source_agent, request.target_agent)
+            if not success:
+                raise HTTPException(status_code=400, detail="Failed to remove edge (agents not found)")
         
         return {
             "success": True,
@@ -586,7 +662,7 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
         state = manager.get_state()
-        network_name = state.get("network_name", state.get("design_id", design_id[:8]))
+        network_name = state["network_name"]
         
         # Validate before export if requested
         if request.validate_before_export:
