@@ -117,7 +117,7 @@ class EdgeRequest(BaseModel):
 
 class NetworkExportRequest(BaseModel):
     """Request to export network to HOCON"""
-    output_path: Optional[str] = Field(None, description="Output file path")
+    output_path: Optional[str] = Field(default=None, description="Output file path")
     validate_before_export: bool = Field(default=True, description="Validate before export")
 
 

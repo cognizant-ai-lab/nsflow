@@ -24,6 +24,7 @@ from werkzeug.utils import secure_filename
 from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR as EXPORT_ROOT_DIR
 from nsflow.backend.utils.editor.simple_state_manager import SimpleStateManager
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
+from nsflow.backend.utils.editor.ops_store import OperationStore
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class SimpleStateRegistry:
 
     def __init__(self, edited_state_dir: Optional[str] = None):
         self.managers: Dict[str, SimpleStateManager] = {}
+        self.operation_stores: Dict[str, OperationStore] = {}
         self.network_to_design_ids: Dict[str, List[str]] = {}
         self.design_id_to_info: Dict[str, Dict[str, Any]] = {}
         
@@ -72,6 +74,10 @@ class SimpleStateRegistry:
         # Register manager
         self.managers[design_id] = manager
         
+        # Create operation store for versioned undo/redo
+        operation_store = OperationStore(design_id, manager)
+        self.operation_stores[design_id] = operation_store
+        
         # Update mappings
         if network_name not in self.network_to_design_ids:
             self.network_to_design_ids[network_name] = []
@@ -101,6 +107,10 @@ class SimpleStateRegistry:
             
             # Register manager
             self.managers[design_id] = manager
+            
+            # Create operation store for versioned undo/redo
+            operation_store = OperationStore(design_id, manager)
+            self.operation_stores[design_id] = operation_store
             
             # Update mappings
             session_network_name = f"{network_name}_{design_id[:8]}"
@@ -181,6 +191,10 @@ class SimpleStateRegistry:
         """Get state manager by design ID"""
         return self.managers.get(design_id)
     
+    def get_operation_store(self, design_id: str) -> Optional[OperationStore]:
+        """Get operation store by design ID"""
+        return self.operation_stores.get(design_id)
+    
     def get_managers_for_network(self, network_name: str) -> Dict[str, SimpleStateManager]:
         """Get all managers for a network name"""
         design_ids = self.network_to_design_ids.get(network_name, [])
@@ -207,12 +221,14 @@ class SimpleStateRegistry:
         return latest_manager or next(iter(managers.values()))
     
     def list_all_networks(self) -> Dict[str, Any]:
-        """List all networks - both from registry and in-memory editing sessions"""
+        """List all networks - registry, in-memory editing sessions, and draft states"""
         result = {
             "registry_networks": [],
             "editing_sessions": [],
+            "draft_states": [],
             "total_registry": 0,
-            "total_sessions": 0
+            "total_sessions": 0,
+            "total_drafts": 0
         }
         
         # Get registry networks
@@ -224,10 +240,11 @@ class SimpleStateRegistry:
         except Exception as e:
             logger.error(f"Failed to get registry networks: {e}")
         
-        # Get editing sessions
+        # Get current editing sessions
         for design_id, info in self.design_id_to_info.items():
             if design_id in self.managers:
                 manager = self.managers[design_id]
+                operation_store = self.operation_stores.get(design_id)
                 state = manager.get_state()
                 
                 session_info = {
@@ -238,14 +255,64 @@ class SimpleStateRegistry:
                     "agent_count": len(state.get("agents", {})),
                     "created_at": state.get("meta", {}).get("created_at"),
                     "updated_at": state.get("meta", {}).get("updated_at"),
-                    "can_undo": manager.can_undo(),
-                    "can_redo": manager.can_redo()
+                    "can_undo": len(operation_store._read_jsonl(operation_store.hist_file)) > 0 if operation_store else manager.can_undo(),
+                    "can_redo": len(operation_store._read_jsonl(operation_store.redo_file)) > 0 if operation_store else manager.can_redo()
                 }
                 
                 result["editing_sessions"].append(session_info)
         
+        # Get draft states (persisted but not currently loaded)
+        try:
+            draft_states = OperationStore.list_all_drafts()
+            # Filter out drafts that are currently loaded as editing sessions
+            loaded_design_ids = set(self.design_id_to_info.keys())
+            for draft in draft_states:
+                if draft["design_id"] not in loaded_design_ids:
+                    result["draft_states"].append(draft)
+            result["total_drafts"] = len(result["draft_states"])
+        except Exception as e:
+            logger.error(f"Failed to get draft states: {e}")
+        
         result["total_sessions"] = len(result["editing_sessions"])
         return result
+    
+    def load_draft_state(self, design_id: str) -> Tuple[str, SimpleStateManager]:
+        """Load a draft state into an active editing session"""
+        try:
+            # Create a new manager
+            manager = SimpleStateManager(design_id)
+            
+            # Load the draft using OperationStore
+            operation_store = OperationStore.load_draft(design_id, manager)
+            if not operation_store:
+                raise Exception(f"Failed to load draft {design_id}")
+            
+            # Register the manager and operation store
+            self.managers[design_id] = manager
+            self.operation_stores[design_id] = operation_store
+            
+            # Get draft info for metadata
+            draft_info = operation_store.get_draft_info()
+            network_name = draft_info.get("network_name", f"draft_{design_id[:8]}")
+            
+            # Update mappings
+            if network_name not in self.network_to_design_ids:
+                self.network_to_design_ids[network_name] = []
+            self.network_to_design_ids[network_name].append(design_id)
+            
+            self.design_id_to_info[design_id] = {
+                "network_name": network_name,
+                "source": "draft",
+                "created_at": draft_info.get("created_at"),
+                "loaded_at": draft_info.get("last_saved")
+            }
+            
+            logger.info(f"Loaded draft state for design_id: {design_id}")
+            return design_id, manager
+            
+        except Exception as e:
+            logger.error(f"Failed to load draft state {design_id}: {e}")
+            raise
     
     def delete_session(self, design_id: str) -> bool:
         """Delete an editing session"""
@@ -348,7 +415,7 @@ class SimpleStateRegistry:
                 sanitized_path = os.path.normpath(os.path.abspath(output_path))
                 export_root = os.path.normpath(os.path.abspath(EXPORT_ROOT_DIR))
                 if not sanitized_path.startswith(export_root):
-                    logger.error(f"Refused export for path outside of export root: {sanitized_path}")
+                    logger.error(f"Refused export for path outside of export root: {sanitized_path}.\nEnsure that you're saving within {export_root}.")
                     return False
             else:
                 # use EXPORT_ROOT_DIR with network name

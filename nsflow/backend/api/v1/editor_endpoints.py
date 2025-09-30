@@ -234,16 +234,26 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
         if request.template:
             agent_data["template"] = request.template
         
-        success = manager.add_agent(
-            agent_name=request.name,
-            parent_name=request.parent_name,
-            agent_data=agent_data
-        )
-        
-        if not success:
-            raise HTTPException(status_code=400, detail=f"Failed to create agent '{request.name}' (may already exist)")
-        
-# Logging removed for simplicity
+        # Use operation store for versioned operations
+        operation_store = registry.get_operation_store(design_id)
+        if operation_store:
+            operation_store.apply({
+                "op": "add_agent",
+                "args": {
+                    "name": request.name,
+                    "parent": request.parent_name,
+                    "agent_data": agent_data
+                }
+            })
+        else:
+            # Fallback to direct manager call
+            success = manager.add_agent(
+                agent_name=request.name,
+                parent_name=request.parent_name,
+                agent_data=agent_data
+            )
+            if not success:
+                raise HTTPException(status_code=400, detail=f"Failed to create agent '{request.name}' (may already exist)")
         
         return {
             "success": True,
@@ -510,20 +520,23 @@ async def validate_network(design_id: str):
 
 @router.post("/networks/{design_id}/undo", response_model=UndoRedoResponse)
 async def undo_operation(design_id: str):
-    """Undo last operation"""
+    """Undo last operation using operation store"""
     try:
         registry = get_registry()
-        manager = registry.get_manager(design_id)
-        if not manager:
+        operation_store = registry.get_operation_store(design_id)
+        if not operation_store:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.undo()
-# Logging removed for simplicity
+        success = operation_store.undo()
+        
+        # Get updated undo/redo status
+        history = operation_store._read_jsonl(operation_store.hist_file)
+        redo_stack = operation_store._read_jsonl(operation_store.redo_file)
         
         return UndoRedoResponse(
             success=success,
-            can_undo=manager.can_undo(),
-            can_redo=manager.can_redo(),
+            can_undo=len(history) > 0,
+            can_redo=len(redo_stack) > 0,
             message="Undo successful" if success else "Nothing to undo"
         )
     except HTTPException:
@@ -535,20 +548,23 @@ async def undo_operation(design_id: str):
 
 @router.post("/networks/{design_id}/redo", response_model=UndoRedoResponse)
 async def redo_operation(design_id: str):
-    """Redo last undone operation"""
+    """Redo last undone operation using operation store"""
     try:
         registry = get_registry()
-        manager = registry.get_manager(design_id)
-        if not manager:
+        operation_store = registry.get_operation_store(design_id)
+        if not operation_store:
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
-        success = manager.redo()
-# Logging removed for simplicity
+        success = operation_store.redo()
+        
+        # Get updated undo/redo status
+        history = operation_store._read_jsonl(operation_store.hist_file)
+        redo_stack = operation_store._read_jsonl(operation_store.redo_file)
         
         return UndoRedoResponse(
             success=success,
-            can_undo=manager.can_undo(),
-            can_redo=manager.can_redo(),
+            can_undo=len(history) > 0,
+            can_redo=len(redo_stack) > 0,
             message="Redo successful" if success else "Nothing to redo"
         )
     except HTTPException:
@@ -570,7 +586,7 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
             raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
         
         state = manager.get_state()
-        network_name = state["network_name"]
+        network_name = state.get("network_name", state.get("design_id", design_id[:8]))
         
         # Validate before export if requested
         if request.validate_before_export:
@@ -608,26 +624,75 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
         raise HTTPException(status_code=500, detail=f"Error exporting to HOCON: {str(e)}")
 
 
-@router.post("/networks/{design_id}/save")
+@router.post("/networks/{design_id}/save-draft")
 async def save_session(design_id: str):
-    """Save editing session to persistent storage"""
+    """Save editing session as draft with operation history"""
     try:
         registry = get_registry()
-        success = registry.save_session_to_file(design_id)
+        operation_store = registry.get_operation_store(design_id)
+        
+        if not operation_store:
+            raise HTTPException(status_code=404, detail=f"Network with design_id '{design_id}' not found")
+        
+        success = operation_store.save_draft()
         
         if success:
+            draft_info = operation_store.get_draft_info()
             return {
                 "success": True,
-                "message": "Session saved successfully"
+                "message": "Draft saved successfully with operation history",
+                "draft_info": {
+                    "design_id": draft_info.get("design_id"),
+                    "network_name": draft_info.get("network_name"),
+                    "operation_count": draft_info.get("operation_count", 0),
+                    "last_saved": draft_info.get("last_saved"),
+                    "draft_path": draft_info.get("draft_path")
+                }
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to save session")
+            raise HTTPException(status_code=500, detail="Failed to save draft")
     
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error saving session: {e}")
         raise HTTPException(status_code=500, detail=f"Error saving session: {str(e)}")
+
+
+@router.post("/networks/{design_id}/load-draft")
+async def load_draft_session(design_id: str):
+    """Load a draft state into an active editing session"""
+    try:
+        registry = get_registry()
+        
+        # Check if already loaded
+        if registry.get_manager(design_id):
+            return {
+                "success": True,
+                "message": f"Draft '{design_id}' is already loaded",
+                "design_id": design_id
+            }
+        
+        # Load the draft
+        loaded_design_id, manager = registry.load_draft_state(design_id)
+        
+        state = manager.get_state()
+        operation_store = registry.get_operation_store(design_id)
+        draft_info = operation_store.get_draft_info() if operation_store else {}
+        
+        return {
+            "success": True,
+            "message": f"Draft loaded successfully",
+            "design_id": loaded_design_id,
+            "network_name": state["network_name"],
+            "agent_count": len(state["agents"]),
+            "operation_count": draft_info.get("operation_count", 0),
+            "can_undo": draft_info.get("can_undo", False),
+            "can_redo": draft_info.get("can_redo", False)
+        }
+    except Exception as e:
+        logger.error(f"Error loading draft session: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading draft session: {str(e)}")
 
 
 # Legacy endpoints for backward compatibility
@@ -705,7 +770,7 @@ async def get_network_state_legacy(network_name: str):
                     "state": state,
                     "last_updated": state.get("meta", {}).get("updated_at"),
                     "source": "editor_session"
-                    }
+                }
             else:
                 raise HTTPException(status_code=404, detail=f"No state found for network '{network_name}'")
         
