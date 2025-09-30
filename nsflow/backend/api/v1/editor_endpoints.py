@@ -11,6 +11,7 @@
 
 import logging
 import os
+import aiofiles
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Optional
 
@@ -31,7 +32,6 @@ from nsflow.backend.models.editor_models import StateConnectivityResponse
 from nsflow.backend.models.editor_models import NetworkStateInfo
 from nsflow.backend.models.editor_models import TopLevelConfig
 from nsflow.backend.models.editor_models import TopLevelConfigUpdateRequest
-from nsflow.backend.models.editor_models import ToolboxAgent
 from nsflow.backend.models.editor_models import ToolboxAgentCreateRequest
 from nsflow.backend.models.editor_models import ToolboxInfo
 
@@ -886,10 +886,27 @@ async def redo_operation(design_id: str):
 
 
 # Export and Save
+def determine_export_filename(network_name: str, original_network_name: Optional[str]) -> str:
+    """
+    Determine the filename for export based on whether this is a new network or edited from registry.
+    
+    :param network_name: Current network name from state
+    :param original_network_name: Original network name if loaded from registry
+    :return: Filename without extension
+    """
+    if original_network_name:
+        # This was loaded from registry, use the original name to replace the existing file
+        logger.info(f"Network was loaded from registry, using original name: {original_network_name}")
+        return original_network_name
+    else:
+        # This is a new network, use the current network name
+        logger.info(f"Network is new, using current name: {network_name}")
+        return network_name
+
 
 @router.post("/networks/{design_id}/export")
 async def export_to_hocon(design_id: str, request: NetworkExportRequest):
-    """Export network to HOCON file"""
+    """Export network to HOCON file and update manifest.hocon"""
     try:
         registry = get_registry()
         manager = registry.get_manager(design_id)
@@ -898,6 +915,9 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
         
         state = manager.get_state()
         network_name = state["network_name"]
+        
+        # Get original_network_name directly from state (added when loading from registry)
+        original_network_name = state.get("original_network_name")
         
         # Validate before export if requested
         if request.validate_before_export:
@@ -909,21 +929,78 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
                     "validation": validation_result
                 }
         
-        # Determine output path
+        # Determine output filename based on whether this is new or edited from registry
         output_path = request.output_path
         if not output_path:
+            # Auto-determine filename based on new vs edited from registry
             from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR
-            output_path = os.path.join(REGISTRY_DIR, f"{network_name}.hocon")
-        
+            filename_for_export = determine_export_filename(network_name, original_network_name)
+            if filename_for_export.strip() == "":
+                filename_for_export = f"network_{design_id[:8]}"
+            output_path = os.path.join(REGISTRY_DIR, f"{filename_for_export}.hocon")
+            filename_for_manifest = filename_for_export
+
         # Export to HOCON
-        registry = get_registry()
         success = registry.export_to_hocon_file(design_id, output_path)
-        
+
         if success:
+            # Add to manifest.hocon (inline code as requested)
+            try:
+                manifest_path = os.path.join(REGISTRY_DIR, "manifest.hocon")
+                manifest_entry = f'"{filename_for_manifest}.hocon" = true'
+
+                try:
+                    # Read the current manifest content
+                    async with aiofiles.open(manifest_path, "r") as file:
+                        manifest_content = await file.read()
+                except FileNotFoundError:
+                    # Create new manifest if it doesn't exist
+                    manifest_content = ""
+
+                # Avoid duplicates
+                if f'"{filename_for_manifest}.hocon"' not in manifest_content:
+                    # Detect old format (with braces)
+                    if "{" in manifest_content and "}" in manifest_content:
+                        insert_position = manifest_content.rfind("}")
+                        # Insert before the closing brace, with proper indentation/newline
+                        updated_content = (
+                            manifest_content[:insert_position].rstrip(", \n")
+                            + f",\n    {manifest_entry}\n"
+                            + manifest_content[insert_position:]
+                        )
+                    else:
+                        # New format (no braces) → just append at the end
+                        if manifest_content.strip():
+                            updated_content = manifest_content.rstrip("\n") + f"\n{manifest_entry}\n"
+                        else:
+                            # Empty manifest
+                            updated_content = f"{manifest_entry}\n"
+
+                    # Write back updated content
+                    async with aiofiles.open(manifest_path, "w") as file:
+                        await file.write(updated_content)
+                    logger.info("Added to manifest: %s", filename_for_manifest)
+                    manifest_message = " and added to manifest.hocon"
+                else:
+                    manifest_message = " (already in manifest.hocon)"
+                    
+            except Exception as e:
+                logger.warning(f"Failed to update manifest.hocon: {e}")
+                manifest_message = " (warning: failed to update manifest.hocon)"
+            
+            # Determine action message
+            if original_network_name:
+                action_message = f"Network exported to {output_path} (replaced existing '{original_network_name}.hocon')"
+            else:
+                action_message = f"Network exported to {output_path} (new file)"
+            
             return {
                 "success": True,
-                "message": f"Network exported to {output_path}",
-                "output_path": output_path
+                "message": action_message + manifest_message,
+                "output_path": output_path,
+                "filename": filename_for_manifest,
+                "action": "replace" if original_network_name else "create",
+                "original_name": original_network_name
             }
         else:
             raise HTTPException(status_code=500, detail="Failed to export network")

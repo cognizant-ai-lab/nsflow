@@ -154,6 +154,9 @@ class SimpleStateRegistry:
             # Load from HOCON
             manager.load_from_hocon_structure(hocon_config, network_name)
             
+            # Store original network name in the state for later use
+            manager.current_state["original_network_name"] = network_name
+            
             # Register manager
             self.managers[design_id] = manager
             
