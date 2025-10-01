@@ -57,13 +57,16 @@ interface StateConnectivityResponse {
 
 const EditorAgentFlow = ({ 
   selectedNetwork, 
+  selectedDesignId,
   onNetworkCreated, 
   onNetworkSelected 
 }: { 
   selectedNetwork: string;
+  selectedDesignId: string;
   onNetworkCreated: () => void;
   onNetworkSelected: (networkName: string) => void;
 }) => {
+  console.log('EditorAgentFlow: Received props:', { selectedNetwork, selectedDesignId });
   const { apiUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -95,10 +98,15 @@ const EditorAgentFlow = ({
 
   // Fetch network connectivity data
   const fetchNetworkData = async () => {
-    if (!selectedNetwork || !apiUrl) return;
+    console.log('fetchNetworkData called with:', { selectedNetwork, selectedDesignId, apiUrl });
+    
+    if (!selectedNetwork || !apiUrl) {
+      console.log('Missing selectedNetwork or apiUrl, skipping fetch');
+      return;
+    }
 
     try {
-      console.log(`Loading network data for: ${selectedNetwork}`);
+      console.log(`Loading network data for: ${selectedNetwork} (design_id: ${selectedDesignId})`);
       const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
       
       if (!response.ok) {
@@ -264,11 +272,21 @@ const EditorAgentFlow = ({
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
-  const handleDeleteAgent = (nodeId: string) => {
-    console.log("Delete agent:", nodeId);
-    // Remove node and connected edges
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  const handleDeleteAgent = async (nodeId: string) => {
+    console.log("Delete agent:", nodeId, "selectedDesignId:", selectedDesignId);
+    
+    if (!selectedDesignId) {
+      console.error("Cannot delete agent: no design_id available. Current selectedDesignId:", selectedDesignId);
+      setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+      return;
+    }
+    
+    const success = await deleteAgent(nodeId);
+    if (success) {
+      // Refresh the network data to reflect changes
+      await fetchNetworkData();
+    }
+    
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
     setSelectedNodeId("");
   };
@@ -279,15 +297,149 @@ const EditorAgentFlow = ({
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
+  const handleDuplicateAgent = async (nodeId: string) => {
+    console.log("Duplicate agent:", nodeId, "selectedDesignId:", selectedDesignId);
+    
+    if (!selectedDesignId) {
+      console.error("Cannot duplicate agent: no design_id available. Current selectedDesignId:", selectedDesignId);
+      setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+      return;
+    }
+    
+    // Generate a new name for the duplicated agent
+    const newAgentName = `${nodeId}_copy`;
+    
+    const success = await duplicateAgent(nodeId, newAgentName);
+    if (success) {
+      // Refresh the network data to reflect changes
+      await fetchNetworkData();
+    }
+    
+    setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+  };
+
+  const handleAddChildAgent = async (nodeId: string) => {
+    console.log("Add child agent to:", nodeId, "selectedDesignId:", selectedDesignId);
+    
+    if (!selectedDesignId) {
+      console.error("Cannot add child agent: no design_id available. Current selectedDesignId:", selectedDesignId);
+      setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+      return;
+    }
+    
+    // Generate a name for the child agent
+    const childAgentName = `${nodeId}_child`;
+    
+    // Use current agent as parent (one level down)
+    const success = await createAgent(childAgentName, nodeId);
+    if (success) {
+      // Refresh the network data to reflect changes
+      await fetchNetworkData();
+    }
+    
+    setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+  };
+
+  // API functions for agent operations
+  const createAgent = async (agentName: string, parentName?: string) => {
+    if (!selectedDesignId || !apiUrl) {
+      console.error("Missing design_id or apiUrl for createAgent:", { selectedDesignId, apiUrl });
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: agentName,
+          parent_name: parentName,
+          instructions: `Agent ${agentName}`,
+          agent_type: 'standard'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Failed to create agent:', error);
+        return false;
+      }
+
+      const result = await response.json();
+      console.log('Agent created successfully:', result);
+      return true;
+    } catch (error) {
+      console.error('Error creating agent:', error);
+      return false;
+    }
+  };
+
+  const duplicateAgent = async (agentName: string, newAgentName: string) => {
+    if (!selectedDesignId || !apiUrl) {
+      console.error("Missing design_id or apiUrl");
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${agentName}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_name: newAgentName
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Failed to duplicate agent:', error);
+        return false;
+      }
+
+      const result = await response.json();
+      console.log('Agent duplicated successfully:', result);
+      return true;
+    } catch (error) {
+      console.error('Error duplicating agent:', error);
+      return false;
+    }
+  };
+
+  const deleteAgent = async (agentName: string) => {
+    if (!selectedDesignId || !apiUrl) {
+      console.error("Missing design_id or apiUrl");
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${agentName}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Failed to delete agent:', error);
+        return false;
+      }
+
+      const result = await response.json();
+      console.log('Agent deleted successfully:', result);
+      return true;
+    } catch (error) {
+      console.error('Error deleting agent:', error);
+      return false;
+    }
+  };
+
   // Load data when network changes or layout parameters change (similar to AgentFlow)
   useEffect(() => {
+    console.log('useEffect triggered with:', { selectedNetwork, selectedDesignId });
     if (selectedNetwork) {
       fetchNetworkData();
     } else {
       setNodes([]);
       setEdges([]);
     }
-  }, [selectedNetwork, baseRadius, levelSpacing]);
+  }, [selectedNetwork, selectedDesignId, baseRadius, levelSpacing]);
 
   // Update temp values when actual values change
   useEffect(() => {
@@ -354,6 +506,8 @@ const EditorAgentFlow = ({
         nodeId={contextMenu.nodeId}
         onEdit={handleEditAgent}
         onDelete={handleDeleteAgent}
+        onDuplicate={handleDuplicateAgent}
+        onAddChild={handleAddChildAgent}
         onAdd={handleAddAgent}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
       />

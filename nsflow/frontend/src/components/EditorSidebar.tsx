@@ -83,7 +83,7 @@ const EditorSidebar = ({
   refreshTrigger,
   externalSelectedNetwork 
 }: { 
-  onSelectNetwork: (network: string) => void;
+  onSelectNetwork: (network: string, designId?: string) => void;
   refreshTrigger?: number; // Used to trigger refresh from external components
   externalSelectedNetwork?: string; // Network selected externally (from EditorPalette)
 }) => {
@@ -119,22 +119,26 @@ const EditorSidebar = ({
       }
 
       const data: NetworksResponse = await response.json();
+      console.log('EditorSidebar: Raw API response:', data);
       
       // Convert only editing sessions to network options (registry networks handled by EditorPalette)
       const options: NetworkOption[] = [];
       
       // Add editing sessions only
       data.editing_sessions.forEach(session => {
-        options.push({
+        const option = {
           id: session.design_id,
           display_name: session.network_name,
-          type: 'editing_session',
+          type: 'editing_session' as const,
           agent_count: session.agent_count,
           source: session.source,
           design_id: session.design_id
-        });
+        };
+        console.log('EditorSidebar: Creating network option:', option);
+        options.push(option);
       });
       
+      console.log('EditorSidebar: Final network options:', options);
       setNetworkOptions(options);
       setError("");
     } catch (err: any) {
@@ -150,7 +154,8 @@ const EditorSidebar = ({
     if (!isReady || !apiUrl || !networkOption) return;
 
     try {
-      // All networks in sidebar are editing sessions, so use the new connectivity endpoint
+      console.log('EditorSidebar: Fetching agents for network:', networkOption.display_name, 'design_id:', networkOption.design_id);
+      // All networks in sidebar are editing sessions, so use the design_id connectivity endpoint
       const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${networkOption.design_id}/connectivity`);
       
       if (!response.ok) {
@@ -158,6 +163,7 @@ const EditorSidebar = ({
       }
 
       const data = await response.json();
+      console.log('EditorSidebar: Fetched agents data:', data);
       setAgents(data.nodes || []);
     } catch (err: any) {
       console.error("Error fetching agents:", err);
@@ -167,12 +173,24 @@ const EditorSidebar = ({
 
   // Handle network selection
   const handleNetworkSelect = (networkId: string) => {
+    console.log('EditorSidebar: Network selected, networkId:', networkId);
+    console.log('EditorSidebar: Available network options:', networkOptions);
+    
     const networkOption = networkOptions.find(option => option.id === networkId);
-    if (!networkOption) return;
+    if (!networkOption) {
+      console.error('EditorSidebar: Network option not found for id:', networkId);
+      return;
+    }
+    
+    console.log('EditorSidebar: Selected network option:', networkOption);
+    console.log('EditorSidebar: Calling onSelectNetwork with:', {
+      networkName: networkOption.display_name,
+      designId: networkOption.design_id
+    });
     
     setSelectedNetworkId(networkId);
     setSelectedNetworkOption(networkOption);
-    onSelectNetwork(networkOption.display_name);
+    onSelectNetwork(networkOption.display_name, networkOption.design_id);
     fetchAgents(networkOption);
   };
 

@@ -19,6 +19,8 @@ interface AgentContextMenuProps {
   nodeId: string;
   onEdit: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
+  onDuplicate: (nodeId: string) => void;
+  onAddChild: (nodeId: string) => void;
   onAdd: (x: number, y: number) => void;
   onClose: () => void;
 }
@@ -30,6 +32,8 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
   nodeId,
   onEdit,
   onDelete,
+  onDuplicate,
+  onAddChild,
   onAdd,
   onClose,
 }) => {
@@ -83,13 +87,13 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
     {
       icon: FaCopy,
       label: "Duplicate",
-      onClick: () => console.log("Duplicate agent:", nodeId),
+      onClick: () => onDuplicate(nodeId),
       className: "hover:bg-green-600",
     },
     {
       icon: FaPlus,
       label: "Add Child Agent",
-      onClick: () => onAdd(x, y),
+      onClick: () => onAddChild(nodeId),
       className: "hover:bg-purple-600",
     },
     {

@@ -25,6 +25,7 @@ import { getInitialTheme } from "../../utils/theme";
 
 const EditorContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+  const [selectedDesignId, setSelectedDesignId] = useState<string>("");
   const { setIsEditorMode } = useChatContext();
 
   useEffect(() => {
@@ -44,8 +45,10 @@ const EditorContent: React.FC = () => {
   };
 
   // Callback to select a network in sidebar
-  const handleNetworkSelected = (networkName: string) => {
+  const handleNetworkSelected = (networkName: string, designId?: string) => {
+    console.log('Editor: Network selected:', { networkName, designId });
     setSelectedNetwork(networkName);
+    setSelectedDesignId(designId || "");
   };
 
   return (
@@ -58,7 +61,7 @@ const EditorContent: React.FC = () => {
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={12} minSize={10} maxSize={25}>
                   {/* Editor Sidebar */}
-                  <EditorSidebar onSelectNetwork={setSelectedNetwork} />
+                  <EditorSidebar onSelectNetwork={handleNetworkSelected} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
@@ -66,6 +69,7 @@ const EditorContent: React.FC = () => {
                   {/* Editable AgentFlow */}
                   <EditorAgentFlow 
                     selectedNetwork={selectedNetwork}
+                    selectedDesignId={selectedDesignId}
                     onNetworkCreated={handleNetworkCreated}
                     onNetworkSelected={handleNetworkSelected}
                   />
