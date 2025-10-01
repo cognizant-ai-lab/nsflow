@@ -213,7 +213,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     });
   };
 
-  const textToSpeech = async (text: string, index: number) => {
+  const textToSpeech = async (text: string, _index: number) => {
     try {
       const response = await fetch(`${apiUrl}/api/v1/text_to_speech`, {
         method: "POST",

@@ -274,7 +274,7 @@ class AgentUpdateRequest(BaseAgentProperties):
         
         # Add all non-None fields (excluding llm_config which is handled specially)
         exclude_fields = {"updates", "llm_config"}
-        for field_name, field_value in self.dict(exclude_none=True, by_alias=True).items():
+        for field_name, field_value in self.model_dump(exclude_none=True, by_alias=True).items():
             if field_name not in exclude_fields and field_value is not None:
                 updates[field_name] = field_value
         
@@ -282,14 +282,12 @@ class AgentUpdateRequest(BaseAgentProperties):
         if self.llm_config is not None:
             if isinstance(self.llm_config, LLMConfig):
                 # Convert LLMConfig to dict, excluding None values
-                llm_dict = self.llm_config.dict(exclude_none=True, by_alias=True)
-                if llm_dict:  # Only add if there are actual values
-                    updates["llm_config"] = llm_dict
+                llm_dict = self.llm_config.model_dump(exclude_none=True, by_alias=True)
+                updates["llm_config"] = llm_dict
             elif isinstance(self.llm_config, dict):
                 # Filter None values from dict
                 llm_dict = {k: v for k, v in self.llm_config.items() if v is not None}
-                if llm_dict:  # Only add if there are actual values
-                    updates["llm_config"] = llm_dict
+                updates["llm_config"] = llm_dict
         
         # Merge with legacy updates field if provided
         if self.updates:
