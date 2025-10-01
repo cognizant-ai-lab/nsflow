@@ -67,12 +67,12 @@ const EditorAgentFlow = ({
   const { apiUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { fitView } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
   
   // Layout control state (similar to AgentFlow)
-  const [baseRadius, setBaseRadius] = useState(150);
-  const [levelSpacing, setLevelSpacing] = useState(200);
+  const [baseRadius, setBaseRadius] = useState(30);
+  const [levelSpacing, setLevelSpacing] = useState(80);
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
   
@@ -98,6 +98,7 @@ const EditorAgentFlow = ({
     if (!selectedNetwork || !apiUrl) return;
 
     try {
+      console.log(`Loading network data for: ${selectedNetwork}`);
       const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
       
       if (!response.ok) {
@@ -143,11 +144,14 @@ const EditorAgentFlow = ({
 
       setNodes(finalNodes);
       setEdges(transformedEdges);
+      fitView({ padding: 0.1, duration: 800 });
+      setViewport({ x: -70, y: 100, zoom: 0.5 }, { duration: 800 });
 
       // Auto-fit view after loading (similar to AgentFlow)
-      setTimeout(() => {
-        fitView({ padding: 0.1, duration: 800 });
-      }, 150);
+      // setTimeout(() => {
+      //   fitView({ padding: 0.1, duration: 800 });
+      // }, 150);
+      // setViewport({ x: 0, y: 0, zoom: 0.2 }, { duration: 800 });
 
     } catch (error) {
       console.error("Error fetching network data:", error);
@@ -362,7 +366,7 @@ const EditorAgentFlow = ({
             position: 'absolute',
             top: 16,
             left: 16,
-            p: 2,
+            p: 1,
             backgroundColor: theme.palette.background.paper,
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: 2,
@@ -400,14 +404,6 @@ const EditorAgentFlow = ({
             <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
               Edges: {edges.length}
             </Typography>
-            {layoutManager && (
-              <Typography variant="caption" sx={{ 
-                color: layoutManager.hasCachedPositions() ? theme.palette.success.main : theme.palette.text.secondary,
-                fontSize: '0.7rem'
-              }}>
-                {layoutManager.hasCachedPositions() ? '● Positions cached' : '○ No cache'}
-              </Typography>
-            )}
             {selectedNodeId && (
               <Box sx={{ 
                 mt: 1, 

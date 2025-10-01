@@ -9,7 +9,7 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -40,23 +40,23 @@ import {
 import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import { useApiPort } from "../context/ApiPortContext";
-import { hierarchicalRadialLayout } from "../utils/hierarchicalRadialLayout";
+import { createLayoutManager } from "../utils/agentLayoutManager";
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
 
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl, wsUrl } = useApiPort();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { fitView } = useReactFlow();
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
 
   // ** State for highlighting active agents & edges **
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
-  // ** State for actual values (used in API calls) **
+  // ** State for actual values (used in API calls/layout) **
   const [baseRadius, setBaseRadius] = useState(30);
   const [levelSpacing, setLevelSpacing] = useState(80);
 
@@ -64,20 +64,23 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
 
-  // ** Get access to the ReactFlow setViewport instance **
-  const { setViewport } = useReactFlow();
-
   // ** Add a diagramKey to force a full remount of ReactFlow **
   const [diagramKey, setDiagramKey] = useState(0);
   // ** Add a compact mode option for connectivity **
   const [useCompactMode, setUseCompactMode] = useState(true);
+
+  // ** Layout manager (same pattern as EditorAgentFlow) **
+  const layoutManager = selectedNetwork
+    ? createLayoutManager(selectedNetwork, { baseRadius, levelSpacing })
+    : null;
 
   const resetFlow = () => {
     setNodes([]);
     setEdges([]);
     setDiagramKey(prev => prev + 1); // This forces a full remount
   };
-    
+
+  // Fetch and render network with cached layout (if present)
   useEffect(() => {
     if (!selectedNetwork) return;
 
@@ -86,30 +89,41 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     fetch(`${apiUrl}/api/v1/${endpoint}/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
-        const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
-          data.nodes,
-          data.edges,
-          baseRadius,
-          levelSpacing
-        );
+        // Shape edges (preserve AgentFlow visuals)
+        const transformedEdges: Edge[] = (data.edges as Edge[]).map((edge) => ({
+          ...edge,
+          type: "floating",
+          animated: true,
+          markerEnd: "arrowclosed" as EdgeMarkerType,
+        }));
 
-        setNodes(arrangedNodes as Node<any>[]);
-        setEdges(
-          arrangedEdges.map((edge: Edge) => ({
-            ...edge,
-            type: "floating",
-            animated: true,
-            markerEnd: "arrowclosed" as EdgeMarkerType,
-          }))
-        );
+        // Start with raw nodes from API
+        const rawNodes: Node[] = (data.nodes as Node[]);
+
+        // Apply intelligent layout w/ position cache (like EditorAgentFlow)
+        let finalNodes = rawNodes;
+        if (layoutManager && rawNodes.length > 0) {
+          try {
+            const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
+            finalNodes = layoutResult.nodes as Node[];
+          } catch (e) {
+            console.warn("[AgentFlow] layoutManager.applyLayout failed; using raw positions:", e);
+          }
+        }
+
+        setNodes(finalNodes);
+        setEdges(transformedEdges);
+
+        // Fit view/viewport exactly as before
         fitView();
         // console.log("received data", data);
         // You can change zoom and center values as needed
         setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
-  }, [selectedNetwork, baseRadius, levelSpacing, useCompactMode]);
+  }, [selectedNetwork, apiUrl, useCompactMode, baseRadius, levelSpacing]); // keep deps so sliders still reflow
 
+  // WebSocket highlighting (unchanged)
   useEffect(() => {
     if (!selectedNetwork) return;
     
@@ -118,7 +132,6 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event: MessageEvent) => {
       try {
-        // Validate the outer JSON message
         if (!isValidJson(event.data)) {
           console.error("Invalid JSON received:", event.data);
           return;
@@ -152,6 +165,27 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     return () => ws.close();
   }, [selectedNetwork, wsUrl]);
 
+  // Save cached positions after drag-end (debounced), like editor
+  const handleNodesChange = useCallback((changes: any[]) => {
+    onNodesChange(changes);
+
+    const ended = changes.some(
+      (c: any) => c.type === "position" && c.dragging === false
+    );
+    if (ended && layoutManager) {
+      setTimeout(() => {
+        setNodes((curr) => {
+          try {
+            layoutManager.savePositions(curr);
+          } catch (e) {
+            console.warn("[AgentFlow] layoutManager.savePositions failed:", e);
+          }
+          return curr;
+        });
+      }, 400);
+    }
+  }, [onNodesChange, layoutManager, setNodes]);
+
   // Utility function to validate JSON
   const isValidJson = (str: string): boolean => {
     try {
@@ -161,8 +195,6 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       return false;
     }
   };
-
-  // Note: handleSliderChange and handleSliderRelease functions removed as they're now handled inline
 
   return (
     <Box sx={{ 
@@ -189,14 +221,16 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               variant="contained"
               startIcon={<AutoArrangeIcon />}
               onClick={() => {
-                const { nodes: arrangedNodes, edges: arrangedEdges } = hierarchicalRadialLayout(
-                  nodes,
-                  edges,
-                  baseRadius,
-                  levelSpacing
-                );
-                setNodes(arrangedNodes);
-                setEdges(arrangedEdges);
+                if (layoutManager && nodes.length > 0) {
+                  try {
+                    const { nodes: laidOut } = layoutManager.forceLayout(nodes, edges);
+                    setNodes(laidOut as Node[]);
+                    // persist immediately so the view sticks next load
+                    layoutManager.savePositions(laidOut as Node[]);
+                  } catch (e) {
+                    console.warn("[AgentFlow] forceLayout failed:", e);
+                  }
+                }
                 fitView();
               }}
               sx={{
@@ -338,7 +372,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? theme.palette.warning.main : theme.palette.divider,
           },
         }))}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
         nodeTypes={nodeTypes}

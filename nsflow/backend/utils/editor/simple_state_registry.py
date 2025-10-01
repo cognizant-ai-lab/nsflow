@@ -73,19 +73,30 @@ class SimpleStateRegistry:
                         self.managers[design_id] = manager
                         self.operation_stores[design_id] = operation_store
                         
-                        # Get network name from draft
-                        network_name = draft.get("network_name", f"draft_{design_id[:8]}")
+                        # Get network name from the ACTUAL restored state, not metadata
+                        state = manager.get_state()
+                        network_name = state.get("network_name", "")
+                        
+                        # If network name is empty, try to get it from metadata as fallback
+                        if not network_name:
+                            network_name = draft.get("network_name", f"draft_{design_id[:8]}")
+                            # Update the manager's state with the fallback name
+                            manager.set_network_name(network_name)
                         
                         # Update mappings
                         if network_name not in self.network_to_design_ids:
                             self.network_to_design_ids[network_name] = []
                         self.network_to_design_ids[network_name].append(design_id)
                         
+                        # Get additional info from the restored state
+                        meta = state.get("meta", {})
+                        
                         self.design_id_to_info[design_id] = {
                             "network_name": network_name,
                             "source": "draft_auto_loaded",
-                            "created_at": draft.get("created_at"),
-                            "loaded_at": draft.get("last_saved")
+                            "created_at": meta.get("created_at", draft.get("created_at")),
+                            "loaded_at": meta.get("updated_at", draft.get("last_saved")),
+                            "original_network_name": state.get("original_network_name")
                         }
                         
                         loaded_count += 1
@@ -123,7 +134,7 @@ class SimpleStateRegistry:
         # Register manager
         self.managers[design_id] = manager
         
-        # Create operation store for versioned undo/redo
+        # Create operation store AFTER all initial setup is complete
         operation_store = OperationStore(design_id, manager)
         self.operation_stores[design_id] = operation_store
         
@@ -157,16 +168,16 @@ class SimpleStateRegistry:
             # Store original network name in the state for later use
             manager.current_state["original_network_name"] = network_name
             
-            # Register manager
-            self.managers[design_id] = manager
-            
-            # Create operation store for versioned undo/redo
-            operation_store = OperationStore(design_id, manager)
-            self.operation_stores[design_id] = operation_store
-            
             # Update mappings
             session_network_name = f"{network_name}_{design_id[:8]}"
             manager.set_network_name(session_network_name)
+            
+            # Register manager
+            self.managers[design_id] = manager
+            
+            # Create operation store AFTER all initial setup is complete
+            operation_store = OperationStore(design_id, manager)
+            self.operation_stores[design_id] = operation_store
             
             if session_network_name not in self.network_to_design_ids:
                 self.network_to_design_ids[session_network_name] = []
@@ -299,14 +310,17 @@ class SimpleStateRegistry:
                 operation_store = self.operation_stores.get(design_id)
                 state = manager.get_state()
                 
+                # Get current network name from the actual state
+                current_network_name = state.get("network_name", "")
+                
                 session_info = {
                     "design_id": design_id,
-                    "network_name": info.get("network_name", ""),
-                    "original_network_name": info.get("original_network_name"),
+                    "network_name": current_network_name or info.get("network_name", ""),
+                    "original_network_name": state.get("original_network_name") or info.get("original_network_name"),
                     "source": info.get("source", "unknown"),
                     "agent_count": len(state.get("agents", {})),
-                    "created_at": state.get("meta", {}).get("created_at"),
-                    "updated_at": state.get("meta", {}).get("updated_at"),
+                    "created_at": state.get("meta", {}).get("created_at") or info.get("created_at"),
+                    "updated_at": state.get("meta", {}).get("updated_at") or info.get("loaded_at"),
                     "can_undo": len(operation_store._read_jsonl(operation_store.hist_file)) > 0 if operation_store else manager.can_undo(),
                     "can_redo": len(operation_store._read_jsonl(operation_store.redo_file)) > 0 if operation_store else manager.can_redo()
                 }
@@ -343,20 +357,32 @@ class SimpleStateRegistry:
             self.managers[design_id] = manager
             self.operation_stores[design_id] = operation_store
             
-            # Get draft info for metadata
-            draft_info = operation_store.get_draft_info()
-            network_name = draft_info.get("network_name", f"draft_{design_id[:8]}")
+            # Get network name from the ACTUAL restored state, not metadata
+            state = manager.get_state()
+            network_name = state.get("network_name", "")
+            
+            # If network name is empty, try to get it from metadata as fallback
+            if not network_name:
+                draft_info = operation_store.get_draft_info()
+                network_name = draft_info.get("network_name", f"draft_{design_id[:8]}")
+                # Update the manager's state with the fallback name
+                manager.set_network_name(network_name)
             
             # Update mappings
             if network_name not in self.network_to_design_ids:
                 self.network_to_design_ids[network_name] = []
             self.network_to_design_ids[network_name].append(design_id)
             
+            # Get additional info from the restored state
+            meta = state.get("meta", {})
+            draft_info = operation_store.get_draft_info()
+            
             self.design_id_to_info[design_id] = {
                 "network_name": network_name,
                 "source": "draft",
-                "created_at": draft_info.get("created_at"),
-                "loaded_at": draft_info.get("last_saved")
+                "created_at": meta.get("created_at", draft_info.get("created_at")),
+                "loaded_at": meta.get("updated_at", draft_info.get("last_saved")),
+                "original_network_name": state.get("original_network_name")
             }
             
             logger.info(f"Loaded draft state for design_id: {design_id}")
@@ -440,13 +466,16 @@ class SimpleStateRegistry:
         state = manager.get_state()
         validation = manager.validate_network()
         
+        # Get the current network name from the actual state
+        current_network_name = state.get("network_name", "")
+        
         return {
             "design_id": design_id,
-            "network_name": info.get("network_name", ""),
-            "original_network_name": info.get("original_network_name"),
+            "network_name": current_network_name or info.get("network_name", ""),
+            "original_network_name": state.get("original_network_name") or info.get("original_network_name"),
             "source": info.get("source", "unknown"),
-            "created_at": state.get("meta", {}).get("created_at"),
-            "updated_at": state.get("meta", {}).get("updated_at"),
+            "created_at": state.get("meta", {}).get("created_at") or info.get("created_at"),
+            "updated_at": state.get("meta", {}).get("updated_at") or info.get("loaded_at"),
             "agent_count": len(state.get("agents", {})),
             "can_undo": manager.can_undo(),
             "can_redo": manager.can_redo(),
