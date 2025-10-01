@@ -11,20 +11,52 @@
 // END COPYRIGHT
 import * as React from "react";
 import { useState, useRef, useEffect } from "react";
-import { FaUserCircle, FaEdit, FaDownload, FaHome } from "react-icons/fa";
-import { FaArrowsRotate } from "react-icons/fa6";
-import { ImPower  } from "react-icons/im";
+import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  IconButton, 
+  Button, 
+  MenuItem, 
+  Box,
+  useTheme as useMuiTheme,
+  alpha,
+  Paper
+} from "@mui/material";
+import { 
+  Home as HomeIcon,
+  Code as CodeIcon,
+  AccountTree as NetworkIcon,
+  Download as DownloadIcon,
+  Refresh as RefreshIcon,
+  AccountCircle as AccountIcon,
+  Edit as EditIcon,
+  DrawTwoTone as WandIcon
+} from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
+import { useTheme } from "../context/ThemeContext";
 
-const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
+interface HeaderProps {
+  selectedNetwork: string;
+  isEditorPage?: boolean;
+}
+
+const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }) => {
   const { apiUrl } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  // const location = useLocation();
+  const location = useLocation();
+  const { theme, isDarkMode } = useTheme();
+  const muiTheme = useMuiTheme();
+  
+  // Determine if we're on editor page based on location or prop
+  const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
+
 
   // Handle clicking outside to close dropdown
   useEffect(() => {
@@ -59,6 +91,7 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setExportDropdown(false);
   };
 
   const handleExportAgentNetwork = async () => {
@@ -81,94 +114,211 @@ const Header: React.FC<{ selectedNetwork: string }> = ({ selectedNetwork }) => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setExportDropdown(false);
+  };
+
+  const handleNavigateToEditor = () => {
+    window.open('/editor', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleNavigateToHome = () => {
+    navigate('/home');
   };
 
   return (
-    <header className="header-panel flex items-center justify-between px-4 shadow-md relative z-50 h-14">
-      {/* Left - App Icon */}
-      <div className="flex items-center space-x-2">
-        <ImPower className="h-8 w-8 text-blue-400" />
-        <span className="text-lg font-semibold">Neuro AI - Multi-Agent Accelerator Client</span>
-      </div>
-
-      {/* Middle - Navigation Buttons */}
-      <div className="flex space-x-4">
-        {/* Reload */}
-        <button className="header-btn h-8 px-4 py-1" onClick={() => window.location.reload()}>
-          <FaArrowsRotate className="mr-2" /> Reload
-        </button>
-
-        {/* Spacer */}
-        <div className="w-6" />
-
-        {/* Home */}
-        <button 
-        className="header-btn h-8 px-4 py-1"
-        onClick={() => navigate("/home")}
-        >
-            <FaHome className="mr-2" /> Home
-        </button>
-
-        {/* Editor */}
-        <a
-          href={`https://neurosan-hocon-editor.streamlit.app/ `}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center text-blue-400 hover:text-blue-300"
-        >
-          <button className="header-btn h-8 px-4 py-1" title="Hocon Editor">
-            <FaEdit className="mr-2" /> Editor
-          </button>
-        </a>
-        {/* Observe */}
-
-        {/* {location.pathname !== "/observability" && (
-          <button
-            className="header-btn h-8 px-4 py-1"
-            title="Coming soon"
-            // onClick={() => window.open("/observability", "_blank", "noopener,noreferrer")}
-          >
-            <FaChartBar className="mr-2" /> Observe
-          </button>
-        )} */}
-
-        {/* Export Dropdown */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            className="header-btn flex items-center h-8 px-4 py-1 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition duration-200"
-            onClick={() => setExportDropdown(!exportDropdown)}
-          >
-            <FaDownload className="mr-2" /> Export{" "}
-            <span className={`ml-2 mr-2 transition-transform duration-200 ${exportDropdown ? "rotate-90" : "rotate-0"}`}>
-              ▶
-            </span>
-          </button>
-
-          {exportDropdown && (
-            <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-50">
-              <button
-                className="block px-4 py-2 h-10 text-white hover:bg-gray-700 w-full text-left"
-                onClick={handleExportNotebook}
-              >
-                Export as Notebook
-              </button>
-              <button
-                className="block px-4 py-2 h-10 text-white hover:bg-gray-700 w-full text-left"
-                onClick={handleExportAgentNetwork}
-              >
-                Export Agent Network
-              </button>
-            </div>
+    <AppBar 
+      key={`header-${isDarkMode ? 'dark' : 'light'}`}
+      position="static" 
+      elevation={2}
+      sx={{
+        background: theme.palette.background.paper,
+        height: 56,
+        zIndex: muiTheme.zIndex.appBar,
+      }}
+    >
+      <Toolbar sx={{ 
+        minHeight: '56px !important', 
+        px: 2,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%'
+      }}>
+        {/* Left - App Icon and Title */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1.5,
+          flex: '0 0 auto'
+        }}>
+          {isOnEditorPage ? (
+            <WandIcon 
+              sx={{ 
+                fontSize: '28px', 
+                color: muiTheme.palette.text.primary,
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+              }} 
+            />
+          ) : (
+            <ImPower 
+              style={{ 
+                fontSize: '28px', 
+                color: muiTheme.palette.text.primary,
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+              }} 
+            />
           )}
-        </div>
-      </div>
+          <Typography 
+            variant="h6" 
+            component="div" 
+            sx={{ 
+              fontWeight: 600,
+              color: muiTheme.palette.text.primary,
+              textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+              display: { xs: 'none', sm: 'block' }
+            }}
+          >
+            {isOnEditorPage ? 'Workflow Agent Network Designer' : 'Neuro AI - Multi-Agent Accelerator Client'}
+          </Typography>
+        </Box>
 
-      {/* Right - Theme Toggle + Profile */}
-      <div className="flex items-center gap-4">
-        <MuiThemeToggle />
-        <FaUserCircle className="h-8 w-8 text-gray-400 cursor-pointer hover:text-white" />
-      </div>
-    </header>
+        {/* Middle - Navigation Buttons */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          flex: '0 0 auto',
+          position: 'absolute',
+          left: '50%',
+          transform: 'translateX(-50%)'
+        }}>
+          {/* Reload */}
+          <IconButton
+            onClick={() => window.location.reload()}
+            sx={{ 
+              color: muiTheme.palette.text.primary,
+              '&:hover': { 
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
+              }
+            }}
+            title="Reload"
+          >
+            <RefreshIcon />
+          </IconButton>
+
+          {/* Home Button */}
+          <Button
+            variant={!isOnEditorPage ? "contained" : "outlined"}
+            startIcon={<HomeIcon />}
+            onClick={handleNavigateToHome}
+            sx={{
+              color: muiTheme.palette.text.primary,
+              borderColor: muiTheme.palette.primary.main,
+              '&:hover': {
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                borderColor: muiTheme.palette.primary.main,
+              },
+              ...(isOnEditorPage && {
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+              }),
+              ...(!isOnEditorPage && {
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
+              })
+            }}
+          >
+            Home
+          </Button>
+
+          {/* Editor Button */}
+          <Button
+            variant={isOnEditorPage ? "contained" : "outlined"}
+            startIcon={<CodeIcon />}
+            onClick={handleNavigateToEditor}
+            sx={{
+              color: muiTheme.palette.text.primary,
+              borderColor: muiTheme.palette.primary.main,
+              '&:hover': {
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                borderColor: muiTheme.palette.primary.main,
+              },
+              ...(isOnEditorPage && {
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
+              }),
+              ...(!isOnEditorPage && {
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+              })
+            }}
+          >
+            Editor
+          </Button>
+
+          {/* Export Dropdown */}
+          <Box ref={dropdownRef} sx={{ position: 'relative' }}>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              endIcon={<Typography sx={{ transform: exportDropdown ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▶</Typography>}
+              onClick={() => setExportDropdown(!exportDropdown)}
+              sx={{
+                color: muiTheme.palette.text.primary,
+                borderColor: muiTheme.palette.primary.main,
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                  borderColor: muiTheme.palette.primary.main,
+                }
+              }}
+            >
+              Export
+            </Button>
+
+            {exportDropdown && (
+              <Paper
+                elevation={8}
+                sx={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  mt: 1,
+                  minWidth: 200,
+                  zIndex: muiTheme.zIndex.modal,
+                  backgroundColor: muiTheme.palette.background.paper,
+                  border: `1px solid ${muiTheme.palette.divider}`,
+                }}
+              >
+                <MenuItem onClick={handleExportNotebook}>
+                  <EditIcon sx={{ mr: 1 }} />
+                  Export as Notebook
+                </MenuItem>
+                <MenuItem onClick={handleExportAgentNetwork}>
+                  <NetworkIcon sx={{ mr: 1 }} />
+                  Export Agent Network
+                </MenuItem>
+              </Paper>
+            )}
+          </Box>
+        </Box>
+
+        {/* Right - Theme Toggle + Profile */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          flex: '0 0 auto'
+        }}>
+          <MuiThemeToggle />
+          <IconButton
+            sx={{ 
+              color: muiTheme.palette.text.primary,
+              '&:hover': { 
+                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
+              }
+            }}
+          >
+            <AccountIcon />
+          </IconButton>
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
 };
 

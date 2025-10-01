@@ -53,9 +53,7 @@ const EditorContent: React.FC = () => {
       <ApiPortProvider>
         <NeuroSanProvider>
           <div className="h-screen w-screen bg-gray-900 flex flex-col">
-            <div className="h-14">
-              <Header selectedNetwork={selectedNetwork} />
-            </div>
+            <Header selectedNetwork={selectedNetwork} isEditorPage={true} />
 
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={12} minSize={10} maxSize={25}>

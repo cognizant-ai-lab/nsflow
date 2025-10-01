@@ -39,7 +39,7 @@ const Home: React.FC = () => {
             {/* NeuroSanProvider is used to manage the host and port for the NeuroSan server */}
             <div className="h-screen w-screen bg-gray-900 flex flex-col">
               <div className="h-14">
-                <Header selectedNetwork={selectedNetwork}/>
+                <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
               </div>
 
               <PanelGroup direction="horizontal">
