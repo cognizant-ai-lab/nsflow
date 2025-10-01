@@ -464,6 +464,38 @@ class OperationStore:
             if not ok: raise RuntimeError("remove_edge failed (undo/redo)")
             return
 
+        if op == "duplicate_agent":
+            # Duplicate agent operation - works the same as create_agent_with_parent
+            # but we need to get the original agent's data and parent first
+            original_name = args["agent_name"]
+            new_name = args["new_name"]
+            
+            # Get the original agent's data from current state
+            current_state = self.manager.get_state()
+            original_agent = current_state["agents"].get(original_name)
+            if not original_agent:
+                raise RuntimeError(f"duplicate_agent: original agent '{original_name}' not found")
+            
+            # Get the parent of the original agent
+            parent = original_agent.get("_parent")
+            
+            # Create agent data for the duplicate (copy all fields except name)
+            agent_data = copy.deepcopy(original_agent)
+            agent_data["name"] = new_name  # Update the name
+            
+            # Use create_agent_with_parent logic
+            ok = self.manager.add_agent(new_name, None, agent_data)
+            if not ok: raise RuntimeError("duplicate_agent: add_agent failed (undo/redo)")
+            
+            # Add edge to parent if original had a parent
+            if parent:
+                ok = self.manager.add_edge(parent, new_name)
+                if not ok:
+                    # Rollback: remove the agent we just added
+                    self.manager.delete_agent(new_name)
+                    raise RuntimeError("duplicate_agent: add_edge failed (undo/redo)")
+            return
+
         if op == "restore_agent":
             # Recreate the agent exactly, then reattach to parent and children.
             agent_def = copy.deepcopy(args["agent_def"])
