@@ -214,7 +214,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         display: 'flex',
         gap: 1
       }}>
-        <Tooltip title="Auto arrange nodes">
+        <Tooltip title="Auto arrange nodes to original state">
           <span style={{ display: 'inline-block' }}>
             <Button
               size="small"
@@ -236,17 +236,18 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 '&:hover': { backgroundColor: theme.palette.primary.dark },
-                fontSize: '0.75rem',
+                fontSize: '0.6rem',
                 minWidth: 'auto',
-                px: 1.5
+                px: 1.5,
+                textTransform: 'none'
               }}
             >
-              Arrange
+              Auto Arrange
             </Button>
           </span>
         </Tooltip>
         
-        <Tooltip title="Reset viewport">
+        <Tooltip title="Reset (Clear) viewport">
           <span style={{ display: 'inline-block' }}>
             <Button
               size="small"
@@ -256,9 +257,10 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               sx={{
                 backgroundColor: theme.palette.secondary.main,
                 '&:hover': { backgroundColor: theme.palette.secondary.dark },
-                fontSize: '0.75rem',
+                fontSize: '0.6rem',
                 minWidth: 'auto',
-                px: 1.5
+                px: 1.5,
+                textTransform: 'none'
               }}
             >
               Reset
