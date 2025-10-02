@@ -59,11 +59,11 @@ const EditorSlyDataPanel: React.FC = () => {
         setTreeData(cached.data);
         setNextId(cached.nextId);
         } else {
-        setTreeData([]);
+          setTreeData([]);
         }
         setLastMessageCount(slyDataMessages.length); // baseline for this mount
         setHasLocalEdits(false); // new network, no pending local edits
-        // setIsInitialized(true);
+        setIsInitialized(true);
     }
   }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
 
@@ -314,14 +314,18 @@ const EditorSlyDataPanel: React.FC = () => {
         const latestData = result.sly_data;
 
         if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
-        // ⛔ If the user has edited locally, do not overwrite their view
-        if (hasLocalEdits) return;
-
+        // // ⛔ If the user has edited locally, do not overwrite their view
+        // if (hasLocalEdits) {
+        //   console.warn('Remote sync skipped: hasLocalEdits = true, treeData length =', treeData.length);
+        //   return;
+        // }
+        // If new data is received from agent, replace current view
         const localRef = { current: nextIdRef.current };
         const newTreeData = jsonToTreeData(latestData, localRef, undefined, 0);
         setTreeData(newTreeData);
         setExpandedItems(getAllItemIds(newTreeData));
         setNextId(localRef.current);
+        setHasLocalEdits(false); // overwrite local edits with Agent's latest
 
         // persist to cache
         if (targetNetwork) saveSlyDataToCache(newTreeData, targetNetwork, localRef.current);
