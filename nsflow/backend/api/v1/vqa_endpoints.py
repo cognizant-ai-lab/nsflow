@@ -73,7 +73,8 @@ async def vqa(
     curl -X POST http://127.0.0.1:8005/api/v1/vqa \
         -F 'question=How many people are in the photo?' \
         -F 'image=@/Users/joe/vacation.jpg' \
-        -F 'model_name=llava-fastvithd_7b_stage3'
+        -F 'model_name=llava-fastvithd_7b_stage3' \
+        -F 'timeout_sec=240'
     """
     if model_name is None:
         model_name = DEFAULT_MODEL_NAME
@@ -152,6 +153,8 @@ async def vqa_video(
     video: UploadFile = File(...),
     model_name: Optional[str] = Form(None),
     expected_num_of_frames: int = Form(8),
+    max_new_tokens: int = Form(128),
+    temperature: float = Form(0.2),
     timeout_sec: int = Form(120),
 ):
     """
@@ -173,7 +176,10 @@ async def vqa_video(
         -F 'question=What is this video about?' \
         -F 'image=@/Users/joe/vacation.mp4' \
         -F 'model_name=llava-fastvithd_7b_stage3' \
-        -F 'expected_num_of_frames=8'
+        -F 'expected_num_of_frames=8' \
+        -F 'max_new_tokens=128' \
+        -F 'temperature=0.2' \
+        -F 'timeout_sec=240'
     """
     if model_name is None:
         model_name = DEFAULT_MODEL_NAME
@@ -209,6 +215,10 @@ async def vqa_video(
         question,
         "--expected_num_of_frames",
         str(expected_num_of_frames),
+        "--max_new_tokens",
+        str(max_new_tokens),
+        "--temperature",
+        str(temperature),
     ]
 
     try:
