@@ -166,6 +166,9 @@ class LLMConfig(BaseModel):
 
 class BaseAgentProperties(BaseModel):
     """Base class containing all common agent properties"""
+    # Make name part of the base, but optional here
+    name: Optional[str] = Field(None, description="Agent name")
+
     # Core agent properties
     instructions: Optional[str] = Field(None, description="Agent instructions", examples=["You are a helpful assistant", "Analyze the data and provide insights"])
     function: Optional[Dict[str, Any]] = Field(None, description="Agent function definition", examples=[{"description": "Get weather info", "parameters": {"type": "object"}}])

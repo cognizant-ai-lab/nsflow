@@ -38,6 +38,7 @@ import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
 import EditorPalette from "./EditorPalette";
+import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
 import { AccountTree as LayoutIcon } from "@mui/icons-material";
@@ -95,6 +96,9 @@ const EditorAgentFlow = ({
 
   // Selected node state
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
+  
+  // Agent editor state
+  const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
 
   // Fetch network connectivity data
   const fetchNetworkData = async () => {
@@ -183,6 +187,12 @@ const EditorAgentFlow = ({
     );
   }, [setNodes]);
 
+  // Handle node double-click
+  const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
+    console.log("Double-clicked agent:", node.id);
+    setSelectedAgentName(node.id);
+  }, []);
+
   // Handle node context menu (right-click)
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault();
@@ -268,7 +278,7 @@ const EditorAgentFlow = ({
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
     console.log("Edit agent:", nodeId);
-    // TODO: Open edit dialog
+    setSelectedAgentName(nodeId);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
@@ -338,6 +348,12 @@ const EditorAgentFlow = ({
     }
     
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+  };
+
+  // Handle agent update from editor panel
+  const handleAgentUpdated = async () => {
+    console.log("Agent updated, refreshing network data");
+    await fetchNetworkData();
   };
 
   // API functions for agent operations
@@ -476,6 +492,7 @@ const EditorAgentFlow = ({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
@@ -685,6 +702,13 @@ const EditorAgentFlow = ({
           </Box>
         )}
       </Box>
+
+      {/* Network Agent Editor Panel */}
+      <NetworkAgentEditorPanel
+        selectedDesignId={selectedDesignId}
+        selectedAgentName={selectedAgentName}
+        onAgentUpdated={handleAgentUpdated}
+      />
     </Box>
   );
 };

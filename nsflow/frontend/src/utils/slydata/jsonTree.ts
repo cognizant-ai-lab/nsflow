@@ -28,16 +28,42 @@ export const getAllItemIds = (items: SlyTreeItem[]): string[] => {
 
 export const treeDataToJson = (items: SlyTreeItem[]): any => {
   const result: any = {};
-  items.forEach((item) => {
-    if (item.isKeyValuePair && item.key) {
-      if (item.children && item.children.length > 0) {
-        result[item.key] = treeDataToJson(item.children);
-      } else {
-        result[item.key] = item.value;
+  
+  // Check if this looks like an array (all keys are numeric)
+  const isArray = items.every(item => 
+    item.isKeyValuePair && 
+    item.key && 
+    !isNaN(Number(item.key)) && 
+    Number(item.key) >= 0
+  );
+  
+  if (isArray) {
+    // Convert to array
+    const arrayResult: any[] = [];
+    items.forEach((item) => {
+      if (item.isKeyValuePair && item.key) {
+        const index = Number(item.key);
+        if (item.children && item.children.length > 0) {
+          arrayResult[index] = treeDataToJson(item.children);
+        } else {
+          arrayResult[index] = item.value;
+        }
       }
-    }
-  });
-  return result;
+    });
+    return arrayResult;
+  } else {
+    // Convert to object
+    items.forEach((item) => {
+      if (item.isKeyValuePair && item.key) {
+        if (item.children && item.children.length > 0) {
+          result[item.key] = treeDataToJson(item.children);
+        } else {
+          result[item.key] = item.value;
+        }
+      }
+    });
+    return result;
+  }
 };
 
 export const jsonToTreeData = (
@@ -50,10 +76,34 @@ export const jsonToTreeData = (
 
   const generateLocalId = () => `item_${nextIdRef.current++}`;
 
-  const convertObject = (obj: any, currentDepth: number, currentParentId?: string): SlyTreeItem[] =>
-    Object.entries(obj).map(([key, value]) => {
+  const convertObject = (obj: any, currentDepth: number, currentParentId?: string): SlyTreeItem[] => {
+    // Handle arrays specially
+    if (Array.isArray(obj)) {
+      return obj.map((value, index) => {
+        const id = generateLocalId();
+        const hasValue = typeof value !== 'object' || value === null;
+        const item: SlyTreeItem = {
+          id,
+          label: hasValue ? `${index}: ${JSON.stringify(value)}` : `${index}`,
+          key: String(index),
+          value: hasValue ? value : undefined,
+          parentId: currentParentId,
+          isKeyValuePair: true,
+          type: Array.isArray(value) ? 'array' : (typeof value as any),
+          depth: currentDepth,
+          hasValue,
+        };
+        if (typeof value === 'object' && value !== null) {
+          item.children = convertObject(value, currentDepth + 1, id);
+        }
+        return item;
+      });
+    }
+
+    // Handle regular objects
+    return Object.entries(obj).map(([key, value]) => {
       const id = generateLocalId();
-      const hasValue = typeof value !== 'object' || value === null;
+      const hasValue = typeof value !== 'object' || value === null || Array.isArray(value);
       const item: SlyTreeItem = {
         id,
         label: hasValue ? `${key}: ${JSON.stringify(value)}` : `${key}`,
@@ -65,11 +115,12 @@ export const jsonToTreeData = (
         depth: currentDepth,
         hasValue,
       };
-      if (typeof value === 'object' && value !== null) {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         item.children = convertObject(value, currentDepth + 1, id);
       }
       return item;
     });
+  };
 
   return convertObject(json, depth, parentId);
 };

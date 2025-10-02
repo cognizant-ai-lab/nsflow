@@ -13,7 +13,7 @@ import logging
 import os
 import aiofiles
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 from nsflow.backend.models.editor_models import NetworkTemplate
 from nsflow.backend.models.editor_models import TemplateType
@@ -24,6 +24,7 @@ from nsflow.backend.models.editor_models import NetworksList
 from nsflow.backend.models.editor_models import AgentCreateRequest
 from nsflow.backend.models.editor_models import AgentUpdateRequest
 from nsflow.backend.models.editor_models import AgentDuplicateRequest
+from nsflow.backend.models.editor_models import BaseAgentProperties
 from nsflow.backend.models.editor_models import EdgeRequest
 from nsflow.backend.models.editor_models import NetworkExportRequest
 from nsflow.backend.models.editor_models import UndoRedoResponse
@@ -57,6 +58,14 @@ def get_hocon_reader():
 
 
 # Network-level operations
+
+@router.get("/schemas/base-agent-properties", response_model=Dict[str, Any])
+def get_agent_create_schema():
+    try:
+        return BaseAgentProperties.model_json_schema(by_alias=True)
+    except AttributeError:
+        return BaseAgentProperties.model_json_schema(by_alias=True)
+    
 
 @router.get("/networks", response_model=NetworksList)
 async def list_all_networks():
