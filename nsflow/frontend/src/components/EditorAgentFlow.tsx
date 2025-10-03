@@ -42,6 +42,7 @@ import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
 import { AccountTree as LayoutIcon } from "@mui/icons-material";
+import { getFeatureFlags } from "../utils/config";
 
 const nodeTypes = { agent: EditableAgentNode };
 const edgeTypes = { floating: FloatingEdge };
@@ -79,6 +80,7 @@ const EditorAgentFlow = ({
   const [levelSpacing, setLevelSpacing] = useState(80);
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
+  const { pluginManualEditor } = getFeatureFlags();
   
   // Layout manager for position caching and intelligent layout
   const layoutManager = selectedNetwork ? createLayoutManager(selectedNetwork, {
@@ -301,11 +303,11 @@ const EditorAgentFlow = ({
     setSelectedNodeId("");
   };
 
-  const handleAddAgent = (x: number, y: number) => {
-    console.log("Add agent at:", x, y);
-    // TODO: Open add agent dialog
-    setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-  };
+  // const handleAddAgent = (x: number, y: number) => {
+  //   console.log("Add agent at:", x, y);
+  //   // TODO: Open add agent dialog
+  //   setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+  // };
 
   const handleDuplicateAgent = async (nodeId: string) => {
     console.log("Duplicate agent:", nodeId, "selectedDesignId:", selectedDesignId);
@@ -525,8 +527,8 @@ const EditorAgentFlow = ({
         onDelete={handleDeleteAgent}
         onDuplicate={handleDuplicateAgent}
         onAddChild={handleAddChildAgent}
-        onAdd={handleAddAgent}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
+        enableEditing={pluginManualEditor} 
       />
 
       {/* Network Info Panel */}
@@ -708,6 +710,7 @@ const EditorAgentFlow = ({
         selectedDesignId={selectedDesignId}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
+        enableEditing={pluginManualEditor}
       />
     </Box>
   );

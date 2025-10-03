@@ -10,30 +10,12 @@
 // END COPYRIGHT
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Box,  Paper,  Typography,  IconButton,  useTheme, alpha, Collapse, Button, 
+  CircularProgress, Alert, TextField, InputAdornment } from '@mui/material';
 import { 
-  Box, 
-  Paper, 
-  Typography, 
-  IconButton, 
-  useTheme,
-  alpha,
-  Collapse,
-  Button,
-  CircularProgress,
-  Alert,
-  TextField,
-  InputAdornment
-} from '@mui/material';
-import { 
-  ExpandLess as ChevronUpIcon,
-  ExpandMore as ChevronDownIcon,
-  Edit as EditIcon,
-  PushPin as PinIcon,
-  PushPinOutlined as UnpinIcon,
-  Save as SaveIcon,
-  Close as CloseIcon,
-  Search as SearchIcon,
-  Add as AddIcon
+  ExpandLess as ChevronUpIcon, ExpandMore as ChevronDownIcon, Edit as EditIcon,
+  PushPin as PinIcon, PushPinOutlined as UnpinIcon, Save as SaveIcon,
+  Close as CloseIcon, Search as SearchIcon, Add as AddIcon
 } from '@mui/icons-material';
 import { useApiPort } from '../context/ApiPortContext';
 import { useJsonEditorTheme } from '../context/ThemeContext';
@@ -50,7 +32,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   selectedDesignId,
   selectedAgentName,
   onAgentUpdated,
-  enableEditing = false // Default to view-only mode
+  enableEditing = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -72,7 +54,8 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
 
   // Data validation helpers
   const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
-  const hasChangesToSave = enableEditing && hasChanges;
+  const canEdit = !!enableEditing;
+  const hasChangesToSave = canEdit && hasChanges;
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {
@@ -264,7 +247,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   };
 
   const saveAgentData = async () => {
-    if (!enableEditing || !selectedAgentName || !selectedDesignId || !apiUrl || !hasChanges) return;
+    if (!canEdit || !selectedAgentName || !selectedDesignId || !apiUrl || !hasChanges) return;
 
     setIsSaving(true);
     setError(null);
@@ -323,7 +306,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
 
   // Handle JSON data updates from the editor
   const handleJsonUpdate = useCallback((update: any) => {
-    if (!enableEditing) return;
+    if (!canEdit) return;
     
     console.log('JsonEditor onUpdate called with:', update);
     // `update.newData` contains the new full JSON value, `update.data` might be empty
@@ -331,11 +314,11 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
     setJsonData(next);
     setHasChanges(true);
-  }, [enableEditing]);
+  }, [canEdit]);
 
   // Handle adding a new root item
   const handleAddRootItem = useCallback(() => {
-    if (!enableEditing) return;
+    if (!canEdit) return;
     
     setJsonData((prev: any) => {
       if (
@@ -351,7 +334,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setHasChanges(true);
       return next;
     });
-  }, [enableEditing]);
+  }, [canEdit]);
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
@@ -455,7 +438,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
               />
 
               {/* Add button - only show when editing is enabled */}
-              {enableEditing && (
+              {canEdit && (
                 <IconButton
                   size="small"
                   onClick={(e) => {
@@ -477,7 +460,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
               )}
 
               {/* Save button - only show when editing is enabled */}
-              {enableEditing && hasChangesToSave && (
+              {canEdit && hasChangesToSave && (
                 <Button
                   size="small"
                   variant="contained"
@@ -612,19 +595,19 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
                 rootFontSize="14px"
                 indent={2}
                 rootName="agent"
-                restrictDrag={!enableEditing}
+                restrictDrag={!canEdit}
                 insertAtTop={false}
                 showIconTooltips={true}
-                viewOnly={!enableEditing}
+                viewOnly={!canEdit}
               />
             ) : selectedAgentName ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                 <EditIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
                 <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>No agent data available</Typography>
                 <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
-                  Agent '{selectedAgentName}' has no {enableEditing ? 'editable ' : ''}properties or failed to load.
+                  Agent '{selectedAgentName}' has no {canEdit ? 'editable ' : ''}properties or failed to load.
                 </Typography>
-                {enableEditing && schema && (
+                {canEdit && schema && (
                   <Button
                     variant="outlined"
                     size="small"
@@ -645,10 +628,10 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                 <EditIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
                 <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>
-                  Select an agent to {enableEditing ? 'edit' : 'view'}
+                  Select an agent to {canEdit ? 'edit' : 'view'}
                 </Typography>
                 <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
-                  {enableEditing 
+                  {canEdit 
                     ? 'Right-click on an agent and select "Edit Agent" or double-click to start editing.'
                     : 'Right-click on an agent and select "View Agent" to see its properties.'
                   }

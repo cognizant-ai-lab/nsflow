@@ -18,7 +18,6 @@ from fastapi import HTTPException
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.models.config_model import ConfigRequest
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
@@ -26,6 +25,13 @@ from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
 
 
 @router.get("/vite_config.json")
@@ -36,6 +42,9 @@ def get_runtime_config():
         "NSFLOW_PORT": os.getenv("NSFLOW_PORT", "4173"),
         "VITE_API_PROTOCOL": os.getenv("VITE_API_PROTOCOL", "http"),
         "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
+        # NEW: feature flags (booleans)
+        "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
+        "NSFLOW_PLUGIN_MANUAL_EDITOR": _env_bool("NSFLOW_PLUGIN_MANUAL_EDITOR", False),
     })
 
 

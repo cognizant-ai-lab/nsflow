@@ -10,7 +10,7 @@
 // END COPYRIGHT
 
 import React, { useEffect, useRef } from "react";
-import { FaEdit, FaTrash, FaPlus, FaCopy } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaCopy, FaEye } from "react-icons/fa";
 
 interface AgentContextMenuProps {
   visible: boolean;
@@ -21,8 +21,8 @@ interface AgentContextMenuProps {
   onDelete: (nodeId: string) => void;
   onDuplicate: (nodeId: string) => void;
   onAddChild: (nodeId: string) => void;
-  onAdd: (x: number, y: number) => void;
   onClose: () => void;
+  enableEditing?: boolean;
 }
 
 const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
@@ -34,10 +34,11 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
   onDelete,
   onDuplicate,
   onAddChild,
-  onAdd,
   onClose,
+  enableEditing = false,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const canEdit = !!enableEditing;
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -77,33 +78,43 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
   const adjustedX = Math.min(x, window.innerWidth - 200);
   const adjustedY = Math.min(y, window.innerHeight - 200);
 
-  const menuItems = [
-    {
-      icon: FaEdit,
-      label: "Edit Agent",
-      onClick: () => onEdit(nodeId),
-      className: "hover:bg-blue-600",
-    },
-    {
-      icon: FaCopy,
-      label: "Duplicate",
-      onClick: () => onDuplicate(nodeId),
-      className: "hover:bg-green-600",
-    },
-    {
-      icon: FaPlus,
-      label: "Add Child Agent",
-      onClick: () => onAddChild(nodeId),
-      className: "hover:bg-purple-600",
-    },
-    {
-      icon: FaTrash,
-      label: "Delete Agent",
-      onClick: () => onDelete(nodeId),
-      className: "hover:bg-red-600 text-red-300",
-      divider: true,
-    },
-  ];
+  // Build menu items based on flag
+  const menuItems = canEdit
+    ? [
+        {
+          icon: FaEdit,
+          label: "Edit Agent",
+          onClick: () => onEdit(nodeId),
+          className: "hover:bg-blue-600",
+        },
+        {
+          icon: FaCopy,
+          label: "Duplicate",
+          onClick: () => onDuplicate(nodeId),
+          className: "hover:bg-green-600",
+        },
+        {
+          icon: FaPlus,
+          label: "Add Child Agent",
+          onClick: () => onAddChild(nodeId),
+          className: "hover:bg-purple-600",
+        },
+        {
+          icon: FaTrash,
+          label: "Delete Agent",
+          onClick: () => onDelete(nodeId),
+          className: "hover:bg-red-600 text-red-300",
+          divider: true,
+        },
+      ]
+    : [
+        {
+          icon: FaEye,
+          label: "View Agent",
+          onClick: () => onEdit(nodeId),    // opens panel in read-only (since enableEditing=false there)
+          className: "hover:bg-gray-700",
+        },
+      ];
 
   return (
     <div
