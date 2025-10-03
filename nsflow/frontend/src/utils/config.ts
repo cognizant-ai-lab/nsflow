@@ -17,6 +17,7 @@ type AppRuntimeConfig = {
   NSFLOW_PORT: string;
   VITE_API_PROTOCOL: string;
   VITE_WS_PROTOCOL: string;
+  NSFLOW_WAND_NAME: string;
   // NEW flags (booleans from backend)
   NSFLOW_PLUGIN_WAND: boolean;
   NSFLOW_PLUGIN_MANUAL_EDITOR: boolean;
@@ -55,5 +56,13 @@ export function getFeatureFlags() {
   return {
     pluginWand: !!c.NSFLOW_PLUGIN_WAND,
     pluginManualEditor: !!c.NSFLOW_PLUGIN_MANUAL_EDITOR,
+  };
+}
+
+// Feature flags convenience for components:
+export function getWandName() {
+  const c = getAppConfig();
+  return {
+    wandName: c.NSFLOW_WAND_NAME,
   };
 }

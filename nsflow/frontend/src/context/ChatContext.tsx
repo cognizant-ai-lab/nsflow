@@ -10,6 +10,7 @@
 //
 // END COPYRIGHT
 import { createContext, useContext, useState, ReactNode } from "react";
+import { getWandName } from "../utils/config";
 
 type Message = {
   sender: "system" | "internal" | "user" | "agent" | string;
@@ -61,9 +62,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [internalChatWs, setInternalChatWs] = useState<WebSocket | null>(null);
   const [slyDataWs, setSlyDataWs] = useState<WebSocket | null>(null);
   const [newSlyData, setNewSlyData] = useState<string>("");
+  // define Workflow Agent Network Designer Name coming in from env variable
+  const { wandName } = getWandName();
 
   // Centralized network logic
-  const targetNetwork = isEditorMode ? "agent_network_editor" : activeNetwork;
+  const targetNetwork = isEditorMode ? wandName : activeNetwork;
 
   const addChatMessage = (msg: Message) => setChatMessages((prev) => [...prev, msg]);
   const addInternalChatMessage = (msg: Message) => {
