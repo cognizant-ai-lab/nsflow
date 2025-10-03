@@ -650,7 +650,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     sx={{
                       p: 0.25,
                       "& .MuiSvgIcon-root": {
-                        fontSize: 16,
+                        fontSize: 20,
                       },
                     }}
                   />

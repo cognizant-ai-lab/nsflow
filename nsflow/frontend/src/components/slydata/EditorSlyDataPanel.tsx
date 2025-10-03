@@ -9,7 +9,7 @@
 //
 // END COPYRIGHT
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Box, IconButton, Paper, Tooltip, Typography, alpha, 
   TextField, InputAdornment
 } from '@mui/material';
@@ -87,15 +87,22 @@ const EditorSlyDataPanel: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [lastMessageCount, setLastMessageCount] = useState(() => slyDataMessages.length);
+  const lastSigRef = useRef<string>('INIT');
   const [, setHasLocalEdits] = useState(false);
   const [isLoadingCache, setIsLoadingCache] = useState(false);
 
   const { saveSlyDataToCache, loadSlyDataFromCache, clearSlyDataCache } = useSlyDataCache();
+  const [editorVersion, setEditorVersion] = useState(0);
 
-  const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
+  // safe deep clone (fast enough for this UI)
+  const deepClone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
+  // optional tiny helper to compare shallow emptiness
+  const isNonEmptyObject = (o: any) => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length > 0;
+  const hasData = isNonEmptyObject(jsonData);
   const addDisabled = hasData;     // disable "Add" when there is already data
   const deleteDisabled = !hasData; // disable "Delete" when there is no data
+
 
   // Bootstrap: run once per mount when a targetNetwork appears
   useEffect(() => {
@@ -141,14 +148,11 @@ const EditorSlyDataPanel: React.FC = () => {
   // Persist cache when data changes
   useEffect(() => {
     if (!isInitialized || !targetNetwork || isLoadingCache) return;
-    console.log('Caching data:', { jsonData, targetNetwork, keysCount: Object.keys(jsonData).length });
-    if (Object.keys(jsonData).length > 0) {
-      saveSlyDataToCache(jsonData, targetNetwork, 1);
-      console.log('Data saved to cache');
-    }
-    // Don't clear cache when jsonData is empty - this prevents clearing cache during network transitions
-    // Cache should only be cleared when user explicitly clears data via the clear button
+    // Save whatever we have, including {}
+    saveSlyDataToCache(jsonData, targetNetwork, 1);
+    console.log('Cache updated', { keysCount: Object.keys(jsonData || {}).length });
   }, [jsonData, isInitialized, targetNetwork, saveSlyDataToCache, isLoadingCache]);
+
 
   // Handle JSON data updates from the editor
   const handleJsonUpdate = useCallback((update: any) => {
@@ -202,7 +206,7 @@ const EditorSlyDataPanel: React.FC = () => {
           open: true, 
           fileName: file.name, 
           jsonData, 
-          hasExistingData: Object.keys(jsonData).length > 0, 
+          hasExistingData: isNonEmptyObject(jsonData), 
           validationError 
         });
       };
@@ -256,27 +260,75 @@ const EditorSlyDataPanel: React.FC = () => {
 
     try {
       const response = await fetch(fetchUrl);
-      if (response.status === 404) return;
+      if (response.status === 404) {
+        // Agent may not have sent any sly_data yet; consider clearing to {}
+        const empty = {};
+        setJsonData(empty);
+        setHasLocalEdits(false);
+        setEditorVersion(v => v + 1); // ensure editor reflects this change
+        return;
+      }
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
       const result = await response.json();
-      const latestData = result.sly_data;
+      const latestData = result?.sly_data ?? {};
 
-      if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
-        setJsonData(latestData);
-        setHasLocalEdits(false);
-      }
+      // Deep-clone to ensure a new identity & avoid internal memo cache
+      const next = deepClone(latestData);
+
+      setJsonData(next);
+      setHasLocalEdits(false);
+      setEditorVersion(v => v + 1);  // force JsonEditor to refresh view/state
     } catch (e) {
       console.error('Failed to fetch latest sly_data:', e);
     }
   }, [apiUrl, targetNetwork]);
 
+  // Stable stringify (sorts keys so object order changes don’t fool equality)
+  const stableStringify = (value: any): string => {
+    const seen = new WeakSet();
+    const helper = (v: any): any => {
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '__CIRCULAR__';
+        seen.add(v);
+        if (Array.isArray(v)) return v.map(helper);
+        const out: Record<string, any> = {};
+        for (const k of Object.keys(v).sort()) out[k] = helper(v[k]);
+        return out;
+      }
+      return v;
+    };
+    return JSON.stringify(helper(value));
+  };
+
+  // Build a signature from the last message (content-only)
+  const lastMessageSignature = (msgs: any[]): string => {
+    const last = msgs?.[msgs.length - 1];
+    if (!last) return 'EMPTY';
+    // if your messages have a "text" field that carries content, prefer it:
+    const content = typeof last?.text === 'string' ? last.text : last;
+    return stableStringify(content);
+  };
+
+  // Message count effect: refetch when new messages arrive
+  // useEffect(() => {
+  //   const currentMessageCount = slyDataMessages.length;
+  //   if (currentMessageCount > lastMessageCount) {
+  //     fetchLatestSlyData();
+  //     console.log(`New sly_data message detected (${lastMessageCount} → ${currentMessageCount}), fetching latest state...`);
+  //     setLastMessageCount(currentMessageCount);
+  //   }
+  // }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
+
+  // Fire when latest message *content* changes, regardless of array length
   useEffect(() => {
-    const currentMessageCount = slyDataMessages.length;
-    if (currentMessageCount > lastMessageCount) fetchLatestSlyData();
-    console.log(`New sly_data message detected (${lastMessageCount} → ${currentMessageCount}), fetching latest state...`);
-    setLastMessageCount(currentMessageCount);
-  }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
+    const sig = lastMessageSignature(slyDataMessages);
+    if (sig !== lastSigRef.current) {
+      lastSigRef.current = sig;
+      console.log('[slydata] new/changed last message detected → fetching latest');
+      fetchLatestSlyData();
+    }
+  }, [slyDataMessages, fetchLatestSlyData]);
 
   const handleExportJson = useCallback(() => {
     const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
@@ -411,6 +463,7 @@ const EditorSlyDataPanel: React.FC = () => {
             <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1, backgroundColor: theme.palette.background.paper }}>
               {Object.keys(jsonData).length > 0 ? (
                 <JsonEditor
+                  key={`${targetNetwork || 'no-net'}-${editorVersion}`}
                   data={jsonData}
                   onUpdate={handleJsonUpdate}
                   theme={jsonEditorTheme as ThemeInput}
