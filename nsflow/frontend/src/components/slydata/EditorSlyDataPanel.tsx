@@ -10,13 +10,11 @@
 // END COPYRIGHT
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { Box, IconButton, Paper, Tooltip, Typography, alpha, 
-  TextField, InputAdornment
-} from '@mui/material';
+import { Box, IconButton, Paper, Tooltip, Typography, alpha, TextField, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { DataObject as DataObjectIcon, Download as DownloadIcon, Upload as UploadIcon, Info as InfoIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { JsonEditor, ThemeInput} from 'json-edit-react';
+import { JsonEditor, ThemeInput } from 'json-edit-react';
 import ScrollableMessageContainer from '../ScrollableMessageContainer';
 import { useChatContext } from '../../context/ChatContext';
 import { useApiPort } from '../../context/ApiPortContext';
@@ -24,6 +22,36 @@ import { useTheme, useJsonEditorTheme } from '../../context/ThemeContext';
 import { useSlyDataCache } from '../../hooks/useSlyDataCache';
 import { ImportDialog, type ImportDialogState } from './ImportDialog';
 import { ClearAllDialog } from './ClearAllDialog';
+
+/** ---------- helpers (module scope) ---------- */
+const deepClone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+const isNonEmptyObject = (o: any) =>
+  o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length > 0;
+
+// Stable stringify (sort keys) so order-only diffs don’t trigger
+const stableStringify = (value: any): string => {
+  const seen = new WeakSet();
+  const helper = (v: any): any => {
+    if (v && typeof v === 'object') {
+      if (seen.has(v)) return '__CIRCULAR__';
+      seen.add(v);
+      if (Array.isArray(v)) return v.map(helper);
+      const out: Record<string, any> = {};
+      for (const k of Object.keys(v).sort()) out[k] = helper(v[k]);
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(helper(value));
+};
+
+const lastMessageSignature = (msgs: any[]): string => {
+  const last = msgs?.[msgs.length - 1];
+  if (!last) return 'EMPTY';
+  const content = typeof last?.text === 'string' ? last.text : last;
+  return stableStringify(content);
+};
+/** ------------------------------------------ */
 
 // Simple JSON validation for slydata
 const validateJsonForSlyData = (data: any): string | null => {
@@ -79,38 +107,30 @@ const EditorSlyDataPanel: React.FC = () => {
   const jsonEditorTheme = useJsonEditorTheme();
 
   const [searchText, setSearchText] = useState('');
-
-
   const [jsonData, setJsonData] = useState<any>({});
-  const [importDialog, setImportDialog] = useState<ImportDialogState>({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
+  const [importDialog, setImportDialog] = useState<ImportDialogState>({
+    open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null
+  });
   const [clearDialog, setClearDialog] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
-  const [lastMessageCount, setLastMessageCount] = useState(() => slyDataMessages.length);
-  const lastSigRef = useRef<string>('INIT');
-  const [, setHasLocalEdits] = useState(false);
   const [isLoadingCache, setIsLoadingCache] = useState(false);
+  const [, setHasLocalEdits] = useState(false);
 
   const { saveSlyDataToCache, loadSlyDataFromCache, clearSlyDataCache } = useSlyDataCache();
   const [editorVersion, setEditorVersion] = useState(0);
+  const lastSigRef = useRef<string>('INIT');
 
-  // safe deep clone (fast enough for this UI)
-  const deepClone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-
-  // optional tiny helper to compare shallow emptiness
-  const isNonEmptyObject = (o: any) => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length > 0;
   const hasData = isNonEmptyObject(jsonData);
-  const addDisabled = hasData;     // disable "Add" when there is already data
-  const deleteDisabled = !hasData; // disable "Delete" when there is no data
+  const addDisabled = hasData;
+  const deleteDisabled = !hasData;
 
-
-  // Bootstrap: run once per mount when a targetNetwork appears
+  /** Bootstrap: run once when a targetNetwork appears */
   useEffect(() => {
     if (!isInitialized && targetNetwork) {
       console.log('Loading cache for network:', targetNetwork);
       setIsLoadingCache(true);
       const cached = loadSlyDataFromCache(targetNetwork);
-      console.log('Cached data:', cached);
       if (cached && cached.data) {
         setJsonData(cached.data);
         console.log('Loaded data from cache:', cached.data);
@@ -118,20 +138,18 @@ const EditorSlyDataPanel: React.FC = () => {
         setJsonData({});
         console.log('No cached data, using empty object');
       }
-      setLastMessageCount(slyDataMessages.length);
       setHasLocalEdits(false);
       setIsInitialized(true);
       setIsLoadingCache(false);
     }
-  }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
 
-  // Network swap: reload cache for the new network
+  /** Network swap: reload cache for the new network */
   useEffect(() => {
     if (isInitialized && targetNetwork) {
       console.log('Network swap - loading cache for:', targetNetwork);
       setIsLoadingCache(true);
       const cached = loadSlyDataFromCache(targetNetwork);
-      console.log('Network swap cached data:', cached);
       if (cached && cached.data) {
         setJsonData(cached.data);
         console.log('Network swap loaded data:', cached.data);
@@ -139,50 +157,36 @@ const EditorSlyDataPanel: React.FC = () => {
         setJsonData({});
         console.log('Network swap - no cached data');
       }
-      setLastMessageCount(slyDataMessages.length);
       setHasLocalEdits(false);
       setIsLoadingCache(false);
     }
-  }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
 
-  // Persist cache when data changes
+  /** Persist cache whenever jsonData changes (skip during cache read) */
   useEffect(() => {
     if (!isInitialized || !targetNetwork || isLoadingCache) return;
-    // Save whatever we have, including {}
     saveSlyDataToCache(jsonData, targetNetwork, 1);
     console.log('Cache updated', { keysCount: Object.keys(jsonData || {}).length });
   }, [jsonData, isInitialized, targetNetwork, saveSlyDataToCache, isLoadingCache]);
 
-
-  // Handle JSON data updates from the editor
+  /** Editor → state */
   const handleJsonUpdate = useCallback((update: any) => {
-    console.log('JsonEditor onUpdate called with:', update);
-    // `update.newData` contains the new full JSON value, `update.data` might be empty
-    const next = update.newData ?? update.data ?? {}; // fall back to empty object if no data
-    console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
+    const next = update?.newData ?? update?.data ?? {};
     setJsonData(next);
     setHasLocalEdits(true);
   }, []);
 
-  // Handle adding a new root item
+  /** Add root item (only when empty) */
   const handleAddRootItem = useCallback(() => {
     setJsonData((prev: any) => {
-      if (
-        prev &&
-        typeof prev === 'object' &&
-        !Array.isArray(prev) &&
-        Object.keys(prev).length > 0
-      ) {
-        // already has data — no-op
-        return prev;
-      }
+      if (isNonEmptyObject(prev)) return prev; // no-op if already has data
       const next = { ...prev, new_key: 'new_value' };
       setHasLocalEdits(true);
       return next;
     });
   }, []);
 
-
+  /** Import JSON */
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -192,39 +196,41 @@ const EditorSlyDataPanel: React.FC = () => {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (event) => {
-        let jsonData: any = null;
+        let parsed: any = null;
         let validationError: string | null = null;
         try {
-          jsonData = JSON.parse(event.target?.result as string);
+          parsed = JSON.parse(event.target?.result as string);
         } catch (err: any) {
           validationError = `Invalid JSON format: ${err?.message || 'Unknown parsing error'}`;
         }
-        if (!validationError && jsonData !== null) {
-          validationError = validateJsonForSlyData(jsonData);
+        if (!validationError && parsed !== null) {
+          validationError = validateJsonForSlyData(parsed);
         }
-        setImportDialog({ 
-          open: true, 
-          fileName: file.name, 
-          jsonData, 
-          hasExistingData: isNonEmptyObject(jsonData), 
-          validationError 
+        setImportDialog({
+          open: true,
+          fileName: file.name,
+          jsonData: parsed,
+          hasExistingData: isNonEmptyObject(parsed),
+          validationError
         });
       };
       reader.readAsText(file);
     };
     input.click();
-  }, []); // Remove jsonData dependency
+  }, []);
 
   const handleImportConfirm = () => {
     if (importDialog.jsonData && !importDialog.validationError) {
       setJsonData(importDialog.jsonData);
       setHasLocalEdits(true);
+      setEditorVersion(v => v + 1); // ensure editor re-mounts on import
       setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
     }
   };
 
   const handleImportCancel = () => setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
 
+  /** Clear */
   const handleClearAll = () => setClearDialog(true);
   const handleClearConfirm = () => {
     setJsonData({});
@@ -233,9 +239,11 @@ const EditorSlyDataPanel: React.FC = () => {
       console.log('Cache explicitly cleared by user');
     }
     setClearDialog(false);
+    setEditorVersion(v => v + 1);
   };
   const handleClearCancel = () => setClearDialog(false);
 
+  /** Clipboard */
   const copyToClipboard = (text: string, index: number) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedMessage(index);
@@ -243,6 +251,7 @@ const EditorSlyDataPanel: React.FC = () => {
     });
   };
 
+  /** Logs download */
   const downloadLogs = () => {
     const logText = slyDataMessages.map((msg) => `${msg.sender}: ${typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}`).join('\n');
     const blob = new Blob([logText], { type: 'text/plain' });
@@ -254,72 +263,29 @@ const EditorSlyDataPanel: React.FC = () => {
     document.body.removeChild(a);
   };
 
+  /** Fetch from API when the *last message content* changes */
   const fetchLatestSlyData = useCallback(async () => {
     if (!targetNetwork) return;
     const fetchUrl = `${apiUrl}/api/v1/slydata/${targetNetwork}`;
-
     try {
       const response = await fetch(fetchUrl);
       if (response.status === 404) {
-        // Agent may not have sent any sly_data yet; consider clearing to {}
-        const empty = {};
-        setJsonData(empty);
+        setJsonData({});
         setHasLocalEdits(false);
-        setEditorVersion(v => v + 1); // ensure editor reflects this change
+        setEditorVersion(v => v + 1);
         return;
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-
       const result = await response.json();
       const latestData = result?.sly_data ?? {};
-
-      // Deep-clone to ensure a new identity & avoid internal memo cache
-      const next = deepClone(latestData);
-
-      setJsonData(next);
+      setJsonData(deepClone(latestData));
       setHasLocalEdits(false);
-      setEditorVersion(v => v + 1);  // force JsonEditor to refresh view/state
+      setEditorVersion(v => v + 1);
     } catch (e) {
       console.error('Failed to fetch latest sly_data:', e);
     }
   }, [apiUrl, targetNetwork]);
-
-  // Stable stringify (sorts keys so object order changes don’t fool equality)
-  const stableStringify = (value: any): string => {
-    const seen = new WeakSet();
-    const helper = (v: any): any => {
-      if (v && typeof v === 'object') {
-        if (seen.has(v)) return '__CIRCULAR__';
-        seen.add(v);
-        if (Array.isArray(v)) return v.map(helper);
-        const out: Record<string, any> = {};
-        for (const k of Object.keys(v).sort()) out[k] = helper(v[k]);
-        return out;
-      }
-      return v;
-    };
-    return JSON.stringify(helper(value));
-  };
-
-  // Build a signature from the last message (content-only)
-  const lastMessageSignature = (msgs: any[]): string => {
-    const last = msgs?.[msgs.length - 1];
-    if (!last) return 'EMPTY';
-    // if your messages have a "text" field that carries content, prefer it:
-    const content = typeof last?.text === 'string' ? last.text : last;
-    return stableStringify(content);
-  };
-
-  // Message count effect: refetch when new messages arrive
-  // useEffect(() => {
-  //   const currentMessageCount = slyDataMessages.length;
-  //   if (currentMessageCount > lastMessageCount) {
-  //     fetchLatestSlyData();
-  //     console.log(`New sly_data message detected (${lastMessageCount} → ${currentMessageCount}), fetching latest state...`);
-  //     setLastMessageCount(currentMessageCount);
-  //   }
-  // }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
-
+  
   // Fire when latest message *content* changes, regardless of array length
   useEffect(() => {
     const sig = lastMessageSignature(slyDataMessages);
@@ -330,6 +296,7 @@ const EditorSlyDataPanel: React.FC = () => {
     }
   }, [slyDataMessages, fetchLatestSlyData]);
 
+  /** Export */
   const handleExportJson = useCallback(() => {
     const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -348,21 +315,17 @@ const EditorSlyDataPanel: React.FC = () => {
             <Box sx={{ p: 1.5, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, backgroundColor: theme.palette.background.paper }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DataObjectIcon sx={{ color: theme.palette.primary.main, fontSize: '1.25rem' }} />
-                <Typography 
-                  variant="subtitle1"
-                  noWrap
-                  sx={{ fontWeight: 600, color: theme.palette.text.primary, textOverflow: 'ellipsis' }}
-                  >
-                    SlyData Editor
+                <Typography variant="subtitle1" noWrap sx={{ fontWeight: 600, color: theme.palette.text.primary, textOverflow: 'ellipsis' }}>
+                  SlyData Editor
                 </Typography>
-                <Tooltip 
+                <Tooltip
                   title={
                     <Box sx={{ p: 1, maxWidth: 350 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, color: 'inherit' }}>
                         🔒 Security Warning
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'inherit', lineHeight: 1.4 }}>
-                        We strongly recommend to not set secrets as values within any sly data here or in any source file, including HOCON files. 
+                        We strongly recommend to not set secrets as values within any sly data here or in any source file, including HOCON files.
                         These files tend to creep into source control repos, and it is generally not considered a good practice to expose secrets by checking them in.
                       </Typography>
                     </Box>
@@ -370,18 +333,10 @@ const EditorSlyDataPanel: React.FC = () => {
                   placement="bottom-start"
                   arrow
                 >
-                  <InfoIcon 
-                    sx={{ 
-                      color: theme.palette.warning.main, 
-                      fontSize: '1rem', 
-                      cursor: 'help',
-                      '&:hover': { 
-                        color: theme.palette.warning.dark 
-                      }
-                    }} 
-                  />
+                  <InfoIcon sx={{ color: theme.palette.warning.main, fontSize: '1rem', cursor: 'help', '&:hover': { color: theme.palette.warning.dark } }} />
                 </Tooltip>
               </Box>
+
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 280 }}>
                 {/* Search input (compact + rounded) */}
                 <TextField
@@ -390,17 +345,9 @@ const EditorSlyDataPanel: React.FC = () => {
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   sx={{
-                    // size/shape
-                    width: 140,            // change width here
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 1.5,   // 12px radius (theme.spacing * 1.5)
-                      height: 32,          // change height here
-                    },
-                    '& .MuiOutlinedInput-input': {
-                      py: 0,               // vertical padding inside
-                      px: 1.25,            // horizontal padding inside
-                      fontSize: 13,
-                    },
+                    width: 140,
+                    '& .MuiOutlinedInput-root': { borderRadius: 1.5, height: 32 },
+                    '& .MuiOutlinedInput-input': { py: 0, px: 1.25, fontSize: 13 },
                   }}
                   slotProps={{
                     input: {
@@ -413,7 +360,7 @@ const EditorSlyDataPanel: React.FC = () => {
                   }}
                 />
 
-                {/* existing buttons */}
+                {/* actions */}
                 <Tooltip title="Add root item">
                   <span>
                     <IconButton
@@ -460,8 +407,9 @@ const EditorSlyDataPanel: React.FC = () => {
                 </Tooltip>
               </Box>
             </Box>
+
             <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1, backgroundColor: theme.palette.background.paper }}>
-              {Object.keys(jsonData).length > 0 ? (
+              {isNonEmptyObject(jsonData) ? (
                 <JsonEditor
                   key={`${targetNetwork || 'no-net'}-${editorVersion}`}
                   data={jsonData}
@@ -469,10 +417,10 @@ const EditorSlyDataPanel: React.FC = () => {
                   theme={jsonEditorTheme as ThemeInput}
                   searchText={searchText}
                   searchDebounceTime={200}
-                  enableClipboard={true}
-                  showArrayIndices={true}
-                  showStringQuotes={true}
-                  showCollectionCount={true}
+                  enableClipboard
+                  showArrayIndices
+                  showStringQuotes
+                  showCollectionCount
                   stringTruncate={250}
                   minWidth="100%"
                   maxWidth="100%"
@@ -481,13 +429,15 @@ const EditorSlyDataPanel: React.FC = () => {
                   rootName="slydata"
                   restrictDrag={false}
                   insertAtTop={false}
-                  showIconTooltips={true}
+                  showIconTooltips
                 />
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                   <DataObjectIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
                   <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>No SlyData available</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>Click the + button to add your first key-value pair, or import JSON data.</Typography>
+                  <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
+                    Click the + button to add your first key-value pair, or import JSON data.
+                  </Typography>
                 </Box>
               )}
             </Box>
