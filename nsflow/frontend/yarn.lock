@@ -2653,6 +2653,14 @@ json-buffer@3.0.1:
   resolved "https://registry.yarnpkg.com/json-buffer/-/json-buffer-3.0.1.tgz#9338802a30d3b6605fbe0613e094008ca8c05a13"
   integrity sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==
 
+json-edit-react@^1.29.0:
+  version "1.29.0"
+  resolved "https://registry.yarnpkg.com/json-edit-react/-/json-edit-react-1.29.0.tgz#4e9d7ef56477a02bab44bd5b1a5323f4480c24cd"
+  integrity sha512-qxho/m0w6GCaKLic6XsZgmCrKKwluMvoy92teRBRus1PRHJQiP4pkFQJ90lmrno1KNgSePYIG0mcscS0GjdH3A==
+  dependencies:
+    object-property-assigner "^1.3.5"
+    object-property-extractor "^1.0.13"
+
 json-parse-even-better-errors@^2.3.0:
   version "2.3.1"
   resolved "https://registry.yarnpkg.com/json-parse-even-better-errors/-/json-parse-even-better-errors-2.3.1.tgz#7c47805a94319928e05777405dc12e1f7a4ee02d"
@@ -3290,6 +3298,16 @@ object-hash@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/object-hash/-/object-hash-3.0.0.tgz#73f97f753e7baffc0e2cc9d6e079079744ac82e9"
   integrity sha512-RSn9F68PjH9HqtltsSnqYC1XXoWe9Bju5+213R98cNGttag9q9yAOTzdbsqvIa7aNm5WffBZFpWYr2aWrklWAw==
+
+object-property-assigner@^1.3.5:
+  version "1.3.5"
+  resolved "https://registry.yarnpkg.com/object-property-assigner/-/object-property-assigner-1.3.5.tgz#f5037ff73b7b015a42e4059c3ff5c84017413ca2"
+  integrity sha512-DIzHzNSTnpoG8QPQCDNrHa6O3vLMhktK3Igirqpk523UYIVe8JNCKcn5C9WyLQxJc58EGsAIiiEu10gqPrud8w==
+
+object-property-extractor@^1.0.13:
+  version "1.0.13"
+  resolved "https://registry.yarnpkg.com/object-property-extractor/-/object-property-extractor-1.0.13.tgz#fff188d6308ac5574eb2610221af906eb87b4f38"
+  integrity sha512-9kgEjTWDhTPuPn7nyof+5mLmCKBPKdU0c7IVpTbOvYKYSdXQ5skH4Pa/8MPbZXeyXBGrqS82JyWecsh6tMxiLw==
 
 optionator@^0.9.3:
   version "0.9.4"
@@ -4099,6 +4117,11 @@ use-sync-external-store@^1.2.2, use-sync-external-store@^1.5.0:
   version "1.5.0"
   resolved "https://registry.yarnpkg.com/use-sync-external-store/-/use-sync-external-store-1.5.0.tgz#55122e2a3edd2a6c106174c27485e0fd59bcfca0"
   integrity sha512-Rb46I4cGGVBmjamjphe8L/UnvJD+uPPtTkNvX5mZgqdbavhI4EbgIWJiIHXJ8bc/i9EQGPRh4DwEURJ552Do0A==
+
+use-undo@^1.1.1:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/use-undo/-/use-undo-1.1.1.tgz#8c5a9143207b6a8f94fc30bb9aa31e19386ba1c4"
+  integrity sha512-2NNpJv7TDQpyETgRTG5I/CsABX5nhExpx8PEhWiDsnW9C5BA6Xnn8G9u/lPeg3+JsBrBtUx8/5bMbGmpnWz1Cw==
 
 util-deprecate@^1.0.2:
   version "1.0.2"

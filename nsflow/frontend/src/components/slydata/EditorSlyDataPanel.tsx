@@ -9,238 +9,161 @@
 //
 // END COPYRIGHT
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, IconButton, Paper, Tooltip, Typography, alpha } from '@mui/material';
-import { Add as AddIcon, DataObject as DataObjectIcon, Delete as DeleteIcon, Download as DownloadIcon, ExpandLess as CollapseAllIcon, ExpandMore as ExpandAllIcon, Upload as UploadIcon, Info as InfoIcon } from '@mui/icons-material';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Box, IconButton, Paper, Tooltip, Typography, alpha, 
+  TextField, InputAdornment
+} from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import { DataObject as DataObjectIcon, Download as DownloadIcon, Upload as UploadIcon, Info as InfoIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
-import type { TreeViewItemId } from '@mui/x-tree-view/models';
+import { JsonEditor, ThemeInput} from 'json-edit-react';
 import ScrollableMessageContainer from '../ScrollableMessageContainer';
 import { useChatContext } from '../../context/ChatContext';
 import { useApiPort } from '../../context/ApiPortContext';
-import { useTheme } from '../../context/ThemeContext';
-import { TreeOperationsContext } from '../../context/TreeOperationsContext';
-import type { SlyTreeItem } from '../../types/slyTree';
-import { CustomTreeItem } from './CustomTreeItem';
+import { useTheme, useJsonEditorTheme } from '../../context/ThemeContext';
 import { useSlyDataCache } from '../../hooks/useSlyDataCache';
-import { getAllItemIds, jsonToTreeData, treeDataToJson, validateJsonForSlyData } from '../../utils/slydata/jsonTree';
-import { ConflictDialog, type ConflictDialogState } from './ConflictDialog';
 import { ImportDialog, type ImportDialogState } from './ImportDialog';
 import { ClearAllDialog } from './ClearAllDialog';
+
+// Simple JSON validation for slydata
+const validateJsonForSlyData = (data: any): string | null => {
+  try {
+    if (data === null || data === undefined) return 'JSON data cannot be null or undefined';
+    if (typeof data !== 'object') return 'Root element must be an object, not a primitive value';
+    if (Array.isArray(data)) return 'Root element must be an object, not an array';
+
+    const seen = new WeakSet();
+    const checkCircular = (obj: any): boolean => {
+      if (obj && typeof obj === 'object') {
+        if (seen.has(obj)) return true;
+        seen.add(obj);
+        for (const k in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, k)) {
+            if (checkCircular(obj[k])) return true;
+          }
+        }
+      }
+      return false;
+    };
+    if (checkCircular(data)) return 'JSON contains circular references which are not supported';
+
+    const validateKeys = (obj: any, path = ''): string | null => {
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            if (typeof key !== 'string') return `Invalid key type at ${path}${key}. Keys must be strings`;
+            if (key.trim() === '') return `Empty key found at ${path}. Keys cannot be empty`;
+            const value = obj[key];
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+              const nested = validateKeys(value, `${path}${key}.`);
+              if (nested) return nested;
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    const keyError = validateKeys(data);
+    if (keyError) return keyError;
+    return null;
+  } catch (e: any) {
+    return `Validation error: ${e?.message || 'Unknown error'}`;
+  }
+};
 
 const EditorSlyDataPanel: React.FC = () => {
   const { slyDataMessages, targetNetwork } = useChatContext();
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
+  const jsonEditorTheme = useJsonEditorTheme();
 
-  const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
-  const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);
-  const [nextId, setNextId] = useState(1);
-  const [conflictDialog, setConflictDialog] = useState<ConflictDialogState>({ open: false, parentId: '', parentKey: '', currentValue: null });
+  const [searchText, setSearchText] = useState('');
+  const [searchFilter, setSearchFilter] = useState<'value' | 'key' | 'all'>('all');
+
+
+  const [jsonData, setJsonData] = useState<any>({});
   const [importDialog, setImportDialog] = useState<ImportDialogState>({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
   const [clearDialog, setClearDialog] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
-  // before: const [lastMessageCount, setLastMessageCount] = useState(0);
   const [lastMessageCount, setLastMessageCount] = useState(() => slyDataMessages.length);
-
-  const [hasLocalEdits, setHasLocalEdits] = useState(false);
-  
-  const nextIdRef = useRef<number>(nextId);
-  nextIdRef.current = nextId;
+  const [, setHasLocalEdits] = useState(false);
+  const [isLoadingCache, setIsLoadingCache] = useState(false);
 
   const { saveSlyDataToCache, loadSlyDataFromCache, clearSlyDataCache } = useSlyDataCache();
 
   // Bootstrap: run once per mount when a targetNetwork appears
   useEffect(() => {
     if (!isInitialized && targetNetwork) {
-        const cached = loadSlyDataFromCache(targetNetwork);
-        if (cached && cached.data.length > 0) {
-        setTreeData(cached.data);
-        setNextId(cached.nextId);
-        } else {
-          setTreeData([]);
-        }
-        setLastMessageCount(slyDataMessages.length); // baseline for this mount
-        setHasLocalEdits(false); // new network, no pending local edits
-        setIsInitialized(true);
+      console.log('Loading cache for network:', targetNetwork);
+      setIsLoadingCache(true);
+      const cached = loadSlyDataFromCache(targetNetwork);
+      console.log('Cached data:', cached);
+      if (cached && cached.data) {
+        setJsonData(cached.data);
+        console.log('Loaded data from cache:', cached.data);
+      } else {
+        setJsonData({});
+        console.log('No cached data, using empty object');
+      }
+      setLastMessageCount(slyDataMessages.length);
+      setHasLocalEdits(false);
+      setIsInitialized(true);
+      setIsLoadingCache(false);
     }
   }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
 
-    // Network swap: reload cache for the new network (no need to flip isInitialized here)
-    useEffect(() => {
-      if (isInitialized && targetNetwork) {
-        const cached = loadSlyDataFromCache(targetNetwork);
-        if (cached && cached.data.length > 0) {
-        setTreeData(cached.data);
-        setNextId(cached.nextId);
-        } else {
-        setTreeData([]);
-        }
-        setLastMessageCount(slyDataMessages.length); // reset baseline for this network
-        setHasLocalEdits(false);  // new network, no pending local edits
+  // Network swap: reload cache for the new network
+  useEffect(() => {
+    if (isInitialized && targetNetwork) {
+      console.log('Network swap - loading cache for:', targetNetwork);
+      setIsLoadingCache(true);
+      const cached = loadSlyDataFromCache(targetNetwork);
+      console.log('Network swap cached data:', cached);
+      if (cached && cached.data) {
+        setJsonData(cached.data);
+        console.log('Network swap loaded data:', cached.data);
+      } else {
+        setJsonData({});
+        console.log('Network swap - no cached data');
       }
-    }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
-
+      setLastMessageCount(slyDataMessages.length);
+      setHasLocalEdits(false);
+      setIsLoadingCache(false);
+    }
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized, slyDataMessages.length]);
 
   // Persist cache when data changes
   useEffect(() => {
-    if (!isInitialized || !targetNetwork) return;
-    if (treeData.length > 0) {
-      saveSlyDataToCache(treeData, targetNetwork, nextId);
-    } else {
-      clearSlyDataCache(targetNetwork);
+    if (!isInitialized || !targetNetwork || isLoadingCache) return;
+    console.log('Caching data:', { jsonData, targetNetwork, keysCount: Object.keys(jsonData).length });
+    if (Object.keys(jsonData).length > 0) {
+      saveSlyDataToCache(jsonData, targetNetwork, 1);
+      console.log('Data saved to cache');
     }
-  }, [treeData, isInitialized, targetNetwork, saveSlyDataToCache, clearSlyDataCache, nextId]);
+    // Don't clear cache when jsonData is empty - this prevents clearing cache during network transitions
+    // Cache should only be cleared when user explicitly clears data via the clear button
+  }, [jsonData, isInitialized, targetNetwork, saveSlyDataToCache, isLoadingCache]);
 
-  // helper: apply and persist *immediately*
-    const applyAndCache = useCallback(
-    (compute: (prev: SlyTreeItem[]) => SlyTreeItem[], nextIdOverride?: number) => {
-        setTreeData(prev => {
-        const updated = compute(prev);
-        if (targetNetwork) {
-            const nextToSave = typeof nextIdOverride === 'number' ? nextIdOverride : nextIdRef.current;
-            saveSlyDataToCache(updated, targetNetwork, nextToSave);
-        }
-        return updated;
-        });
-        setHasLocalEdits(true);
-    },
-    [saveSlyDataToCache, targetNetwork]
-    );
-
-  const generateId = useCallback(() => {
-    const id = `item_${nextIdRef.current}`;
-    setNextId((p) => p + 1);
-    nextIdRef.current += 1;
-    return id;
+  // Handle JSON data updates from the editor
+  const handleJsonUpdate = useCallback((update: any) => {
+    console.log('JsonEditor onUpdate called with:', update);
+    // `update.newData` contains the new full JSON value, `update.data` might be empty
+    const next = update.newData ?? update.data ?? {}; // fall back to empty object if no data
+    console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
+    setJsonData(next);
+    setHasLocalEdits(true);
   }, []);
 
-  const handleAddWithConflictCheck = useCallback((parentId: string) => {
-    const findItem = (items: SlyTreeItem[], id: string): SlyTreeItem | null => {
-      for (const item of items) {
-        if (item.id === id) return item;
-        if (item.children) {
-          const found = findItem(item.children, id);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-    const parentItem = findItem(treeData, parentId);
-    if (parentItem && parentItem.hasValue && parentItem.value !== undefined) {
-      setConflictDialog({ open: true, parentId, parentKey: parentItem.key || '', currentValue: parentItem.value });
-    } else {
-      handleAddItem(parentId);
-    }
-  }, [treeData]);
-
-  const handleAddItem = useCallback((parentId?: string) => {
-    if (!parentId) {
-      const newItem: SlyTreeItem = { id: generateId(), label: 'new_key: "new_value"', key: 'new_key', value: 'new_value', parentId: undefined, isKeyValuePair: true, type: 'string', depth: 0, hasValue: true };
-      applyAndCache((prev) => [...prev, newItem]);
-      return;
-    }
-    const findDepth = (items: SlyTreeItem[], id: string): number => {
-      for (const item of items) {
-        if (item.id === id) return (item.depth || 0) + 1;
-        if (item.children) {
-          const depth = findDepth(item.children, id);
-          if (depth > 0) return depth;
-        }
-      }
-      return 0;
-    };
-    const newDepth = findDepth(treeData, parentId);
-    const newItem: SlyTreeItem = { id: generateId(), label: 'new_key: "new_value"', key: 'new_key', value: 'new_value', parentId, isKeyValuePair: true, type: 'string', depth: newDepth, hasValue: true };
-    applyAndCache((prev) => {
-      const updateItems = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === parentId) return { ...item, children: [...(item.children || []), newItem], hasValue: false, value: undefined };
-        if (item.children) return { ...item, children: updateItems(item.children) };
-        return item;
-      });
-      return updateItems(prev);
+  // Handle adding a new root item
+  const handleAddRootItem = useCallback(() => {
+    setJsonData((prevData: any) => {
+      const newData = { ...prevData, new_key: "new_value" };
+      setHasLocalEdits(true);
+      return newData;
     });
-    setExpandedItems((prev) => [...prev, parentId]);
-  }, [generateId, treeData, applyAndCache]);
-
-  const handleConflictConfirm = () => { handleAddItem(conflictDialog.parentId); setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null }); };
-  const handleConflictCancel = () => { setConflictDialog({ open: false, parentId: '', parentKey: '', currentValue: null }); };
-
-  const handleUpdateKey = useCallback((id: string, newKey: string) => {
-    applyAndCache((prev) => {
-      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === id) {
-          return { ...item, key: newKey, label: item.hasValue ? `${newKey}: ${typeof item.value === 'string' ? `"${item.value}"` : String(item.value)}` : newKey };
-        }
-        if (item.children) return { ...item, children: updateItem(item.children) };
-        return item;
-      });
-      return updateItem(prev);
-    });
-  }, [applyAndCache]);
-
-  const handleUpdateValue = useCallback((id: string, newValue: any) => {
-    applyAndCache((prev) => {
-      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === id) {
-          let parsedValue: any = newValue;
-          try {
-            if (typeof newValue === 'string') {
-              if (newValue.startsWith('"') && newValue.endsWith('"')) parsedValue = newValue.slice(1, -1);
-              else if (!isNaN(Number(newValue))) parsedValue = Number(newValue);
-              else if (newValue === 'true' || newValue === 'false') parsedValue = newValue === 'true';
-              else if (newValue === 'null') parsedValue = null;
-            }
-          } catch { parsedValue = newValue; }
-          return { ...item, value: parsedValue, hasValue: true, children: undefined, type: typeof parsedValue as any, label: `${item.key}: ${typeof parsedValue === 'string' ? `"${parsedValue}"` : String(parsedValue)}` };
-        }
-        if (item.children) return { ...item, children: updateItem(item.children) };
-        return item;
-      });
-      return updateItem(prev);
-    });
-  }, [applyAndCache]);
-
-  const handleDeleteItem = useCallback((itemId: string) => {
-    applyAndCache((prev) => {
-      const removeItem = (items: SlyTreeItem[]): SlyTreeItem[] => items
-        .filter((item) => item.id !== itemId)
-        .map((item) => {
-          const updatedChildren = item.children ? removeItem(item.children) : undefined;
-          if (item.children && item.children.length > 0 && (!updatedChildren || updatedChildren.length === 0)) {
-            return { ...item, children: undefined, hasValue: false, value: undefined };
-          }
-          return { ...item, children: updatedChildren };
-        });
-      return removeItem(prev);
-    });
-  }, [applyAndCache]);
-
-  const handleLabelChange = useCallback((itemId: TreeViewItemId, newLabel: string) => {
-    applyAndCache((prev) => {
-      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === itemId) {
-          const match = newLabel.match(/^([^:]+):\s*(.+)$/);
-          if (match) {
-            const [, key, valueStr] = match;
-            let value: any = valueStr.trim();
-            try {
-              if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-              else if (!isNaN(Number(value))) value = Number(value);
-              else if (value === 'true' || value === 'false') value = value === 'true';
-              else if (value === 'null') value = null;
-            } catch { /* keep string */ }
-            return { ...item, label: newLabel, key: key.trim(), value, type: typeof value as any };
-          }
-          return { ...item, label: newLabel };
-        }
-        if (item.children) return { ...item, children: updateItem(item.children) };
-        return item;
-      });
-      return updateItem(prev);
-    });
-  }, [applyAndCache]);
+  }, []); // Remove jsonData dependency to avoid stale closure
 
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
@@ -251,38 +174,46 @@ const EditorSlyDataPanel: React.FC = () => {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (event) => {
-        let jsonData: any = null; let validationError: string | null = null;
-        try { jsonData = JSON.parse(event.target?.result as string); } catch (err: any) { validationError = `Invalid JSON format: ${err?.message || 'Unknown parsing error'}`; }
-        if (!validationError && jsonData !== null) validationError = validateJsonForSlyData(jsonData);
-        setImportDialog({ open: true, fileName: file.name, jsonData, hasExistingData: treeData.length > 0, validationError });
+        let jsonData: any = null;
+        let validationError: string | null = null;
+        try {
+          jsonData = JSON.parse(event.target?.result as string);
+        } catch (err: any) {
+          validationError = `Invalid JSON format: ${err?.message || 'Unknown parsing error'}`;
+        }
+        if (!validationError && jsonData !== null) {
+          validationError = validateJsonForSlyData(jsonData);
+        }
+        setImportDialog({ 
+          open: true, 
+          fileName: file.name, 
+          jsonData, 
+          hasExistingData: Object.keys(jsonData).length > 0, 
+          validationError 
+        });
       };
       reader.readAsText(file);
     };
     input.click();
-  }, [treeData.length]);
+  }, []); // Remove jsonData dependency
 
   const handleImportConfirm = () => {
     if (importDialog.jsonData && !importDialog.validationError) {
-        const localRef = { current: nextIdRef.current };
-        const newTreeData = jsonToTreeData(importDialog.jsonData, localRef, undefined, 0);
-
-        // Save immediately to cache so a quick panel switch won't lose it
-        if (targetNetwork) saveSlyDataToCache(newTreeData, targetNetwork, localRef.current);
-
-        setTreeData(newTreeData);
-        setExpandedItems(newTreeData.map(i => i.id));
-        setNextId(localRef.current);
-        setHasLocalEdits(true);
-
-        setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
+      setJsonData(importDialog.jsonData);
+      setHasLocalEdits(true);
+      setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
     }
   };
+
   const handleImportCancel = () => setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
 
   const handleClearAll = () => setClearDialog(true);
   const handleClearConfirm = () => {
-    setTreeData([]); setExpandedItems([]); setNextId(1);
-    if (targetNetwork) clearSlyDataCache(targetNetwork); else clearSlyDataCache();
+    setJsonData({});
+    if (targetNetwork) {
+      clearSlyDataCache(targetNetwork);
+      console.log('Cache explicitly cleared by user');
+    }
     setClearDialog(false);
   };
   const handleClearCancel = () => setClearDialog(false);
@@ -298,7 +229,11 @@ const EditorSlyDataPanel: React.FC = () => {
     const logText = slyDataMessages.map((msg) => `${msg.sender}: ${typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}`).join('\n');
     const blob = new Blob([logText], { type: 'text/plain' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'slydata_logs.txt'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    a.href = URL.createObjectURL(blob);
+    a.download = 'slydata_logs.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const fetchLatestSlyData = useCallback(async () => {
@@ -306,35 +241,21 @@ const EditorSlyDataPanel: React.FC = () => {
     const fetchUrl = `${apiUrl}/api/v1/slydata/${targetNetwork}`;
 
     try {
-        const response = await fetch(fetchUrl);
-        if (response.status === 404) return;
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const response = await fetch(fetchUrl);
+      if (response.status === 404) return;
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
-        const result = await response.json();
-        const latestData = result.sly_data;
+      const result = await response.json();
+      const latestData = result.sly_data;
 
-        if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
-        // // ⛔ If the user has edited locally, do not overwrite their view
-        // if (hasLocalEdits) {
-        //   console.warn('Remote sync skipped: hasLocalEdits = true, treeData length =', treeData.length);
-        //   return;
-        // }
-        // If new data is received from agent, replace current view
-        const localRef = { current: nextIdRef.current };
-        const newTreeData = jsonToTreeData(latestData, localRef, undefined, 0);
-        setTreeData(newTreeData);
-        setExpandedItems(getAllItemIds(newTreeData));
-        setNextId(localRef.current);
-        setHasLocalEdits(false); // overwrite local edits with Agent's latest
-
-        // persist to cache
-        if (targetNetwork) saveSlyDataToCache(newTreeData, targetNetwork, localRef.current);
-        }
+      if (latestData && typeof latestData === 'object' && Object.keys(latestData).length > 0) {
+        setJsonData(latestData);
+        setHasLocalEdits(false);
+      }
     } catch (e) {
-        console.error('Failed to fetch latest sly_data:', e);
+      console.error('Failed to fetch latest sly_data:', e);
     }
-    }, [apiUrl, targetNetwork, hasLocalEdits, saveSlyDataToCache]);
-
+  }, [apiUrl, targetNetwork]);
 
   useEffect(() => {
     const currentMessageCount = slyDataMessages.length;
@@ -344,19 +265,14 @@ const EditorSlyDataPanel: React.FC = () => {
   }, [slyDataMessages.length, lastMessageCount, fetchLatestSlyData]);
 
   const handleExportJson = useCallback(() => {
-    const json = treeDataToJson(treeData);
-    const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'slydata.json'; a.click(); URL.revokeObjectURL(url);
-  }, [treeData]);
-
-  const handleExpandCollapseAll = useCallback(() => {
-    if (expandedItems.length === 0 || expandedItems.length < treeData.length) setExpandedItems(getAllItemIds(treeData));
-    else setExpandedItems([]);
-  }, [expandedItems.length, treeData]);
-
-  const treeOpsValue = useMemo(() => ({ handleDeleteItem, handleAddItem, handleAddWithConflictCheck, handleUpdateKey, handleUpdateValue, treeData }), [handleDeleteItem, handleAddItem, handleAddWithConflictCheck, handleUpdateKey, handleUpdateValue, treeData]);
+    a.href = url;
+    a.download = 'slydata.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [jsonData]);
 
   return (
     <Paper elevation={1} sx={{ height: '100%', backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary, display: 'flex', flexDirection: 'column', overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
@@ -394,10 +310,41 @@ const EditorSlyDataPanel: React.FC = () => {
                   />
                 </Tooltip>
               </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Tooltip title={expandedItems.length === 0 || expandedItems.length < treeData.length ? 'Expand All' : 'Collapse All'}>
-                  <IconButton size="small" onClick={handleExpandCollapseAll} disabled={treeData.length === 0} sx={{ color: treeData.length > 0 ? theme.palette.info.main : theme.palette.text.disabled, p: 0.5, '&:hover': treeData.length > 0 ? { backgroundColor: alpha(theme.palette.info.main, 0.1) } : undefined, '&:disabled': { color: theme.palette.text.disabled } }}>
-                    {expandedItems.length === 0 || expandedItems.length < treeData.length ? (<ExpandAllIcon fontSize="small" />) : (<CollapseAllIcon fontSize="small" />)}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 280 }}>
+                {/* Search input (compact + rounded) */}
+                <TextField
+                  size="small"
+                  placeholder="Search…"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  sx={{
+                    // size/shape
+                    width: 140,            // ← change width here
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 1.5,   // 12px radius (theme.spacing * 1.5)
+                      height: 32,          // ← change height here
+                    },
+                    '& .MuiOutlinedInput-input': {
+                      py: 0,               // vertical padding inside
+                      px: 1.25,            // horizontal padding inside
+                      fontSize: 13,
+                    },
+                  }}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+
+                {/* existing buttons */}
+                <Tooltip title="Add root item">
+                  <IconButton size="small" onClick={handleAddRootItem} sx={{ color: theme.palette.primary.main, p: 0.5, '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.1) } }}>
+                    <AddIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Import JSON">
@@ -410,31 +357,45 @@ const EditorSlyDataPanel: React.FC = () => {
                     <UploadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Add root item">
-                  <IconButton size="small" onClick={() => handleAddItem()} sx={{ color: theme.palette.primary.main, p: 0.5, '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.1) } }}>
-                    <AddIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
                 <Tooltip title="Clear all data">
-                  <IconButton size="small" onClick={handleClearAll} disabled={treeData.length === 0} sx={{ color: treeData.length > 0 ? theme.palette.error.main : theme.palette.text.disabled, '&:disabled': { color: theme.palette.text.disabled }, '&:hover': treeData.length > 0 ? { backgroundColor: alpha(theme.palette.error.main, 0.1) } : undefined, p: 0.5 }}>
+                  <IconButton
+                    size="small"
+                    onClick={handleClearAll}
+                    disabled={Object.keys(jsonData).length === 0}
+                    sx={{
+                      color: Object.keys(jsonData).length > 0 ? theme.palette.error.main : theme.palette.text.disabled,
+                      '&:disabled': { color: theme.palette.text.disabled },
+                      '&:hover': Object.keys(jsonData).length > 0 ? { backgroundColor: alpha(theme.palette.error.main, 0.1) } : undefined,
+                      p: 0.5,
+                    }}
+                  >
                     <DeleteIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
               </Box>
             </Box>
             <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1, backgroundColor: theme.palette.background.paper }}>
-              {treeData.length > 0 ? (
-                <TreeOperationsContext.Provider value={treeOpsValue}>
-                  <RichTreeView
-                    items={treeData as any}
-                    expandedItems={expandedItems}
-                    onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
-                    onItemLabelChange={handleLabelChange}
-                    isItemEditable={(item) => Boolean((item as any)?.isKeyValuePair)}
-                    slots={{ item: CustomTreeItem as any }}
-                    sx={{ color: theme.palette.text.primary, '& .MuiTreeItem-root': { '& .MuiTreeItem-content': { padding: '4px 0', paddingLeft: '0px !important', color: theme.palette.text.primary, '&:hover': { backgroundColor: theme.custom.slyData.hoverBackground }, '&.Mui-focused': { backgroundColor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main } }, '& .MuiTreeItem-iconContainer': { marginRight: '4px', minWidth: '24px', '& .MuiSvgIcon-root': { color: theme.palette.text.secondary, fontSize: '1rem' } } } }}
-                  />
-                </TreeOperationsContext.Provider>
+              {Object.keys(jsonData).length > 0 ? (
+                <JsonEditor
+                  data={jsonData}
+                  onUpdate={handleJsonUpdate}
+                  theme={jsonEditorTheme as ThemeInput}
+                  searchText={searchText}
+                  searchDebounceTime={200}
+                  enableClipboard={true}
+                  showArrayIndices={true}
+                  showStringQuotes={true}
+                  showCollectionCount={true}
+                  stringTruncate={250}
+                  minWidth="100%"
+                  maxWidth="100%"
+                  rootFontSize="14px"
+                  indent={2}
+                  rootName="slydata"
+                  restrictDrag={false}
+                  insertAtTop={false}
+                  showIconTooltips={true}
+                />
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                   <DataObjectIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
@@ -477,9 +438,8 @@ const EditorSlyDataPanel: React.FC = () => {
         </Panel>
       </PanelGroup>
 
-      <ConflictDialog state={conflictDialog} onConfirm={handleConflictConfirm} onCancel={handleConflictCancel} />
-      <ImportDialog state={importDialog} onConfirm={handleImportConfirm} onCancel={handleImportCancel} currentRootCount={treeData.length} />
-      <ClearAllDialog open={clearDialog} onConfirm={handleClearConfirm} onCancel={handleClearCancel} rootCount={treeData.length} />
+      <ImportDialog state={importDialog} onConfirm={handleImportConfirm} onCancel={handleImportCancel} currentRootCount={Object.keys(jsonData).length} />
+      <ClearAllDialog open={clearDialog} onConfirm={handleClearConfirm} onCancel={handleClearCancel} rootCount={Object.keys(jsonData).length} />
     </Paper>
   );
 };

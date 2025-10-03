@@ -13,6 +13,8 @@ import * as React from 'react';
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createTheme, ThemeProvider as MuiThemeProvider, Theme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
+import { githubDarkTheme, githubLightTheme, type ThemeInput } from 'json-edit-react';
+import { useMemo } from 'react';
 
 // Define our custom theme colors
 const lightTheme = createTheme({
@@ -215,6 +217,58 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+export const buildJsonEditorTheme = (muiTheme: Theme): ThemeInput[] => {
+  const base = muiTheme.palette.mode === 'dark' ? githubDarkTheme : githubLightTheme;
+
+  return [
+    base,
+    {
+      styles: {
+        // container & base text
+        container: {
+          backgroundColor: muiTheme.palette.background.paper,
+          color: muiTheme.palette.text.primary,
+          fontFamily: muiTheme.typography.fontFamily,
+        },
+
+        // tokens
+        property: muiTheme.palette.text.primary,
+        bracket: { color: muiTheme.palette.text.secondary, fontWeight: 700 },
+
+        string: muiTheme.palette.success.main,
+        number: muiTheme.palette.info.main,
+        boolean: muiTheme.palette.warning.main,
+        null: { color: muiTheme.palette.error.main, fontWeight: 'bold' },
+
+        // inputs & highlight
+        input: [
+          muiTheme.palette.text.primary,
+          { backgroundColor: muiTheme.palette.background.default },
+        ],
+        inputHighlight: muiTheme.palette.action.hover,
+
+        // errors
+        error: { color: muiTheme.palette.error.main, fontWeight: 'bold' },
+
+        // icon colors (used by built-in icons)
+        iconCollection: muiTheme.palette.primary.main,
+        iconEdit: muiTheme.palette.text.secondary,
+        iconDelete: muiTheme.palette.error.main,
+        iconAdd: muiTheme.palette.primary.main,
+        iconCopy: muiTheme.palette.info.main,
+        iconOk: muiTheme.palette.success.main,
+        iconCancel: muiTheme.palette.warning.main,
+      },
+    },
+  ];
+};
+
+export const useJsonEditorTheme = (): ThemeInput[] => {
+  const { theme } = useTheme();
+  // Recompute when palette mode or the theme object changes
+  return useMemo(() => buildJsonEditorTheme(theme), [theme, theme.palette.mode]);
+};
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);

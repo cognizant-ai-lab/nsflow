@@ -10,19 +10,18 @@
 // END COPYRIGHT
 
 import { useCallback } from 'react';
-import type { SlyTreeItem } from '../types/slyTree';
 
-const CACHE_VERSION = '1.0';
+const CACHE_VERSION = '2.0';
 
 export const useSlyDataCache = () => {
   const getCacheKey = useCallback((networkName: string) => `nsflow-slydata-${networkName}`, []);
 
   const saveSlyDataToCache = useCallback(
-    (data: SlyTreeItem[], networkName: string, nextId: number) => {
+    (data: any, networkName: string, nextId?: number) => {
       if (!networkName) return;
       try {
         const cacheKey = getCacheKey(networkName);
-        const cacheData = { version: CACHE_VERSION, timestamp: Date.now(), data, nextId, networkName };
+        const cacheData = { version: CACHE_VERSION, timestamp: Date.now(), data, nextId: nextId || 1, networkName };
         localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       } catch (e) {
         console.warn('Failed to save SlyData cache', e);
@@ -32,7 +31,7 @@ export const useSlyDataCache = () => {
   );
 
   const loadSlyDataFromCache = useCallback(
-    (networkName: string): { data: SlyTreeItem[]; nextId: number } | null => {
+    (networkName: string): { data: any; nextId: number } | null => {
       if (!networkName) return null;
       try {
         const cacheKey = getCacheKey(networkName);
@@ -43,15 +42,11 @@ export const useSlyDataCache = () => {
           localStorage.removeItem(cacheKey);
           return null;
         }
-        if (!Array.isArray(cacheData.data)) {
-          localStorage.removeItem(cacheKey);
-          return null;
-        }
         if (cacheData.networkName && cacheData.networkName !== networkName) {
           localStorage.removeItem(cacheKey);
           return null;
         }
-        return { data: cacheData.data, nextId: cacheData.nextId || 1 };
+        return { data: cacheData.data || {}, nextId: cacheData.nextId || 1 };
       } catch (e) {
         const cacheKey = getCacheKey(networkName);
         localStorage.removeItem(cacheKey);
