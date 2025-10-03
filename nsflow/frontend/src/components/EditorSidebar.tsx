@@ -10,32 +10,13 @@
 // END COPYRIGHT
 
 import { useEffect, useState, useRef } from "react";
-import { 
-  Box, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  Card, 
-  CardContent, 
-  Chip, 
-  InputAdornment, 
-  useTheme,
-  alpha,
-  Popper,
-  MenuItem,
-  MenuList,
-  ClickAwayListener,
-  Grow
-} from "@mui/material";
-import { 
-  PolylineTwoTone as NetworkIcon,
-  Search as SearchIcon,
-  SmartToy as RobotIcon,
-  Refresh as RefreshIcon
-} from "@mui/icons-material";
+import { Box, Typography, TextField, Button,  Paper, Card, CardContent, Chip, InputAdornment, 
+  useTheme, alpha, Popper, MenuItem, MenuList, ClickAwayListener, Grow } from "@mui/material";
+import { PolylineTwoTone as NetworkIcon, Search as SearchIcon, 
+  SmartToy as RobotIcon, Refresh as RefreshIcon} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { getFeatureFlags } from "../utils/config";
 
 
 interface EditingSession {
@@ -106,6 +87,9 @@ const EditorSidebar = ({
   const [dropdownSearchQuery, setDropdownSearchQuery] = useState("");
   const anchorRef = useRef<HTMLDivElement>(null);
 
+  // Use manual editor plugin flag
+  const { pluginManualEditor } = getFeatureFlags();
+  const canEdit = !!pluginManualEditor;
   // Fetch networks with state
   const fetchNetworks = async () => {
     if (!isReady || !apiUrl) return;
@@ -124,7 +108,7 @@ const EditorSidebar = ({
       // Convert only editing sessions to network options (registry networks handled by EditorPalette)
       const options: NetworkOption[] = [];
       
-      // Add editing sessions only
+      // Add editing sessions only if the user canEdit
       data.editing_sessions.forEach(session => {
         const option = {
           id: session.design_id,

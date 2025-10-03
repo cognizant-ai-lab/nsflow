@@ -34,6 +34,7 @@ class SimpleStateRegistry:
     Simplified registry for state management.
     Uses instance-based approach to avoid class-level conflicts.
     """
+    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", False)
 
     def __init__(self, edited_state_dir: Optional[str] = None):
         self.managers: Dict[str, SimpleStateManager] = {}
@@ -198,7 +199,7 @@ class SimpleStateRegistry:
     
     def load_from_copilot_state(self, copilot_state: Dict[str, Any], session_id: Optional[str] = None) -> Tuple[str, SimpleStateManager]:
         """Load or update a network from copilot agent state"""
-        network_name = copilot_state.get("agent_network_name", "")
+        network_name = copilot_state.get("agent_network_name", "new_network")
         
         # Look for existing session with this network name and session_id
         existing_design_id = None
@@ -219,8 +220,11 @@ class SimpleStateRegistry:
             return existing_design_id, manager
         else:
             # Create new manager
-            design_id = str(uuid.uuid4())
-            manager = SimpleStateManager(design_id)
+            if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
+                design_id = str(uuid.uuid4())
+                manager = SimpleStateManager(design_id)
+            else:
+                manager = SimpleStateManager(design_id=network_name)
             
             # Load from copilot state
             manager.load_from_copilot_state(copilot_state)

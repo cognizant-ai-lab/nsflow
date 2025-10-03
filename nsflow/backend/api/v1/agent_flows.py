@@ -11,9 +11,11 @@
 # END COPYRIGHT
 import logging
 import os
+from typing import Any, Dict
 
 from fastapi import HTTPException
 from fastapi import APIRouter
+from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
@@ -47,6 +49,63 @@ async def get_agent_network(network_name: str):
     grpc_network_utils = NsGrpcNetworkUtils()
     res = grpc_network_utils.build_nodes_and_edges(result)
     return JSONResponse(content=res)
+
+
+@router.post(
+    "/connectivity/from_json",
+    summary="Build connectivity graph from raw JSON (no gRPC, no Pydantic).",
+    responses={
+        200: {"description": "Connectivity graph built from provided JSON."},
+        422: {"description": "Invalid payload. Provide exactly one of the accepted formats."},
+        500: {"description": "Failed to build nodes/edges."},
+    },
+)
+async def build_connectivity_from_json(request: Request):
+    """
+    Accepts ONE of:
+      A) connectivity_info: [{ "origin": str, "tools": [str, ...] }, ...]
+         -> NsGrpcNetworkUtils.build_nodes_and_edges(...)
+      B) agent_network_definition: { "<agent>": { "down_chains": [...], "instructions": str }, ... }
+         + optional agent_network_name
+         -> NsGrpcNetworkUtils.partial_build_nodes_and_edges(...)
+    """
+    try:
+        data: Dict[str, Any] = await request.json()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Body must be valid JSON")
+
+    has_conn = isinstance(data.get("connectivity_info"), list)
+    has_state = isinstance(data.get("agent_network_definition"), dict)
+
+    # require exactly one of the two inputs
+    if has_conn == has_state:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide exactly one of 'connectivity_info' (list) or 'agent_network_definition' (dict).",
+        )
+
+    try:
+        utils = NsGrpcNetworkUtils()
+
+        if has_conn:
+            # Minimal pass-through shape used by build_nodes_and_edges(...)
+            connectivity_response = {"connectivity_info": data["connectivity_info"]}
+            result = utils.build_nodes_and_edges(connectivity_response)
+            return JSONResponse(content=result)
+
+        # Otherwise: partial build from state dict
+        state_dict = {
+            "agent_network_name": data.get("agent_network_name", "inline_network"),
+            "agent_network_definition": data["agent_network_definition"],
+        }
+        result = utils.partial_build_nodes_and_edges(state_dict)
+        return JSONResponse(content=result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception("Failed to build connectivity from JSON: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to build nodes/edges") from e
 
 
 @router.get("/slydata/{network_name}", responses={200: {"description": "Latest SlyData found"},

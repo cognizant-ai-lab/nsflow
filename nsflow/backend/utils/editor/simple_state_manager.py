@@ -16,6 +16,7 @@ Designed for single-user editing sessions with simpler state management.
 
 import json
 import logging
+import os
 import uuid
 from copy import deepcopy
 from datetime import datetime
@@ -29,6 +30,7 @@ class SimpleStateManager:
     Simplified state manager for agent network editing.
     No locks, no complex async patterns - just simple state management.
     """
+    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", False)
     
     def __init__(self, design_id: Optional[str] = None):
         self.design_id = design_id or str(uuid.uuid4())
@@ -37,8 +39,9 @@ class SimpleStateManager:
         self.history_index = -1
         self.max_history = 20  # Reduced for simplicity
         
-        # Initialize empty state structure
-        self._initialize_empty_state()
+        if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
+            # Initialize empty state structure
+            self._initialize_empty_state()
     
     def _initialize_empty_state(self):
         """Initialize an empty state structure"""
