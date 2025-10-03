@@ -39,7 +39,6 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
-import { treeDataToJson } from "../utils/slydata/jsonTree";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const useSpeech = import.meta.env.VITE_USE_SPEECH === "true";
@@ -158,11 +157,9 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     const network = activeNetwork;
     if (!network) return {}; // no network context; still send {}
     const cached = loadSlyDataFromCache(network);
-    if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
-      const json = treeDataToJson(cached.data);
-      if (json && typeof json === "object" && !Array.isArray(json)) {
-        return json; // current editor state as dict
-      }
+    console.log('Cached data:', cached);
+    if (cached && cached.data && typeof cached.data === 'object' && !Array.isArray(cached.data) && Object.keys(cached.data).length > 0) {
+      return cached.data; // cached data is already in JSON format
     }
     return {}; // if editor is blank, still send {}
   }, [useSlyDataChecked, activeNetwork, loadSlyDataFromCache]);
@@ -658,7 +655,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     }}
                   />
                 }
-                label="Use Sly Data"
+                label="Use Edited Sly Data"
                 sx={{
                   color: theme.palette.text.primary,
                   m: 0,
