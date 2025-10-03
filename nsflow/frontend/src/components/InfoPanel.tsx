@@ -10,8 +10,19 @@
 //
 // END COPYRIGHT
 import { useEffect, useState } from "react";
-import { FaGithub, FaBookOpen } from "react-icons/fa";
-import { SiFastapi } from "react-icons/si";
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  Link,
+  useTheme,
+  alpha
+} from "@mui/material";
+import { 
+  GitHub as GitHubIcon,
+  MenuBook as BookIcon,
+  Api as ApiIcon
+} from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import SustainabilityScore from "./SustainabilityScore";
 
@@ -21,6 +32,7 @@ const InfoPanel = () => {
     nsflow: "Loading...",
     neuroSan: "Loading...",
   });
+  const theme = useTheme();
 
   useEffect(() => {
     const fetchVersion = async (packageName: string) => {
@@ -48,73 +60,192 @@ const InfoPanel = () => {
   }, [apiUrl]);
 
   return (
-    <div className="logs-panel p-4 bg-gray-900 border border-gray-700 rounded-md">
-      <div className="logs-header flex justify-between items-center mb-2">
-        <h2 className="text-white text-lg">Info</h2>
-      </div>
-      <div className="logs-messages overflow-y-auto max-h-[18rem] min-h-[8rem] p-2 bg-gray-800 border border-gray-600 rounded-md mb-2">
-        {/* New SustainabilityScore Component */}
+    <Paper
+      elevation={1}
+      sx={{
+        p: 2,
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 2,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 1,
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        pb: 0
+      }}>
+        <Typography variant="h6" sx={{ 
+          color: theme.palette.text.primary,
+          fontWeight: 600
+        }}>
+          Info
+        </Typography>
+      </Box>
+
+      {/* Sustainability Score Section */}
+      <Paper
+        variant="outlined"
+        sx={{
+          overflow: 'auto',
+          maxHeight: '18rem',
+          minHeight: '8rem',
+          p: 1,
+          mb: 0.5,
+          backgroundColor: alpha(theme.palette.background.default, 0.5),
+          border: `1px solid ${theme.palette.divider}`
+        }}
+      >
         <SustainabilityScore />
-      </div>
-      <div className="logs-messages overflow-y-auto max-h-96 p-2 bg-gray-800 border border-gray-600 rounded-md ">
-        {/* Resources */}
-        <div className="space-y-2">
-          <p className="font-bold text-gray-400">Resources</p>
+      </Paper>
+
+      {/* Resources Section */}
+      <Paper
+        variant="outlined"
+        sx={{
+          flexGrow: 1,
+          overflow: 'auto',
+          maxHeight: '24rem',
+          p: 1,
+          backgroundColor: alpha(theme.palette.background.default, 0.5),
+          border: `1px solid ${theme.palette.divider}`
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography variant="subtitle2" sx={{ 
+            fontWeight: 600, 
+            color: theme.palette.text.secondary,
+            mb: 0.5
+          }}>
+            Resources
+          </Typography>
           
           {/* Versions Display */}
-          <div className="info-panel flex items-center">
-            <a
-                href="https://github.com/cognizant-ai-lab/neuro-san"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center text-blue-400 hover:text-blue-300"
-              >
-            <FaGithub className="mr-2" /> neuro-san v. {versions.neuroSan}
-            </a>
-          </div>
-          <div className="info-panel flex items-center">
-            <a
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Link
+              href="https://github.com/cognizant-ai-lab/neuro-san"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                color: theme.palette.primary.main,
+                textDecoration: 'none',
+                '&:hover': {
+                  color: theme.palette.primary.light,
+                  textDecoration: 'underline'
+                }
+              }}
+            >
+              <GitHubIcon sx={{ fontSize: 18 }} />
+              <Typography variant="body2">
+                neuro-san v. {versions.neuroSan}
+              </Typography>
+            </Link>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Link
               href="https://github.com/cognizant-ai-lab/nsflow"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center text-blue-400 hover:text-blue-300"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                color: theme.palette.primary.main,
+                textDecoration: 'none',
+                '&:hover': {
+                  color: theme.palette.primary.light,
+                  textDecoration: 'underline'
+                }
+              }}
             >
-              <FaGithub className="mr-2" /> nsflow v. {versions.nsflow}
-            </a>
-          </div>
+              <GitHubIcon sx={{ fontSize: 18 }} />
+              <Typography variant="body2">
+                nsflow v. {versions.nsflow}
+              </Typography>
+            </Link>
+          </Box>
 
           {/* GitHub Link */}
-          <a
+          <Link
             href="https://github.com/cognizant-ai-lab/neuro-san-studio"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center text-blue-400 hover:text-blue-300"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              color: theme.palette.primary.main,
+              textDecoration: 'none',
+              '&:hover': {
+                color: theme.palette.primary.light,
+                textDecoration: 'underline'
+              }
+            }}
           >
-            <FaGithub className="mr-2" /> neuro-san-studio
-          </a>
+            <GitHubIcon sx={{ fontSize: 18 }} />
+            <Typography variant="body2">
+              neuro-san-studio
+            </Typography>
+          </Link>
 
           {/* FastAPI Docs Link */}
-          <a
+          <Link
             href={`${apiUrl}/docs`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center text-blue-400 hover:text-blue-300"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              color: theme.palette.primary.main,
+              textDecoration: 'none',
+              '&:hover': {
+                color: theme.palette.primary.light,
+                textDecoration: 'underline'
+              }
+            }}
           >
-            <SiFastapi className="mr-2" /> FastAPI Specs
-          </a>
+            <ApiIcon sx={{ fontSize: 18 }} />
+            <Typography variant="body2">
+              FastAPI Specs
+            </Typography>
+          </Link>
 
           {/* Documentation and User Guide */}
-          <a
+          <Link
             href="https://github.com/cognizant-ai-lab/neuro-san-studio/blob/main/README.md"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center text-blue-400 hover:text-blue-300"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              color: theme.palette.primary.main,
+              textDecoration: 'none',
+              '&:hover': {
+                color: theme.palette.primary.light,
+                textDecoration: 'underline'
+              }
+            }}
           >
-            <FaBookOpen className="mr-2" /> Examples and User Guide
-          </a>
-        </div>
-      </div>
-    </div>
+            <BookIcon sx={{ fontSize: 18 }} />
+            <Typography variant="body2">
+              Examples and User Guide
+            </Typography>
+          </Link>
+        </Box>
+      </Paper>
+    </Paper>
   );
 };
 

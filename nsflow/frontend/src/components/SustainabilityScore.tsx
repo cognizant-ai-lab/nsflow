@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  useTheme,
+  alpha
+} from '@mui/material';
 import { useApiPort } from '../context/ApiPortContext';
 import { useChatContext } from '../context/ChatContext';
 
@@ -32,6 +40,7 @@ const SustainabilityScore: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { wsUrl } = useApiPort();
   const { activeNetwork } = useChatContext();
+  const theme = useTheme();
 
   const sustainabilityWsUrl = useMemo(() => 
     wsUrl && activeNetwork ? `${wsUrl}/api/v1/ws/sustainability/${activeNetwork}` : null,
@@ -160,66 +169,112 @@ const SustainabilityScore: React.FC = () => {
   }, [sustainabilityWsUrl, activeNetwork]);
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <p className="font-bold" style={{ color: 'var(--text-color)' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      {/* Compact Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between' 
+      }}>
+        <Typography variant="subtitle2" sx={{ 
+          fontWeight: 600, 
+          color: theme.palette.text.primary,
+          fontSize: '0.8rem'
+        }}>
           Sustainability Score
-        </p>
-        <div className="flex items-center gap-2">
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {connectionStatus === 'connected' && (
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-xs" style={{ color: 'var(--text-color-secondary)' }}>Live</span>
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ 
+                width: 6, 
+                height: 6, 
+                backgroundColor: theme.palette.success.main,
+                borderRadius: '50%',
+                animation: 'pulse 2s infinite'
+              }} />
+              <Typography variant="caption" sx={{ 
+                color: theme.palette.text.secondary,
+                fontSize: '0.65rem'
+              }}>
+                Live
+              </Typography>
+            </Box>
           )}
           {loading && (
-            <div className="text-xs" style={{ color: 'var(--text-color-secondary)' }}>
+            <Typography variant="caption" sx={{ 
+              color: theme.palette.text.secondary,
+              fontSize: '0.65rem'
+            }}>
               Loading...
-            </div>
+            </Typography>
           )}
           {error && (
-            <div className="text-xs text-red-400" title={error}>
+            <Typography variant="caption" sx={{ 
+              color: theme.palette.error.main,
+              fontSize: '0.65rem'
+            }} title={error}>
               Error
-            </div>
+            </Typography>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
       
-      <div 
-        className="grid grid-cols-4 gap-2 p-2 rounded-lg"
-        style={{ 
-          backgroundColor: 'var(--config-input-bg)',
-          border: '1px solid var(--border-color)'
+      {/* Compact Metrics Grid */}
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2,
+          backgroundColor: alpha(theme.palette.background.default, 0.5),
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: 1
         }}
       >
-        {SUSTAINABILITY_METRICS.map((metric) => (
-          <div key={metric.key} className="flex flex-col items-center">
-            <div 
-              className="text-xl mb-1 hover:scale-110 transition-transform"
-            
-            >
-              {metric.icon}
-            </div>
-            <div className="space-y-1">
-              <div 
-                className="text-xs font-medium" 
-                style={{ color: 'var(--text-color-secondary)' }}
-              >
-                {metric.label}
-              </div>
-              <div 
-                className="text-xs font-semibold" 
-                style={{ color: 'var(--text-color)' }}
-              >
-                {values[metric.key]}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      
- 
-    </div>
+        <Box sx={{ 
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 1
+        }}>
+          {SUSTAINABILITY_METRICS.map((metric) => (
+            <Box key={metric.key} sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              textAlign: 'center'
+            }}>
+              <Box sx={{ 
+                fontSize: '1rem',
+                mb: 0.25,
+                '&:hover': {
+                  transform: 'scale(1.1)'
+                },
+                transition: 'transform 0.2s ease'
+              }}>
+                {metric.icon}
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.125 }}>
+                <Typography variant="caption" sx={{ 
+                  fontSize: '0.6rem',
+                  fontWeight: 500,
+                  color: theme.palette.text.secondary,
+                  lineHeight: 1
+                }}>
+                  {metric.label}
+                </Typography>
+                <Typography variant="caption" sx={{ 
+                  fontSize: '0.625rem',
+                  fontWeight: 600,
+                  color: theme.palette.text.primary,
+                  lineHeight: 1
+                }}>
+                  {values[metric.key]}
+                </Typography>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
+    </Box>
   );
 };
 

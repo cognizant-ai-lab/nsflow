@@ -149,7 +149,8 @@ class AgentNetworkUtils:
             agent_id = tool.get("name", "unknown_agent")
             node_lookup[agent_id] = tool
 
-        front_man = agent_network.find_front_man()
+        front_man_name = agent_network.find_front_man()
+        front_man = node_lookup.get(front_man_name)
 
         if not front_man:
             raise HTTPException(status_code=400, detail="No front-man agent found in network.")

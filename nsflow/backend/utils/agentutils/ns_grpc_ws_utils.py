@@ -35,6 +35,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 user_sessions_lock = asyncio.Lock()
 user_sessions = {}
 
+# Global storage for latest sly_data by network name
+latest_sly_data_storage: Dict[str, Any] = {}
+
 
 # pylint: disable=too-many-instance-attributes
 class NsGrpcWsUtils:
@@ -128,6 +131,11 @@ class NsGrpcWsUtils:
                     await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
                     await self.logs_manager.sly_data_event(sly_data_str)
 
+                # Store the latest sly_data for this network
+                if state.get("sly_data") is not None:
+                    latest_sly_data_storage[self.agent_name] = state["sly_data"]
+                    logging.info(f"Updated latest sly_data for network {self.agent_name}")
+
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
 
         except WebSocketDisconnect:
@@ -199,3 +207,16 @@ class NsGrpcWsUtils:
                  session with the agent network.
         """
         return AgentSessionFactory()
+    
+    @classmethod
+    def get_latest_sly_data(cls, network_name: str) -> dict:
+        """
+        Retrieve the latest sly_data for a given network.
+        
+        Args:
+            network_name: The name of the network to get sly_data for
+            
+        Returns:
+            dict: The latest sly_data for the network, or empty dict if none available
+        """
+        return latest_sly_data_storage.get(network_name, {})

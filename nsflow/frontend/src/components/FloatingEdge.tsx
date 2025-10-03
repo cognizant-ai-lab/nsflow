@@ -10,6 +10,7 @@
 //
 // END COPYRIGHT
 import { getBezierPath, useNodes, EdgeProps, Node } from "reactflow";
+import { useTheme } from "@mui/material/styles";
 import { getEdgeParams } from "../utils/utils";
 
 // Define a type for the node with required properties
@@ -21,6 +22,7 @@ interface CustomNode extends Node {
 // Explicitly type the FloatingEdge component using ReactFlow's EdgeProps
 const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, style }) => {
   const nodes = useNodes();
+  const theme = useTheme();
 
   // Ensure we correctly type sourceNode and targetNode
   const sourceNode = nodes.find((node) => node.id === source) as CustomNode | undefined;
@@ -48,10 +50,13 @@ const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, styl
       id={id}
       className="react-flow__edge-path"
       d={edgePath}
-      strokeWidth={2}
-      stroke="white"
+      stroke={theme.palette.text.secondary}
       markerEnd={markerEnd}
-      style={style}
+      style={{
+        ...style,
+        stroke: style?.stroke || theme.palette.text.primary,
+        strokeWidth: 3,
+      }}
     />
   );
 };
