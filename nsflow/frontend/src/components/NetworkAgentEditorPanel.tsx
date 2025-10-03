@@ -20,7 +20,9 @@ import {
   Collapse,
   Button,
   CircularProgress,
-  Alert
+  Alert,
+  TextField,
+  InputAdornment
 } from '@mui/material';
 import { 
   ExpandLess as ChevronUpIcon,
@@ -29,33 +31,30 @@ import {
   PushPin as PinIcon,
   PushPinOutlined as UnpinIcon,
   Save as SaveIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Search as SearchIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
-import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
-import type { TreeViewItemId } from '@mui/x-tree-view/models';
 import { useApiPort } from '../context/ApiPortContext';
-import { useTheme as useCustomTheme } from '../context/ThemeContext';
-import { TreeOperationsContext } from '../context/TreeOperationsContext';
-import type { SlyTreeItem } from '../types/slyTree';
-import { CustomTreeItem } from './slydata/CustomTreeItem';
-import { jsonToTreeData, treeDataToJson, getAllItemIds } from '../utils/slydata/jsonTree';
+import { useJsonEditorTheme } from '../context/ThemeContext';
+import { JsonEditor, ThemeInput } from 'json-edit-react';
 
 interface NetworkAgentEditorPanelProps {
   selectedDesignId: string;
   selectedAgentName: string | null;
   onAgentUpdated: () => void;
+  enableEditing?: boolean; // Flag to control editing capabilities
 }
 
 const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   selectedDesignId,
   selectedAgentName,
-  onAgentUpdated
+  onAgentUpdated,
+  enableEditing = false // Default to view-only mode
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  const [treeData, setTreeData] = useState<SlyTreeItem[]>([]);
-  const [expandedItems, setExpandedItems] = useState<TreeViewItemId[]>([]);
-  const [nextId, setNextId] = useState(1);
+  const [jsonData, setJsonData] = useState<any>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,9 +65,14 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
-  const { theme: customTheme } = useCustomTheme();
+  const jsonEditorTheme = useJsonEditorTheme();
   const { apiUrl } = useApiPort();
 
+  const [searchText, setSearchText] = useState('');
+
+  // Data validation helpers
+  const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
+  const hasChangesToSave = enableEditing && hasChanges;
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {
@@ -100,8 +104,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     if (selectedAgentName && selectedDesignId && apiUrl) {
       loadAgentData();
     } else {
-      setTreeData([]);
-      setExpandedItems([]);
+      setJsonData({});
       setHasChanges(false);
       setOriginalData(null);
       setError(null);
@@ -128,58 +131,26 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     }
   };
 
-  const createDefaultTreeFromSchema = (schema: any): SlyTreeItem[] => {
-    if (!schema || !schema.properties) return [];
+  const createDefaultDataFromSchema = (schema: any): any => {
+    if (!schema || !schema.properties) return {};
     
-    const localRef = { current: 1 };
-    const treeData: SlyTreeItem[] = [];
+    const defaultData: any = {};
     
-    // Create tree items for each property in the schema
+    // Create default values for each property in the schema
     Object.entries(schema.properties).forEach(([key, property]: [string, any]) => {
-      const item: SlyTreeItem = {
-        id: `item_${localRef.current++}`,
-        label: `${key}: ""`,
-        key,
-        value: "",
-        parentId: undefined,
-        isKeyValuePair: true,
-        type: 'string',
-        depth: 0,
-        hasValue: false
-      };
-      
-      // Note: Description could be added as a tooltip in the future
-      
-      // Handle nested objects (like llm_config)
       if (property.type === 'object' && property.properties) {
-        item.hasValue = false;
-        item.children = [];
-        
-        // Add nested properties
+        // Handle nested objects (like llm_config)
+        const nestedData: any = {};
         Object.entries(property.properties).forEach(([nestedKey]: [string, any]) => {
-          const nestedItem: SlyTreeItem = {
-            id: `item_${localRef.current++}`,
-            label: `${nestedKey}: ""`,
-            key: nestedKey,
-            value: "",
-            parentId: item.id,
-            isKeyValuePair: true,
-            type: 'string',
-            depth: 1,
-            hasValue: false
-          };
-          
-          // Note: Description could be added as a tooltip in the future
-          
-          item.children!.push(nestedItem);
+          nestedData[nestedKey] = "";
         });
+        defaultData[key] = nestedData;
+      } else {
+        defaultData[key] = "";
       }
-      
-      treeData.push(item);
     });
     
-    setNextId(localRef.current);
-    return treeData;
+    return defaultData;
   };
 
   const loadAgentData = async () => {
@@ -200,13 +171,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       const agentData = data.agent;
       console.log('Loaded agent data:', agentData);
 
-      // Convert agent data to tree format
-      const localRef = { current: 1 };
-      const newTreeData = jsonToTreeData(agentData, localRef, undefined, 0);
-      
-      setTreeData(newTreeData);
-      setExpandedItems(getAllItemIds(newTreeData));
-      setNextId(localRef.current);
+      setJsonData(agentData);
       setOriginalData(agentData);
       setHasChanges(false);
       
@@ -219,10 +184,9 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
       
       // If agent doesn't exist, create default structure from schema
-      if (schema && !treeData.length) {
-        const defaultTree = createDefaultTreeFromSchema(schema);
-        setTreeData(defaultTree);
-        setExpandedItems(getAllItemIds(defaultTree));
+      if (schema && !hasData) {
+        const defaultData = createDefaultDataFromSchema(schema);
+        setJsonData(defaultData);
         setHasChanges(false);
         setOriginalData({});
       }
@@ -300,19 +264,15 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   };
 
   const saveAgentData = async () => {
-    if (!selectedAgentName || !selectedDesignId || !apiUrl || !hasChanges) return;
+    if (!enableEditing || !selectedAgentName || !selectedDesignId || !apiUrl || !hasChanges) return;
 
     setIsSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      // Convert tree data back to JSON
-      const rawData = treeDataToJson(treeData);
-      console.log('rawData from tree:', rawData);
-      
       // Clean the data to match API expectations
-      const cleanedData = cleanAgentData(rawData);
+      const cleanedData = cleanAgentData(jsonData);
       console.log('cleanedData for API:', cleanedData);
       
       // Validate that we have some data to send
@@ -361,117 +321,37 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   };
 
 
-  const handleAddItem = useCallback((parentId?: string) => {
-    const newId = `item_${nextId}`;
-    const newItem: SlyTreeItem = { 
-      id: newId, 
-      label: 'new_key: "new_value"', 
-      key: 'new_key', 
-      value: 'new_value', 
-      parentId, 
-      isKeyValuePair: true, 
-      type: 'string', 
-      depth: parentId ? (treeData.find(item => item.id === parentId)?.depth || 0) + 1 : 0, 
-      hasValue: true 
-    };
+  // Handle JSON data updates from the editor
+  const handleJsonUpdate = useCallback((update: any) => {
+    if (!enableEditing) return;
     
-    if (!parentId) {
-      setTreeData(prev => [...prev, newItem]);
-    } else {
-      setTreeData(prev => {
-        const updateItems = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-          if (item.id === parentId) {
-            return { ...item, children: [...(item.children || []), newItem], hasValue: false, value: undefined };
-          }
-          if (item.children) return { ...item, children: updateItems(item.children) };
-          return item;
-        });
-        return updateItems(prev);
-      });
-    }
+    console.log('JsonEditor onUpdate called with:', update);
+    // `update.newData` contains the new full JSON value, `update.data` might be empty
+    const next = update.newData ?? update.data ?? {}; // fall back to empty object if no data
+    console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
+    setJsonData(next);
+    setHasChanges(true);
+  }, [enableEditing]);
+
+  // Handle adding a new root item
+  const handleAddRootItem = useCallback(() => {
+    if (!enableEditing) return;
     
-    setNextId(prev => prev + 1);
-    setHasChanges(true);
-  }, [nextId, treeData]);
-
-  const handleDeleteItem = useCallback((itemId: string) => {
-    setTreeData(prev => {
-      const removeItem = (items: SlyTreeItem[]): SlyTreeItem[] => items
-        .filter((item) => item.id !== itemId)
-        .map((item) => {
-          const updatedChildren = item.children ? removeItem(item.children) : undefined;
-          if (item.children && item.children.length > 0 && (!updatedChildren || updatedChildren.length === 0)) {
-            return { ...item, children: undefined, hasValue: false, value: undefined };
-          }
-          return { ...item, children: updatedChildren };
-        });
-      return removeItem(prev);
+    setJsonData((prev: any) => {
+      if (
+        prev &&
+        typeof prev === 'object' &&
+        !Array.isArray(prev) &&
+        Object.keys(prev).length > 0
+      ) {
+        // already has data — no-op
+        return prev;
+      }
+      const next = { ...prev, new_key: 'new_value' };
+      setHasChanges(true);
+      return next;
     });
-    setHasChanges(true);
-  }, []);
-
-  const handleUpdateKey = useCallback((id: string, newKey: string) => {
-    setTreeData(prev => {
-      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === id) {
-          return { ...item, key: newKey, label: item.hasValue ? `${newKey}: ${typeof item.value === 'string' ? `"${item.value}"` : String(item.value)}` : newKey };
-        }
-        if (item.children) return { ...item, children: updateItem(item.children) };
-        return item;
-      });
-      return updateItem(prev);
-    });
-    setHasChanges(true);
-  }, []);
-
-  const handleUpdateValue = useCallback((id: string, newValue: any) => {
-    setTreeData(prev => {
-      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === id) {
-          let parsedValue: any = newValue;
-          try {
-            if (typeof newValue === 'string') {
-              if (newValue.startsWith('"') && newValue.endsWith('"')) parsedValue = newValue.slice(1, -1);
-              else if (!isNaN(Number(newValue))) parsedValue = Number(newValue);
-              else if (newValue === 'true' || newValue === 'false') parsedValue = newValue === 'true';
-              else if (newValue === 'null') parsedValue = null;
-            }
-          } catch { parsedValue = newValue; }
-          return { ...item, value: parsedValue, hasValue: true, children: undefined, type: typeof parsedValue as any, label: `${item.key}: ${typeof parsedValue === 'string' ? `"${parsedValue}"` : String(parsedValue)}` };
-        }
-        if (item.children) return { ...item, children: updateItem(item.children) };
-        return item;
-      });
-      return updateItem(prev);
-    });
-    setHasChanges(true);
-  }, []);
-
-  const handleLabelChange = useCallback((itemId: TreeViewItemId, newLabel: string) => {
-    setTreeData(prev => {
-      const updateItem = (items: SlyTreeItem[]): SlyTreeItem[] => items.map((item) => {
-        if (item.id === itemId) {
-          const match = newLabel.match(/^([^:]+):\s*(.+)$/);
-          if (match) {
-            const [, key, valueStr] = match;
-            let value: any = valueStr.trim();
-            try {
-              if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-              else if (!isNaN(Number(value))) value = Number(value);
-              else if (value === 'true' || value === 'false') value = value === 'true';
-              else if (value === 'null') value = null;
-            } catch { /* keep string */ }
-            return { ...item, label: newLabel, key: key.trim(), value, type: typeof value as any };
-          }
-          return { ...item, label: newLabel };
-        }
-        if (item.children) return { ...item, children: updateItem(item.children) };
-        return item;
-      });
-      return updateItem(prev);
-    });
-    setHasChanges(true);
-  }, []);
+  }, [enableEditing]);
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
@@ -484,21 +364,11 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
 
   const handleClose = () => {
     setIsExpanded(false);
-    setTreeData([]);
-    setExpandedItems([]);
+    setJsonData({});
     setHasChanges(false);
     setOriginalData(null);
     setError(null);
     setSuccess(null);
-  };
-
-  const treeOpsValue = {
-    handleDeleteItem,
-    handleAddItem,
-    handleAddWithConflictCheck: handleAddItem,
-    handleUpdateKey,
-    handleUpdateValue,
-    treeData
   };
 
   return (
@@ -538,16 +408,76 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <EditIcon sx={{ color: theme.palette.primary.main, fontSize: 16 }} />
-              <Typography variant="body2" sx={{ 
-                color: theme.palette.text.primary,
-                fontWeight: 500,
-                fontSize: '0.8rem'
-              }}>
+              <Typography 
+                variant="body2" 
+                noWrap
+                sx={{ 
+                  color: theme.palette.text.primary,
+                  fontWeight: 500,
+                  fontSize: '0.8rem',
+                  textOverflow: 'ellipsis'
+                }}
+              >
                 Agent: {selectedAgentName}
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {hasChanges && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 280 }}>
+              {/* Search input (compact + rounded) */}
+              <TextField
+                size="small"
+                placeholder="Search…"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                sx={{
+                  // size/shape
+                  width: 140,            // change width here
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 1.5,   // 12px radius (theme.spacing * 1.5)
+                    height: 32,          // change height here
+                  },
+                  '& .MuiOutlinedInput-input': {
+                    py: 0,               // vertical padding inside
+                    px: 1.25,            // horizontal padding inside
+                    fontSize: 13,
+                  },
+                }}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+
+              {/* Add button - only show when editing is enabled */}
+              {enableEditing && (
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddRootItem();
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={hasData}
+                  sx={{
+                    color: hasData ? theme.palette.text.disabled : theme.palette.primary.main,
+                    '&:disabled': { color: theme.palette.text.disabled },
+                    '&:hover': hasData ? undefined : { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                    p: 0.5,
+                  }}
+                  title="Add root item"
+                >
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              )}
+
+              {/* Save button - only show when editing is enabled */}
+              {enableEditing && hasChangesToSave && (
                 <Button
                   size="small"
                   variant="contained"
@@ -556,7 +486,8 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
                     e.stopPropagation();
                     saveAgentData();
                   }}
-                  disabled={isSaving || !hasChanges}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={isSaving || !hasChangesToSave}
                   sx={{
                     minWidth: 'auto',
                     px: 1.5,
@@ -574,6 +505,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
               <IconButton
                 size="small"
                 onClick={togglePinned}
+                onMouseDown={(e) => e.stopPropagation()}
                 sx={{
                   color: isPinned ? theme.palette.primary.main : theme.palette.text.secondary,
                   '&:hover': { 
@@ -596,6 +528,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
                   e.stopPropagation();
                   handleClose();
                 }}
+                onMouseDown={(e) => e.stopPropagation()}
                 sx={{
                   color: theme.palette.text.secondary,
                   '&:hover': { color: theme.palette.text.primary },
@@ -662,51 +595,46 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
                   Loading agent data...
                 </Typography>
               </Box>
-            ) : treeData.length > 0 ? (
-              <TreeOperationsContext.Provider value={treeOpsValue}>
-                <RichTreeView
-                  items={treeData as any}
-                  expandedItems={expandedItems}
-                  onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
-                  onItemLabelChange={handleLabelChange}
-                  isItemEditable={(item) => Boolean((item as any)?.isKeyValuePair)}
-                  slots={{ item: CustomTreeItem as any }}
-                  sx={{ 
-                    color: theme.palette.text.primary, 
-                    '& .MuiTreeItem-root': { 
-                      '& .MuiTreeItem-content': { 
-                        padding: '4px 0', 
-                        paddingLeft: '0px !important', 
-                        color: theme.palette.text.primary, 
-                        '&:hover': { backgroundColor: customTheme.custom.slyData.hoverBackground }, 
-                        '&.Mui-focused': { backgroundColor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main } 
-                      }, 
-                      '& .MuiTreeItem-iconContainer': { 
-                        marginRight: '4px', 
-                        minWidth: '24px', 
-                        '& .MuiSvgIcon-root': { color: theme.palette.text.secondary, fontSize: '1rem' } 
-                      } 
-                    } 
-                  }}
-                />
-              </TreeOperationsContext.Provider>
+            ) : hasData ? (
+              <JsonEditor
+                data={jsonData}
+                onUpdate={handleJsonUpdate}
+                theme={jsonEditorTheme as ThemeInput}
+                searchText={searchText}
+                searchDebounceTime={200}
+                enableClipboard={true}
+                showArrayIndices={true}
+                showStringQuotes={true}
+                showCollectionCount={true}
+                stringTruncate={250}
+                minWidth="100%"
+                maxWidth="100%"
+                rootFontSize="14px"
+                indent={2}
+                rootName="agent"
+                restrictDrag={!enableEditing}
+                insertAtTop={false}
+                showIconTooltips={true}
+                viewOnly={!enableEditing}
+              />
             ) : selectedAgentName ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                 <EditIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
                 <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>No agent data available</Typography>
                 <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
-                  Agent '{selectedAgentName}' has no editable properties or failed to load.
+                  Agent '{selectedAgentName}' has no {enableEditing ? 'editable ' : ''}properties or failed to load.
                 </Typography>
-                {schema && (
+                {enableEditing && schema && (
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => {
-                      const defaultTree = createDefaultTreeFromSchema(schema);
-                      setTreeData(defaultTree);
-                      setExpandedItems(getAllItemIds(defaultTree));
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const defaultData = createDefaultDataFromSchema(schema);
+                      setJsonData(defaultData);
                       setHasChanges(true);
                     }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     sx={{ mt: 1 }}
                   >
                     Create from Schema
@@ -716,9 +644,14 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                 <EditIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
-                <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>Select an agent to edit</Typography>
+                <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>
+                  Select an agent to {enableEditing ? 'edit' : 'view'}
+                </Typography>
                 <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
-                  Right-click on an agent and select "Edit Agent" or double-click to start editing.
+                  {enableEditing 
+                    ? 'Right-click on an agent and select "Edit Agent" or double-click to start editing.'
+                    : 'Right-click on an agent and select "View Agent" to see its properties.'
+                  }
                 </Typography>
                 {schema && (
                   <Typography variant="caption" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary, mt: 1 }}>
