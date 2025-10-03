@@ -79,7 +79,6 @@ const EditorSlyDataPanel: React.FC = () => {
   const jsonEditorTheme = useJsonEditorTheme();
 
   const [searchText, setSearchText] = useState('');
-  const [searchFilter, setSearchFilter] = useState<'value' | 'key' | 'all'>('all');
 
 
   const [jsonData, setJsonData] = useState<any>({});
@@ -92,6 +91,11 @@ const EditorSlyDataPanel: React.FC = () => {
   const [isLoadingCache, setIsLoadingCache] = useState(false);
 
   const { saveSlyDataToCache, loadSlyDataFromCache, clearSlyDataCache } = useSlyDataCache();
+
+  const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
+
+  const addDisabled = hasData;     // disable "Add" when there is already data
+  const deleteDisabled = !hasData; // disable "Delete" when there is no data
 
   // Bootstrap: run once per mount when a targetNetwork appears
   useEffect(() => {
@@ -158,12 +162,22 @@ const EditorSlyDataPanel: React.FC = () => {
 
   // Handle adding a new root item
   const handleAddRootItem = useCallback(() => {
-    setJsonData((prevData: any) => {
-      const newData = { ...prevData, new_key: "new_value" };
+    setJsonData((prev: any) => {
+      if (
+        prev &&
+        typeof prev === 'object' &&
+        !Array.isArray(prev) &&
+        Object.keys(prev).length > 0
+      ) {
+        // already has data — no-op
+        return prev;
+      }
+      const next = { ...prev, new_key: 'new_value' };
       setHasLocalEdits(true);
-      return newData;
+      return next;
     });
-  }, []); // Remove jsonData dependency to avoid stale closure
+  }, []);
+
 
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
@@ -282,7 +296,13 @@ const EditorSlyDataPanel: React.FC = () => {
             <Box sx={{ p: 1.5, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, backgroundColor: theme.palette.background.paper }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DataObjectIcon sx={{ color: theme.palette.primary.main, fontSize: '1.25rem' }} />
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>SlyData Editor</Typography>
+                <Typography 
+                  variant="subtitle1"
+                  noWrap
+                  sx={{ fontWeight: 600, color: theme.palette.text.primary, textOverflow: 'ellipsis' }}
+                  >
+                    SlyData Editor
+                </Typography>
                 <Tooltip 
                   title={
                     <Box sx={{ p: 1, maxWidth: 350 }}>
@@ -319,10 +339,10 @@ const EditorSlyDataPanel: React.FC = () => {
                   onChange={(e) => setSearchText(e.target.value)}
                   sx={{
                     // size/shape
-                    width: 140,            // ← change width here
+                    width: 140,            // change width here
                     '& .MuiOutlinedInput-root': {
                       borderRadius: 1.5,   // 12px radius (theme.spacing * 1.5)
-                      height: 32,          // ← change height here
+                      height: 32,          // change height here
                     },
                     '& .MuiOutlinedInput-input': {
                       py: 0,               // vertical padding inside
@@ -343,9 +363,21 @@ const EditorSlyDataPanel: React.FC = () => {
 
                 {/* existing buttons */}
                 <Tooltip title="Add root item">
-                  <IconButton size="small" onClick={handleAddRootItem} sx={{ color: theme.palette.primary.main, p: 0.5, '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.1) } }}>
-                    <AddIcon fontSize="small" />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={handleAddRootItem}
+                      disabled={addDisabled}
+                      sx={{
+                        color: addDisabled ? theme.palette.text.disabled : theme.palette.primary.main,
+                        '&:disabled': { color: theme.palette.text.disabled },
+                        '&:hover': addDisabled ? undefined : { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                        p: 0.5,
+                      }}
+                    >
+                      <AddIcon fontSize="small" />
+                    </IconButton>
+                  </span>
                 </Tooltip>
                 <Tooltip title="Import JSON">
                   <IconButton size="small" onClick={handleImportJson} sx={{ color: theme.palette.secondary.main, p: 0.5, '&:hover': { backgroundColor: alpha(theme.palette.secondary.main, 0.1) } }}>
@@ -358,19 +390,21 @@ const EditorSlyDataPanel: React.FC = () => {
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Clear all data">
-                  <IconButton
-                    size="small"
-                    onClick={handleClearAll}
-                    disabled={Object.keys(jsonData).length === 0}
-                    sx={{
-                      color: Object.keys(jsonData).length > 0 ? theme.palette.error.main : theme.palette.text.disabled,
-                      '&:disabled': { color: theme.palette.text.disabled },
-                      '&:hover': Object.keys(jsonData).length > 0 ? { backgroundColor: alpha(theme.palette.error.main, 0.1) } : undefined,
-                      p: 0.5,
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={handleClearAll}
+                      disabled={deleteDisabled}
+                      sx={{
+                        color: deleteDisabled ? theme.palette.text.disabled : theme.palette.error.main,
+                        '&:disabled': { color: theme.palette.text.disabled },
+                        '&:hover': deleteDisabled ? undefined : { backgroundColor: alpha(theme.palette.error.main, 0.1) },
+                        p: 0.5,
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               </Box>
             </Box>
