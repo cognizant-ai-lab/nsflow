@@ -120,10 +120,11 @@ const ScrollableMessageContainer: React.FC<Props> = ({
         {messages.map((msg, index) => {
           const colors = getMessageColors(msg.sender);
           const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+          const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
           
           return (
             <Paper
-              key={index}
+              key={key}
               elevation={1}
               sx={{
                 p: 0.5,

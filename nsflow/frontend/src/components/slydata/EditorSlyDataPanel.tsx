@@ -9,7 +9,7 @@
 //
 // END COPYRIGHT
 
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, IconButton, Paper, Tooltip, Typography, alpha, TextField, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { DataObject as DataObjectIcon, Download as DownloadIcon, Upload as UploadIcon, Info as InfoIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
@@ -23,86 +23,70 @@ import { useSlyDataCache } from '../../hooks/useSlyDataCache';
 import { ImportDialog, type ImportDialogState } from './ImportDialog';
 import { ClearAllDialog } from './ClearAllDialog';
 
-/** ---------- helpers (module scope) ---------- */
-const deepClone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-const isNonEmptyObject = (o: any) =>
-  o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length > 0;
+/* ---------------- helpers ---------------- */
 
-// Stable stringify (sort keys) so order-only diffs don’t trigger
+const isPlainObject = (o: any) => o && typeof o === 'object' && !Array.isArray(o);
+const isNonEmptyObject = (o: any) => isPlainObject(o) && Object.keys(o).length > 0;
+
 const stableStringify = (value: any): string => {
   const seen = new WeakSet();
-  const helper = (v: any): any => {
+  const norm = (v: any): any => {
     if (v && typeof v === 'object') {
       if (seen.has(v)) return '__CIRCULAR__';
       seen.add(v);
-      if (Array.isArray(v)) return v.map(helper);
+      if (Array.isArray(v)) return v.map(norm);
       const out: Record<string, any> = {};
-      for (const k of Object.keys(v).sort()) out[k] = helper(v[k]);
+      for (const k of Object.keys(v).sort()) out[k] = norm(v[k]);
       return out;
     }
     return v;
   };
-  return JSON.stringify(helper(value));
+  return JSON.stringify(norm(value));
 };
 
-const lastMessageSignature = (msgs: any[]): string => {
-  const last = msgs?.[msgs.length - 1];
-  if (!last) return 'EMPTY';
-  const content = typeof last?.text === 'string' ? last.text : last;
-  return stableStringify(content);
-};
-/** ------------------------------------------ */
+const tryParse = (s: string): any => { try { return JSON.parse(s); } catch { return undefined; } };
 
-// Simple JSON validation for slydata
-const validateJsonForSlyData = (data: any): string | null => {
-  try {
-    if (data === null || data === undefined) return 'JSON data cannot be null or undefined';
-    if (typeof data !== 'object') return 'Root element must be an object, not a primitive value';
-    if (Array.isArray(data)) return 'Root element must be an object, not an array';
-
-    const seen = new WeakSet();
-    const checkCircular = (obj: any): boolean => {
-      if (obj && typeof obj === 'object') {
-        if (seen.has(obj)) return true;
-        seen.add(obj);
-        for (const k in obj) {
-          if (Object.prototype.hasOwnProperty.call(obj, k)) {
-            if (checkCircular(obj[k])) return true;
-          }
-        }
-      }
-      return false;
-    };
-    if (checkCircular(data)) return 'JSON contains circular references which are not supported';
-
-    const validateKeys = (obj: any, path = ''): string | null => {
-      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-        for (const key in obj) {
-          if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            if (typeof key !== 'string') return `Invalid key type at ${path}${key}. Keys must be strings`;
-            if (key.trim() === '') return `Empty key found at ${path}. Keys cannot be empty`;
-            const value = obj[key];
-            if (value && typeof value === 'object' && !Array.isArray(value)) {
-              const nested = validateKeys(value, `${path}${key}.`);
-              if (nested) return nested;
-            }
-          }
-        }
-      }
-      return null;
-    };
-
-    const keyError = validateKeys(data);
-    if (keyError) return keyError;
-    return null;
-  } catch (e: any) {
-    return `Validation error: ${e?.message || 'Unknown error'}`;
+/** tolerate code-fenced strings or raw objects/strings */
+const extractJsonObjectFromString = (s: string): any | undefined => {
+  if (typeof s !== 'string') return undefined;
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence?.[1]) {
+    const parsed = tryParse(fence[1]);
+    if (isPlainObject(parsed)) return parsed;
   }
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    const guess = s.slice(start, end + 1);
+    const parsed = tryParse(guess);
+    if (isPlainObject(parsed)) return parsed;
+  }
+  const parsed = tryParse(s);
+  if (isPlainObject(parsed)) return parsed;
+  return undefined;
 };
+
+const extractSlyDataFromMessage = (msg: any): any | undefined => {
+  const raw = typeof msg?.text === 'string' ? extractJsonObjectFromString(msg.text) : (msg?.text ?? msg);
+  if (!raw) return undefined;
+  if (isPlainObject(raw) && isPlainObject((raw as any).sly_data)) return (raw as any).sly_data;
+  if (isPlainObject(raw)) return raw;
+  return undefined;
+};
+
+const getLatestSlyDataFromMessages = (msgs: any[]): any | undefined => {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const v = extractSlyDataFromMessage(msgs[i]);
+    if (isPlainObject(v)) return v;
+  }
+  return undefined;
+};
+
+/* ---------------- component ---------------- */
 
 const EditorSlyDataPanel: React.FC = () => {
-  const { slyDataMessages, targetNetwork } = useChatContext();
-  const { apiUrl } = useApiPort();
+  const { slyDataMessages, targetNetwork, addSlyDataMessage } = useChatContext();
+  const { apiUrl } = useApiPort(); // reserved for future server fetch if needed
   const { theme } = useTheme();
   const jsonEditorTheme = useJsonEditorTheme();
 
@@ -116,77 +100,95 @@ const EditorSlyDataPanel: React.FC = () => {
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [isLoadingCache, setIsLoadingCache] = useState(false);
   const [, setHasLocalEdits] = useState(false);
+  const [editorVersion, setEditorVersion] = useState(0);
 
   const { saveSlyDataToCache, loadSlyDataFromCache, clearSlyDataCache } = useSlyDataCache();
-  const [editorVersion, setEditorVersion] = useState(0);
-  const lastSigRef = useRef<string>('INIT');
 
-  const hasData = isNonEmptyObject(jsonData);
-  const addDisabled = hasData;
-  const deleteDisabled = !hasData;
+  /* ---- init & cache ---- */
 
-  /** Bootstrap: run once when a targetNetwork appears */
   useEffect(() => {
     if (!isInitialized && targetNetwork) {
-      console.log('Loading cache for network:', targetNetwork);
       setIsLoadingCache(true);
       const cached = loadSlyDataFromCache(targetNetwork);
-      if (cached && cached.data) {
-        setJsonData(cached.data);
-        console.log('Loaded data from cache:', cached.data);
-      } else {
-        setJsonData({});
-        console.log('No cached data, using empty object');
-      }
+      setJsonData(cached?.data ?? {});
       setHasLocalEdits(false);
       setIsInitialized(true);
       setIsLoadingCache(false);
     }
   }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
 
-  /** Network swap: reload cache for the new network */
   useEffect(() => {
     if (isInitialized && targetNetwork) {
-      console.log('Network swap - loading cache for:', targetNetwork);
       setIsLoadingCache(true);
       const cached = loadSlyDataFromCache(targetNetwork);
-      if (cached && cached.data) {
-        setJsonData(cached.data);
-        console.log('Network swap loaded data:', cached.data);
-      } else {
-        setJsonData({});
-        console.log('Network swap - no cached data');
-      }
+      setJsonData(cached?.data ?? {});
       setHasLocalEdits(false);
       setIsLoadingCache(false);
     }
   }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
 
-  /** Persist cache whenever jsonData changes (skip during cache read) */
   useEffect(() => {
     if (!isInitialized || !targetNetwork || isLoadingCache) return;
     saveSlyDataToCache(jsonData, targetNetwork, 1);
-    console.log('Cache updated', { keysCount: Object.keys(jsonData || {}).length });
   }, [jsonData, isInitialized, targetNetwork, saveSlyDataToCache, isLoadingCache]);
 
-  /** Editor → state */
+  /* ---- derive editor state from global slyDataMessages ---- */
+
+  const latestSigRef = useRef<string>('INIT');
+
+  // only use the global stream; both agent + user edits go through addSlyDataMessage
+  useEffect(() => {
+    const latest = getLatestSlyDataFromMessages(slyDataMessages ?? []);
+    const sig = stableStringify(latest ?? '__EMPTY__');
+
+    if (sig === latestSigRef.current) return;
+    latestSigRef.current = sig;
+
+    if (latest && isPlainObject(latest)) {
+      setJsonData(latest);
+      setHasLocalEdits(false);
+      if (targetNetwork) saveSlyDataToCache(latest, targetNetwork, 1);
+      setEditorVersion(v => v + 1);
+    }
+  }, [slyDataMessages, saveSlyDataToCache, targetNetwork]);
+
+  /* ---- actions ---- */
+
+  const hasData = isNonEmptyObject(jsonData);
+  const addDisabled = hasData;
+  const deleteDisabled = !hasData;
+
+  // Emit a "user edit" message via context so it persists across tabs/panels
+  const emitUserSlyMessage = useCallback((obj: any) => {
+    const pretty = JSON.stringify(obj, null, 2);
+    const textAsCodeBlock = `\`\`\`json\n${pretty}\n\`\`\``;
+    addSlyDataMessage({
+      sender: 'user',
+      text: textAsCodeBlock,
+      network: targetNetwork || undefined,
+    });
+  }, [addSlyDataMessage, targetNetwork]);
+
   const handleJsonUpdate = useCallback((update: any) => {
     const next = update?.newData ?? update?.data ?? {};
     setJsonData(next);
     setHasLocalEdits(true);
-  }, []);
+    if (targetNetwork) saveSlyDataToCache(next, targetNetwork, 1);
+    emitUserSlyMessage(next);             // <- key change: send to global stream
+    setEditorVersion(v => v + 1);
+  }, [emitUserSlyMessage, saveSlyDataToCache, targetNetwork]);
 
-  /** Add root item (only when empty) */
   const handleAddRootItem = useCallback(() => {
     setJsonData((prev: any) => {
-      if (isNonEmptyObject(prev)) return prev; // no-op if already has data
+      if (isNonEmptyObject(prev)) return prev;
       const next = { ...prev, new_key: 'new_value' };
       setHasLocalEdits(true);
+      if (targetNetwork) saveSlyDataToCache(next, targetNetwork, 1);
+      emitUserSlyMessage(next);
       return next;
     });
-  }, []);
+  }, [emitUserSlyMessage, saveSlyDataToCache, targetNetwork]);
 
-  /** Import JSON */
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -204,7 +206,9 @@ const EditorSlyDataPanel: React.FC = () => {
           validationError = `Invalid JSON format: ${err?.message || 'Unknown parsing error'}`;
         }
         if (!validationError && parsed !== null) {
-          validationError = validateJsonForSlyData(parsed);
+          if (parsed === null || parsed === undefined) validationError = 'JSON data cannot be null or undefined';
+          else if (typeof parsed !== 'object') validationError = 'Root element must be an object, not a primitive value';
+          else if (Array.isArray(parsed)) validationError = 'Root element must be an object, not an array';
         }
         setImportDialog({
           open: true,
@@ -221,29 +225,28 @@ const EditorSlyDataPanel: React.FC = () => {
 
   const handleImportConfirm = () => {
     if (importDialog.jsonData && !importDialog.validationError) {
-      setJsonData(importDialog.jsonData);
+      const next = importDialog.jsonData;
+      setJsonData(next);
       setHasLocalEdits(true);
-      setEditorVersion(v => v + 1); // ensure editor re-mounts on import
+      if (targetNetwork) saveSlyDataToCache(next, targetNetwork, 1);
+      emitUserSlyMessage(next);
+      setEditorVersion(v => v + 1);
       setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
     }
   };
-
   const handleImportCancel = () => setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });
 
-  /** Clear */
   const handleClearAll = () => setClearDialog(true);
   const handleClearConfirm = () => {
-    setJsonData({});
-    if (targetNetwork) {
-      clearSlyDataCache(targetNetwork);
-      console.log('Cache explicitly cleared by user');
-    }
+    const next = {};
+    setJsonData(next);
+    if (targetNetwork) clearSlyDataCache(targetNetwork);
+    emitUserSlyMessage(next);
     setClearDialog(false);
     setEditorVersion(v => v + 1);
   };
   const handleClearCancel = () => setClearDialog(false);
 
-  /** Clipboard */
   const copyToClipboard = (text: string, index: number) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedMessage(index);
@@ -251,9 +254,11 @@ const EditorSlyDataPanel: React.FC = () => {
     });
   };
 
-  /** Logs download */
   const downloadLogs = () => {
-    const logText = slyDataMessages.map((msg) => `${msg.sender}: ${typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}`).join('\n');
+    const logText = (slyDataMessages ?? []).map((msg: any) => {
+      const text = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+      return `${msg.sender || 'agent'}: ${text}`;
+    }).join('\n');
     const blob = new Blob([logText], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -263,40 +268,6 @@ const EditorSlyDataPanel: React.FC = () => {
     document.body.removeChild(a);
   };
 
-  /** Fetch from API when the *last message content* changes */
-  const fetchLatestSlyData = useCallback(async () => {
-    if (!targetNetwork) return;
-    const fetchUrl = `${apiUrl}/api/v1/slydata/${targetNetwork}`;
-    try {
-      const response = await fetch(fetchUrl);
-      if (response.status === 404) {
-        setJsonData({});
-        setHasLocalEdits(false);
-        setEditorVersion(v => v + 1);
-        return;
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      const result = await response.json();
-      const latestData = result?.sly_data ?? {};
-      setJsonData(deepClone(latestData));
-      setHasLocalEdits(false);
-      setEditorVersion(v => v + 1);
-    } catch (e) {
-      console.error('Failed to fetch latest sly_data:', e);
-    }
-  }, [apiUrl, targetNetwork]);
-  
-  // Fire when latest message *content* changes, regardless of array length
-  useEffect(() => {
-    const sig = lastMessageSignature(slyDataMessages);
-    if (sig !== lastSigRef.current) {
-      lastSigRef.current = sig;
-      console.log('[slydata] new/changed last message detected → fetching latest');
-      fetchLatestSlyData();
-    }
-  }, [slyDataMessages, fetchLatestSlyData]);
-
-  /** Export */
   const handleExportJson = useCallback(() => {
     const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -306,6 +277,8 @@ const EditorSlyDataPanel: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   }, [jsonData]);
+
+  /* ---- render ---- */
 
   return (
     <Paper elevation={1} sx={{ height: '100%', backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary, display: 'flex', flexDirection: 'column', overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
@@ -338,7 +311,6 @@ const EditorSlyDataPanel: React.FC = () => {
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 280 }}>
-                {/* Search input (compact + rounded) */}
                 <TextField
                   size="small"
                   placeholder="Search…"
@@ -360,7 +332,6 @@ const EditorSlyDataPanel: React.FC = () => {
                   }}
                 />
 
-                {/* actions */}
                 <Tooltip title="Add root item">
                   <span>
                     <IconButton
@@ -459,16 +430,21 @@ const EditorSlyDataPanel: React.FC = () => {
                 </IconButton>
               </Tooltip>
             </Box>
+
             <Box sx={{ flexGrow: 1, overflow: 'auto', backgroundColor: theme.palette.background.paper }}>
               <ScrollableMessageContainer
-                messages={slyDataMessages.filter((msg) => {
+                messages={(slyDataMessages ?? []).filter((msg: any) => {
                   const text = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
                   return text.trim().length > 0 && text.trim() !== '{}';
                 })}
                 copiedMessage={copiedMessage}
                 onCopy={copyToClipboard}
-                renderSenderLabel={(msg: any) => msg.network || msg.sender}
-                getMessageClass={() => 'chat-msg chat-msg-agent'}
+                renderSenderLabel={(msg: any) =>
+                  msg?.sender === 'user' ? 'user' : (msg.network || msg.sender || 'agent')
+                }
+                getMessageClass={(msg: any) =>
+                  `chat-msg ${msg.sender === 'user' ? 'chat-msg-user' : msg.sender === 'agent' ? 'chat-msg-agent' : 'chat-msg-system'}`
+                }
               />
             </Box>
           </Box>
