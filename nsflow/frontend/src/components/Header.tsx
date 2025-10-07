@@ -14,27 +14,10 @@ import { useState, useRef, useEffect } from "react";
 import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  IconButton, 
-  Button, 
-  MenuItem, 
-  Box,
-  useTheme as useMuiTheme,
-  alpha,
-  Paper
-} from "@mui/material";
-import { 
-  Home as HomeIcon,
-  Code as CodeIcon,
-  AccountTree as NetworkIcon,
-  Download as DownloadIcon,
-  Refresh as RefreshIcon,
-  AccountCircle as AccountIcon,
-  Edit as EditIcon,
-  DrawTwoTone as WandIcon
+import { AppBar, Toolbar, Typography, IconButton, Button, 
+  MenuItem,  Box, useTheme as useMuiTheme, alpha, Paper } from "@mui/material";
+import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
+  Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
@@ -72,17 +55,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
   }, []);
 
   const handleExportNotebook = async () => {
-    if (!selectedNetwork) {
-      alert("Please select an agent network first.");
-      return;
-    }
-
+    if (!selectedNetwork) return alert("Please select an agent network first.");
     const response = await fetch(`${apiUrl}/api/v1/export/notebook/${selectedNetwork}`);
-    if (!response.ok) {
-      alert("Failed to generate notebook.");
-      return;
-    }
-
+    if (!response.ok) return alert("Failed to generate notebook.");
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -95,17 +70,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
   };
 
   const handleExportAgentNetwork = async () => {
-    if (!selectedNetwork) {
-      alert("Please select an agent network first.");
-      return;
-    }
-
+    if (!selectedNetwork) return alert("Please select an agent network first.");
     const response = await fetch(`${apiUrl}/api/v1/export/agent_network/${selectedNetwork}`);
-    if (!response.ok) {
-      alert("Failed to download agent network.");
-      return;
-    }
-
+    if (!response.ok) return alert("Failed to download agent network.");
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -122,7 +89,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
   };
 
   const handleNavigateToHome = () => {
-    navigate('/home');
+    window.open("/home", "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -253,49 +220,51 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
           </Button>
 
           {/* Export Dropdown */}
-          <Box ref={dropdownRef} sx={{ position: 'relative' }}>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              endIcon={<Typography sx={{ transform: exportDropdown ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▶</Typography>}
-              onClick={() => setExportDropdown(!exportDropdown)}
-              sx={{
-                color: muiTheme.palette.text.primary,
-                borderColor: muiTheme.palette.primary.main,
-                '&:hover': {
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                  borderColor: muiTheme.palette.primary.main,
-                }
-              }}
-            >
-              Export
-            </Button>
-
-            {exportDropdown && (
-              <Paper
-                elevation={8}
+          {!isOnEditorPage && (
+            <Box ref={dropdownRef} sx={{ position: 'relative' }}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                endIcon={<Typography sx={{ transform: exportDropdown ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▶</Typography>}
+                onClick={() => setExportDropdown(!exportDropdown)}
                 sx={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  mt: 1,
-                  minWidth: 200,
-                  zIndex: muiTheme.zIndex.modal,
-                  backgroundColor: muiTheme.palette.background.paper,
-                  border: `1px solid ${muiTheme.palette.divider}`,
+                  color: muiTheme.palette.text.primary,
+                  borderColor: muiTheme.palette.primary.main,
+                  '&:hover': {
+                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                    borderColor: muiTheme.palette.primary.main,
+                  }
                 }}
               >
-                <MenuItem onClick={handleExportNotebook}>
-                  <EditIcon sx={{ mr: 1 }} />
-                  Export as Notebook
-                </MenuItem>
-                <MenuItem onClick={handleExportAgentNetwork}>
-                  <NetworkIcon sx={{ mr: 1 }} />
-                  Export Agent Network
-                </MenuItem>
-              </Paper>
-            )}
-          </Box>
+                Export
+              </Button>
+
+              {exportDropdown && (
+                <Paper
+                  elevation={8}
+                  sx={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    mt: 1,
+                    minWidth: 200,
+                    zIndex: muiTheme.zIndex.modal,
+                    backgroundColor: muiTheme.palette.background.paper,
+                    border: `1px solid ${muiTheme.palette.divider}`,
+                  }}
+                >
+                  <MenuItem onClick={handleExportNotebook}>
+                    <EditIcon sx={{ mr: 1 }} />
+                    Export as Notebook
+                  </MenuItem>
+                  <MenuItem onClick={handleExportAgentNetwork}>
+                    <NetworkIcon sx={{ mr: 1 }} />
+                    Export Agent Network
+                  </MenuItem>
+                </Paper>
+              )}
+            </Box>
+          )}
         </Box>
 
         {/* Right - Theme Toggle + Profile */}
