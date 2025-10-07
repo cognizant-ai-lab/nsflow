@@ -17,6 +17,7 @@ import { PolylineTwoTone as NetworkIcon, Search as SearchIcon,
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
+import {extractProgressPayload } from "../utils/progressHelper";
 
 
 interface EditingSession {
@@ -62,59 +63,6 @@ interface AgentNode {
     dropdown_tools?: string[];
     sub_networks?: string[];
   };
-}
-
-type LogMsgPayload = {
-  agent_network_definition?: Record<string, any>;
-  agent_network_name?: string;
-};
-
-/* -------------------- Helpers -------------------- */
-// Try to parse a markdown code-fenced JSON string like ```json\n{...}\n```
-function parseCodeFenceJSON(s: string): any | undefined {
-  // grab fenced content if present
-  const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = (m ? m[1] : s).trim();
-  try {
-    return JSON.parse(raw);
-  } catch {
-    // sometimes payload arrives with escaped \n — try unescaping
-    try {
-      return JSON.parse(raw.replace(/\\n/g, "\n"));
-    } catch {
-      return undefined;
-    }
-  }
-}
-
-// normalize text (string | object) → object
-function asObjectText(text: string | object): Record<string, any> | undefined {
-  if (typeof text === "object" && text) return text as Record<string, any>;
-  if (typeof text === "string") {
-    // handle code-fence markdown or raw JSON
-    return parseCodeFenceJSON(text);
-  }
-  return undefined;
-}
-
-// support direct payload or { message: {...} }
-function extractLogPayload(
-  msg: { text: string | object } | undefined
-): LogMsgPayload | undefined {
-  if (!msg) return undefined;
-  const obj = asObjectText(msg.text);
-  if (!obj) return undefined;
-
-  if ("agent_network_definition" in obj || "agent_network_name" in obj) {
-    return obj as LogMsgPayload;
-  }
-  if ("message" in obj && typeof (obj as any).message === "object") {
-    const inner = (obj as any).message;
-    if ("agent_network_definition" in inner || "agent_network_name" in inner) {
-      return inner as LogMsgPayload;
-    }
-  }
-  return undefined;
 }
 
 const EditorSidebar = ({ 
@@ -231,8 +179,6 @@ const EditorSidebar = ({
       }
 
       const data = await response.json();
-      // console.log("EditorSidebar: Fetched agents data:", data);
-
       // Both endpoints return { nodes: [...] } — keep sidebar identical across modes
       setAgents(Array.isArray(data.nodes) ? data.nodes : []);
     } catch (err) {
@@ -259,10 +205,12 @@ const EditorSidebar = ({
   };
 
   // Filter agents based on search query
-  const filteredAgents = agents.filter((agent) =>
-    agent.data.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    agent.data.instructions.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredAgents = agents.filter((agent) => {
+    const label = (agent.data.label || "").toLowerCase();
+    const instr = (agent.data.instructions || "").toLowerCase();
+    const q = searchQuery.toLowerCase();
+    return label.includes(q) || instr.includes(q);
+  });
 
   // Filter network options based on dropdown search
   const filteredNetworkOptions = networkOptions.filter((option) =>
@@ -293,14 +241,16 @@ const EditorSidebar = ({
     const latestProgress = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
     const latestSly = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
 
-    const payload = extractLogPayload(latestSly) || extractLogPayload(latestProgress);
+    const payload = extractProgressPayload( latestProgress) || extractProgressPayload(latestSly);
     // silently ignore; nothing to show yet
     if (!payload?.agent_network_definition || !payload?.agent_network_name) return;
 
+    const nameFromPayload = payload.agent_network_name ?? "(new_agent_network)";
+
     // Ensure dropdown has exactly one option (view-only)
     const singleOption: NetworkOption = {
-      id: payload.agent_network_name!,
-      display_name: payload.agent_network_name!,
+      id: nameFromPayload,
+      display_name: nameFromPayload,
       type: "editing_session", // reused shape
       agent_count: Object.keys(payload.agent_network_definition!).length,
     };
@@ -319,9 +269,7 @@ const EditorSidebar = ({
     }
   };
 
-
   /* -------------------- Effects -------------------- */
-
   // Reset selection to "none" whenever mode flips or app becomes ready
   useEffect(() => {
     setSelectedNetworkId("");
@@ -405,6 +353,15 @@ const EditorSidebar = ({
       didAutoSelectRef.current = false;
     }
   }, [targetNetwork, canEdit]);
+
+  // Rebuild agent list whenever the raw definition changes (view-only)
+  useEffect(() => {
+    if (canEdit) return;
+    if (!agentNetworkDefinition) return;
+    fetchAgents(undefined, agentNetworkDefinition);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEdit, agentNetworkDefinition]);
+
 
   /* -------------------- Render -------------------- */
   return (

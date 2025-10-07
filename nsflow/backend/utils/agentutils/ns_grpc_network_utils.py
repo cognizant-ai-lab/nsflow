@@ -110,7 +110,15 @@ class NsGrpcNetworkUtils:
         network_name = state_dict.get("agent_network_name", "unknown_network")
         
         if not agent_definition:
-            return {"nodes": nodes, "edges": edges}
+            return {
+                "nodes": nodes,
+                "edges": edges,
+                "network_name": network_name,
+                "connected_components": 0,
+                "total_agents": 0,
+                "defined_agents": 0,
+                "undefined_agents": 0,
+            }
         
         # Step 1: Create all nodes first
         all_agent_names = set(agent_definition.keys())
@@ -122,7 +130,7 @@ class NsGrpcNetworkUtils:
         # Build parent mapping from down_chains
         # Also collect all down_chain agents that might not be defined yet
         for agent_name, agent_data in agent_definition.items():
-            down_chains = agent_data.get("down_chains", [])
+            down_chains = NsGrpcNetworkUtils.get_children(agent_data)
             all_agent_names.update(down_chains)
             for child in down_chains:
                 parent_map[child] = agent_name
@@ -143,13 +151,12 @@ class NsGrpcNetworkUtils:
             current_node, depth = queue.pop(0)
             if current_node in visited:
                 continue
-                
             visited.add(current_node)
             depth_map[current_node] = depth
             
             # Add children to queue
             if current_node in agent_definition:
-                down_chains = agent_definition[current_node].get("down_chains", [])
+                down_chains =  NsGrpcNetworkUtils.get_children(agent_definition[current_node])
                 for child in down_chains:
                     if child not in visited:
                         queue.append((child, depth + 1))
@@ -166,7 +173,7 @@ class NsGrpcNetworkUtils:
         for agent_name in all_agent_names:
             agent_data = agent_definition.get(agent_name, {})
             # more details could be added here, but as of now, we are only using down_chains and instructions
-            down_chains = agent_data.get("down_chains", [])
+            down_chains =  NsGrpcNetworkUtils.get_children(agent_data)
             instructions = agent_data.get("instructions", "")
             
             # Determine node type
@@ -194,7 +201,7 @@ class NsGrpcNetworkUtils:
         
         # Step 5: Create edges
         for agent_name, agent_data in agent_definition.items():
-            down_chains = agent_data.get("down_chains", [])
+            down_chains = NsGrpcNetworkUtils.get_children(agent_data)
             for target in down_chains:
                 edge = {
                     "id": f"{agent_name}-{target}",
@@ -204,8 +211,26 @@ class NsGrpcNetworkUtils:
                     "type": "default"
                 }
                 edges.append(edge)
+
+        # Summary stats & components
+        components = NsGrpcNetworkUtils._find_connected_components(all_agent_names, parent_map)
+        total_agents = len(all_agent_names)
+        defined_agents = len(agent_definition)
+        undefined_agents = total_agents - defined_agents
         
-        return {"nodes": nodes, "edges": edges}
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "network_name": network_name,
+            "connected_components": len(components),
+            "total_agents": total_agents,
+            "defined_agents": defined_agents,
+            "undefined_agents": undefined_agents,
+        }
+    
+    @staticmethod
+    def get_children(data: Dict[str, Any]) -> List[str]:
+        return list(data.get("tools") or data.get("down_chains") or [])
     
     @staticmethod
     def _calculate_positions(agent_names: set, depth_map: Dict[str, int], parent_map: Dict[str, str]) -> Dict[str, Dict[str, int]]:

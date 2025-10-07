@@ -95,7 +95,7 @@ async def build_connectivity_from_json(request: Request):
 
         # Otherwise: partial build from state dict
         state_dict = {
-            "agent_network_name": data.get("agent_network_name", "inline_network"),
+            "agent_network_name": data.get("agent_network_name", "new_agent_network"),
             "agent_network_definition": data["agent_network_definition"],
         }
         result = utils.partial_build_nodes_and_edges(state_dict)

@@ -9,31 +9,11 @@
 //
 // END COPYRIGHT
 
-import { useEffect, useState, useCallback } from "react";
-import ReactFlow, {
-  Background,
-  Controls,
-  useEdgesState,
-  useNodesState,
-  useReactFlow,
-  Node,
-  Edge,
-  EdgeMarkerType,
-  addEdge,
-  Connection,
-  NodeMouseHandler,
-} from "reactflow";
+import { useEffect, useState, useCallback, useRef } from "react";
+import ReactFlow, { Background, Controls, useEdgesState, useNodesState, useReactFlow, 
+  Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "reactflow";
 import "reactflow/dist/style.css";
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  useTheme,
-  IconButton,
-  Tooltip,
-  Slider,
-  alpha
-} from "@mui/material";
+import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
@@ -42,7 +22,9 @@ import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
 import { AccountTree as LayoutIcon } from "@mui/icons-material";
+import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
+import {extractProgressPayload } from "../utils/progressHelper";
 
 const nodeTypes = { agent: EditableAgentNode };
 const edgeTypes = { floating: FloatingEdge };
@@ -81,7 +63,20 @@ const EditorAgentFlow = ({
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
   const { pluginManualEditor } = getFeatureFlags();
-  
+  const canEdit = !!pluginManualEditor;
+  const shouldForceLayoutRef = useRef(false);
+
+  // We'll read the latest agent_network_definition from logs in view-mode
+  const { getLastProgressMessage, getLastSlyDataMessage, newProgress, newSlyData, targetNetwork } = useChatContext();
+
+  // latest definition for view-mode
+  const getViewDefinition = useCallback(() => {
+    const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
+    const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
+    const payload = extractProgressPayload(s) || extractProgressPayload(p);
+    return payload?.agent_network_definition as Record<string, any> | undefined;
+  }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
+
   // Layout manager for position caching and intelligent layout
   const layoutManager = selectedNetwork ? createLayoutManager(selectedNetwork, {
     baseRadius,
@@ -103,42 +98,48 @@ const EditorAgentFlow = ({
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
 
   // Fetch network connectivity data
-  const fetchNetworkData = async () => {
+  const fetchNetworkData = async (definitionOverride?: Record<string, any>) => {
     // console.log('fetchNetworkData called with:', { selectedNetwork, selectedDesignId, apiUrl });
-    
     if (!selectedNetwork || !apiUrl) {
       console.log('Missing selectedNetwork or apiUrl, skipping fetch');
       return;
     }
 
     try {
-      // console.log(`Loading network data for: ${selectedNetwork} (design_id: ${selectedDesignId})`);
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
-      
+      let response: Response;
+      if (canEdit && selectedDesignId) {
+        // EDIT MODE: unchanged
+        response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
+      } else {
+        // VIEW MODE: get the definition from logs (or override)
+        const definition = definitionOverride ?? getViewDefinition();
+        if (!definition) {
+          console.warn("View-mode: no agent_network_definition available yet.");
+          return;
+        }
+        response = await fetch(`${apiUrl}/api/v1/connectivity/from_json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_network_definition: definition }),
+        });
+      }
       if (!response.ok) {
         console.error(`Failed to fetch network data: ${response.statusText}`);
         return;
       }
 
       const data: StateConnectivityResponse = await response.json();
-      
       // Transform nodes to include selection state
       const rawNodes = data.nodes.map((node: Node) => ({
         ...node,
-        data: {
-          ...node.data,
-          selected: node.id === selectedNodeId,
-        },
+        data: { ...node.data, selected: node.id === selectedNodeId },
       }));
 
       // Transform edges to include arrows
       const transformedEdges = data.edges.map((edge: Edge) => ({
         ...edge,
         markerEnd: "arrowclosed" as EdgeMarkerType,
-        style: {
-          stroke: theme.palette.divider,
-          strokeWidth: 2,
-        },
+        style: { stroke: theme.palette.divider, strokeWidth: 2 },
         type: "floating",
       }));
 
@@ -160,12 +161,6 @@ const EditorAgentFlow = ({
       setEdges(transformedEdges);
       fitView({ padding: 0.1, duration: 800 });
       setViewport({ x: -70, y: 100, zoom: 0.5 }, { duration: 800 });
-
-      // Auto-fit view after loading (similar to AgentFlow)
-      // setTimeout(() => {
-      //   fitView({ padding: 0.1, duration: 800 });
-      // }, 150);
-      // setViewport({ x: 0, y: 0, zoom: 0.2 }, { duration: 800 });
 
     } catch (error) {
       console.error("Error fetching network data:", error);
@@ -384,7 +379,7 @@ const EditorAgentFlow = ({
       }
 
       const result = await response.json();
-      // console.log('Agent created successfully:', result);
+      console.log('Agent created successfully:', result);
       return true;
     } catch (error) {
       console.error('Error creating agent:', error);
@@ -448,6 +443,7 @@ const EditorAgentFlow = ({
     }
   };
 
+  // Effects
   // Load data when network changes or layout parameters change (similar to AgentFlow)
   useEffect(() => {
     // console.log('useEffect triggered with:', { selectedNetwork, selectedDesignId });
@@ -467,6 +463,36 @@ const EditorAgentFlow = ({
   useEffect(() => {
     setTempLevelSpacing(levelSpacing);
   }, [levelSpacing]);
+
+  // refetch when new progress/slydata ticks arrive (view-mode only)
+  useEffect(() => {
+    if (!canEdit && selectedNetwork) {
+      shouldForceLayoutRef.current = true;
+      const def = getViewDefinition();
+      if (def) {
+        fetchNetworkData(def);       // pass override so we POST exactly what just arrived
+      } else {
+        // fallback: still try; fetchNetworkData() will call getViewDefinition() internally
+        fetchNetworkData();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newProgress, newSlyData, selectedNetwork, canEdit]);
+
+  // After nodes/edges update, run animated relayout once
+  useEffect(() => {
+    if (!canEdit && selectedNetwork && shouldForceLayoutRef.current) {
+      // reset the latch before invoking to avoid loops
+      shouldForceLayoutRef.current = false;
+
+      // wait for the DOM/positions to update, then animate
+      requestAnimationFrame(() => {
+        handleForceLayout();
+      });
+    }
+  }, [nodes, edges, canEdit, selectedNetwork, handleForceLayout]);
+
+
 
   return (
     <Box sx={{ 
