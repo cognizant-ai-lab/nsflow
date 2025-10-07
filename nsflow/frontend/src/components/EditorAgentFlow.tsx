@@ -9,11 +9,11 @@
 //
 // END COPYRIGHT
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import ReactFlow, { Background, Controls, useEdgesState, useNodesState, useReactFlow, 
   Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "reactflow";
 import "reactflow/dist/style.css";
-import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha } from "@mui/material";
+import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
@@ -21,7 +21,7 @@ import EditorPalette from "./EditorPalette";
 import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
-import { AccountTree as LayoutIcon } from "@mui/icons-material";
+import { AccountTree as LayoutIcon, RocketLaunchTwoTone as LaunchIcon } from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
@@ -56,10 +56,6 @@ const EditorAgentFlow = ({
   const { apiUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const defaultEdgeOptions = useMemo(
-    () => ({ type: "floating" as const, markerEnd: "arrowclosed" as const }),
-    []
-  );
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
   
@@ -71,6 +67,8 @@ const EditorAgentFlow = ({
   const { pluginManualEditor } = getFeatureFlags();
   const canEdit = !!pluginManualEditor;
   const shouldForceLayoutRef = useRef(false);
+  const lastSeenNameRef = useRef<string | null>(null);
+  const [showLaunchButton, setShowLaunchButton] = useState(false);
 
   // We'll read the latest agent_network_definition from logs in view-mode
   const { getLastProgressMessage, getLastSlyDataMessage, newProgress, newSlyData, targetNetwork } = useChatContext();
@@ -81,6 +79,14 @@ const EditorAgentFlow = ({
     const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
     const payload = extractProgressPayload(s) || extractProgressPayload(p);
     return payload?.agent_network_definition as Record<string, any> | undefined;
+  }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
+
+  // Get the latest agent network name for launch button
+  const getLatestAgentNetworkName = useCallback(() => {
+    const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
+    const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
+    const payload = extractProgressPayload(s) || extractProgressPayload(p);
+    return payload?.agent_network_name;
   }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
 
   // Layout manager for position caching and intelligent layout
@@ -359,6 +365,16 @@ const EditorAgentFlow = ({
     await fetchNetworkData();
   };
 
+  // Handle launch button click
+  const handleLaunch = useCallback(() => {
+    const agentNetworkName = getLatestAgentNetworkName();
+    if (agentNetworkName) {
+      // Open Home page in a new tab with the agent network name as a URL parameter
+      const homeUrl = `${window.location.origin}/?network=${encodeURIComponent(agentNetworkName)}`;
+      window.open(homeUrl, '_blank');
+    }
+  }, [getLatestAgentNetworkName]);
+
   // API functions for agent operations
   const createAgent = async (agentName: string, parentName?: string) => {
     if (!selectedDesignId || !apiUrl) {
@@ -498,6 +514,17 @@ const EditorAgentFlow = ({
     }
   }, [nodes, edges, canEdit, selectedNetwork, handleForceLayout]);
 
+  // Monitor for agent network name changes to show launch button
+  useEffect(() => {
+    if (!canEdit && selectedNetwork) {
+      const currentName = getLatestAgentNetworkName();
+      if (currentName && currentName !== lastSeenNameRef.current) {
+        lastSeenNameRef.current = currentName;
+        setShowLaunchButton(true);
+      }
+    }
+  }, [newProgress, newSlyData, selectedNetwork, canEdit, getLatestAgentNetworkName]);
+
 
 
   return (
@@ -629,6 +656,39 @@ const EditorAgentFlow = ({
             )}
           </Box>
         </Paper>
+      )}
+
+      {/* Launch Button */}
+      {showLaunchButton && (
+        <Tooltip title={`Launch ${lastSeenNameRef.current} in Home page`}>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            startIcon={<LaunchIcon />}
+            onClick={handleLaunch}
+            sx={{
+              position: 'absolute',
+              top: 16,
+              right: 180, // Position to the left of Layout Controls
+              zIndex: 20,
+              borderRadius: '50%',
+              minWidth: 56,
+              width: 56,
+              height: 56,
+              backgroundColor: theme.palette.primary.main,
+              '&:hover': {
+                backgroundColor: theme.palette.primary.dark,
+                transform: 'scale(1.05)',
+                transition: 'all 0.2s ease-in-out'
+              },
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              '& .MuiButton-startIcon': {
+                margin: 0
+              }
+            }}
+          />
+        </Tooltip>
       )}
 
       {/* Layout Controls Panel */}

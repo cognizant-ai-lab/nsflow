@@ -400,9 +400,9 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       ref={panelRef}
       elevation={8}
       sx={{
-        position: 'fixed',
+        position: 'absolute',
         bottom: 16,
-        right: 660, // Position at bottom right
+        right: 20, // Position at bottom right
         zIndex: theme.zIndex.drawer + 1,
         backgroundColor: theme.palette.background.paper,
         border: `1px solid ${theme.palette.divider}`,
