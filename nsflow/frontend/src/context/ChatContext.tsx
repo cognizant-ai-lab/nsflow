@@ -64,9 +64,9 @@ type ChatContextType = {
   setNewLog: (data: string) => void;
   setNewProgress: (data: string) => void;
 
-  getLastSlyDataMessage: (opts?: { network?: string }) => Message | undefined;
-  getLastLogMessage: (opts?: { network?: string }) => Message | undefined;
-  getLastProgressMessage: (opts?: { network?: string }) => Message | undefined;
+  getLastSlyDataMessage: (opts?: { network?: string; connectionId?: string }) => Message | undefined;
+  getLastLogMessage: (opts?: { network?: string; connectionId?: string }) => Message | undefined;
+  getLastProgressMessage: (opts?: { network?: string; connectionId?: string }) => Message | undefined;
 
   makeSlyDataConnectionId: () => string;
   makeLogConnectionId: () => string;
@@ -197,7 +197,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useChatContext = () => {
+export const useChatContext = (): ChatContextType => {
   const context = useContext(ChatContext);
   if (!context) {
     throw new Error("useChatContext must be used within a ChatProvider");

@@ -26,8 +26,10 @@ import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
 
-const nodeTypes = { agent: EditableAgentNode };
-const edgeTypes = { floating: FloatingEdge };
+// const nodeTypes = { agent: EditableAgentNode };
+// const edgeTypes = { floating: FloatingEdge };
+export const NODE_TYPES = { agent: EditableAgentNode } as const;
+export const EDGE_TYPES = { floating: FloatingEdge } as const;
 
 interface StateConnectivityResponse {
   nodes: Node[];
@@ -523,8 +525,8 @@ const EditorAgentFlow = ({
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         defaultEdgeOptions={{
           type: "floating",
           markerEnd: "arrowclosed" as EdgeMarkerType,
@@ -580,19 +582,21 @@ const EditorAgentFlow = ({
               Editing: {selectedNetwork}
             </Typography>
             <Tooltip title="Reorganize Layout">
-              <IconButton
-                size="small"
-                onClick={handleForceLayout}
-                disabled={nodes.length === 0}
-                sx={{
-                  color: theme.palette.primary.main,
-                  '&:hover': {
-                    backgroundColor: theme.palette.primary.main + '20'
-                  }
-                }}
-              >
-                <LayoutIcon fontSize="small" />
-              </IconButton>
+              <span style={{ display: 'inline-flex' }}>
+                <IconButton
+                  size="small"
+                  onClick={handleForceLayout}
+                  disabled={nodes.length === 0}
+                  sx={{
+                    color: theme.palette.primary.main,
+                    '&:hover': {
+                      backgroundColor: theme.palette.primary.main + '20'
+                    }
+                  }}
+                >
+                  <LayoutIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           </Box>
           
