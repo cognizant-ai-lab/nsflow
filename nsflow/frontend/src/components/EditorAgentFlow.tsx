@@ -28,8 +28,8 @@ import {extractProgressPayload } from "../utils/progressHelper";
 
 // const nodeTypes = { agent: EditableAgentNode };
 // const edgeTypes = { floating: FloatingEdge };
-export const NODE_TYPES = { agent: EditableAgentNode } as const;
-export const EDGE_TYPES = { floating: FloatingEdge } as const;
+export const NODE_TYPES = Object.freeze({ agent: EditableAgentNode, editable_agent: EditableAgentNode, undefined_agent: EditableAgentNode });
+export const EDGE_TYPES = Object.freeze({ floating: FloatingEdge });
 
 interface StateConnectivityResponse {
   nodes: Node[];
