@@ -46,12 +46,16 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     addChatMessage,
     addInternalChatMessage,
     addSlyDataMessage,
+    addProgressMessage,
     setChatWs,
     setInternalChatWs,
     setSlyDataWs,
+    setProgressWs,
     chatWs,
     internalChatWs,
-    slyDataWs
+    slyDataWs,
+    progressWs,
+    setNewProgress // tick for listeners
    } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
@@ -78,6 +82,10 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     if (slyDataWs) {
       console.log("Closing previous Sly Data WebSocket...");
       slyDataWs.close();
+    }
+    if (progressWs) {
+      console.log("Closing previous Progress WebSocket...");
+      progressWs.close();
     }
 
     // Send system message for network switch only once
@@ -110,7 +118,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     newChatWs.onclose = () => console.log(">> Chat WebSocket Disconnected");
     setChatWs(newChatWs);
 
-     // Setup WebSocket for Internal Chat Panel (skip in editor mode)
+    // Setup WebSocket for Internal Chat Panel (skip in editor mode)
     if (!isEditorMode) {
       const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${targetNetwork}`;
       console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
@@ -182,6 +190,49 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     newSlyDataWs.onopen = () => console.log(">>Sly Data WebSocket Connected");
     newSlyDataWs.onclose = () => console.log(">> Sly Data WebSocket Disconnected");
     setSlyDataWs(newSlyDataWs);
+
+    // Setup WebSocket for Progress only in editor mode for now
+    if (isEditorMode) {
+      const progressWsUrl = `${wsUrl}/api/v1/ws/progress/${targetNetwork}`;
+      console.log("Connecting Progress WebSocket:", progressWsUrl);
+      const newProgressWs = new WebSocket(progressWsUrl);
+
+      newProgressWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Expect a shape like { message: { text: string | object, ... } } OR other
+          const msg = data?.message ?? data;
+
+          // normalize to an object if possible
+          let payload: any = undefined;
+          if (msg && typeof msg === "object") {
+            const raw = ("text" in msg ? msg.text : msg); // some servers put the payload into text, others directly on message
+            if (typeof raw === "object" && raw !== null) {
+              payload = raw;
+            } else if (typeof raw === "string") {
+              try {
+                payload = JSON.parse(raw);
+              } catch {
+                // if not JSON, ignore for the Sidebar (we only use JSON payloads there)
+                payload = undefined;
+              }
+            }
+          }
+
+          if (payload) {
+            // Store RAW object for robust downstream parsing
+            addProgressMessage({ sender: targetNetwork, text: payload, network: targetNetwork });
+            setNewProgress(String(Date.now())); // tick for listeners
+          }
+        } catch (err) {
+          console.error("Error parsing Progress WebSocket message:", err);
+        }
+      };
+
+      newProgressWs.onopen = () => console.log(">> Progress WebSocket Connected");
+      newProgressWs.onclose = () => console.log(">> Progress WebSocket Disconnected");
+      setProgressWs(newProgressWs);
+    }
 
     return () => {
       console.log("WebSockets for old network are closed.");

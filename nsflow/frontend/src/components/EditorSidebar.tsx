@@ -56,7 +56,65 @@ interface AgentNode {
     instructions: string;
     is_defined: boolean;
     network_name?: string;
+    depth?: number;
+    children?: string[];
+    parent?: string;
+    dropdown_tools?: string[];
+    sub_networks?: string[];
   };
+}
+
+type LogMsgPayload = {
+  agent_network_definition?: Record<string, any>;
+  agent_network_name?: string;
+};
+
+/* -------------------- Helpers -------------------- */
+// Try to parse a markdown code-fenced JSON string like ```json\n{...}\n```
+function parseCodeFenceJSON(s: string): any | undefined {
+  // grab fenced content if present
+  const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const raw = (m ? m[1] : s).trim();
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // sometimes payload arrives with escaped \n — try unescaping
+    try {
+      return JSON.parse(raw.replace(/\\n/g, "\n"));
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+// normalize text (string | object) → object
+function asObjectText(text: string | object): Record<string, any> | undefined {
+  if (typeof text === "object" && text) return text as Record<string, any>;
+  if (typeof text === "string") {
+    // handle code-fence markdown or raw JSON
+    return parseCodeFenceJSON(text);
+  }
+  return undefined;
+}
+
+// support direct payload or { message: {...} }
+function extractLogPayload(
+  msg: { text: string | object } | undefined
+): LogMsgPayload | undefined {
+  if (!msg) return undefined;
+  const obj = asObjectText(msg.text);
+  if (!obj) return undefined;
+
+  if ("agent_network_definition" in obj || "agent_network_name" in obj) {
+    return obj as LogMsgPayload;
+  }
+  if ("message" in obj && typeof (obj as any).message === "object") {
+    const inner = (obj as any).message;
+    if ("agent_network_definition" in inner || "agent_network_name" in inner) {
+      return inner as LogMsgPayload;
+    }
+  }
+  return undefined;
 }
 
 const EditorSidebar = ({ 
@@ -65,7 +123,7 @@ const EditorSidebar = ({
   externalSelectedNetwork 
 }: { 
   onSelectNetwork: (network: string, designId?: string) => void;
-  refreshTrigger?: number; // Used to trigger refresh from external components
+  refreshTrigger?: number; // trigger refresh from external components
   externalSelectedNetwork?: string; // Network selected externally (from EditorPalette)
 }) => {
   const [networkOptions, setNetworkOptions] = useState<NetworkOption[]>([]);
@@ -74,8 +132,9 @@ const EditorSidebar = ({
   const [error, setError] = useState("");
   const [selectedNetworkId, setSelectedNetworkId] = useState<string>("");
   const [selectedNetworkOption, setSelectedNetworkOption] = useState<NetworkOption | null>(null);
+  const [agentNetworkDefinition, setAgentNetworkDefinition] = useState<Record<string, any> | null>(null);
   const { apiUrl, isReady } = useApiPort();
-  const { chatMessages } = useChatContext();
+  const { chatMessages, getLastProgressMessage, getLastSlyDataMessage, newProgress, targetNetwork, newSlyData, newLog } = useChatContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [lastChatMessageCount, setLastChatMessageCount] = useState(0);
   const theme = useTheme();
@@ -90,9 +149,12 @@ const EditorSidebar = ({
   // Use manual editor plugin flag
   const { pluginManualEditor } = getFeatureFlags();
   const canEdit = !!pluginManualEditor;
-  // Fetch networks with state
+  const dropdownEnabled = !loading && (canEdit ? networkOptions.length > 0 : true);
+
+  // Edit-mode: Fetch networks with state
   const fetchNetworks = async () => {
-    if (!isReady || !apiUrl) return;
+    console.log(`canEdit value: ${canEdit}`)
+    if (!isReady || !apiUrl || !canEdit) return;
 
     try {
       setLoading(true);
@@ -118,11 +180,11 @@ const EditorSidebar = ({
           source: session.source,
           design_id: session.design_id
         };
-        console.log('EditorSidebar: Creating network option:', option);
+        // console.log('EditorSidebar: Creating network option:', option);
         options.push(option);
       });
       
-      console.log('EditorSidebar: Final network options:', options);
+      // console.log('EditorSidebar: Final network options:', options);
       setNetworkOptions(options);
       setError("");
     } catch (err: any) {
@@ -133,23 +195,47 @@ const EditorSidebar = ({
     }
   };
 
-  // Fetch agents for selected network (only editing sessions now)
-  const fetchAgents = async (networkOption: NetworkOption) => {
-    if (!isReady || !apiUrl || !networkOption) return;
+  // Unified: fetch agents for both modes, returning the same nodes list
+  const fetchAgents = async (networkOption?: NetworkOption, definitionOverride?: Record<string, any>) => {
+    if (!isReady || !apiUrl) return;
 
     try {
-      console.log('EditorSidebar: Fetching agents for network:', networkOption.display_name, 'design_id:', networkOption.design_id);
-      // All networks in sidebar are editing sessions, so use the design_id connectivity endpoint
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${networkOption.design_id}/connectivity`);
-      
+      let response: Response;
+
+      if (canEdit) {
+        // Edit mode requires a design_id
+        if (!networkOption?.design_id) {
+          console.warn("fetchAgents: missing design_id in edit mode");
+          return;
+        }
+        console.log("EditorSidebar: Fetching agents (edit) for", networkOption.display_name, "design_id:", networkOption.design_id);
+        response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${networkOption.design_id}/connectivity`);
+      } else {
+        // View-only mode requires an agentNetworkDefinition
+        const definition = definitionOverride ?? agentNetworkDefinition;
+        if (!definition) {
+          console.warn("fetchAgents: agentNetworkDefinition is not set in view-only mode");
+          return;
+        }
+        console.log("EditorSidebar: Fetching agents (view-only) from JSON definition");
+        response = await fetch(`${apiUrl}/api/v1/connectivity/from_json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_network_definition: definition }),
+        });
+      }
+
       if (!response.ok) {
-        throw new Error(`Failed to fetch agents for ${networkOption.display_name}`);
+        const name = networkOption?.display_name || "(view-only)";
+        throw new Error(`Failed to fetch agents for ${name} — HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('EditorSidebar: Fetched agents data:', data);
-      setAgents(data.nodes || []);
-    } catch (err: any) {
+      console.log("EditorSidebar: Fetched agents data:", data);
+
+      // Both endpoints return { nodes: [...] } — keep sidebar identical across modes
+      setAgents(Array.isArray(data.nodes) ? data.nodes : []);
+    } catch (err) {
       console.error("Error fetching agents:", err);
       setAgents([]);
     }
@@ -157,25 +243,19 @@ const EditorSidebar = ({
 
   // Handle network selection
   const handleNetworkSelect = (networkId: string) => {
-    console.log('EditorSidebar: Network selected, networkId:', networkId);
-    console.log('EditorSidebar: Available network options:', networkOptions);
-    
     const networkOption = networkOptions.find(option => option.id === networkId);
-    if (!networkOption) {
-      console.error('EditorSidebar: Network option not found for id:', networkId);
-      return;
-    }
-    
-    console.log('EditorSidebar: Selected network option:', networkOption);
-    console.log('EditorSidebar: Calling onSelectNetwork with:', {
-      networkName: networkOption.display_name,
-      designId: networkOption.design_id
-    });
-    
+    if (!networkOption) return;
+
     setSelectedNetworkId(networkId);
     setSelectedNetworkOption(networkOption);
-    onSelectNetwork(networkOption.display_name, networkOption.design_id);
-    fetchAgents(networkOption);
+    onSelectNetwork(networkOption.display_name, canEdit ? networkOption.design_id : undefined);
+
+    if (canEdit) {
+      fetchAgents(networkOption);
+    } else {
+      // use current definition; refreshFromLogs already keeps it up to date
+      fetchAgents(undefined, agentNetworkDefinition || undefined);
+    }
   };
 
   // Filter agents based on search query
@@ -189,6 +269,7 @@ const EditorSidebar = ({
     option.display_name.toLowerCase().includes(dropdownSearchQuery.toLowerCase())
   );
 
+  // Dropdown controls
   // Handle dropdown toggle
   const handleDropdownToggle = () => {
     setDropdownOpen(!dropdownOpen);
@@ -207,144 +288,202 @@ const EditorSidebar = ({
     handleDropdownClose();
   };
 
+  const refreshFromLogs = () => {
+    // Prefer network-scoped latest, then fallback to global
+    const latestProgress = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
+    const latestSly = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
+
+    // IMPORTANT: log objects directly, not with template strings
+    console.log("latestProgress:", latestProgress);
+    console.log("latestSly:", latestSly);
+
+    const payload = extractLogPayload(latestSly) || extractLogPayload(latestProgress);
+    if (!payload?.agent_network_definition || !payload?.agent_network_name) {
+      // silently ignore; nothing to show yet
+      return;
+    }
+
+    // Ensure dropdown has exactly one option (view-only)
+    const singleOption: NetworkOption = {
+      id: payload.agent_network_name!,
+      display_name: payload.agent_network_name!,
+      type: "editing_session", // reused shape
+      agent_count: Object.keys(payload.agent_network_definition!).length,
+    };
+
+    setNetworkOptions([singleOption]);
+
+    // Keep selection semantics identical: nothing selected by default;
+    // once we have a valid message, set it if not set already
+    if (!selectedNetworkOption) {
+      setSelectedNetworkId(singleOption.id);
+      setSelectedNetworkOption(singleOption);
+      onSelectNetwork(singleOption.display_name); // no design_id in view-only
+    }
+
+    // Provide the definition for unified fetchAgents()
+    setAgentNetworkDefinition(payload.agent_network_definition!);
+
+    // Now populate agents using the same path as edit mode
+    fetchAgents(undefined, payload.agent_network_definition!); // avoid race
+  };
+
+
+  /* -------------------- Effects -------------------- */
+
+  // Reset selection to "none" whenever mode flips or app becomes ready
+  useEffect(() => {
+    setSelectedNetworkId("");
+    setSelectedNetworkOption(null);
+    setAgents([]);
+    setError("");
+  }, [canEdit, isReady]);
+
   // Initial load
   useEffect(() => {
-    fetchNetworks();
-  }, [isReady, apiUrl]);
-
-  // Refresh when external trigger changes (from EditorPalette)
-  useEffect(() => {
-    if (refreshTrigger && refreshTrigger > 0) {
+    if (!isReady) return;
+    if (canEdit) {
       fetchNetworks();
+    } else {
+      // reuse flow: hydrate from logs, then fetchAgents()
+      refreshFromLogs();
     }
-  }, [refreshTrigger]);
+  }, [isReady, apiUrl, canEdit]);
 
-  // Auto-select first network if available
+  // Refresh from logs
   useEffect(() => {
-    if (networkOptions.length > 0 && !selectedNetworkId) {
+    refreshFromLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newProgress, newSlyData, targetNetwork]);
+
+  // External refresh trigger
+  useEffect(() => {
+    if (!refreshTrigger || refreshTrigger <= 0) return;
+    if (canEdit) {
+      fetchNetworks();
+    } else {
+      refreshFromLogs();
+    }
+  }, [refreshTrigger, canEdit]);
+
+  // auto-select first session when none selected
+  useEffect(() => {
+    if (canEdit && networkOptions.length > 0 && !selectedNetworkId) {
       const firstNetwork = networkOptions[0];
       handleNetworkSelect(firstNetwork.id);
     }
-  }, [networkOptions]);
+  }, [networkOptions, selectedNetworkId, canEdit]);
 
-  // Handle external network selection (from EditorPalette)
+  // EDIT MODE: handle external selection (EditorPalette)
   useEffect(() => {
-    if (externalSelectedNetwork && networkOptions.length > 0) {
-      const networkOption = networkOptions.find(option => option.display_name === externalSelectedNetwork);
-      if (networkOption && networkOption.id !== selectedNetworkId) {
-        handleNetworkSelect(networkOption.id);
+    if (canEdit && externalSelectedNetwork && networkOptions.length > 0) {
+      const option = networkOptions.find(o => o.display_name === externalSelectedNetwork);
+      if (option && option.id !== selectedNetworkId) {
+        handleNetworkSelect(option.id);
       }
     }
-  }, [externalSelectedNetwork, networkOptions, selectedNetworkId]);
+  }, [externalSelectedNetwork, networkOptions, selectedNetworkId, canEdit]);
 
-  // Monitor chat messages to refresh networks/agents when new activity occurs
+  // monitor and refresh sessions/agents on new messages
   useEffect(() => {
-    const currentMessageCount = chatMessages.length;
-    
-    // Only refresh if message count increased and we're not dealing with the initial system message
-    if (currentMessageCount > lastChatMessageCount && currentMessageCount > 1) {
-      console.log(`New chat message detected (${lastChatMessageCount} → ${currentMessageCount}), refreshing networks and agents...`);
-      
-      // Refresh networks and agents after a short delay to allow backend processing
-      setTimeout(() => {
-        fetchNetworks();
-        if (selectedNetworkOption) {
-          fetchAgents(selectedNetworkOption);
-        }
-      }, 1000); // 1 second delay to allow backend to process agent creation
-    }
-    
-    setLastChatMessageCount(currentMessageCount);
-  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption]);
+    const currentCount = chatMessages.length;
 
+    // Only react when count increases and not the initial system message
+    if (currentCount > lastChatMessageCount && currentCount > 1) {
+      setTimeout(() => {
+        if (canEdit) {
+          fetchNetworks();
+          if (selectedNetworkOption) {
+            fetchAgents(selectedNetworkOption);
+          }
+        } else {
+          // reuse: update from logs, then unified fetchAgents()
+          refreshFromLogs();
+        }
+      }, 1000);
+    }
+
+    setLastChatMessageCount(currentCount);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, canEdit]);
+
+  /* -------------------- Render -------------------- */
   return (
     <Paper
       elevation={0}
       sx={{
-        height: '100%',
+        height: "100%",
         backgroundColor: theme.palette.background.paper,
         borderRight: `1px solid ${theme.palette.divider}`,
-        display: 'flex',
-        flexDirection: 'column'
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       {/* Header */}
-      <Box sx={{ 
-        p: 2, 
-        borderBottom: `1px solid ${theme.palette.divider}` 
-      }}>
-        {/* Compact Header */}
-        <Typography variant="subtitle1" sx={{ 
-          fontWeight: 600, 
-          color: theme.palette.text.primary,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          fontSize: '0.9rem',
-          py: 0.5,
-          mb: 1
-        }}>
+      <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 600,
+            color: theme.palette.text.primary,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            fontSize: "0.9rem",
+            py: 0.5,
+            mb: 1,
+          }}
+        >
           <NetworkIcon sx={{ fontSize: 18 }} color="primary" />
           Agent Networks
         </Typography>
 
-        {/* Network Selection */}
+        {/* Status / Errors */}
         {loading && (
-          <Typography variant="body2" sx={{ 
-            color: theme.palette.text.secondary 
-          }}>
-            Loading networks...
+          <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
+            {canEdit ? "Loading sessions..." : "Waiting for activity…"}
           </Typography>
         )}
-
         {error && (
-          <Typography variant="body2" sx={{ 
-            color: theme.palette.error.main,
-            mb: 1
-          }}>
+          <Typography
+            variant="body2"
+            sx={{ color: theme.palette.error.main, mb: 1 }}
+          >
             {error}
           </Typography>
         )}
 
-        {!loading && networkOptions.length > 0 && (
+        {/* Selection (Edit mode dropdown) or View-only label */}
+        {/* Selection: same dropdown for both modes */}
+        {!loading && (
           <Box ref={anchorRef}>
             <TextField
               size="small"
-              label="Select editing session"
-              value={selectedNetworkOption?.display_name || ""}
-              onClick={handleDropdownToggle}
-              slotProps={{
-                input: {
-                  readOnly: true
-                }
-              }}
+              label={canEdit ? "Select editing session" : "Agent network"}
+              value={selectedNetworkOption?.display_name || ""} // empty initially in view mode
+              onClick={handleDropdownToggle} // clickable in both modes
+              slotProps={{ input: { readOnly: true } }}
               fullWidth
               sx={{
-                cursor: 'pointer',
-                '& .MuiOutlinedInput-notchedOutline': {
-                  borderColor: theme.palette.divider
-                },
-                '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: theme.palette.primary.main
-                },
-                '& .MuiInputBase-input': {
-                  cursor: 'pointer'
-                }
+                cursor: "pointer",
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.divider },
+                "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.primary.main },
+                "& .MuiInputBase-input": { cursor: "pointer" },
               }}
             />
+
             <Popper
               open={dropdownOpen}
               anchorEl={anchorRef.current}
               placement="bottom-start"
-              style={{ zIndex: 1300, width: '400px' }}
+              style={{ zIndex: 1300, width: "400px" }}
               transition
             >
               {({ TransitionProps }) => (
                 <Grow {...TransitionProps}>
-                  <Paper elevation={8} sx={{ mt: 0.5, maxHeight: 300, overflow: 'auto' }}>
+                  <Paper elevation={8} sx={{ mt: 0.5, maxHeight: 300, overflow: "auto" }}>
                     <ClickAwayListener onClickAway={handleDropdownClose}>
                       <Box>
-                        {/* Search within dropdown */}
                         <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
                           <TextField
                             size="small"
@@ -358,11 +497,12 @@ const EditorSidebar = ({
                                   <InputAdornment position="start">
                                     <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 18 }} />
                                   </InputAdornment>
-                                )
-                              }
+                                ),
+                              },
                             }}
                           />
                         </Box>
+
                         <MenuList>
                           {filteredNetworkOptions.length === 0 ? (
                             <MenuItem disabled>
@@ -374,25 +514,31 @@ const EditorSidebar = ({
                             filteredNetworkOptions.map((option) => (
                               <MenuItem
                                 key={option.id}
-                                onClick={() => handleDropdownNetworkSelect(option.id)}
+                                onClick={() => { handleDropdownNetworkSelect(option.id); }}
                                 selected={option.id === selectedNetworkId}
                                 sx={{ minWidth: 350 }}
                               >
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
                                   <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontWeight: option.id === selectedNetworkId ? 600 : 400 }}>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        color: theme.palette.text.secondary,
+                                        fontWeight: option.id === selectedNetworkId ? 600 : 400,
+                                      }}
+                                    >
                                       {option.display_name}
                                     </Typography>
                                   </Box>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                                     <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
                                       ({option.agent_count} agents)
                                     </Typography>
-                                    <Chip 
-                                      label="Editing"
+                                    <Chip
+                                      label={canEdit ? "Editing" : "View only"}
                                       size="small"
-                                      color="secondary"
-                                      sx={{ fontSize: '0.6rem', height: 16 }}
+                                      color={canEdit ? "secondary" : "default"}
+                                      sx={{ fontSize: "0.6rem", height: 16 }}
                                     />
                                   </Box>
                                 </Box>
@@ -410,12 +556,9 @@ const EditorSidebar = ({
         )}
       </Box>
 
-      {/* Search Box */}
+      {/* Search Box (both modes once selected) */}
       {selectedNetworkOption && (
-        <Box sx={{ 
-          p: 2, 
-          borderBottom: `1px solid ${theme.palette.divider}` 
-        }}>
+        <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
           <TextField
             size="small"
             placeholder="Search agents..."
@@ -426,48 +569,60 @@ const EditorSidebar = ({
               input: {
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 18 }} />
+                    <SearchIcon
+                      sx={{ color: theme.palette.text.secondary, fontSize: 18 }}
+                    />
                   </InputAdornment>
-                )
-              }
+                ),
+              },
             }}
             sx={{
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: theme.palette.divider
+              "& .MuiOutlinedInput-notchedOutline": {
+                borderColor: theme.palette.divider,
               },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: theme.palette.primary.main
-              }
+              "&:hover .MuiOutlinedInput-notchedOutline": {
+                borderColor: theme.palette.primary.main,
+              },
             }}
           />
         </Box>
       )}
 
       {/* Agents List */}
-      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-        {selectedNetworkOption && (
+      <Box sx={{ flexGrow: 1, overflow: "auto" }}>
+        {selectedNetworkOption ? (
           <Box sx={{ p: 1 }}>
-            <Typography variant="subtitle2" sx={{ 
-              fontWeight: 600, 
-              color: theme.palette.text.primary,
-              mb: 1,
-              px: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1
-            }}>
-              <RobotIcon sx={{ color: theme.palette.success.main, fontSize: 18 }} />
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 600,
+                color: theme.palette.text.primary,
+                mb: 1,
+                px: 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+              }}
+            >
+              <RobotIcon
+                sx={{ color: theme.palette.success.main, fontSize: 18 }}
+              />
               Agents ({filteredAgents.length})
             </Typography>
 
             {filteredAgents.length === 0 && (
-              <Typography variant="body2" sx={{ 
-                color: theme.palette.text.secondary,
-                px: 1,
-                textAlign: 'center',
-                py: 2
-              }}>
-                {searchQuery ? "No agents match your search" : "No agents found"}
+              <Typography
+                variant="body2"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  px: 1,
+                  textAlign: "center",
+                  py: 2,
+                }}
+              >
+                {searchQuery
+                  ? "No agents match your search"
+                  : "No agents found"}
               </Typography>
             )}
 
@@ -478,46 +633,55 @@ const EditorSidebar = ({
                 sx={{
                   mb: 1,
                   borderLeft: `4px solid ${theme.palette.primary.main}`,
-                  '&:hover': {
+                  "&:hover": {
                     backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                    boxShadow: theme.shadows[2]
+                    boxShadow: theme.shadows[2],
                   },
-                  transition: 'all 0.2s ease'
+                  transition: "all 0.2s ease",
                 }}
               >
-                <CardContent sx={{ p: 0.5, '&:last-child': { pb: 0.5 } }}>
-                  <Typography variant="body2" sx={{ 
-                    fontWeight: 600, 
-                    color: theme.palette.text.primary,
-                    mb: 0.5
-                  }}>
+                <CardContent sx={{ p: 0.5, "&:last-child": { pb: 0.5 } }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: theme.palette.text.primary,
+                      mb: 0.5,
+                    }}
+                  >
                     {agent.data.label}
                   </Typography>
-                  
-                  <Typography variant="caption" sx={{ 
-                    color: theme.palette.text.secondary,
-                    mb: 1,
-                    lineHeight: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical'
-                  }}>
+
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: theme.palette.text.secondary,
+                      mb: 1,
+                      lineHeight: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                  >
                     {agent.data.instructions || "No instructions provided."}
                   </Typography>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Chip 
-                      label={agent.data.is_defined ? 'Defined' : 'Referenced'}
+
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Chip
+                      label={agent.data.is_defined ? "Defined" : "Referenced"}
                       size="small"
-                      color={agent.data.is_defined ? 'success' : 'warning'}
-                      sx={{ fontSize: '0.6rem', height: 15 }}
+                      color={agent.data.is_defined ? "success" : "warning"}
+                      sx={{ fontSize: "0.6rem", height: 15 }}
                     />
-                    <Typography variant="caption" sx={{ 
-                      color: theme.palette.text.secondary,
-                      fontSize: '0.6rem'
-                    }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: theme.palette.text.secondary,
+                        fontSize: "0.6rem",
+                      }}
+                    >
                       {agent.type}
                     </Typography>
                   </Box>
@@ -525,45 +689,47 @@ const EditorSidebar = ({
               </Card>
             ))}
           </Box>
-        )}
-
-        {!selectedNetworkOption && (
-          <Typography variant="body2" sx={{ 
-            color: theme.palette.text.secondary,
-            textAlign: 'center',
-            p: 2
-          }}>
-            Select a network to view its agents
+        ) : (
+          <Typography
+            variant="body2"
+            sx={{
+              color: theme.palette.text.secondary,
+              textAlign: "center",
+              p: 2,
+            }}
+          >
+            {canEdit
+              ? "Select a network to view its agents"
+              : "Waiting for activity…"}
           </Typography>
         )}
 
         <div ref={networksEndRef} />
       </Box>
 
-      {/* Manual Refresh Button */}
-      <Box sx={{ 
-        p: 2, 
-        borderTop: `1px solid ${theme.palette.divider}` 
-      }}>
+      {/* Manual Refresh (edit mode only) */}
+      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
         <Button
           variant="outlined"
           color="primary"
           fullWidth
           size="small"
           onClick={() => {
-            fetchNetworks();
-            if (selectedNetworkOption) {
-              fetchAgents(selectedNetworkOption);
+            if (canEdit) {
+              fetchNetworks();
+              if (selectedNetworkOption) {
+                fetchAgents(selectedNetworkOption);
+              }
             }
           }}
-          disabled={loading}
+          disabled={loading || !canEdit}
           startIcon={<RefreshIcon />}
           sx={{
-            textTransform: 'none',
-            fontSize: '0.75rem',
-            '&:disabled': {
-              backgroundColor: alpha(theme.palette.primary.main, 0.1)
-            }
+            textTransform: "none",
+            fontSize: "0.75rem",
+            "&:disabled": {
+              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+            },
           }}
         >
           {loading ? "Refreshing..." : "Manual Refresh"}

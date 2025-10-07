@@ -68,7 +68,7 @@ const EditorAgentFlow = ({
   onNetworkCreated: () => void;
   onNetworkSelected: (networkName: string) => void;
 }) => {
-  console.log('EditorAgentFlow: Received props:', { selectedNetwork, selectedDesignId });
+  // console.log('EditorAgentFlow: Received props:', { selectedNetwork, selectedDesignId });
   const { apiUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -104,7 +104,7 @@ const EditorAgentFlow = ({
 
   // Fetch network connectivity data
   const fetchNetworkData = async () => {
-    console.log('fetchNetworkData called with:', { selectedNetwork, selectedDesignId, apiUrl });
+    // console.log('fetchNetworkData called with:', { selectedNetwork, selectedDesignId, apiUrl });
     
     if (!selectedNetwork || !apiUrl) {
       console.log('Missing selectedNetwork or apiUrl, skipping fetch');
@@ -112,7 +112,7 @@ const EditorAgentFlow = ({
     }
 
     try {
-      console.log(`Loading network data for: ${selectedNetwork} (design_id: ${selectedDesignId})`);
+      // console.log(`Loading network data for: ${selectedNetwork} (design_id: ${selectedDesignId})`);
       const response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
       
       if (!response.ok) {
@@ -149,7 +149,7 @@ const EditorAgentFlow = ({
         try {
           const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
           finalNodes = layoutResult.nodes;
-          console.log(`Applied layout for ${selectedNetwork}: ${finalNodes.length} nodes, cached: ${layoutManager.hasCachedPositions()}`);
+          // console.log(`Applied layout for ${selectedNetwork}: ${finalNodes.length} nodes, cached: ${layoutManager.hasCachedPositions()}`);
         } catch (error) {
           console.warn('Failed to apply layout, using raw positions:', error);
           finalNodes = rawNodes;
@@ -191,7 +191,7 @@ const EditorAgentFlow = ({
 
   // Handle node double-click
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
-    console.log("Double-clicked agent:", node.id);
+    // console.log("Double-clicked agent:", node.id);
     setSelectedAgentName(node.id);
   }, []);
 
@@ -279,13 +279,13 @@ const EditorAgentFlow = ({
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
-    console.log("Edit agent:", nodeId);
+    // console.log("Edit agent:", nodeId);
     setSelectedAgentName(nodeId);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
   const handleDeleteAgent = async (nodeId: string) => {
-    console.log("Delete agent:", nodeId, "selectedDesignId:", selectedDesignId);
+    // console.log("Delete agent:", nodeId, "selectedDesignId:", selectedDesignId);
     
     if (!selectedDesignId) {
       console.error("Cannot delete agent: no design_id available. Current selectedDesignId:", selectedDesignId);
@@ -310,7 +310,7 @@ const EditorAgentFlow = ({
   // };
 
   const handleDuplicateAgent = async (nodeId: string) => {
-    console.log("Duplicate agent:", nodeId, "selectedDesignId:", selectedDesignId);
+    // console.log("Duplicate agent:", nodeId, "selectedDesignId:", selectedDesignId);
     
     if (!selectedDesignId) {
       console.error("Cannot duplicate agent: no design_id available. Current selectedDesignId:", selectedDesignId);
@@ -331,7 +331,7 @@ const EditorAgentFlow = ({
   };
 
   const handleAddChildAgent = async (nodeId: string) => {
-    console.log("Add child agent to:", nodeId, "selectedDesignId:", selectedDesignId);
+    // console.log("Add child agent to:", nodeId, "selectedDesignId:", selectedDesignId);
     
     if (!selectedDesignId) {
       console.error("Cannot add child agent: no design_id available. Current selectedDesignId:", selectedDesignId);
@@ -354,7 +354,7 @@ const EditorAgentFlow = ({
 
   // Handle agent update from editor panel
   const handleAgentUpdated = async () => {
-    console.log("Agent updated, refreshing network data");
+    // console.log("Agent updated, refreshing network data");
     await fetchNetworkData();
   };
 
@@ -384,7 +384,7 @@ const EditorAgentFlow = ({
       }
 
       const result = await response.json();
-      console.log('Agent created successfully:', result);
+      // console.log('Agent created successfully:', result);
       return true;
     } catch (error) {
       console.error('Error creating agent:', error);
@@ -450,7 +450,7 @@ const EditorAgentFlow = ({
 
   // Load data when network changes or layout parameters change (similar to AgentFlow)
   useEffect(() => {
-    console.log('useEffect triggered with:', { selectedNetwork, selectedDesignId });
+    // console.log('useEffect triggered with:', { selectedNetwork, selectedDesignId });
     if (selectedNetwork) {
       fetchNetworkData();
     } else {

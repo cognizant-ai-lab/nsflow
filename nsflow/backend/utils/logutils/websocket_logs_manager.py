@@ -88,6 +88,15 @@ class WebsocketLogsManager:
         Send a structured message to all connected clients.
         :param message: A dictionary representing the chat message and metadata.
         """
+        # # Normalize to {"message": {"text": "<json string>"}}
+        # if isinstance(message, str):
+        #     entry = {"message": {"text": message}}
+        # else:
+        #     # If caller passed {"text": "<json>"} or any dict, wrap as text when not already a string
+        #     if "text" in message and isinstance(message["text"], str):
+        #         entry = {"message": {"text": message["text"]}}
+        #     else:
+        #         entry = {"message": {"text": json.dumps(message)}}
         entry = {"message": message}
         await self.broadcast_to_websocket(entry, self.active_progress_connections)
 
@@ -176,10 +185,10 @@ class WebsocketLogsManager:
         """
         await websocket.accept()
         self.active_progress_connections.append(websocket)
-        await self.progress_event(f"Progress client connected: {self.agent_name}")
+        await self.progress_event({"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})})
         try:
             while True:
                 await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
         except WebSocketDisconnect:
             self.active_progress_connections.remove(websocket)
-            await self.sly_data_event(f"Progress client disconnected: {self.agent_name}")
+            await self.progress_event({"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})})

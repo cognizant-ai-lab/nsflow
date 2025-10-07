@@ -91,12 +91,12 @@ class AgentLogProcessor(MessageProcessor):
             tool_output = self.extract_agent_network_definition(chat_message_dict)
             if tool_output:
                 progress = {"agent_network_definition": tool_output, "agent_network_name": "new_agent_network"}
-                await self.logs_manager.progress_event(json.dumps({"progress": progress}))
+                await self.logs_manager.progress_event({"text": progress})
 
         if message_type == ChatMessageType.AGENT_PROGRESS:
-            logging.info("\n"+"="*30 + "progress message START " + "="*30+"\n")
-            logging.info(chat_message_dict.get("structure", progress))
-            logging.info("\n"+"x"*30 + "progress message END " + "x"*30+"\n")
+            # logging.info("\n"+"="*30 + "progress message START " + "="*30+"\n")
+            # logging.info(chat_message_dict.get("structure", progress))
+            # logging.info("\n"+"x"*30 + "progress message END " + "x"*30+"\n")
 
             # log progress messages if any
             progress = chat_message_dict.get("structure", progress)
@@ -116,9 +116,9 @@ class AgentLogProcessor(MessageProcessor):
         otrace = [i.get("tool") for i in otrace]
 
         if message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
-            logging.info("\n"+"="*50 + "AGENT or AGENT_TOOL_RESULT message start" + "="*50+"\n")
-            logging.info(chat_message_dict)
-            logging.info("\n"+"x"*50 + "AGENT or AGENT_TOOL_RESULT message end" + "x"*50+"\n")
+            # logging.info("\n"+"="*50 + "AGENT or AGENT_TOOL_RESULT message start" + "="*50+"\n")
+            # logging.info(chat_message_dict)
+            # logging.info("\n"+"x"*50 + "AGENT or AGENT_TOOL_RESULT message end" + "x"*50+"\n")
             # Get the internal chat message between agents
             internal_chat = chat_message_dict.get("text", "")
 

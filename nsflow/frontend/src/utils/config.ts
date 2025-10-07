@@ -40,7 +40,7 @@ export async function loadAppConfig(): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   config = await res.json();
-  console.log(">>> Loaded runtime config: ", config)
+  // console.log(">>> Loaded runtime config: ", config)
 }
 
 export function getAppConfig(): AppRuntimeConfig {

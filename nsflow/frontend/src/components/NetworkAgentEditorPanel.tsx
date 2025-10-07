@@ -106,7 +106,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       }
 
       const schemaData = await response.json();
-      console.log('Loaded schema:', schemaData);
+      // console.log('Loaded schema:', schemaData);
       setSchema(schemaData);
     } catch (err) {
       console.error('Error loading schema:', err);
@@ -152,7 +152,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
 
       const data = await response.json();
       const agentData = data.agent;
-      console.log('Loaded agent data:', agentData);
+      // console.log('Loaded agent data:', agentData);
 
       setJsonData(agentData);
       setOriginalData(agentData);
@@ -256,7 +256,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     try {
       // Clean the data to match API expectations
       const cleanedData = cleanAgentData(jsonData);
-      console.log('cleanedData for API:', cleanedData);
+      // console.log('cleanedData for API:', cleanedData);
       
       // Validate that we have some data to send
       if (Object.keys(cleanedData).length === 0) {
@@ -264,13 +264,13 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       }
       
       // Log the final request body for debugging
-      console.log('Final request body:', JSON.stringify(cleanedData, null, 2));
+      // console.log('Final request body:', JSON.stringify(cleanedData, null, 2));
       
       // Also log the URL for debugging
-      console.log('API URL:', `${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`);
+      // console.log('API URL:', `${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`);
       
       // Log the headers for debugging
-      console.log('Request headers:', { 'Content-Type': 'application/json' });
+      // console.log('Request headers:', { 'Content-Type': 'application/json' });
       
       const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`, {
         method: 'PUT',
@@ -308,10 +308,10 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const handleJsonUpdate = useCallback((update: any) => {
     if (!canEdit) return;
     
-    console.log('JsonEditor onUpdate called with:', update);
+    // console.log('JsonEditor onUpdate called with:', update);
     // `update.newData` contains the new full JSON value, `update.data` might be empty
     const next = update.newData ?? update.data ?? {}; // fall back to empty object if no data
-    console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
+    // console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
     setJsonData(next);
     setHasChanges(true);
   }, [canEdit]);
