@@ -9,7 +9,7 @@
 //
 // END COPYRIGHT
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import ReactFlow, { Background, Controls, useEdgesState, useNodesState, useReactFlow, 
   Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "reactflow";
 import "reactflow/dist/style.css";
@@ -56,6 +56,10 @@ const EditorAgentFlow = ({
   const { apiUrl } = useApiPort();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const defaultEdgeOptions = useMemo(
+    () => ({ type: "floating" as const, markerEnd: "arrowclosed" as const }),
+    []
+  );
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
   
@@ -504,10 +508,12 @@ const EditorAgentFlow = ({
       display: 'flex'
     }}>
       {/* Editor Palette */}
-      <EditorPalette 
-        onNetworkCreated={onNetworkCreated}
-        onNetworkSelected={onNetworkSelected}
-      />
+      {canEdit &&
+        <EditorPalette 
+          onNetworkCreated={onNetworkCreated}
+          onNetworkSelected={onNetworkSelected}
+        />
+      }
       
       {/* Main Flow Area */}
       <Box sx={{ 
