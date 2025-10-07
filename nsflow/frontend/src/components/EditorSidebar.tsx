@@ -98,6 +98,7 @@ const EditorSidebar = ({
   const { pluginManualEditor } = getFeatureFlags();
   const canEdit = !!pluginManualEditor;
   const didAutoSelectRef = useRef(false);
+  const lastSeenNameRef = useRef<string | null>(null);
 
   // Edit-mode: Fetch networks with state
   const fetchNetworks = async () => {
@@ -241,7 +242,7 @@ const EditorSidebar = ({
     const latestProgress = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
     const latestSly = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
 
-    const payload = extractProgressPayload( latestProgress) || extractProgressPayload(latestSly);
+    const payload = extractProgressPayload(latestSly) || extractProgressPayload(latestProgress);
     // silently ignore; nothing to show yet
     if (!payload?.agent_network_definition || !payload?.agent_network_name) return;
 
@@ -255,13 +256,21 @@ const EditorSidebar = ({
       agent_count: Object.keys(payload.agent_network_definition!).length,
     };
 
+    // always replace the list with the latest single option
     setNetworkOptions([singleOption]);
     setAgentNetworkDefinition(payload.agent_network_definition!);
 
+    const nameChanged =
+      lastSeenNameRef.current !== nameFromPayload ||
+      selectedNetworkId !== nameFromPayload ||
+      !selectedNetworkOption;
+
     // Keep selection semantics identical: nothing selected by default;
     // once we have a valid message, set it if not set already
-    if (!canEdit && !didAutoSelectRef.current) {
+    if (!canEdit && nameChanged) {
       didAutoSelectRef.current = true;
+      lastSeenNameRef.current = nameFromPayload;
+
       setSelectedNetworkId(singleOption.id);
       setSelectedNetworkOption(singleOption);
       onSelectNetwork(singleOption.display_name); // no design_id in view-only
@@ -351,6 +360,7 @@ const EditorSidebar = ({
     if (!canEdit) {
       setLoading(false);
       didAutoSelectRef.current = false;
+      lastSeenNameRef.current = null;
     }
   }, [targetNetwork, canEdit]);
 
