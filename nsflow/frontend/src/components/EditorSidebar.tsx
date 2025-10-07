@@ -149,7 +149,7 @@ const EditorSidebar = ({
   // Use manual editor plugin flag
   const { pluginManualEditor } = getFeatureFlags();
   const canEdit = !!pluginManualEditor;
-  const dropdownEnabled = !loading && (canEdit ? networkOptions.length > 0 : true);
+  const didAutoSelectRef = useRef(false);
 
   // Edit-mode: Fetch networks with state
   const fetchNetworks = async () => {
@@ -165,7 +165,7 @@ const EditorSidebar = ({
       }
 
       const data: NetworksResponse = await response.json();
-      console.log('EditorSidebar: Raw API response:', data);
+      // console.log('EditorSidebar: Raw API response:', data);
       
       // Convert only editing sessions to network options (registry networks handled by EditorPalette)
       const options: NetworkOption[] = [];
@@ -231,7 +231,7 @@ const EditorSidebar = ({
       }
 
       const data = await response.json();
-      console.log("EditorSidebar: Fetched agents data:", data);
+      // console.log("EditorSidebar: Fetched agents data:", data);
 
       // Both endpoints return { nodes: [...] } — keep sidebar identical across modes
       setAgents(Array.isArray(data.nodes) ? data.nodes : []);
@@ -293,15 +293,9 @@ const EditorSidebar = ({
     const latestProgress = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
     const latestSly = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
 
-    // IMPORTANT: log objects directly, not with template strings
-    console.log("latestProgress:", latestProgress);
-    console.log("latestSly:", latestSly);
-
     const payload = extractLogPayload(latestSly) || extractLogPayload(latestProgress);
-    if (!payload?.agent_network_definition || !payload?.agent_network_name) {
-      // silently ignore; nothing to show yet
-      return;
-    }
+    // silently ignore; nothing to show yet
+    if (!payload?.agent_network_definition || !payload?.agent_network_name) return;
 
     // Ensure dropdown has exactly one option (view-only)
     const singleOption: NetworkOption = {
@@ -312,20 +306,17 @@ const EditorSidebar = ({
     };
 
     setNetworkOptions([singleOption]);
+    setAgentNetworkDefinition(payload.agent_network_definition!);
 
     // Keep selection semantics identical: nothing selected by default;
     // once we have a valid message, set it if not set already
-    if (!selectedNetworkOption) {
+    if (!canEdit && !didAutoSelectRef.current) {
+      didAutoSelectRef.current = true;
       setSelectedNetworkId(singleOption.id);
       setSelectedNetworkOption(singleOption);
       onSelectNetwork(singleOption.display_name); // no design_id in view-only
+      fetchAgents(undefined, payload.agent_network_definition!); // avoid race
     }
-
-    // Provide the definition for unified fetchAgents()
-    setAgentNetworkDefinition(payload.agent_network_definition!);
-
-    // Now populate agents using the same path as edit mode
-    fetchAgents(undefined, payload.agent_network_definition!); // avoid race
   };
 
 
@@ -406,6 +397,14 @@ const EditorSidebar = ({
     setLastChatMessageCount(currentCount);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, canEdit]);
+
+  // keep true by default, but turn it off in view mode:
+  useEffect(() => {
+    if (!canEdit) {
+      setLoading(false);
+      didAutoSelectRef.current = false;
+    }
+  }, [targetNetwork, canEdit]);
 
   /* -------------------- Render -------------------- */
   return (
@@ -535,7 +534,7 @@ const EditorSidebar = ({
                                       ({option.agent_count} agents)
                                     </Typography>
                                     <Chip
-                                      label={canEdit ? "Editing" : "View only"}
+                                      label={canEdit ? "Editing" : "View"}
                                       size="small"
                                       color={canEdit ? "secondary" : "default"}
                                       sx={{ fontSize: "0.6rem", height: 16 }}
