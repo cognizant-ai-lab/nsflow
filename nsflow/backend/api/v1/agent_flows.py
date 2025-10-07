@@ -106,6 +106,56 @@ async def build_connectivity_from_json(request: Request):
     except Exception as e:
         logging.exception("Failed to build connectivity from JSON: %s", e)
         raise HTTPException(status_code=500, detail="Failed to build nodes/edges") from e
+    
+
+@router.post(
+    "/connectivity/from_json/agents/{agent_name}",
+    summary="Get details for a specific agent from raw JSON (no gRPC, no Pydantic).",
+    responses={
+        200: {"description": "Agent details built from provided JSON."},
+        404: {"description": "Agent not found in provided JSON."},
+        422: {"description": "Invalid payload. Must include 'agent_network_definition'."},
+        500: {"description": "Failed to build agent details."},
+    },
+)
+async def get_agent_details_from_json(agent_name: str, request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Body must be valid JSON")
+
+    agent_def = data.get("agent_network_definition")
+    if not isinstance(agent_def, dict):
+        raise HTTPException(
+            status_code=422,
+            detail="Missing or invalid 'agent_network_definition' (dict required).",
+        )
+
+    try:
+        utils = NsGrpcNetworkUtils()
+
+        # Normalize keys so everyone sees 'down_chains'
+        norm_def = utils.normalize_agent_def(agent_def)
+        network_name = data.get("agent_network_name", "new_agent_network")
+
+        details = utils.get_agent_details(
+            agent_definition=norm_def,
+            agent_name=agent_name,
+            network_name=network_name,
+            design_id=network_name,
+        )
+
+        if details is None:
+            # selected agent neither defined nor referenced
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found.")
+
+        return JSONResponse(content=details)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception("Failed to build agent details: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to build agent details") from e
 
 
 @router.get("/slydata/{network_name}", responses={200: {"description": "Latest SlyData found"},

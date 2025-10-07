@@ -20,6 +20,8 @@ import {
 import { useApiPort } from '../context/ApiPortContext';
 import { useJsonEditorTheme } from '../context/ThemeContext';
 import { JsonEditor, ThemeInput } from 'json-edit-react';
+import { useChatContext } from "../context/ChatContext";
+import { extractProgressPayload } from "../utils/progressHelper";
 
 interface NetworkAgentEditorPanelProps {
   selectedDesignId: string;
@@ -44,6 +46,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const [hasChanges, setHasChanges] = useState(false);
   const [, setOriginalData] = useState<any>(null);
   const [schema, setSchema] = useState<any>(null);
+  const { getLastProgressMessage, getLastSlyDataMessage, newProgress, newSlyData, targetNetwork } = useChatContext();
   
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -56,6 +59,13 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
   const canEdit = !!enableEditing;
   const hasChangesToSave = canEdit && hasChanges;
+
+  const getViewDefinition = useCallback(() => {
+    const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
+    const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
+    const payload = extractProgressPayload(s) || extractProgressPayload(p);
+    return payload?.agent_network_definition as Record<string, any> | undefined;
+  }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {
@@ -82,9 +92,9 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     }
   }, [apiUrl]);
 
-  // Load agent data when selectedAgentName changes
+  // Load agent data when selectedAgentName or apiUrl changes
   useEffect(() => {
-    if (selectedAgentName && selectedDesignId && apiUrl) {
+    if (selectedAgentName && apiUrl && (canEdit ? !!selectedDesignId : true)) {
       loadAgentData();
     } else {
       setJsonData({});
@@ -93,7 +103,15 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setError(null);
       setSuccess(null);
     }
-  }, [selectedAgentName, selectedDesignId, apiUrl]);
+  }, [selectedAgentName, selectedDesignId, apiUrl, canEdit]);
+
+  // When new messages arrive, refresh the open agent in view-mode
+  useEffect(() => {
+    if (!canEdit && selectedAgentName) {
+      loadAgentData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newProgress, newSlyData]);
 
   const loadSchema = async () => {
     if (!apiUrl) return;
@@ -137,21 +155,46 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   };
 
   const loadAgentData = async () => {
-    if (!selectedAgentName || !selectedDesignId || !apiUrl) return;
+    if (!selectedAgentName || !apiUrl) return;
+
+    // In edit-mode we still need designId; in view-mode we don’t
+    if (canEdit && !selectedDesignId) return;
 
     setIsLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`);
+      let response: Response;
+      if (canEdit && selectedDesignId) {
+        // EDIT MODE (unchanged)
+        response = await fetch(
+          `${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`
+        );
+      } else {
+        // VIEW MODE
+        const definition = getViewDefinition();
+        if (!definition) {
+          setIsLoading(false);
+          // optional: keep quiet until we have the first payload
+          return;
+        }
+        response = await fetch(
+          `${apiUrl}/api/v1/connectivity/from_json/agents/${encodeURIComponent(selectedAgentName)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agent_network_definition: definition }),
+          }
+        );
+      }
       
       if (!response.ok) {
         throw new Error(`Failed to load agent: ${response.statusText}`);
       }
 
       const data = await response.json();
-      const agentData = data.agent;
+      const agentData = data.agent?? data;
       // console.log('Loaded agent data:', agentData);
 
       setJsonData(agentData);
@@ -159,9 +202,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setHasChanges(false);
       
       // Auto-expand the panel when agent is selected
-      if (!isExpanded) {
-        setIsExpanded(true);
-      }
+      if (!isExpanded) setIsExpanded(true);
     } catch (err) {
       console.error('Error loading agent data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load agent data');

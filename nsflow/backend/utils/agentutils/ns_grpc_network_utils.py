@@ -10,7 +10,8 @@
 #
 # END COPYRIGHT
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+from uuid import uuid4
 
 
 @dataclass
@@ -312,3 +313,78 @@ class NsGrpcNetworkUtils:
                 components.append(component)
         
         return components
+    
+    @staticmethod
+    def normalize_agent_def(agent_def: Dict[str, dict]) -> Dict[str, dict]:
+        """
+        Canonicalize children under 'down_chains' (accepts 'tools' or 'down_chains').
+        """
+        normalized: Dict[str, dict] = {}
+        for name, data in (agent_def or {}).items():
+            d = dict(data or {})
+            children = d.get("down_chains")
+            if children is None:
+                children = d.get("tools") or []
+            d["down_chains"] = list(children)
+            normalized[name] = d
+        return normalized
+
+    @staticmethod
+    def build_parent_map(agent_definition: Dict[str, Any]) -> Dict[str, str]:
+        """
+        Build parent map from normalized definition (expects 'down_chains' to exist).
+        """
+        parent_map: Dict[str, str] = {}
+        for parent, data in (agent_definition or {}).items():
+            for child in NsGrpcNetworkUtils.get_children(data):
+                parent_map[child] = parent
+        return parent_map
+
+    @staticmethod
+    def get_agent_details(
+        agent_definition: Dict[str, Any],
+        agent_name: str,
+        network_name: str,
+        design_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Return the agent details payload for a given agent.
+        If agent is only referenced (undefined), still return with empty instructions/tools.
+        Returns None if the agent doesn't exist at all (neither defined nor referenced).
+        """
+        # Universe = defined + referenced children
+        defined_names = set(agent_definition.keys())
+        referenced_names = set()
+        for _, data in agent_definition.items():
+            referenced_names.update(NsGrpcNetworkUtils.get_children(data))
+        all_names = defined_names | referenced_names
+
+        if agent_name not in all_names:
+            return None
+
+        parent_map = NsGrpcNetworkUtils.build_parent_map(agent_definition)
+        data = agent_definition.get(agent_name, {})  # {} if undefined but referenced
+
+        instructions = data.get("instructions", "") if isinstance(data, dict) else ""
+        tools = NsGrpcNetworkUtils.get_children(data) if isinstance(data, dict) else []
+        klass = data.get("class") if isinstance(data, dict) else None
+        parent = parent_map.get(agent_name)
+
+        # Conform exactly to requested output shape
+        return {
+            "agent": {
+                "name": agent_name,
+                "instructions": instructions or "",
+                "tools": tools,
+                "class": klass if (klass is None or isinstance(klass, str)) else str(klass),
+                "_parent": parent,
+            },
+            "design_id": design_id or "new_agent_network",
+            "network_name": network_name,
+        }
+
+    # keep existing methods (get_children, partial_build_nodes_and_edges, etc.)
+    @staticmethod
+    def get_children(data: Dict[str, Any]) -> List[str]:
+        # still resilient if caller skipped normalization
+        return list(data.get("down_chains") or data.get("tools") or [])
