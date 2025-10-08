@@ -126,6 +126,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
             <Paper
               key={key}
               elevation={1}
+              data-msg-class={getMessageClass(msg)}
               sx={{
                 p: 0.5,
                 pb: 0,

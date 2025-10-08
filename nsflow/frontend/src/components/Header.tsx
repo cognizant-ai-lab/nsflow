@@ -13,7 +13,7 @@ import * as React from "react";
 import { useState, useRef, useEffect } from "react";
 import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, 
   MenuItem,  Box, useTheme as useMuiTheme, alpha, Paper } from "@mui/material";
 import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
@@ -32,7 +32,6 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
   const { apiUrl } = useApiPort();
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
   const location = useLocation();
   const { theme, isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
@@ -160,18 +159,20 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
           transform: 'translateX(-50%)'
         }}>
           {/* Reload */}
-          <IconButton
-            onClick={() => window.location.reload()}
-            sx={{ 
-              color: muiTheme.palette.text.primary,
-              '&:hover': { 
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
-              }
-            }}
-            title="Reload"
-          >
-            <RefreshIcon />
-          </IconButton>
+          {!isOnEditorPage && (
+            <IconButton
+              onClick={() => window.location.reload()}
+              sx={{ 
+                color: muiTheme.palette.text.primary,
+                '&:hover': { 
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
+                }
+              }}
+              title="Reload"
+            >
+              <RefreshIcon />
+            </IconButton>
+          )}
 
           {/* Home Button */}
           <Button

@@ -9,7 +9,7 @@
 //
 // END COPYRIGHT
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, IconButton, Paper, Tooltip, Typography, alpha, TextField, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { DataObject as DataObjectIcon, Download as DownloadIcon, Upload as UploadIcon, Info as InfoIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
@@ -17,7 +17,6 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { JsonEditor, ThemeInput } from 'json-edit-react';
 import ScrollableMessageContainer from '../ScrollableMessageContainer';
 import { useChatContext } from '../../context/ChatContext';
-import { useApiPort } from '../../context/ApiPortContext';
 import { useTheme, useJsonEditorTheme } from '../../context/ThemeContext';
 import { useSlyDataCache } from '../../hooks/useSlyDataCache';
 import { ImportDialog, type ImportDialogState } from './ImportDialog';
@@ -86,7 +85,6 @@ const getLatestSlyDataFromMessages = (msgs: any[]): any | undefined => {
 
 const EditorSlyDataPanel: React.FC = () => {
   const { slyDataMessages, targetNetwork, addSlyDataMessage } = useChatContext();
-  const { apiUrl } = useApiPort(); // reserved for future server fetch if needed
   const { theme } = useTheme();
   const jsonEditorTheme = useJsonEditorTheme();
 
