@@ -84,7 +84,7 @@ logging.info("frontend_dist_path: %s", frontend_dist_path)
 # Serve Frontend on `/` when
 if not NSFLOW_DEV_MODE and os.path.exists(frontend_dist_path):
     logging.info("Serving frontend from: %s", frontend_dist_path)
-    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets"), html=True), name="frontend")
 else:
     logging.info("DEV MODE: Skipping frontend serving.")
 
