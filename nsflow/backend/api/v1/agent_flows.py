@@ -71,8 +71,8 @@ async def build_connectivity_from_json(request: Request):
     """
     try:
         data: Dict[str, Any] = await request.json()
-    except Exception:
-        raise HTTPException(status_code=422, detail="Body must be valid JSON")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail="Body must be valid JSON") from e
 
     has_conn = isinstance(data.get("connectivity_info"), list)
     has_state = isinstance(data.get("agent_network_definition"), dict)
@@ -106,7 +106,7 @@ async def build_connectivity_from_json(request: Request):
     except Exception as e:
         logging.exception("Failed to build connectivity from JSON: %s", e)
         raise HTTPException(status_code=500, detail="Failed to build nodes/edges") from e
-    
+
 
 @router.post(
     "/connectivity/from_json/agents/{agent_name}",
@@ -119,10 +119,11 @@ async def build_connectivity_from_json(request: Request):
     },
 )
 async def get_agent_details_from_json(agent_name: str, request: Request):
+    """Get agent details from json object such as agent_network_definition in a sly data"""
     try:
         data = await request.json()
-    except Exception:
-        raise HTTPException(status_code=422, detail="Body must be valid JSON")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail="Body must be valid JSON") from e
 
     agent_def = data.get("agent_network_definition")
     if not isinstance(agent_def, dict):
@@ -165,12 +166,12 @@ def get_latest_sly_data(network_name: str):
     logging.info("Fetching latest sly_data for network: %s", network_name)
     try:
         latest_data = NsGrpcWsUtils.get_latest_sly_data(network_name)
-        
+
         if not latest_data:
             raise HTTPException(status_code=404, detail=f"No sly_data available for network '{network_name}'")
-        
+
         return JSONResponse(content={"network_name": network_name, "sly_data": latest_data})
-        
+
     except Exception as e:
         logging.exception("Failed to retrieve sly_data for network %s: %s", network_name, e)
         raise HTTPException(status_code=500, detail="Failed to retrieve sly_data") from e

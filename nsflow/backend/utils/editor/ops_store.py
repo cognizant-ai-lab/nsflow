@@ -647,7 +647,7 @@ class OperationStore:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     @staticmethod
-    def _read_jsonl(path: str) -> List[Dict[str, Any]]:
+    def read_jsonl(path: str) -> List[Dict[str, Any]]:
         if not os.path.exists(path): return []
         out = []
         with open(path, "r", encoding="utf-8") as f:

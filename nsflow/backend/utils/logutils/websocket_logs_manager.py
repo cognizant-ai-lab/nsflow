@@ -162,7 +162,7 @@ class WebsocketLogsManager:
         except WebSocketDisconnect:
             self.active_log_connections.remove(websocket)
             await self.log_event("Logs client disconnected", "FastAPI")
-    
+
     async def handle_sly_data_websocket(self, websocket: WebSocket):
         """
         Handle a new WebSocket connection for receiving sly_data.
@@ -185,10 +185,14 @@ class WebsocketLogsManager:
         """
         await websocket.accept()
         self.active_progress_connections.append(websocket)
-        await self.progress_event({"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})})
+        await self.progress_event(
+            {"text": json.dumps({"event": "progress_client_connected",
+                                 "agent": self.agent_name})})
         try:
             while True:
                 await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
         except WebSocketDisconnect:
             self.active_progress_connections.remove(websocket)
-            await self.progress_event({"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})})
+            await self.progress_event(
+                {"text": json.dumps({"event": "progress_client_connected",
+                                     "agent": self.agent_name})})

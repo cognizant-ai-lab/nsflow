@@ -16,12 +16,12 @@ import socket
 import httpx
 
 from fastapi import HTTPException
+from neuro_san.interfaces.concierge_session import ConciergeSession
+from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
-from neuro_san.interfaces.concierge_session import ConciergeSession
-from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 
 class NsConciergeUtils:
     """
@@ -40,7 +40,7 @@ class NsConciergeUtils:
         except RuntimeError as e:
             raise RuntimeError("No active NsConfigStore. \
                                Please set it via /set_config before using gRPC endpoints.") from e
-        
+
         self.server_host = config.host
         self.server_port = config.port
         self.connection = config.connection_type
@@ -75,7 +75,7 @@ class NsConciergeUtils:
                 port=self.server_port,
                 metadata=metadata)
         return grpc_session
-    
+
     async def list_concierge(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
         Call the concierge `list()` method via gRPC.
@@ -108,7 +108,8 @@ class NsConciergeUtils:
                 url = f"{self.connection}://{self.server_host}:{self.server_port}/api/v1/list"
 
             try:
-                async with httpx.AsyncClient(verify=True, headers={"host": self.server_host}) as client:  # consider verify=True in prod
+                # consider verify=True in prod
+                async with httpx.AsyncClient(verify=True, headers={"host": self.server_host}) as client:
                     response = await client.get(url, headers={
                         "User-Agent": "curl/8.7.1",
                         "Accept": "*/*",
@@ -116,7 +117,6 @@ class NsConciergeUtils:
                         })
                     try:
                         json_data = response.json()
-                        # await self.logs_manager.log_event(f"Response status: {response.status_code}, response.text: {response.text}", "NeuroSan")
                     except (httpx.HTTPError, json.JSONDecodeError):
                         json_data = {
                             "error": "The NeuroSan Server did not return valid JSON",
@@ -127,7 +127,7 @@ class NsConciergeUtils:
             except httpx.RequestError as exc:
                 await self.logs_manager.log_event(f"Failed to fetch concierge list: {exc}", "NeuroSan")
                 raise HTTPException(status_code=502, detail=f"Failed to reach {url}: {str(exc)}") from exc
-            
+
     def is_port_open(self, host: str, port: int, timeout=1.0) -> bool:
         """
         Check if a port is open on a given host.

@@ -105,7 +105,7 @@ class AgentNetworkUtils:
         ]
 
         return {"networks": networks}
-    
+
     def get_agent_network(self, agent_network_name: str) -> AgentNetwork:
         """
         :param agent_name: The name of the agent whose AgentNetwork we want to get.

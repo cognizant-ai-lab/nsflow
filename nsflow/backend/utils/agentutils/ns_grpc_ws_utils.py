@@ -66,7 +66,7 @@ class NsGrpcWsUtils:
         except RuntimeError as e:
             raise RuntimeError("No active NsConfigStore. \
                                Please set it via /set_config before using gRPC endpoints.") from e
-        
+
         self.server_host = config.host
         self.server_port = config.port
         self.connection = config.connection_type
@@ -134,7 +134,7 @@ class NsGrpcWsUtils:
                 # Store the latest sly_data for this network
                 if state.get("sly_data") is not None:
                     latest_sly_data_storage[self.agent_name] = state["sly_data"]
-                    logging.info(f"Updated latest sly_data for network {self.agent_name}")
+                    logging.info("Updated latest sly_data for network %s", self.agent_name)
 
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
 
@@ -207,7 +207,7 @@ class NsGrpcWsUtils:
                  session with the agent network.
         """
         return AgentSessionFactory()
-    
+
     @classmethod
     def get_latest_sly_data(cls, network_name: str) -> dict:
         """
