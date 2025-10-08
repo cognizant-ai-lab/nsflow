@@ -149,6 +149,10 @@ declare module '@mui/material/styles' {
         labelHoverBackground: string;
       };
     };
+    pageVariants: {
+      home: { headerBg: string };
+      editor: { headerBg: string };
+    };
   }
 
   interface ThemeOptions {
@@ -167,6 +171,10 @@ declare module '@mui/material/styles' {
         deleteIconColor?: string;
         labelHoverBackground?: string;
       };
+    };
+    pageVariants?: {
+      home?: { headerBg?: string };
+      editor?: { headerBg?: string };
     };
   }
 }
@@ -189,6 +197,14 @@ const augmentedLightTheme = createTheme(lightTheme, {
       labelHoverBackground: '#f8fafc', // Slate-50
     },
   },
+  pageVariants: {
+      home: {
+        headerBg: '#e0f2fe', // Light blue-100
+      },
+      editor: {
+        headerBg: '#fef9c3', // Amber-100
+      },
+    },
 });
 
 const augmentedDarkTheme = createTheme(darkTheme, {
@@ -208,6 +224,14 @@ const augmentedDarkTheme = createTheme(darkTheme, {
       labelHoverBackground: '#1e293b', // Slate-800
     },
   },
+  pageVariants: {
+      home: {
+        headerBg: '#1e293b', // Slate-800
+      },
+      editor: {
+        headerBg: '#3f3f46', // 3f3f46=Zinc-700, '#3a2e16' // dark depp amber //'#5b4519' // bright deep amber
+      },
+    },
 });
 
 interface ThemeContextType {

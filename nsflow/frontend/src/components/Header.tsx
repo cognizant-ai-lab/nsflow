@@ -97,11 +97,18 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
       position="static" 
       elevation={2}
       sx={{
-        background: theme.palette.background.paper,
+        backgroundColor: isOnEditorPage
+          ? muiTheme.pageVariants.editor.headerBg
+          : muiTheme.pageVariants.home.headerBg,
+        color: muiTheme.palette.text.primary,
         height: 56,
         zIndex: muiTheme.zIndex.appBar,
+        backdropFilter: 'blur(6px)',
+        boxShadow: `0 2px 6px ${alpha(muiTheme.palette.common.black, 0.15)}`,
+        transition: 'background-color 0.3s ease',
       }}
     >
+
       <Toolbar sx={{ 
         minHeight: '56px !important', 
         px: 2,
