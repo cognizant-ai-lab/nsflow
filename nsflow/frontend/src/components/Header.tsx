@@ -33,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
   const [exportDropdown, setExportDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
-  const { theme, isDarkMode } = useTheme();
+  const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
   
   // Determine if we're on editor page based on location or prop
