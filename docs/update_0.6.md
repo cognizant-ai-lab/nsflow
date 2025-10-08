@@ -2,7 +2,7 @@
 
 ## 🎯 **Intro**
 
-Implemented a **Workflow Agent Network Designer** that embodies the agentic design philosophy, 
+Implemented an **Agent Network Designer** that embodies the agentic design philosophy, 
 making the neuro-san library accessible to both developers and non-developers alike. 
 This comprehensive update transforms nsflow from a simple interactive chat client into a 
 well-featured agent orchestration platform with visual design capabilities.
