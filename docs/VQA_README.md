@@ -24,5 +24,10 @@ python3 -m venv venv;
 ```bash
 pip install -e .
 ```
+5. Install opencv
 
-5. Refer to [vqa_endpoints.py](../nsflow/backend/api/v1/vqa_endpoints.py) for example `curl` commands to call the endpoint.
+```bash
+pip install opencv-python==4.8.0.74
+```
+
+6. Refer to [vqa_endpoints.py](../nsflow/backend/api/v1/vqa_endpoints.py) for example `curl` commands to call the endpoint.
