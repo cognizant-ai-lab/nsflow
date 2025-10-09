@@ -27,11 +27,13 @@ logging.basicConfig(level=logging.INFO)
 router = APIRouter(prefix="/api/v1")
 
 
+TRUTH_VALUES = ["1", "true", "yes", "on"]
+
 def _env_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)
     if val is None:
         return default
-    return val.strip().lower() in ("1", "true", "yes", "on")
+    return val.strip().lower() in TRUTH_VALUES
 
 
 @router.get("/vite_config.json")

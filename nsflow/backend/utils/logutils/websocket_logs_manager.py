@@ -88,15 +88,6 @@ class WebsocketLogsManager:
         Send a structured message to all connected clients.
         :param message: A dictionary representing the chat message and metadata.
         """
-        # # Normalize to {"message": {"text": "<json string>"}}
-        # if isinstance(message, str):
-        #     entry = {"message": {"text": message}}
-        # else:
-        #     # If caller passed {"text": "<json>"} or any dict, wrap as text when not already a string
-        #     if "text" in message and isinstance(message["text"], str):
-        #         entry = {"message": {"text": message["text"]}}
-        #     else:
-        #         entry = {"message": {"text": json.dumps(message)}}
         entry = {"message": message}
         await self.broadcast_to_websocket(entry, self.active_progress_connections)
 

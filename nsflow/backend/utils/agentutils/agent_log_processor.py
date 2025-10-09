@@ -77,7 +77,7 @@ class AgentLogProcessor(MessageProcessor):
             # These are framework messages that contain chat context, system prompts or consolidated messages etc.
             # Don't log them. And there's no agent to highlight in the network diagram.
             # ChatMessageType.AGENT_FRAMEWORK
-            # ChatMessageType.SYSTEM/
+            # ChatMessageType.SYSTEM
             # ChatMessageType.UNKNOWN
             # We also ignore ChatMessageType.HUMAN message here because that is already available via the ChatPanel
             return
@@ -101,9 +101,6 @@ class AgentLogProcessor(MessageProcessor):
             progress = chat_message_dict.get("structure", progress)
             if progress:
                 await self.logs_manager.progress_event(json.dumps({"progress": progress}))
-                # progress_network_name = progress.get("agent_network_name")
-                # ssm = SimpleStateManager(design_id=progress_network_name)
-                # state_from_progress = ssm.extract_state_from_progress(progress)
 
                 # Process with state manager only if the manual editor plugin is enabled
                 if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
@@ -115,9 +112,6 @@ class AgentLogProcessor(MessageProcessor):
         otrace = [i.get("tool") for i in otrace]
 
         if message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
-            # logging.info("\n"+"="*50 + "AGENT or AGENT_TOOL_RESULT message start" + "="*50+"\n")
-            # logging.info(chat_message_dict)
-            # logging.info("\n"+"x"*50 + "AGENT or AGENT_TOOL_RESULT message end" + "x"*50+"\n")
             # Get the internal chat message between agents
             internal_chat = chat_message_dict.get("text", "")
 
