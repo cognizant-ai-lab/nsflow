@@ -12,35 +12,12 @@
 import * as React from "react";
 import { useState, useMemo, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
-import {
-  FaRobot,
-  FaCogs,
-  FaBrain,
-  FaMicrochip,
-  FaNetworkWired,
-  FaUserSecret
-} from "react-icons/fa";
-import { 
-  Box, 
-  Paper, 
-  Typography, 
-  Button, 
-  IconButton, 
-  List, 
-  ListItem, 
-  ListItemIcon, 
-  ListItemText, 
-  Tooltip, 
-  useTheme,
-  alpha,
-  Collapse
-} from "@mui/material";
-import { 
-  ExpandMore as ExpandMoreIcon,
-  CheckBox as CheckBoxIcon,
+import { FaRobot, FaCogs, FaBrain, FaMicrochip, FaNetworkWired, FaUserSecret } from "react-icons/fa";
+import { Box, Paper, Typography, Button, IconButton, List, ListItem, 
+  ListItemIcon, ListItemText, Tooltip, useTheme, alpha, Collapse } from "@mui/material";
+import { ExpandMore as ExpandMoreIcon, CheckBox as CheckBoxIcon,
   CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
-  ContentCopy as CopyIcon
-} from "@mui/icons-material";
+  ContentCopy as CopyIcon } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 
 // Define the structure of the `data` prop
@@ -84,6 +61,7 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const [hoveringTooltip, setHoveringTooltip] = useState(false);
   const theme = useTheme();
+  const agentNodeTheme = theme.custom.agentNode;
   
   // Fix: Explicitly type the state object
   const [selectedTools, setSelectedTools] = useState<Record<string, boolean>>(
@@ -159,12 +137,12 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
           transition: 'all 0.3s ease',
           transform: data.isActive ? 'scale(1.05)' : 'scale(1)',
           backgroundColor: data.isActive 
-            ? alpha(theme.palette.primary.main, 0.6) 
-            : alpha(theme.palette.primary.light, 0.6),
+            ? alpha(agentNodeTheme.activeBg, 0.8) 
+            : alpha(agentNodeTheme.inactiveBg, 0.8),
           color: theme.palette.text.primary,
           border: `2px solid ${data.isActive 
-            ? theme.palette.primary.main 
-            : theme.palette.divider}`,
+            ? agentNodeTheme.activeBorder 
+            : agentNodeTheme.inactiveBorder}`,
           '&:hover': {
             elevation: 4,
             borderColor: theme.palette.primary.light
@@ -177,8 +155,8 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
           alignItems: 'center', 
           justifyContent: 'center', 
           backgroundColor: data.isActive 
-            ? alpha(theme.palette.secondary.dark, 0.7)
-            : alpha(theme.palette.primary.dark, 0.9),
+            ? alpha(agentNodeTheme.titleActiveBg, 0.7)
+            : alpha(agentNodeTheme.titleInactiveBg, 0.9),
           px: 1, 
           py: 0.5, 
           borderRadius: '4px 4px 0 0',

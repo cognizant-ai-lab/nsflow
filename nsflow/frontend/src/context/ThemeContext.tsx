@@ -148,6 +148,15 @@ declare module '@mui/material/styles' {
         deleteIconColor: string;
         labelHoverBackground: string;
       };
+      agentNode: {
+        activeBg: string;
+        inactiveBg: string;
+        activeBorder: string;
+        inactiveBorder: string;
+        titleActiveBg: string;
+        titleInactiveBg: string;
+        glowColor: string;
+      };
     };
     pageVariants: {
       home: { headerBg: string };
@@ -170,6 +179,15 @@ declare module '@mui/material/styles' {
         addIconColor?: string;
         deleteIconColor?: string;
         labelHoverBackground?: string;
+      };
+      agentNode?: {
+        activeBg?: string;
+        inactiveBg?: string;
+        activeBorder?: string;
+        inactiveBorder?: string;
+        titleActiveBg?: string;
+        titleInactiveBg?: string;
+        glowColor?: string;
       };
     };
     pageVariants?: {
@@ -195,6 +213,15 @@ const augmentedLightTheme = createTheme(lightTheme, {
       addIconColor: '#10b981', // Emerald-500
       deleteIconColor: '#ef4444', // Red-500
       labelHoverBackground: '#f8fafc', // Slate-50
+    },
+    agentNode: {
+      activeBg: '#facd18ff', // Light amber background
+      inactiveBg: '#3b82f6', // Slate-100
+      activeBorder: '#ffe99fff', // Amber-500
+      inactiveBorder: '#475569', // Slate-300
+      titleActiveBg: '#fbbf24', // Amber-400
+      titleInactiveBg: '#0ea5e9', // Sky-500
+      glowColor: 'rgba(245, 158, 11, 0.6)', // Amber glow
     },
   },
   pageVariants: {
@@ -222,6 +249,15 @@ const augmentedDarkTheme = createTheme(darkTheme, {
       addIconColor: '#34d399', // Emerald-400
       deleteIconColor: '#f87171', // Red-400
       labelHoverBackground: '#1e293b', // Slate-800
+    },
+    agentNode: {
+      activeBg: '#facd18ff', // Deep amber-900
+      inactiveBg: '#3b82f6', // Slate-800
+      activeBorder: '#ffe99fff', // Amber-300
+      inactiveBorder: '#cbd5e1', // Slate-600
+      titleActiveBg: '#b45309', // Amber-700
+      titleInactiveBg: '#1e3a8a', // Blue-900
+      glowColor: 'rgba(252, 211, 77, 0.6)', // Amber-300 glow
     },
   },
   pageVariants: {
