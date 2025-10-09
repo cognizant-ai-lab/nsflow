@@ -795,7 +795,9 @@ const EditorAgentFlow = ({
               color: theme.palette.text.secondary,
               textAlign: 'center'
             }}>
-              Select a network from the sidebar to start editing
+              {canEdit
+                ? "Select a network from the sidebar to start editing"
+                : "Awaiting Agent design..."}
             </Typography>
           </Box>
         )}
