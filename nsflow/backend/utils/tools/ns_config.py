@@ -35,4 +35,3 @@ class NsConfig:
             "ns_server_port": self.port,
             "ns_connection_type": self.connection_type
         }
-

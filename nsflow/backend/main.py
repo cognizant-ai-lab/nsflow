@@ -84,19 +84,28 @@ logging.info("frontend_dist_path: %s", frontend_dist_path)
 # Serve Frontend on `/` when
 if not NSFLOW_DEV_MODE and os.path.exists(frontend_dist_path):
     logging.info("Serving frontend from: %s", frontend_dist_path)
-    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets"), html=True), name="frontend")
 else:
     logging.info("DEV MODE: Skipping frontend serving.")
 
 
 @app.get("/{path_name:path}", response_class=HTMLResponse)
 async def spa_fallback(path_name: str):
+    """
+    Serve the frontend Single-Page Application (SPA) index.html file for all non-API routes.
+    This endpoint acts as a fallback handler for client-side routing in modern web apps
+    (e.g., React, Vue, Svelte, etc.). If the requested path is not an API route, it returns
+    the compiled `index.html` file from the frontend distribution directory, allowing the
+    SPA router to handle navigation internally.
+    :param: path_name (str): The requested path after the root (e.g., '/dashboard', '/settings').
+    :return: HTMLResponse: The contents of the frontend `index.html` file when found.
+    """
     if path_name.startswith("api/"):
         raise HTTPException(status_code=404, detail="API route not found")
-    
+
     index_file_path = os.path.join(frontend_dist_path, "index.html")
     if os.path.exists(index_file_path):
-        with open(index_file_path, "r") as f:
+        with open(index_file_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     else:
         logging.error("index.html not found at: %s", index_file_path)

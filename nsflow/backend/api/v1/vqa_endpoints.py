@@ -94,7 +94,7 @@ async def vqa(
             content = await image.read()
             tmp.write(content)
     except Exception as e:
-        raise HTTPException(400, f"Failed to save uploaded image: {e}")
+        raise HTTPException(400, f"Failed to save uploaded image: {e}") from e
 
     # Call predict.py
     cmd = [
@@ -116,9 +116,9 @@ async def vqa(
             timeout=timeout_sec,
             check=False,  # don’t raise automatically; we’ll return stderr if needed
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         os.unlink(img_path)
-        raise HTTPException(504, f"Prediction timed out after {timeout_sec}s")
+        raise HTTPException(504, f"Prediction timed out after {timeout_sec}s") from e
 
     # Clean up the temp file
     try:

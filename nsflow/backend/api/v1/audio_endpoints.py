@@ -54,7 +54,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
         if not audio.content_type or not audio.content_type.startswith("audio/"):
             raise HTTPException(status_code=400, detail="Invalid file type. Please upload an audio file.")
 
-        logging.info(f"Received audio file: {audio.filename}, content-type: {audio.content_type}")
+        logging.info("Received audio file: %s, content-type: %s", audio.filename, audio.content_type)
 
         # Read file content
         content = await audio.read()
@@ -73,15 +73,16 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 temp_wav_path = temp_wav.name
 
             # Use pydub to convert MP3 to WAV
+
             try:
-                from pydub import AudioSegment
+                from pydub import AudioSegment  # pylint: disable=import-outside-toplevel
 
                 audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, "mp3")
                 audio_segment.export(temp_wav_path, format="wav")
-            except ImportError:
+            except ImportError as exc:
                 raise HTTPException(
                     status_code=500, detail="pydub library not installed. Required for audio conversion."
-                )
+                ) from exc
 
             # Load the audio file
             with sr.AudioFile(temp_wav_path) as source:
@@ -90,16 +91,16 @@ async def speech_to_text(audio: UploadFile = File(...)):
             # Use Google Speech Recognition
             transcribed_text = recognizer.recognize_google(audio_data)
 
-            logging.info(f"Transcription successful: {transcribed_text[:50]}...")
+            logging.info("Transcription successful: %.50s...", transcribed_text)
 
             return JSONResponse(content={"text": transcribed_text})
 
-        except sr.UnknownValueError:
+        except sr.UnknownValueError as exc:
             logging.warning("Google Speech Recognition could not understand the audio")
-            raise HTTPException(status_code=400, detail="Could not understand the audio")
-        except sr.RequestError as e:
-            logging.error(f"Google Speech Recognition service error: {e}")
-            raise HTTPException(status_code=503, detail="Speech recognition service unavailable")
+            raise HTTPException(status_code=400, detail="Could not understand the audio") from exc
+        except sr.RequestError as exc:
+            logging.error("Google Speech Recognition service error: %s", exc)
+            raise HTTPException(status_code=503, detail="Speech recognition service unavailable") from exc
         finally:
             # Clean up temporary files
             try:
@@ -108,9 +109,9 @@ async def speech_to_text(audio: UploadFile = File(...)):
             except OSError:
                 pass
 
-    except Exception as e:
-        logging.error(f"Error in speech_to_text: {e}")
-        raise HTTPException(status_code=500, detail=f"Speech-to-text processing failed: {str(e)}")
+    except Exception as exc:
+        logging.error("Error in speech_to_text: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Speech-to-text processing failed: {str(exc)}") from exc
 
 
 @router.post("/text_to_speech")
@@ -137,7 +138,7 @@ async def text_to_speech(request: TextToSpeechRequest):
         if not text or not text.strip():
             raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
-        logging.info(f"Received text for TTS: {text[:50]}...")
+        logging.info("Received text for TTS: %.50s...", text)
 
         # Create gTTS object
         tts = gTTS(text=text, lang="en", slow=False)
@@ -158,9 +159,9 @@ async def text_to_speech(request: TextToSpeechRequest):
             headers={"Content-Disposition": "attachment; filename=speech.mp3"},
         )
 
-    except Exception as e:
-        logging.error(f"Error in text_to_speech: {e}")
-        raise HTTPException(status_code=500, detail=f"Text-to-speech processing failed: {str(e)}")
+    except Exception as exc:
+        logging.error("Error in text_to_speech: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Text-to-speech processing failed: {str(exc)}") from exc
 
 
 # Dependencies required: pip install gtts speechrecognition pydub

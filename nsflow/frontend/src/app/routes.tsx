@@ -12,12 +12,15 @@
 
 import { Routes, Route } from 'react-router-dom';
 import Home from '../pages/Home/Home';
+import Editor from '../pages/Editor/Editor';
 import Observability from '../pages/Observability/Observability';
 
 export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Home />} /> {/* Serve Home directly at "/" */}
+      <Route path="/home" element={<Home />} /> {/* Explicit home route */}
+      <Route path="/editor" element={<Editor />} /> {/* Editor page */}
       <Route path="/observability" element={<Observability />} />
       <Route path="*" element={<Home />} /> {/* Optional fallback */}
     </Routes>
