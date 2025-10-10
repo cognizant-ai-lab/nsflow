@@ -379,7 +379,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         fitView
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        minZoom={0.1}
+        minZoom={0.01}
         maxZoom={3}
         // style={{ backgroundColor: theme.palette.background.default }}
       >
