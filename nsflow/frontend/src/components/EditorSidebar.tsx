@@ -82,7 +82,8 @@ const EditorSidebar = ({
   const [selectedNetworkOption, setSelectedNetworkOption] = useState<NetworkOption | null>(null);
   const [agentNetworkDefinition, setAgentNetworkDefinition] = useState<Record<string, any> | null>(null);
   const { apiUrl, isReady } = useApiPort();
-  const { chatMessages, getLastProgressMessage, getLastSlyDataMessage, newProgress, targetNetwork, newSlyData } = useChatContext();
+  const { chatMessages, getLastProgressMessage, getLastSlyDataMessage, 
+    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, newProgress, targetNetwork, newSlyData } = useChatContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [lastChatMessageCount, setLastChatMessageCount] = useState(0);
   const theme = useTheme();
@@ -242,7 +243,12 @@ const EditorSidebar = ({
     const latestProgress = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
     const latestSly = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
 
-    const payload = extractProgressPayload(latestSly) || extractProgressPayload(latestProgress);
+    // Decide which one to use based on which tick was updated last basis timestamp
+    const preferProgress = lastProgressAt > lastSlyDataAt;
+
+    const payload = preferProgress
+      ? extractProgressPayload(latestProgress) || extractProgressPayload(latestSly)
+      : extractProgressPayload(latestSly) || extractProgressPayload(latestProgress);
     // silently ignore; nothing to show yet
     if (!payload?.agent_network_definition || !payload?.agent_network_name) return;
 
@@ -302,7 +308,7 @@ const EditorSidebar = ({
   useEffect(() => {
     refreshFromLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newProgress, newSlyData, targetNetwork]);
+  }, [progressTick, slyDataTick, targetNetwork]);
 
   // External refresh trigger
   useEffect(() => {
