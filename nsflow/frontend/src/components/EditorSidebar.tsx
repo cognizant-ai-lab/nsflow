@@ -182,7 +182,14 @@ const EditorSidebar = ({
 
       const data = await response.json();
       // Both endpoints return { nodes: [...] } — keep sidebar identical across modes
-      setAgents(Array.isArray(data.nodes) ? data.nodes : []);
+      if (Array.isArray(data.nodes)) {
+        const sortedNodes = [...data.nodes].sort((a, b) =>
+          a.data?.label?.localeCompare(b.data?.label ?? "", undefined, { sensitivity: "base" })
+        );
+        setAgents(sortedNodes);
+      } else {
+        setAgents([]);
+      }
     } catch (err) {
       console.error("Error fetching agents:", err);
       setAgents([]);
