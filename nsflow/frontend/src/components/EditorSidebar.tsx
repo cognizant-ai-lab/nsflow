@@ -83,7 +83,7 @@ const EditorSidebar = ({
   const [agentNetworkDefinition, setAgentNetworkDefinition] = useState<Record<string, any> | null>(null);
   const { apiUrl, isReady } = useApiPort();
   const { chatMessages, getLastProgressMessage, getLastSlyDataMessage, 
-    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, newProgress, targetNetwork, newSlyData } = useChatContext();
+    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, targetNetwork } = useChatContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [lastChatMessageCount, setLastChatMessageCount] = useState(0);
   const theme = useTheme();
