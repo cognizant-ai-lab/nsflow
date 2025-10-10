@@ -567,7 +567,7 @@ const EditorAgentFlow = ({
         }}
         fitView
         attributionPosition="bottom-left"
-        minZoom={0.1}
+        minZoom={0.01}
         maxZoom={3}
       >
         <Background/>

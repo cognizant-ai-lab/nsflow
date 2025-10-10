@@ -366,7 +366,7 @@ const EditorSidebar = ({
 
     setLastChatMessageCount(currentCount);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, canEdit]);
+  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, slyDataTick, canEdit]);
 
   // keep true by default, but turn it off in view mode:
   useEffect(() => {
