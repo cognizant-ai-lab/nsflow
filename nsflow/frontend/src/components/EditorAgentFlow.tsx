@@ -71,13 +71,21 @@ const EditorAgentFlow = ({
   const [showLaunchButton, setShowLaunchButton] = useState(false);
 
   // We'll read the latest agent_network_definition from logs in view-mode
-  const { getLastProgressMessage, getLastSlyDataMessage, newProgress, newSlyData, targetNetwork } = useChatContext();
+  const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork, 
+    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt } = useChatContext();
 
   // latest definition for view-mode
   const getViewDefinition = useCallback(() => {
     const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
     const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
-    const payload = extractProgressPayload(s) || extractProgressPayload(p);
+
+    // Decide which one to use based on which tick was updated last basis timestamp
+    const preferProgress = lastProgressAt > lastSlyDataAt;
+
+    const payload = preferProgress
+      ? extractProgressPayload(p) || extractProgressPayload(s)
+      : extractProgressPayload(s) || extractProgressPayload(p);
+
     return payload?.agent_network_definition as Record<string, any> | undefined;
   }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
 
@@ -310,12 +318,6 @@ const EditorAgentFlow = ({
     setSelectedNodeId("");
   };
 
-  // const handleAddAgent = (x: number, y: number) => {
-  //   console.log("Add agent at:", x, y);
-  //   // TODO: Open add agent dialog
-  //   setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-  // };
-
   const handleDuplicateAgent = async (nodeId: string) => {
     // console.log("Duplicate agent:", nodeId, "selectedDesignId:", selectedDesignId);
     
@@ -489,17 +491,17 @@ const EditorAgentFlow = ({
   // refetch when new progress/slydata ticks arrive (view-mode only)
   useEffect(() => {
     if (!canEdit && selectedNetwork) {
-      shouldForceLayoutRef.current = true;
-      const def = getViewDefinition();
-      if (def) {
-        fetchNetworkData(def);       // pass override so we POST exactly what just arrived
-      } else {
-        // fallback: still try; fetchNetworkData() will call getViewDefinition() internally
-        fetchNetworkData();
-      }
+      const timeout = setTimeout(() => {
+        shouldForceLayoutRef.current = true;
+        const def = getViewDefinition();
+        if (def) fetchNetworkData(def);  // pass override so we POST exactly what just arrived
+        else fetchNetworkData();  // fallback: still try; fetchNetworkData() will call getViewDefinition() internally
+      }, 200); // slight debounce
+
+      return () => clearTimeout(timeout);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newProgress, newSlyData, selectedNetwork, canEdit]);
+  }, [progressTick, slyDataTick, selectedNetwork, canEdit]);
 
   // After nodes/edges update, run animated relayout once
   useEffect(() => {
@@ -523,8 +525,7 @@ const EditorAgentFlow = ({
         setShowLaunchButton(true);
       }
     }
-  }, [newProgress, newSlyData, selectedNetwork, canEdit, getLatestAgentNetworkName]);
-
+  }, [progressTick, slyDataTick, selectedNetwork, canEdit, getLatestAgentNetworkName]);
 
 
   return (
