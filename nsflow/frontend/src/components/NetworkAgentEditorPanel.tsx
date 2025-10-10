@@ -46,7 +46,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const [hasChanges, setHasChanges] = useState(false);
   const [, setOriginalData] = useState<any>(null);
   const [schema, setSchema] = useState<any>(null);
-  const { getLastProgressMessage, getLastSlyDataMessage, newProgress, newSlyData, targetNetwork } = useChatContext();
+  const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork } = useChatContext();
   
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -104,14 +104,6 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setSuccess(null);
     }
   }, [selectedAgentName, selectedDesignId, apiUrl, canEdit]);
-
-  // When new messages arrive, refresh the open agent in view-mode
-  useEffect(() => {
-    if (!canEdit && selectedAgentName) {
-      loadAgentData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newProgress, newSlyData]);
 
   const loadSchema = async () => {
     if (!apiUrl) return;

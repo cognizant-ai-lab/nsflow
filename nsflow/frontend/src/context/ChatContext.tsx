@@ -71,6 +71,11 @@ type ChatContextType = {
   makeSlyDataConnectionId: () => string;
   makeLogConnectionId: () => string;
   makeProgressConnectionId: () => string;
+
+  progressTick: number;
+  slyDataTick: number;
+  lastProgressAt: number;
+  lastSlyDataAt: number;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -103,6 +108,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [newSlyData, setNewSlyData] = useState<string>("");
   const [newLog, setNewLog] = useState<string>("");
   const [newProgress, setNewProgress] = useState<string>("");
+
+  const [progressTick, setProgressTick] = useState(0);
+  const [slyDataTick, setSlyDataTick] = useState(0);
+  const [lastProgressAt, setLastProgressAt] = useState<number>(0);
+  const [lastSlyDataAt, setLastSlyDataAt] = useState<number>(0);
   // define Workflow Agent Network Designer Name coming in from env variable
   const { wandName } = getWandName();
 
@@ -133,6 +143,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     if (msg.connectionId) {
       setLastSlyDataByConn(prev => ({ ...prev, [msg.connectionId!]: msg }));
     }
+    setSlyDataTick((n) => n + 1);
+    setLastSlyDataAt(Date.now());
   };
 
   const getLastSlyDataMessage = (opts?: { network?: string; connectionId?: string }) => {
@@ -165,6 +177,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     if (msg.connectionId) {
       setLastProgressByConn(prev => ({ ...prev, [msg.connectionId!]: msg }));
     }
+    setProgressTick((n) => n + 1);
+    setLastProgressAt(Date.now());
   };
 
   const getLastProgressMessage = (opts?: { network?: string; connectionId?: string }) => {
@@ -190,7 +204,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
       getLastSlyDataMessage, getLastLogMessage, getLastProgressMessage,
 
-      makeSlyDataConnectionId, makeLogConnectionId, makeProgressConnectionId
+      makeSlyDataConnectionId, makeLogConnectionId, makeProgressConnectionId,
+      progressTick, slyDataTick, lastProgressAt, lastSlyDataAt
      }}>
       {children}
     </ChatContext.Provider>
