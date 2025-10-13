@@ -45,7 +45,7 @@ ACCEPTABLE_MODEL_NAMES = [
 
 router = APIRouter(prefix="/api/v1")
 
-QuestionField = Annotated[str, StringConstraints(min_length=3, max_length=100, strip_whitespace=True)]
+QuestionField = Annotated[str, StringConstraints(min_length=3, max_length=256, strip_whitespace=True)]
 
 
 @router.post("/vqa")
