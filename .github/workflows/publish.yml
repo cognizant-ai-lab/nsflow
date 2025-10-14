@@ -10,8 +10,8 @@ jobs:
     name: Build and Publish
     runs-on: ubuntu-latest
     environment: pypi  # Match this to your configured GitHub Environment.
-      permissions:
-    id-token: write #Mandatory for PyPi Trusted Publishing (configured at pypi.org)
+    permissions:
+      id-token: write #Mandatory for PyPi Trusted Publishing (configured at pypi.org)
 
     steps:
       - name: Checkout code
