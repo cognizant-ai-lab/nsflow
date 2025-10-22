@@ -34,7 +34,7 @@ def get_networks():
     return agent_utils.list_available_networks()
 
 
-@router.get("/connectivity/{network_name}", responses={200: {"description": "Agent Network found"},
+@router.get("/connectivity/{network_name:path}", responses={200: {"description": "Agent Network found"},
                                                   404: {"description": "Agent Network not found"}})
 async def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
