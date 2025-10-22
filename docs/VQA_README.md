@@ -30,4 +30,10 @@ pip install -e .
 pip install opencv-python==4.8.0.74
 ```
 
-6. Refer to [vqa_endpoints.py](../nsflow/backend/api/v1/vqa_endpoints.py) for example `curl` commands to call the endpoint.
+6. Set `NSFLOW_PLUGIN_VQA_ENDPOINT` environment variable to `True` for the VQA endpoints to be added to the http service.
+
+```bash
+export NSFLOW_PLUGIN_VQA_ENDPOINT=True
+```
+
+7. Refer to [vqa_endpoints.py](../nsflow/backend/api/v1/vqa_endpoints.py) for example `curl` commands to call the endpoint.
