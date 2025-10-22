@@ -16,7 +16,6 @@ This is the FastAPI endpoints for streaming_chat, logs, connectivity & function
 For now, we have separate end-points for OpenAPI specs
 """
 
-import json
 from fastapi import APIRouter, WebSocket
 
 from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils

@@ -13,10 +13,22 @@ import React, { useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import { FaCopy } from "react-icons/fa";
-import { Clipboard, Volume2 } from "lucide-react";
+import { 
+  Box, 
+  Typography, 
+  IconButton, 
+  Paper, 
+  Tooltip,
+  alpha,
+  Chip
+} from "@mui/material";
+import { 
+  ContentCopy as CopyIcon,
+  VolumeUp as VolumeIcon
+} from "@mui/icons-material";
 
 import { Message } from "../types/chat";
+import { useTheme } from "../context/ThemeContext";
 
 // type Message = {
 //   sender: "user" | "agent" | "system";
@@ -56,121 +68,339 @@ const ScrollableMessageContainer: React.FC<Props> = ({
     }`
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { theme } = useTheme();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Helper function to get message colors based on sender
+  const getMessageColors = (sender: string) => {
+    switch (sender) {
+      case "user":
+        return {
+          backgroundColor: theme.palette.primary.main,
+          color: theme.palette.primary.contrastText,
+          chipColor: theme.palette.primary.dark,
+        };
+      case "agent":
+        return {
+          backgroundColor: alpha(theme.palette.secondary.main, 0.1),
+          color: theme.palette.text.primary,
+          chipColor: theme.palette.secondary.main,
+        };
+      case "system":
+        return {
+          backgroundColor: alpha(theme.palette.info.main, 0.1),
+          color: theme.palette.text.primary,
+          chipColor: theme.palette.info.main,
+        };
+      default:
+        return {
+          backgroundColor: alpha(theme.palette.grey[500], 0.1),
+          color: theme.palette.text.primary,
+          chipColor: theme.palette.grey[500],
+        };
+    }
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto pr-1">
-      <div className="chat-messages-container">
-        {messages.map((msg, index) => (
-          <div key={index} className={getMessageClass(msg)}>
-            <div className="font-bold mb-1 flex justify-between items-center">
-              <span>{renderSenderLabel(msg)}</span>
-              <div className="flex items-center space-x-1">
-                {useSpeech && onTextToSpeech && (
-                  <button
-                    onClick={() => onTextToSpeech(msg.text, index)}
-                    className="text-gray-400 hover:text-white p-1"
-                    title="Text to speech"
-                  >
-                    <Volume2 size={10} />
-                  </button>
-                )}
-                <button
-                  onClick={() => onCopy(msg.text, index)}
-                  className="text-gray-400 hover:text-white p-1"
-                  title="Copy to clipboard"
-                >
-                  <Clipboard size={10} />
-                </button>
-              </div>
-            </div>
-
-            <div className="chat-markdown">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={{
-                  h1: ({ children }) => <h1 className="text-2xl font-bold mt-4 mb-2 text-[var(--chat-message-text-color)]">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-xl font-semibold mt-3 mb-2 text-[var(--chat-message-text-color)]">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-semibold mt-2 mb-1 text-[var(--chat-message-text-color)]">{children}</h3>,
-                  ul: ({ children }) => <ul className="list-disc ml-6 text-[var(--chat-message-text-color)]">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal ml-6 text-[var(--chat-message-text-color)]">{children}</ol>,
-                  li: ({ children }) => <li className="ml-2 text-[var(--chat-message-text-color)]">{children}</li>,
-                  p: ({ children }) => <p className="mb-2 leading-relaxed text-[var(--chat-message-text-color)]">{children}</p>,
-                  strong: ({ children }) => <strong className="font-bold text-[var(--chat-message-text-color)]">{children}</strong>,
-                  em: ({ children }) => <em className="italic text-gray-300 text-[var(--chat-message-text-color)]">{children}</em>,
-                  a: ({ children, href }) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                      {children}
-                    </a>
-                  ),
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-gray-400 pl-4 italic text-gray-300">
-                      {children}
-                    </blockquote>
-                  ),
-                  pre: ({ children }) => (
-                    <pre className="bg-gray-900 text-gray-300 p-3 rounded-md overflow-x-auto">{children}</pre>
-                  ),
-                  code: ({ className = "", children, ...props }) => {
-                    const isBlock = className.includes("language-");
-                    const codeContent = String(children).trim();
-
-                    if (isBlock) {
-                      return (
-                        <div className="relative group my-2">
-                          <pre
-                            className="rounded p-3 overflow-x-auto text-sm"
-                            style={{
-                              backgroundColor: "var(--code-block-bg)",
-                              color: "var(--code-block-text)",
-                            }}
-                          >
-                            <code className={className} {...props}>
-                              {codeContent}
-                            </code>
-                          </pre>
-                          <button
-                            onClick={() => onCopy(codeContent, index)}
-                            className="copy-button"
-                            title="Copy to clipboard"
-                          >
-                            <FaCopy size={10} />
-                          </button>
-                        </div>
-                      );
+    <Box sx={{ 
+      flexGrow: 1, 
+      overflow: 'auto', 
+      pr: 0.5,
+      backgroundColor: theme.palette.background.default
+    }}>
+      <Box sx={{ 
+        p: 0.5,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1
+      }}>
+        {messages.map((msg, index) => {
+          const colors = getMessageColors(msg.sender);
+          const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+          const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
+          
+          return (
+            <Paper
+              key={key}
+              elevation={1}
+              data-msg-class={getMessageClass(msg)}
+              sx={{
+                p: 0.5,
+                pb: 0,
+                backgroundColor: colors.backgroundColor,
+                color: colors.color,
+                maxWidth: msg.sender === "user" ? "75%" : "90%",
+                alignSelf: msg.sender === "user" ? "flex-end" : "flex-start",
+                position: 'relative',
+                border: `1px solid ${alpha(colors.chipColor, 0.2)}`,
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  boxShadow: theme.shadows[2],
+                }
+              }}
+            >
+              {/* Compact Header with sender and actions */}
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                mb: 0,
+                minHeight: '20px'
+              }}>
+                <Chip
+                  label={renderSenderLabel(msg)}
+                  size="small"
+                  sx={{
+                    backgroundColor: colors.chipColor,
+                    color: 'white',
+                    fontWeight: 500,
+                    fontSize: '0.65rem',
+                    height: '20px',
+                    '& .MuiChip-label': {
+                      px: 0.75,
+                      py: 0
                     }
-
-                    return (
-                      <code
-                        className="px-1 py-0.5 rounded"
-                        style={{
-                          backgroundColor: "var(--code-inline-bg)",
-                          color: "var(--code-inline-text)",
+                  }}
+                />
+                
+                <Box sx={{ display: 'flex', gap: 0.25 }}>
+                  {useSpeech && onTextToSpeech && (
+                    <Tooltip title="Text to speech">
+                      <IconButton
+                        size="small"
+                        onClick={() => onTextToSpeech(messageText, index)}
+                        sx={{ 
+                          color: colors.color,
+                          opacity: 0.6,
+                          p: 0.25,
+                          '&:hover': { 
+                            opacity: 1,
+                            backgroundColor: alpha(colors.chipColor, 0.1)
+                          }
                         }}
                       >
-                        {codeContent}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {msg.text}
-              </ReactMarkdown>
-            </div>
+                        <VolumeIcon sx={{ fontSize: '0.875rem' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  
+                  <Tooltip title="Copy to clipboard">
+                    <IconButton
+                      size="small"
+                      onClick={() => onCopy(messageText, index)}
+                      sx={{ 
+                        color: colors.color,
+                        opacity: 0.6,
+                        p: 0.25,
+                        '&:hover': { 
+                          opacity: 1,
+                          backgroundColor: alpha(colors.chipColor, 0.1)
+                        }
+                      }}
+                    >
+                      <CopyIcon sx={{ fontSize: '0.875rem' }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
 
-            {copiedMessage === index && (
-              <div className="absolute top-0 right-6 bg-gray-800 text-white text-xs p-1 rounded-md">
-                Copied!
-              </div>
-            )}
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-    </div>
+              {/* Message Content */}
+              <Box sx={{ color: colors.color }}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    h1: ({ children }) => (
+                      <Typography variant="h4" sx={{ mt: 2, mb: 1, fontWeight: 'bold', color: colors.color }}>
+                        {children}
+                      </Typography>
+                    ),
+                    h2: ({ children }) => (
+                      <Typography variant="h5" sx={{ mt: 1.5, mb: 1, fontWeight: 600, color: colors.color }}>
+                        {children}
+                      </Typography>
+                    ),
+                    h3: ({ children }) => (
+                      <Typography variant="h6" sx={{ mt: 1, mb: 0.5, fontWeight: 600, color: colors.color }}>
+                        {children}
+                      </Typography>
+                    ),
+                    ul: ({ children }) => (
+                      <Box component="ul" sx={{ pl: 3, color: colors.color, listStyleType: 'disc' }}>
+                        {children}
+                      </Box>
+                    ),
+                    ol: ({ children }) => (
+                      <Box component="ol" sx={{ pl: 3, color: colors.color, listStyleType: 'decimal' }}>
+                        {children}
+                      </Box>
+                    ),
+                    li: ({ children }) => (
+                      <Typography component="li" sx={{ mb: 0.5, color: colors.color }}>
+                        {children}
+                      </Typography>
+                    ),
+                    p: ({ children }) => (
+                      <Typography variant="body2" sx={{ mb: 1, lineHeight: 1.6, color: colors.color }}>
+                        {children}
+                      </Typography>
+                    ),
+                    strong: ({ children }) => (
+                      <Typography component="strong" sx={{ fontWeight: 'bold', color: colors.color }}>
+                        {children}
+                      </Typography>
+                    ),
+                    em: ({ children }) => (
+                      <Typography component="em" sx={{ fontStyle: 'italic', color: colors.color, opacity: 0.9 }}>
+                        {children}
+                      </Typography>
+                    ),
+                    a: ({ children, href }) => (
+                      <Typography
+                        component="a"
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{
+                          color: theme.palette.primary.light,
+                          textDecoration: 'none',
+                          '&:hover': { textDecoration: 'underline' }
+                        }}
+                      >
+                        {children}
+                      </Typography>
+                    ),
+                    blockquote: ({ children }) => (
+                      <Box
+                        sx={{
+                          borderLeft: `4px solid ${alpha(colors.chipColor, 0.5)}`,
+                          pl: 2,
+                          py: 1,
+                          fontStyle: 'italic',
+                          backgroundColor: alpha(colors.chipColor, 0.05),
+                          borderRadius: '0 4px 4px 0',
+                          color: colors.color
+                        }}
+                      >
+                        {children}
+                      </Box>
+                    ),
+                    pre: ({ children }) => (
+                      <Box
+                        component="pre"
+                        sx={{
+                          backgroundColor: alpha(theme.palette.common.black, 0.1),
+                          color: theme.palette.text.primary,
+                          p: 2,
+                          borderRadius: 1,
+                          overflow: 'auto',
+                          fontSize: '0.875rem',
+                          fontFamily: 'monospace',
+                          border: `1px solid ${theme.palette.divider}`
+                        }}
+                      >
+                        {children}
+                      </Box>
+                    ),
+                    code: ({ className = "", children, ...props }) => {
+                      const isBlock = className.includes("language-");
+                      const codeContent = String(children).trim();
+
+                      if (isBlock) {
+                        return (
+                          <Box sx={{ position: 'relative', my: 1 }}>
+                            <Box
+                              component="pre"
+                              sx={{
+                                backgroundColor: alpha(theme.palette.common.black, 0.1),
+                                color: theme.palette.text.primary,
+                                p: 2,
+                                borderRadius: 1,
+                                overflow: 'auto',
+                                fontSize: '0.875rem',
+                                fontFamily: 'monospace',
+                                border: `1px solid ${theme.palette.divider}`
+                              }}
+                            >
+                              <code className={className} {...props}>
+                                {codeContent}
+                              </code>
+                            </Box>
+                            
+                            <Tooltip title="Copy code">
+                              <IconButton
+                                size="small"
+                                onClick={() => onCopy(codeContent, index)}
+                                sx={{
+                                  position: 'absolute',
+                                  top: 8,
+                                  right: 8,
+                                  backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                                  color: theme.palette.text.secondary,
+                                  '&:hover': {
+                                    backgroundColor: theme.palette.background.paper,
+                                    color: theme.palette.text.primary
+                                  }
+                                }}
+                              >
+                                <CopyIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        );
+                      }
+
+                      return (
+                        <Typography
+                          component="code"
+                          sx={{
+                            backgroundColor: alpha(colors.chipColor, 0.1),
+                            color: colors.color,
+                            px: 0.5,
+                            py: 0.25,
+                            borderRadius: 0.5,
+                            fontSize: '0.875rem',
+                            fontFamily: 'monospace'
+                          }}
+                        >
+                          {codeContent}
+                        </Typography>
+                      );
+                    },
+                  }}
+                >
+                  {messageText}
+                </ReactMarkdown>
+              </Box>
+
+              {/* Copied notification */}
+              {copiedMessage === index && (
+                <Paper
+                  elevation={3}
+                  sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 60,
+                    backgroundColor: theme.palette.success.main,
+                    color: 'white',
+                    px: 1,
+                    py: 0.5,
+                    borderRadius: 1,
+                    fontSize: '0.75rem',
+                    zIndex: 1000
+                  }}
+                >
+                  Copied!
+                </Paper>
+              )}
+            </Paper>
+          );
+        })}
+        <Box ref={messagesEndRef} />
+      </Box>
+    </Box>
   );
 };
 

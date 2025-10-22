@@ -22,6 +22,7 @@ registries/
 coded_tools/
 generated_notebooks/
 toolbox/
+draft_states/
 
 # Virtual environments
 .venv

@@ -12,13 +12,14 @@
 
 import asyncio
 from copy import copy
-import logging
 from typing import Dict, Any, Optional, Generator
 
 from neuro_san.interfaces.agent_session import AgentSession
 from neuro_san.internals.messages.origination import Origination
 from neuro_san.client.streaming_input_processor import StreamingInputProcessor
 
+
+# pylint: disable=too-many-locals, useless-parent-delegation
 class AsyncStreamingInputProcessor(StreamingInputProcessor):
     """
     Processes AgentCli input by using the neuro-san streaming API.

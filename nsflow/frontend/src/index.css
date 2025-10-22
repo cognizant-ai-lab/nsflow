@@ -504,6 +504,21 @@ input:focus {
   color: white;
 }
 
+.react-flow__controls-button {
+  width: 8px;  /* or 32px for slightly bigger buttons */
+  height: 8px;
+  padding: 2px;
+  border-radius: 4px;
+  /* reduce vertical gap between each button */
+  margin-top: 1px;
+  transition: background-color 0.2s ease;
+}
+
+.react-flow__controls-button:hover {
+  background-color: #fb923c; /* Hover color (orange-ish) */
+  color: white;
+}
+
 .agent-flow-container .react-flow__controls-button svg {
   width: 10px; /* Resize icon */
   height: 10px;
@@ -1029,7 +1044,7 @@ input:focus {
 
 .react-flow__edge-path {
   stroke: white;
-  stroke-width: 2;
+  stroke-width: 3;
 }
 
 .react-flow__handle {
