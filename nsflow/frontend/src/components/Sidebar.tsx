@@ -10,25 +10,11 @@
 //
 // END COPYRIGHT
 import { useEffect, useState, useRef, useCallback } from "react";
-import { 
-  Box, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  FormControl, 
-  FormLabel, 
-  RadioGroup, 
-  FormControlLabel, 
-  Radio, 
-  Alert, 
-  useTheme,
-  alpha
-} from "@mui/material";
-import { 
-  HubTwoTone as NetworkIcon,
-  Search as SearchIcon
-} from "@mui/icons-material";
+import { Box, Typography, TextField, Button, Paper, FormControl, FormLabel, RadioGroup, 
+  FormControlLabel, Radio, Alert, useTheme,alpha, Tooltip } from "@mui/material";
+import { HubTwoTone as NetworkIcon, Search as SearchIcon, 
+  Folder, FolderOpen, AccountTreeTwoTone } from "@mui/icons-material";
+import { SimpleTreeView, TreeItem, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -50,6 +36,172 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tempConnectionType, setTempConnectionType] = useState<string>(connectionType ?? "http");
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // --- Helper to build nested tree from agent names ---
+  const buildTree = (agents: string[]) => {
+    const root: any = {};
+    for (const name of agents) {
+      const parts = name.split("/");
+      let current = root;
+      parts.forEach((part, idx) => {
+        if (!current[part]) current[part] = { __children: {} };
+        if (idx === parts.length - 1) current[part].__isAgent = true;
+        current = current[part].__children;
+      });
+    }
+    return root;
+  };
+
+  // --- Recursive render function with original visuals preserved ---
+  const renderTree = (
+    node: any,
+    path: string[] = [],
+    activeNetwork: string,
+    theme: any,
+    onSelect: (n: string) => void
+  ) => {
+    return Object.entries(node).map(([key, value]) => {
+      const fullPath = [...path, key].join("/");
+      const children = (value as any).__children || {};
+      const isAgent = (value as any).__isAgent;
+      const hasChildren = Object.keys(children).length > 0;
+
+      // --- Agent leaf node (inline icon, original Paper styling) ---
+      if (isAgent && !hasChildren) {
+        const isActive = activeNetwork === fullPath;
+        return (
+          <TreeItem
+            key={fullPath}
+            itemId={fullPath}
+            onClick={() => onSelect(fullPath)}
+            // Remove tree icon spacing for leaves so they align with folders
+            sx={{
+              [`& .${treeItemClasses.iconContainer}`]: {
+                width: 0,
+                display: "none",
+              },
+              // keep TreeItem content compact
+              [`& .${treeItemClasses.content}`]: {
+                minHeight: "unset",
+                py: 0,
+              },
+            }}
+            label={
+              <Paper
+                elevation={isActive ? 2 : 0}
+                sx={{
+                  mb: 0.5,
+                  borderRadius: 1,
+                  border: `1px solid ${theme.palette.divider}`,
+                  backgroundColor: isActive
+                    ? alpha(theme.palette.primary.main, 0.1)
+                    : "transparent",
+                  "&:hover": {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                    cursor: "pointer",
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    px: 1,
+                    py: 0.5,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.4,
+                    borderLeft: isActive
+                      ? `3px solid ${theme.palette.primary.main}`
+                      : "none",
+                    overflow: "hidden",
+                  }}
+                >
+                  <AccountTreeTwoTone
+                    sx={{
+                      fontSize: 12,
+                      color: isActive
+                        ? theme.palette.primary.main
+                        : theme.palette.text.secondary,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Tooltip title={fullPath} placement="right">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: "0.7rem",
+                        color: isActive
+                          ? theme.palette.primary.main
+                          : theme.palette.text.primary,
+                        fontWeight: isActive ? 600 : 400,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        display: "block",
+                        flexGrow: 1,
+                      }}
+                    >
+                      {key}
+                    </Typography>
+                  </Tooltip>
+                </Box>
+              </Paper>
+            }
+          />
+        );
+      }
+
+      // --- Directory node (no extra left indent at this level) ---
+      // Apply indent ONLY to this directory's children (not globally)
+      return (
+        <TreeItem
+          key={fullPath}
+          itemId={fullPath}
+          label={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, py: 0.2 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  fontSize: "0.7rem",
+                  color: theme.palette.text.secondary,
+                  fontWeight: 600,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={key}
+              >
+                {key}
+              </Typography>
+            </Box>
+          }
+          slots={{
+            collapseIcon: FolderOpen,
+            expandIcon: Folder,
+          }}
+          sx={{
+            // Make directory row compact + hover tint
+            [`& .${treeItemClasses.content}`]: {
+              minHeight: "unset",
+              py: 0.1,
+              "&:hover": {
+                backgroundColor: alpha(theme.palette.primary.main, 0.03),
+                borderRadius: 1,
+              },
+            },
+            // IMPORTANT: indent ONLY this folder's children (not the root)
+            [`& > .${treeItemClasses.groupTransition}`]: {
+              marginLeft: '2px', // ~1.5 spacing for children under this dir
+              paddingLeft: '4px',
+              borderLeft: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+            },
+          }}
+        >
+          {renderTree(children, [...path, key], activeNetwork, theme, onSelect)}
+        </TreeItem>
+      );
+    });
+  };
+
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -387,59 +539,34 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
               ))}
             </Alert>
           )}
-
-          <Box sx={{ p: 0.5 }}>
-            {networks
-              .filter((network) =>
-                network.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .map((network) => (
-                <Paper
-                  key={network}
-                  elevation={activeNetwork === network ? 2 : 0}
-                  sx={{
-                    mb: 0.5,
+          <Box sx={{ p: 0.5, height: "100%", overflowY: "auto" }}>
+            {!loading && !error && (
+              <SimpleTreeView
+                disableSelection
+                sx={{
+                  // Keep global rows compact, but DO NOT indent root
+                  [`& .${treeItemClasses.label}`]: { py: 0 },
+                  [`& .${treeItemClasses.content}`]: {
+                    minHeight: "1.2rem",
                     borderRadius: 1,
-                    border: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: activeNetwork === network 
-                      ? alpha(theme.palette.primary.main, 0.1) 
-                      : 'transparent',
-                    '&:hover': {
-                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                      cursor: 'pointer'
-                    }
-                  }}
-                  onClick={() => handleNetworkSelection(network)}
-                >
-                  <Box sx={{ 
-                    px: 1, 
-                    py: 0.5,
-                    borderLeft: activeNetwork === network 
-                      ? `3px solid ${theme.palette.primary.main}` 
-                      : 'none',
-                    overflow: 'hidden' // Prevent overflow on very small widths
-                  }}>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: '0.7rem',
-                        color: activeNetwork === network 
-                          ? theme.palette.primary.main 
-                          : theme.palette.text.primary,
-                        fontWeight: activeNetwork === network ? 600 : 400,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        display: 'block'
-                      }}
-                      title={network} // Show full name on hover
-                    >
-                      {network}
-                    </Typography>
-                  </Box>
-                </Paper>
-              ))}
+                  },
+                }}
+              >
+                {renderTree(
+                  buildTree(
+                    networks.filter((n) =>
+                      n.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                  ),
+                  [],
+                  activeNetwork,
+                  theme,
+                  handleNetworkSelection
+                )}
+              </SimpleTreeView>
+            )}
           </Box>
+
           <div ref={networksEndRef} />
         </Box>
       </Paper>
