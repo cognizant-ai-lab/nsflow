@@ -11,14 +11,14 @@
 // END COPYRIGHT
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, FormLabel, RadioGroup, 
-  FormControlLabel, Radio, Alert, useTheme,alpha, Tooltip } from "@mui/material";
-import { HubTwoTone as NetworkIcon, Search as SearchIcon, 
-  Folder, FolderOpen, AccountTreeTwoTone } from "@mui/icons-material";
-import { SimpleTreeView, TreeItem, treeItemClasses } from "@mui/x-tree-view";
+  FormControlLabel, Radio, Alert, useTheme,alpha } from "@mui/material";
+import { HubTwoTone as NetworkIcon, Search as SearchIcon } from "@mui/icons-material";
+import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
+import { buildTree, renderTree, getAncestorDirs } from "../utils/sidebarHelpers";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [networks, setNetworks] = useState<string[]>([]);
@@ -37,18 +37,6 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userExpanded, setUserExpanded] = useState<string[]>([]);
-
-  // Helper for sidebar directory expanded state
-  const getAncestorDirs = (fullPath: string) => {
-    // "dir1/sub/agentA" -> ["dir1", "dir1/sub"]
-    const parts = fullPath.split("/");
-    const dirs: string[] = [];
-    for (let i = 1; i < parts.length; i++) {
-      const candidate = parts.slice(0, i).join("/");
-      dirs.push(candidate);
-    }
-    return dirs;
-  };
 
   const filteredNetworks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -74,196 +62,6 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       ? Array.from(new Set([...userExpanded, ...searchExpanded]))
       : userExpanded;
   }, [userExpanded, searchExpanded, searchQuery]);
-
-  // --- Helper to build nested tree from agent names ---
-  const buildTree = (agents: string[]) => {
-    const root: any = {};
-    for (const name of agents) {
-      const parts = name.split("/");
-      let current = root;
-      parts.forEach((part, idx) => {
-        if (!current[part]) current[part] = { __children: {} };
-        if (idx === parts.length - 1) current[part].__isAgent = true;
-        current = current[part].__children;
-      });
-    }
-    return root;
-  };
-
-  // Sort entries so that directories come first (A→Z), then agents (A→Z)
-  const sortNodeEntries = (node: any) => {
-    const dirs: [string, any][] = [];
-    const agents: [string, any][] = [];
-
-    for (const [key, val] of Object.entries(node)) {
-      const children = (val as any).__children || {};
-      const hasChildren = Object.keys(children).length > 0;
-      const isAgent = (val as any).__isAgent && !hasChildren;
-
-      if (hasChildren) dirs.push([key, val]);
-      else if (isAgent) agents.push([key, val]);
-      else agents.push([key, val]); // fallback: treat as agent if uncertain
-    }
-
-    const cmp = (a: [string, any], b: [string, any]) =>
-      a[0].localeCompare(b[0], undefined, { sensitivity: "base", numeric: true });
-
-    dirs.sort(cmp);
-    agents.sort(cmp);
-
-    return [...dirs, ...agents];
-  };
-
-  // --- Recursive render function with original visuals preserved ---
-  const renderTree = (
-    node: any,
-    path: string[] = [],
-    activeNetwork: string,
-    theme: any,
-    onSelect: (n: string) => void
-  ) => {
-    return sortNodeEntries(node).map(([key, value]) => {
-      const fullPath = [...path, key].join("/");
-      const children = (value as any).__children || {};
-      const isAgent = (value as any).__isAgent;
-      const hasChildren = Object.keys(children).length > 0;
-
-      // --- Agent leaf node (inline icon, original Paper styling) ---
-      if (isAgent && !hasChildren) {
-        const isActive = activeNetwork === fullPath;
-        return (
-          <TreeItem
-            key={fullPath}
-            itemId={fullPath}
-            onClick={() => onSelect(fullPath)}
-            // Remove tree icon spacing for leaves so they align with folders
-            sx={{
-              [`& .${treeItemClasses.iconContainer}`]: {
-                width: 0,
-                display: "none",
-              },
-              // keep TreeItem content compact
-              [`& .${treeItemClasses.content}`]: {
-                minHeight: "unset",
-                py: 0,
-              },
-            }}
-            label={
-              <Paper
-                elevation={isActive ? 2 : 0}
-                sx={{
-                  mb: 0.5,
-                  borderRadius: 1,
-                  border: `1px solid ${theme.palette.divider}`,
-                  backgroundColor: isActive
-                    ? alpha(theme.palette.primary.main, 0.1)
-                    : "transparent",
-                  "&:hover": {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                    cursor: "pointer",
-                  },
-                }}
-              >
-                <Box
-                  sx={{
-                    px: 1,
-                    py: 0.5,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.4,
-                    borderLeft: isActive
-                      ? `3px solid ${theme.palette.primary.main}`
-                      : "none",
-                    overflow: "hidden",
-                  }}
-                >
-                  <AccountTreeTwoTone
-                    sx={{
-                      fontSize: 12,
-                      color: isActive
-                        ? theme.palette.primary.main
-                        : theme.palette.text.secondary,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <Tooltip title={fullPath} placement="right">
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: "0.7rem",
-                        color: isActive
-                          ? theme.palette.primary.main
-                          : theme.palette.text.primary,
-                        fontWeight: isActive ? 600 : 400,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        display: "block",
-                        flexGrow: 1,
-                      }}
-                    >
-                      {key}
-                    </Typography>
-                  </Tooltip>
-                </Box>
-              </Paper>
-            }
-          />
-        );
-      }
-
-      // --- Directory node (no extra left indent at this level) ---
-      // Apply indent ONLY to this directory's children (not globally)
-      return (
-        <TreeItem
-          key={fullPath}
-          itemId={fullPath}
-          label={
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, py: 0.2 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  fontSize: "0.7rem",
-                  color: theme.palette.text.secondary,
-                  fontWeight: 600,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={key}
-              >
-                {key}
-              </Typography>
-            </Box>
-          }
-          slots={{
-            collapseIcon: FolderOpen,
-            expandIcon: Folder,
-          }}
-          sx={{
-            // Make directory row compact + hover tint
-            [`& .${treeItemClasses.content}`]: {
-              minHeight: "unset",
-              py: 0.1,
-              "&:hover": {
-                backgroundColor: alpha(theme.palette.primary.main, 0.03),
-                borderRadius: 1,
-              },
-            },
-            // IMPORTANT: indent ONLY this folder's children (not the root)
-            [`& > .${treeItemClasses.groupTransition}`]: {
-              marginLeft: '2px', // ~1.5 spacing for children under this dir
-              paddingLeft: '4px',
-              borderLeft: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
-            },
-          }}
-        >
-          {renderTree(children, [...path, key], activeNetwork, theme, onSelect)}
-        </TreeItem>
-      );
-    });
-  };
-
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
