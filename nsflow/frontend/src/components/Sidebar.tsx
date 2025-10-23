@@ -9,7 +9,7 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, FormLabel, RadioGroup, 
   FormControlLabel, Radio, Alert, useTheme,alpha, Tooltip } from "@mui/material";
 import { HubTwoTone as NetworkIcon, Search as SearchIcon, 
@@ -36,6 +36,44 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tempConnectionType, setTempConnectionType] = useState<string>(connectionType ?? "http");
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [userExpanded, setUserExpanded] = useState<string[]>([]);
+
+  // Helper for sidebar directory expanded state
+  const getAncestorDirs = (fullPath: string) => {
+    // "dir1/sub/agentA" -> ["dir1", "dir1/sub"]
+    const parts = fullPath.split("/");
+    const dirs: string[] = [];
+    for (let i = 1; i < parts.length; i++) {
+      const candidate = parts.slice(0, i).join("/");
+      dirs.push(candidate);
+    }
+    return dirs;
+  };
+
+  const filteredNetworks = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return q
+      ? networks.filter((n) => n.toLowerCase().includes(q))
+      : networks;
+  }, [networks, searchQuery]);
+
+  const searchExpanded = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return [];
+    const set = new Set<string>();
+    for (const path of networks) {
+      if (path.toLowerCase().includes(q.toLowerCase())) {
+        for (const dir of getAncestorDirs(path)) set.add(dir);
+      }
+    }
+    return Array.from(set);
+  }, [networks, searchQuery]);
+
+  const effectiveExpanded = useMemo(() => {
+    return searchQuery.trim()
+      ? Array.from(new Set([...userExpanded, ...searchExpanded]))
+      : userExpanded;
+  }, [userExpanded, searchExpanded, searchQuery]);
 
   // --- Helper to build nested tree from agent names ---
   const buildTree = (agents: string[]) => {
@@ -567,6 +605,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             {!loading && !error && (
               <SimpleTreeView
                 disableSelection
+                expandedItems={effectiveExpanded}
+                onExpandedItemsChange={(_, ids) => {
+                  // Always capture what the user does; search overlay is added via `effectiveExpanded`
+                  setUserExpanded(ids as string[]);
+                }}
                 sx={{
                   // Keep global rows compact, but DO NOT indent root
                   [`& .${treeItemClasses.label}`]: { py: 0 },
@@ -577,11 +620,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                 }}
               >
                 {renderTree(
-                  buildTree(
-                    networks.filter((n) =>
-                      n.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                  ),
+                  buildTree(filteredNetworks),
                   [],
                   activeNetwork,
                   theme,
