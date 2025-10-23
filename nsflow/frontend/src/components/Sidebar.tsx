@@ -21,7 +21,6 @@ import { useNeuroSan } from "../context/NeuroSanContext";
 import { buildTree, renderTree, getAncestorDirs } from "../utils/sidebarHelpers";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
-  const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { apiUrl, isReady } = useApiPort();
@@ -94,10 +93,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       const data = await response.json();
       // keep raw agents (with tags)
       setAgents(data.agents ?? []);
-      // get agent names from list api
-      const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
-      setNetworks(agentNames || []);
-      // aggregate tag universe counts (all agents)
+      // build tag universe
       const counts: Record<string, number> = {};
       for (const a of data.agents ?? []) {
         for (const t of a.tags ?? []) {
@@ -147,7 +143,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       return;
     }
 
-    setNetworks([]);
+    // setNetworks([]);
+    setAgents([]);              // clear displayed agents immediately
+    setTagCounts({});           // optional: clear tag chips while loading
+    setSelectedTags(new Set()); // optional: reset tag filters when switching endpoints
+    setUserExpanded([]);        // optional: collapse tree on switch
     setError("");
     setLoading(true);
 
@@ -318,7 +318,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         alignItems: 'center',
         gap: 0.5,
         fontSize: '0.9rem',
-        py: 0.5
+        py: 0.1
       }}>
         <NetworkIcon sx={{ fontSize: 18 }} color="primary" />
         Agent Networks
@@ -334,24 +334,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           borderRadius: 1
         }}
       >
-        <Typography variant="caption" sx={{ 
-          fontWeight: 600, 
-          color: theme.palette.text.primary,
-          mb: 1,
-          display: 'block',
-          fontSize: '0.75rem'
-        }}>
-          NeuroSan Config
-        </Typography>
 
         {/* Responsive Connection Type Radio Group */}
         <FormControl component="fieldset" sx={{ mb: 1 }}>
-          <FormLabel component="legend" sx={{ 
-            fontSize: '0.6rem',
-            color: theme.palette.text.secondary 
-          }}>
-            Type
-          </FormLabel>
           <RadioGroup
             row
             value={tempConnectionType}
@@ -361,7 +346,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
               flexWrap: 'wrap' // Allow wrapping on very small widths
             }}
           >
-            {["http", "grpc", "https"].map((type) => (
+            {["http", "https"].map((type) => (
               <FormControlLabel
                 key={type}
                 value={type}
@@ -438,6 +423,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         </Button>
       </Paper>
 
+      {/* Add spacer */}
+      <Box sx={{ height: 2 }} />
+
       {/* Compact Search Box */}
       <TextField
         size="small"
@@ -499,7 +487,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
               }
             }}
           >
-            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
+            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
               {/* Clear-all chip shows only when at least one tag is selected */}
               {selectedTags.size > 0 && (
                 <Tooltip title="Clear all selected tags" placement="bottom" arrow enterDelay={400} >
