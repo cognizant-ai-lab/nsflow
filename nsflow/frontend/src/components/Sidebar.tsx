@@ -11,7 +11,7 @@
 // END COPYRIGHT
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, FormLabel, RadioGroup, 
-  FormControlLabel, Radio, Alert, useTheme,alpha } from "@mui/material";
+  FormControlLabel, Radio, Alert, useTheme, alpha, Chip, Stack } from "@mui/material";
 import { HubTwoTone as NetworkIcon, Search as SearchIcon } from "@mui/icons-material";
 import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
@@ -37,6 +37,16 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userExpanded, setUserExpanded] = useState<string[]>([]);
+  const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
+
+  // Sorted tags by count desc, then name asc
+  const sortedTags = useMemo(() => {
+    const entries = Object.entries(tagCounts);
+    // Count desc, then name asc
+    entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    return entries;
+  }, [tagCounts]);
+
 
   const filteredNetworks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -117,8 +127,18 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       }
 
       const data = await response.json();
+      // get agent names from list api
       const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
       setNetworks(agentNames || []); // .sort((a: string, b: string) => a.localeCompare(b)));
+      // aggregate tags compactly
+      const counts: Record<string, number> = {};
+      for (const a of data.agents ?? []) {
+        for (const t of a.tags ?? []) {
+          if (!t) continue;
+          counts[t] = (counts[t] || 0) + 1;
+        }
+      }
+      setTagCounts(counts);
     } catch (err: any) {
       const message = err.name === "AbortError"
         ? "[x] Connection timed out. Check if the server is up and running."
@@ -321,7 +341,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           onClick={() => handleNeurosanConnect(connectionType, tempHost, tempPort, true)}
           sx={{ 
             fontSize: '0.7rem',
-            py: 0.5,
+            py: 0.4,
             '&:hover': {
               backgroundColor: theme.palette.success.dark
             }
@@ -331,9 +351,6 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           Connect
         </Button>
       </Paper>
-
-      {/* Spacer */}
-      <Box sx={{ height: 4 }} />
 
       {/* Compact Search Box */}
       <TextField
@@ -355,6 +372,42 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         }}
         fullWidth
       />
+
+      {/* Compact Tags Section */}
+      {sortedTags.length > 0 && (
+        <Paper
+          elevation={1}
+          sx={{
+            mt: 0.1,
+            p: 0.5,
+            backgroundColor: alpha(theme.palette.background.default, 0.5),
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 1
+          }}
+        >
+          <Stack
+            direction="row"
+            useFlexGap
+            flexWrap="wrap"
+            spacing={0.5}
+          >
+            {sortedTags.map(([tag, count]) => (
+              <Chip
+                key={tag}
+                size="small"
+                variant="outlined"
+                label={`${count} ${tag}`}
+                sx={{
+                  height: 20,
+                  borderRadius: "16px",
+                  "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" }
+                }}
+                title={`${count} agents tagged "${tag}"`}
+              />
+            ))}
+          </Stack>
+        </Paper>
+      )}
 
       {/* Compact Networks Display */}
       <Paper
