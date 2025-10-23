@@ -266,15 +266,31 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     });
   };
 
+  // Tags chip Sx:
   const chipSx = (selected: boolean, available: boolean) => ({
     height: 20,
     borderRadius: "16px",
     opacity: available || selected ? 1 : 0.5,
     cursor: available || selected ? "pointer" : "not-allowed",
+
+    // thinner, softer selection styling
     borderColor: selected ? alpha(theme.palette.success.main, 0.8) : undefined,
-    boxShadow: selected ? `0 0 0 2px ${alpha(theme.palette.success.light, 0.6)} inset` : "none",
+    boxShadow: selected
+      ? `0 0 0 1px ${alpha(theme.palette.success.light, 0.6)} inset`
+      : "none",
+
+    // nice subtle hover without getting chunky
+    "&:hover": selected
+      ? {
+          boxShadow: `0 0 0 1px ${alpha(theme.palette.success.main, 0.36)} inset`,
+          borderColor: alpha(theme.palette.success.light, 0.7),
+        }
+      : undefined,
+
     "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
+    transition: "box-shadow 120ms ease, border-color 120ms ease"
   });
+
 
   return (
     <Paper
@@ -454,29 +470,47 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             borderRadius: 1
           }}
         >
-          <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
-            {sortedTags.map(([tag, count]) => {
-              const isSelected = selectedTags.has(tag);
-              const isAvailable = count > 0; // available within current search result
-              return (
-                <Chip
-                  key={tag}
-                  size="small"
-                  variant="outlined"
-                  label={`${count} ${tag}`}
-                  onClick={() => toggleTag(tag, isAvailable)}
-                  sx={chipSx(isSelected, isAvailable)}
-                  title={
-                    isSelected
-                      ? `Selected: ${count} agents currently match "${tag}"`
-                      : isAvailable
-                        ? `${count} agents currently match "${tag}"`
-                        : `No agents match "${tag}" in the current search`
-                  }
-                />
-              );
-            })}
-          </Stack>
+          {/* Scrollable chips area */}
+          <Box
+            sx={{
+              maxHeight: 48,            // ~24px = 1 row of small chips; tweak as needed
+              overflowY: "auto",
+              pr: 0.5,                  // little room so the scrollbar doesn't overlap chips
+              // subtle scrollbar styling
+              "&::-webkit-scrollbar": { width: 8, height: 8 },
+              "&::-webkit-scrollbar-thumb": {
+                backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                borderRadius: 8
+              },
+              "&::-webkit-scrollbar-track": {
+                backgroundColor: alpha(theme.palette.background.default, 0.4)
+              }
+            }}
+          >
+            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
+              {sortedTags.map(([tag, count]) => {
+                const isSelected = selectedTags.has(tag);
+                const isAvailable = count > 0; // available within current search result
+                return (
+                  <Chip
+                    key={tag}
+                    size="small"
+                    variant="outlined"
+                    label={`${count} ${tag}`}
+                    onClick={() => toggleTag(tag, isAvailable)}
+                    sx={chipSx(isSelected, isAvailable)}
+                    title={
+                      isSelected
+                        ? `Selected: ${count} agents currently match "${tag}"`
+                        : isAvailable
+                          ? `${count} agents currently match "${tag}"`
+                          : `No agents match "${tag}" in the current search`
+                    }
+                  />
+                );
+              })}
+            </Stack>
+          </Box>
         </Paper>
       )}
 
