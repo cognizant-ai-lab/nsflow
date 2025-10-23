@@ -11,8 +11,8 @@
 // END COPYRIGHT
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, FormLabel, RadioGroup, 
-  FormControlLabel, Radio, Alert, useTheme, alpha, Chip, Stack } from "@mui/material";
-import { HubTwoTone as NetworkIcon, Search as SearchIcon } from "@mui/icons-material";
+  FormControlLabel, Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip } from "@mui/material";
+import { HubTwoTone as NetworkIcon, Search as SearchIcon, CloseRounded } from "@mui/icons-material";
 import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
@@ -42,6 +42,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   // tag universe + selection
   const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const clearAllTags = () => setSelectedTags(new Set());
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -448,6 +449,17 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           input: {
             startAdornment: (
               <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 16, mr: 0.5 }} />
+            ),
+            endAdornment: !!searchQuery && (
+              <IconButton
+                aria-label="Clear search"
+                size="small"
+                onClick={() => setSearchQuery("")}
+                edge="end"
+                sx={{ ml: 0.5 }}
+              >
+                <CloseRounded sx={{ fontSize: 16 }} />
+              </IconButton>
             )
           }
         }}
@@ -488,6 +500,36 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             }}
           >
             <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
+              {/* Clear-all chip shows only when at least one tag is selected */}
+              {selectedTags.size > 0 && (
+                <Tooltip title="Clear all selected tags" placement="bottom" arrow enterDelay={400} >
+                  {/* Box span wrapper ensures tooltip works even if the chip is ever disabled */}
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", lineHeight: 0 }} >
+                    <Chip
+                      key="__clear_all__"
+                      size="small"
+                      variant="outlined"
+                      label="x"
+                      onClick={clearAllTags}
+                      title="Clear all tag filters"
+                      sx={{
+                        height: 18,
+                        width:32,
+                        borderRadius: "16px",
+                        // subtle green outline to match selected glow family but lighter
+                        backgroundColor: alpha(theme.palette.warning.main, 0.8),
+                        boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.4)} inset`,
+                        "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem", fontWeight: 700 },
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.warning.main, 0.7),
+                          boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.3)} inset`,
+                        },
+                        transition: "box-shadow 120ms ease, border-color 120ms ease"
+                      }}
+                    />
+                  </Box>
+                </Tooltip>
+              )}
               {sortedTags.map(([tag, count]) => {
                 const isSelected = selectedTags.has(tag);
                 const isAvailable = count > 0; // available within current search result
