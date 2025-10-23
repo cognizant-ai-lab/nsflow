@@ -37,47 +37,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userExpanded, setUserExpanded] = useState<string[]>([]);
+  // raw agents with tags for tag logic
+  const [agents, setAgents] = useState<Array<{ agent_name: string; tags?: string[] }>>([]);
+  // tag universe + selection
   const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
-
-  // Sorted tags by count desc, then name asc
-  const sortedTags = useMemo(() => {
-    const entries = Object.entries(tagCounts);
-    // Count desc, then name asc
-    entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    return entries;
-  }, [tagCounts]);
-
-
-  const filteredNetworks = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return q
-      ? networks.filter((n) => n.toLowerCase().includes(q))
-      : networks;
-  }, [networks, searchQuery]);
-
-  const treeData = useMemo(() => {
-    // Build from filtered list when searching, otherwise from full list
-    const q = searchQuery.trim();
-    return buildTree(q ? filteredNetworks : networks);
-  }, [networks, filteredNetworks, searchQuery]);
-
-  const searchExpanded = useMemo(() => {
-    const q = searchQuery.trim();
-    if (!q) return [];
-    const set = new Set<string>();
-    for (const path of networks) {
-      if (path.toLowerCase().includes(q.toLowerCase())) {
-        for (const dir of getAncestorDirs(path)) set.add(dir);
-      }
-    }
-    return Array.from(set);
-  }, [networks, searchQuery]);
-
-  const effectiveExpanded = useMemo(() => {
-    return searchQuery.trim()
-      ? Array.from(new Set([...userExpanded, ...searchExpanded]))
-      : userExpanded;
-  }, [userExpanded, searchExpanded, searchQuery]);
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -127,10 +91,12 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       }
 
       const data = await response.json();
+      // keep raw agents (with tags)
+      setAgents(data.agents ?? []);
       // get agent names from list api
       const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
-      setNetworks(agentNames || []); // .sort((a: string, b: string) => a.localeCompare(b)));
-      // aggregate tags compactly
+      setNetworks(agentNames || []);
+      // aggregate tag universe counts (all agents)
       const counts: Record<string, number> = {};
       for (const a of data.agents ?? []) {
         for (const t of a.tags ?? []) {
@@ -206,6 +172,109 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     setActiveNetwork(network);
     onSelectNetwork(network);
   };
+
+  // Agents matching the search box (name only)
+  const searchMatchedAgents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return agents;
+    return agents.filter(a => a.agent_name.toLowerCase().includes(q));
+  }, [agents, searchQuery]);
+
+  // Available tag counts scoped to current search results (ignores tag selection)
+  const availableTagCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of searchMatchedAgents) {
+      for (const t of a.tags ?? []) {
+        if (!t) continue;
+        counts[t] = (counts[t] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [searchMatchedAgents]);
+
+  // Final agents to display: search filter AND (any of selected tags if any)
+  const displayAgents = useMemo(() => {
+    if (selectedTags.size === 0) return searchMatchedAgents;
+    return searchMatchedAgents.filter(a => {
+      const tags = new Set(a.tags ?? []);
+      // OR-logic across selected tags
+      for (const t of selectedTags) if (tags.has(t)) return true;
+      return false;
+    });
+  }, [searchMatchedAgents, selectedTags]);
+
+  // Final list of agent names for the tree
+  const displayAgentNames = useMemo(
+    () => displayAgents.map(a => a.agent_name),
+    [displayAgents]
+  );
+
+  // Build the tree from the final names (search + tag selection)
+  const treeData = useMemo(() => buildTree(displayAgentNames), [displayAgentNames]);
+
+  // Expand only folders that contain the final displayed agents
+  const searchExpanded = useMemo(() => {
+    if (displayAgentNames.length === 0) return [];
+    const set = new Set<string>();
+    for (const path of displayAgentNames) {
+      for (const dir of getAncestorDirs(path)) set.add(dir);
+    }
+    return Array.from(set);
+  }, [displayAgentNames]);
+
+  const effectiveExpanded = useMemo(() => {
+    return searchQuery.trim() || selectedTags.size > 0
+      ? Array.from(new Set([...userExpanded, ...searchExpanded]))
+      : userExpanded;
+  }, [userExpanded, searchExpanded, searchQuery, selectedTags]);
+
+  // Sorted tag chips: from the global universe, but show current counts (scoped to search)
+  const sortedTags = useMemo(() => {
+    // collect all tag names from universe (tagCounts) so chips persist even when unavailable
+    const names = Object.keys(tagCounts);
+    const entries = names.map(n => [n, availableTagCounts[n] || 0] as [string, number]);
+
+    // Sort: selected first (keep order by count desc inside each group), then available (count>0), then unavailable
+    const byStateScore = (tag: string, count: number) => {
+      if (selectedTags.has(tag)) return 2;      // selected (top)
+      if (count > 0) return 1;                 // available
+      return 0;                                // unavailable
+    };
+
+    entries.sort((a, b) => {
+      const [ta, ca] = a;
+      const [tb, cb] = b;
+      const sa = byStateScore(ta, ca);
+      const sb = byStateScore(tb, cb);
+      if (sa !== sb) return sb - sa; // higher state score first
+      // within same state, count desc then name asc
+      return cb - ca || ta.localeCompare(tb);
+    });
+
+    return entries;
+  }, [tagCounts, availableTagCounts, selectedTags]);
+
+  const toggleTag = (tag: string, available: boolean) => {
+    // If unavailable and not already selected, don't allow toggling on
+    if (!available && !selectedTags.has(tag)) return;
+
+    setSelectedTags(prev => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  };
+
+  const chipSx = (selected: boolean, available: boolean) => ({
+    height: 20,
+    borderRadius: "16px",
+    opacity: available || selected ? 1 : 0.5,
+    cursor: available || selected ? "pointer" : "not-allowed",
+    borderColor: selected ? alpha(theme.palette.success.main, 0.8) : undefined,
+    boxShadow: selected ? `0 0 0 2px ${alpha(theme.palette.success.light, 0.6)} inset` : "none",
+    "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
+  });
 
   return (
     <Paper
@@ -385,26 +454,28 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
             borderRadius: 1
           }}
         >
-          <Stack
-            direction="row"
-            useFlexGap
-            flexWrap="wrap"
-            spacing={0.5}
-          >
-            {sortedTags.map(([tag, count]) => (
-              <Chip
-                key={tag}
-                size="small"
-                variant="outlined"
-                label={`${count} ${tag}`}
-                sx={{
-                  height: 20,
-                  borderRadius: "16px",
-                  "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" }
-                }}
-                title={`${count} agents tagged "${tag}"`}
-              />
-            ))}
+          <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
+            {sortedTags.map(([tag, count]) => {
+              const isSelected = selectedTags.has(tag);
+              const isAvailable = count > 0; // available within current search result
+              return (
+                <Chip
+                  key={tag}
+                  size="small"
+                  variant="outlined"
+                  label={`${count} ${tag}`}
+                  onClick={() => toggleTag(tag, isAvailable)}
+                  sx={chipSx(isSelected, isAvailable)}
+                  title={
+                    isSelected
+                      ? `Selected: ${count} agents currently match "${tag}"`
+                      : isAvailable
+                        ? `${count} agents currently match "${tag}"`
+                        : `No agents match "${tag}" in the current search`
+                  }
+                />
+              );
+            })}
           </Stack>
         </Paper>
       )}
