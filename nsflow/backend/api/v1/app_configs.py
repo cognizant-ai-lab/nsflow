@@ -48,7 +48,7 @@ def get_runtime_config():
         # NEW: feature flags (booleans)
         "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
         "NSFLOW_PLUGIN_MANUAL_EDITOR": _env_bool("NSFLOW_PLUGIN_MANUAL_EDITOR", False),
-
+        "NSFLOW_PLUGIN_VQA_ENDPOINT": _env_bool("NSFLOW_PLUGIN_VQA_ENDPOINT", False),
     })
 
 

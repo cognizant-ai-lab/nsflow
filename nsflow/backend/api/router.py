@@ -8,6 +8,8 @@
 # nsflow SDK Software in commercial settings.
 #
 # END COPYRIGHT
+import os
+
 from fastapi import APIRouter
 
 from .v1 import agent_flows
@@ -19,6 +21,8 @@ from .v1 import fastapi_grpc_endpoints
 from .v1 import vqa_endpoints
 from .v1 import editor_endpoints
 
+NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
+
 router = APIRouter()
 
 router.include_router(app_configs.router, tags=["App Configs"])
@@ -27,5 +31,6 @@ router.include_router(agent_flows.router, tags=["Agent Flows"])
 router.include_router(export_endpoints.router, tags=["Notebook Export"])
 router.include_router(fastapi_grpc_endpoints.router, tags=["Concierge Endpoints"])
 router.include_router(audio_endpoints.router, tags=["Audio Processing"])
-router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
 router.include_router(editor_endpoints.router, tags=["Agent Network Designer"])
+if NSFLOW_PLUGIN_VQA_ENDPOINT:
+    router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
