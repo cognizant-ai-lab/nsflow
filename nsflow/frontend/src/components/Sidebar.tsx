@@ -52,6 +52,30 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     return root;
   };
 
+  // Sort entries so that directories come first (A→Z), then agents (A→Z)
+  const sortNodeEntries = (node: any) => {
+    const dirs: [string, any][] = [];
+    const agents: [string, any][] = [];
+
+    for (const [key, val] of Object.entries(node)) {
+      const children = (val as any).__children || {};
+      const hasChildren = Object.keys(children).length > 0;
+      const isAgent = (val as any).__isAgent && !hasChildren;
+
+      if (hasChildren) dirs.push([key, val]);
+      else if (isAgent) agents.push([key, val]);
+      else agents.push([key, val]); // fallback: treat as agent if uncertain
+    }
+
+    const cmp = (a: [string, any], b: [string, any]) =>
+      a[0].localeCompare(b[0], undefined, { sensitivity: "base", numeric: true });
+
+    dirs.sort(cmp);
+    agents.sort(cmp);
+
+    return [...dirs, ...agents];
+  };
+
   // --- Recursive render function with original visuals preserved ---
   const renderTree = (
     node: any,
@@ -60,7 +84,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     theme: any,
     onSelect: (n: string) => void
   ) => {
-    return Object.entries(node).map(([key, value]) => {
+    return sortNodeEntries(node).map(([key, value]) => {
       const fullPath = [...path, key].join("/");
       const children = (value as any).__children || {};
       const isAgent = (value as any).__isAgent;
@@ -252,7 +276,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
       const data = await response.json();
       const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
-      setNetworks((agentNames || []).sort((a: string, b: string) => a.localeCompare(b)));
+      setNetworks(agentNames || []); // .sort((a: string, b: string) => a.localeCompare(b)));
     } catch (err: any) {
       const message = err.name === "AbortError"
         ? "[x] Connection timed out. Check if the server is up and running."
