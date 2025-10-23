@@ -45,6 +45,12 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       : networks;
   }, [networks, searchQuery]);
 
+  const treeData = useMemo(() => {
+    // Build from filtered list when searching, otherwise from full list
+    const q = searchQuery.trim();
+    return buildTree(q ? filteredNetworks : networks);
+  }, [networks, filteredNetworks, searchQuery]);
+
   const searchExpanded = useMemo(() => {
     const q = searchQuery.trim();
     if (!q) return [];
@@ -399,6 +405,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
               ))}
             </Alert>
           )}
+          {/* Networks Tree View */}
           <Box sx={{ p: 0.5, height: "100%", overflowY: "auto" }}>
             {!loading && !error && (
               <SimpleTreeView
@@ -418,7 +425,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                 }}
               >
                 {renderTree(
-                  buildTree(filteredNetworks),
+                  treeData,
                   [],
                   activeNetwork,
                   theme,

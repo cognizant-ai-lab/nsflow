@@ -164,6 +164,11 @@ export const renderTree = (
     }
 
     // Directory node (indent only its children, not root level)
+    // If this folder has no children (after filtering), hide it.
+    if (!hasChildren) {
+      return []; // <- crucial: do NOT render empty folder during search
+    }
+    // Directory with children
     return (
       <TreeItem
         key={fullPath}
