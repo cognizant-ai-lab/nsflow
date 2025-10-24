@@ -9,33 +9,18 @@
 // nsflow SDK Software in commercial settings.
 //
 // END COPYRIGHT
-import { useEffect, useState, useRef, useCallback } from "react";
-import { 
-  Box, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  FormControl, 
-  FormLabel, 
-  RadioGroup, 
-  FormControlLabel, 
-  Radio, 
-  Alert, 
-  useTheme,
-  alpha
-} from "@mui/material";
-import { 
-  HubTwoTone as NetworkIcon,
-  Search as SearchIcon
-} from "@mui/icons-material";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { Box, Typography, TextField, Button, Paper, FormControl, RadioGroup, FormControlLabel,
+  Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip } from "@mui/material";
+import { HubTwoTone as NetworkIcon, Search as SearchIcon, CloseRounded } from "@mui/icons-material";
+import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
+import { buildTree, renderTree, getAncestorDirs } from "../utils/sidebarHelpers";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
-  const [networks, setNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { apiUrl, isReady } = useApiPort();
@@ -50,6 +35,13 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tempConnectionType, setTempConnectionType] = useState<string>(connectionType ?? "http");
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [userExpanded, setUserExpanded] = useState<string[]>([]);
+  // raw agents with tags for tag logic
+  const [agents, setAgents] = useState<Array<{ agent_name: string; tags?: string[] }>>([]);
+  // tag universe + selection
+  const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const clearAllTags = () => setSelectedTags(new Set());
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -99,8 +91,17 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       }
 
       const data = await response.json();
-      const agentNames = data.agents?.map((a: { agent_name: string }) => a.agent_name);
-      setNetworks((agentNames || []).sort((a: string, b: string) => a.localeCompare(b)));
+      // keep raw agents (with tags)
+      setAgents(data.agents ?? []);
+      // build tag universe
+      const counts: Record<string, number> = {};
+      for (const a of data.agents ?? []) {
+        for (const t of a.tags ?? []) {
+          if (!t) continue;
+          counts[t] = (counts[t] || 0) + 1;
+        }
+      }
+      setTagCounts(counts);
     } catch (err: any) {
       const message = err.name === "AbortError"
         ? "[x] Connection timed out. Check if the server is up and running."
@@ -142,7 +143,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       return;
     }
 
-    setNetworks([]);
+    // setNetworks([]);
+    setAgents([]);              // clear displayed agents immediately
+    setTagCounts({});           // optional: clear tag chips while loading
+    setSelectedTags(new Set()); // optional: reset tag filters when switching endpoints
+    setUserExpanded([]);        // optional: collapse tree on switch
     setError("");
     setLoading(true);
 
@@ -169,6 +174,125 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     onSelectNetwork(network);
   };
 
+  // Agents matching the search box (name only)
+  const searchMatchedAgents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return agents;
+    return agents.filter(a => a.agent_name.toLowerCase().includes(q));
+  }, [agents, searchQuery]);
+
+  // Available tag counts scoped to current search results (ignores tag selection)
+  const availableTagCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of searchMatchedAgents) {
+      for (const t of a.tags ?? []) {
+        if (!t) continue;
+        counts[t] = (counts[t] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [searchMatchedAgents]);
+
+  // Final agents to display: search filter AND (any of selected tags if any)
+  const displayAgents = useMemo(() => {
+    if (selectedTags.size === 0) return searchMatchedAgents;
+    return searchMatchedAgents.filter(a => {
+      const tags = new Set(a.tags ?? []);
+      // OR-logic across selected tags
+      for (const t of selectedTags) if (tags.has(t)) return true;
+      return false;
+    });
+  }, [searchMatchedAgents, selectedTags]);
+
+  // Final list of agent names for the tree
+  const displayAgentNames = useMemo(
+    () => displayAgents.map(a => a.agent_name),
+    [displayAgents]
+  );
+
+  // Build the tree from the final names (search + tag selection)
+  const treeData = useMemo(() => buildTree(displayAgentNames), [displayAgentNames]);
+
+  // Expand only folders that contain the final displayed agents
+  const searchExpanded = useMemo(() => {
+    if (displayAgentNames.length === 0) return [];
+    const set = new Set<string>();
+    for (const path of displayAgentNames) {
+      for (const dir of getAncestorDirs(path)) set.add(dir);
+    }
+    return Array.from(set);
+  }, [displayAgentNames]);
+
+  const effectiveExpanded = useMemo(() => {
+    return searchQuery.trim() || selectedTags.size > 0
+      ? Array.from(new Set([...userExpanded, ...searchExpanded]))
+      : userExpanded;
+  }, [userExpanded, searchExpanded, searchQuery, selectedTags]);
+
+  // Sorted tag chips: from the global universe, but show current counts (scoped to search)
+  const sortedTags = useMemo(() => {
+    // collect all tag names from universe (tagCounts) so chips persist even when unavailable
+    const names = Object.keys(tagCounts);
+    const entries = names.map(n => [n, availableTagCounts[n] || 0] as [string, number]);
+
+    // Sort: selected first (keep order by count desc inside each group), then available (count>0), then unavailable
+    const byStateScore = (tag: string, count: number) => {
+      if (selectedTags.has(tag)) return 2;      // selected (top)
+      if (count > 0) return 1;                 // available
+      return 0;                                // unavailable
+    };
+
+    entries.sort((a, b) => {
+      const [ta, ca] = a;
+      const [tb, cb] = b;
+      const sa = byStateScore(ta, ca);
+      const sb = byStateScore(tb, cb);
+      if (sa !== sb) return sb - sa; // higher state score first
+      // within same state, count desc then name asc
+      return cb - ca || ta.localeCompare(tb);
+    });
+
+    return entries;
+  }, [tagCounts, availableTagCounts, selectedTags]);
+
+  const toggleTag = (tag: string, available: boolean) => {
+    // If unavailable and not already selected, don't allow toggling on
+    if (!available && !selectedTags.has(tag)) return;
+
+    setSelectedTags(prev => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  };
+
+  // Tags chip Sx:
+  const chipSx = (selected: boolean, available: boolean) => ({
+    height: 20,
+    borderRadius: "16px",
+    opacity: available || selected ? 1 : 0.5,
+    cursor: available || selected ? "pointer" : "not-allowed",
+
+    // thinner, softer selection styling
+    borderColor: selected ? alpha(theme.palette.success.main, 0.8) : undefined,
+    boxShadow: selected
+      ? `0 0 0 1px ${alpha(theme.palette.success.light, 0.6)} inset`
+      : "none",
+
+    // nice subtle hover without getting chunky
+    "&:hover": selected
+      ? {
+          boxShadow: `0 0 0 1px ${alpha(theme.palette.success.main, 0.36)} inset`,
+          borderColor: alpha(theme.palette.success.light, 0.7),
+        }
+      : undefined,
+
+    "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
+    transition: "box-shadow 120ms ease, border-color 120ms ease"
+  });
+
+
   return (
     <Paper
       component="aside"
@@ -194,7 +318,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         alignItems: 'center',
         gap: 0.5,
         fontSize: '0.9rem',
-        py: 0.5
+        py: 0.1
       }}>
         <NetworkIcon sx={{ fontSize: 18 }} color="primary" />
         Agent Networks
@@ -210,24 +334,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           borderRadius: 1
         }}
       >
-        <Typography variant="caption" sx={{ 
-          fontWeight: 600, 
-          color: theme.palette.text.primary,
-          mb: 1,
-          display: 'block',
-          fontSize: '0.75rem'
-        }}>
-          NeuroSan Config
-        </Typography>
 
         {/* Responsive Connection Type Radio Group */}
         <FormControl component="fieldset" sx={{ mb: 1 }}>
-          <FormLabel component="legend" sx={{ 
-            fontSize: '0.6rem',
-            color: theme.palette.text.secondary 
-          }}>
-            Type
-          </FormLabel>
           <RadioGroup
             row
             value={tempConnectionType}
@@ -237,7 +346,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
               flexWrap: 'wrap' // Allow wrapping on very small widths
             }}
           >
-            {["http", "grpc", "https"].map((type) => (
+            {["http", "https"].map((type) => (
               <FormControlLabel
                 key={type}
                 value={type}
@@ -303,7 +412,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           onClick={() => handleNeurosanConnect(connectionType, tempHost, tempPort, true)}
           sx={{ 
             fontSize: '0.7rem',
-            py: 0.5,
+            py: 0.4,
             '&:hover': {
               backgroundColor: theme.palette.success.dark
             }
@@ -314,8 +423,8 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         </Button>
       </Paper>
 
-      {/* Spacer */}
-      <Box sx={{ height: 4 }} />
+      {/* Add spacer */}
+      <Box sx={{ height: 2 }} />
 
       {/* Compact Search Box */}
       <TextField
@@ -328,6 +437,17 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           input: {
             startAdornment: (
               <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 16, mr: 0.5 }} />
+            ),
+            endAdornment: !!searchQuery && (
+              <IconButton
+                aria-label="Clear search"
+                size="small"
+                onClick={() => setSearchQuery("")}
+                edge="end"
+                sx={{ ml: 0.5 }}
+              >
+                <CloseRounded sx={{ fontSize: 16 }} />
+              </IconButton>
             )
           }
         }}
@@ -337,6 +457,92 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         }}
         fullWidth
       />
+
+      {/* Compact Tags Section */}
+      {sortedTags.length > 0 && (
+        <Paper
+          elevation={1}
+          sx={{
+            mt: 0.1,
+            p: 0.5,
+            backgroundColor: alpha(theme.palette.background.default, 0.5),
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 1
+          }}
+        >
+          {/* Scrollable chips area */}
+          <Box
+            sx={{
+              maxHeight: 48,            // ~24px = 1 row of small chips; tweak as needed
+              overflowY: "auto",
+              pr: 0.5,                  // little room so the scrollbar doesn't overlap chips
+              // subtle scrollbar styling
+              "&::-webkit-scrollbar": { width: 8, height: 8 },
+              "&::-webkit-scrollbar-thumb": {
+                backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                borderRadius: 8
+              },
+              "&::-webkit-scrollbar-track": {
+                backgroundColor: alpha(theme.palette.background.default, 0.4)
+              }
+            }}
+          >
+            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+              {/* Clear-all chip shows only when at least one tag is selected */}
+              {selectedTags.size > 0 && (
+                <Tooltip title="Clear all selected tags" placement="bottom" arrow enterDelay={400} >
+                  {/* Box span wrapper ensures tooltip works even if the chip is ever disabled */}
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", lineHeight: 0 }} >
+                    <Chip
+                      key="__clear_all__"
+                      size="small"
+                      variant="outlined"
+                      label="x"
+                      onClick={clearAllTags}
+                      title="Clear all tag filters"
+                      sx={{
+                        height: 18,
+                        width:32,
+                        borderRadius: "16px",
+                        // subtle green outline to match selected glow family but lighter
+                        backgroundColor: alpha(theme.palette.warning.main, 0.8),
+                        boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.4)} inset`,
+                        "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem", fontWeight: 700 },
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.warning.main, 0.7),
+                          boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.3)} inset`,
+                        },
+                        transition: "box-shadow 120ms ease, border-color 120ms ease"
+                      }}
+                    />
+                  </Box>
+                </Tooltip>
+              )}
+              {sortedTags.map(([tag, count]) => {
+                const isSelected = selectedTags.has(tag);
+                const isAvailable = count > 0; // available within current search result
+                return (
+                  <Chip
+                    key={tag}
+                    size="small"
+                    variant="outlined"
+                    label={`${count} ${tag}`}
+                    onClick={() => toggleTag(tag, isAvailable)}
+                    sx={chipSx(isSelected, isAvailable)}
+                    title={
+                      isSelected
+                        ? `Selected: ${count} agents currently match "${tag}"`
+                        : isAvailable
+                          ? `${count} agents currently match "${tag}"`
+                          : `No agents match "${tag}" in the current search`
+                    }
+                  />
+                );
+              })}
+            </Stack>
+          </Box>
+        </Paper>
+      )}
 
       {/* Compact Networks Display */}
       <Paper
@@ -387,59 +593,36 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
               ))}
             </Alert>
           )}
-
-          <Box sx={{ p: 0.5 }}>
-            {networks
-              .filter((network) =>
-                network.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .map((network) => (
-                <Paper
-                  key={network}
-                  elevation={activeNetwork === network ? 2 : 0}
-                  sx={{
-                    mb: 0.5,
+          {/* Networks Tree View */}
+          <Box sx={{ p: 0.5, height: "100%", overflowY: "auto" }}>
+            {!loading && !error && (
+              <SimpleTreeView
+                disableSelection
+                expandedItems={effectiveExpanded}
+                onExpandedItemsChange={(_, ids) => {
+                  // Always capture what the user does; search overlay is added via `effectiveExpanded`
+                  setUserExpanded(ids as string[]);
+                }}
+                sx={{
+                  // Keep global rows compact, but DO NOT indent root
+                  [`& .${treeItemClasses.label}`]: { py: 0 },
+                  [`& .${treeItemClasses.content}`]: {
+                    minHeight: "1.2rem",
                     borderRadius: 1,
-                    border: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: activeNetwork === network 
-                      ? alpha(theme.palette.primary.main, 0.1) 
-                      : 'transparent',
-                    '&:hover': {
-                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                      cursor: 'pointer'
-                    }
-                  }}
-                  onClick={() => handleNetworkSelection(network)}
-                >
-                  <Box sx={{ 
-                    px: 1, 
-                    py: 0.5,
-                    borderLeft: activeNetwork === network 
-                      ? `3px solid ${theme.palette.primary.main}` 
-                      : 'none',
-                    overflow: 'hidden' // Prevent overflow on very small widths
-                  }}>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: '0.7rem',
-                        color: activeNetwork === network 
-                          ? theme.palette.primary.main 
-                          : theme.palette.text.primary,
-                        fontWeight: activeNetwork === network ? 600 : 400,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        display: 'block'
-                      }}
-                      title={network} // Show full name on hover
-                    >
-                      {network}
-                    </Typography>
-                  </Box>
-                </Paper>
-              ))}
+                  },
+                }}
+              >
+                {renderTree(
+                  treeData,
+                  [],
+                  activeNetwork,
+                  theme,
+                  handleNetworkSelection
+                )}
+              </SimpleTreeView>
+            )}
           </Box>
+
           <div ref={networksEndRef} />
         </Box>
       </Paper>
