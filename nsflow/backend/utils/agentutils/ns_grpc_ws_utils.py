@@ -42,10 +42,10 @@ latest_sly_data_storage: Dict[str, Any] = {}
 # pylint: disable=too-many-instance-attributes
 class NsGrpcWsUtils:
     """
-    Encapsulates gRPC session management and WebSocket interactions for a NeuroSAN agent.
+    Encapsulates session management and WebSocket interactions for a NeuroSAN agent.
     Manages:
     - WebSocket message handling
-    - gRPC streaming communication
+    - Agent streaming communication
     - Live logging and internal chat broadcasting via WebSocketLogsManager
     """
 
@@ -56,7 +56,7 @@ class NsGrpcWsUtils:
     def __init__(self, agent_name: str,
                  websocket: WebSocket):
         """
-        Initialize the gRPC service API wrapper.
+        Initialize the Agent service API wrapper.
         :param agent_name: Name of the NeuroSAN agent(Network) to connect to.
         :param websocket: The WebSocket connection instance.
         :param forwarded_request_metadata: List of metadata keys to extract from incoming headers.
@@ -65,7 +65,7 @@ class NsGrpcWsUtils:
             config = NsConfigsRegistry.get_current()
         except RuntimeError as e:
             raise RuntimeError("No active NsConfigStore. \
-                               Please set it via /set_config before using gRPC endpoints.") from e
+                               Please set it via /set_config before using endpoints.") from e
 
         self.server_host = config.host
         self.server_port = config.port
@@ -90,10 +90,11 @@ class NsGrpcWsUtils:
     # pylint: disable=too-many-function-args
     async def handle_user_input(self):
         """
-        Handle incoming WebSocket messages and process them using the gRPC session."""
+        Handle incoming WebSocket messages and process them using the agent session."""
         websocket = self.websocket
         await websocket.accept()
-        sid = str(websocket.client) + "_" + str(uuid.uuid4().hex[:8])
+        # sid = str(websocket.client) + "_" + str(uuid.uuid4().hex[:8])
+        sid = str(websocket.client.host) + ":" + str(websocket.client.port) + ":" + str(uuid.uuid4().hex[:8])
 
         self.active_chat_connections[sid] = websocket
         await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "nsflow")
@@ -161,7 +162,6 @@ class NsGrpcWsUtils:
             "sly_data": {},
         }
 
-        # agent_session = self.base_utils.get_regular_agent_grpc_session(metadata=metadata)
         input_processor = AsyncStreamingInputProcessor(default_input="",
                                                   thinking_file=self.thinking_file,
                                                   session=self.session,
@@ -179,8 +179,9 @@ class NsGrpcWsUtils:
         #       data charges on their cell phone.
 
         user_session = {
-            'input_processor': input_processor,
-            'state': state
+            "input_processor": input_processor,
+            "state": state,
+            "sid": sid
         }
         return user_session
 
@@ -192,6 +193,7 @@ class NsGrpcWsUtils:
         session = factory.create_session(self.connection, self.agent_name,
                                               self.server_host, self.server_port, self.use_direct,
                                               metadata)
+        logging.info("Created agent session for agent: %s", str(session.get_request_path(self.connection)))
         return session
 
     def get_connectivity(self):

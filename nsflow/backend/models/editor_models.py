@@ -190,7 +190,7 @@ class LLMConfig(BaseModel):
     # pylint: disable=too-few-public-methods
     class Config:
         extra = "allow"
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class BaseAgentProperties(BaseModel):
@@ -238,7 +238,7 @@ class BaseAgentProperties(BaseModel):
     # pylint: disable=too-few-public-methods
     class Config:
         extra = "allow"
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class AgentCreateRequest(BaseAgentProperties):
