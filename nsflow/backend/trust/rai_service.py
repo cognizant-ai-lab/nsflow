@@ -29,6 +29,7 @@ class RaiService:
         """Initialize the RAI service with default metrics and connection management."""
         self.active_connections: List[WebSocket] = []
         self.calculator = SustainabilityCalculator()
+        # Turning off some of the logs in this class to reduce terminal noise
         self.logger = logging.getLogger(self.__class__.__name__)
         self.current_metrics = self._get_default_metrics("unknown")
         
@@ -41,7 +42,7 @@ class RaiService:
     
     def _get_default_metrics(self, agent_name: str = "ollama") -> Dict[str, str]:
         """Return default sustainability metrics."""
-        self.logger.info(f"Returning default sustainability metrics for agent: {agent_name}")
+        # self.logger.info(f"Returning default sustainability metrics for agent: {agent_name}")
         return {
             "energy": "0.00 kWh",
             "carbon": "0.00 g CO₂",
@@ -66,19 +67,19 @@ class RaiService:
             List of sustainability metrics with updated values
         """
         try:
-            self.logger.info(f"Processing token accounting in _calculate_metrics_from_token_accounting: {token_accounting}")
+            # self.logger.info(f"Processing token accounting in _calculate_metrics_from_token_accounting: {token_accounting}")
             
             # Add model name to token accounting data if not already present
             enhanced_token_data = token_accounting.copy()
             if "model" not in enhanced_token_data:
                 enhanced_token_data["model"] = "llm"  # Generic placeholder for demo - will be replaced with actual model detection
             
-            self.logger.info(f"Enhanced token data with model: {enhanced_token_data}")
+            # self.logger.info(f"Enhanced token data with model: {enhanced_token_data}")
             
             # Use the research-based calculator
             sustainability_metrics = self.calculator.calculate_from_token_accounting(enhanced_token_data)
             
-            self.logger.info(f"Calculator returned: energy={sustainability_metrics.energy_kwh}, carbon={sustainability_metrics.carbon_g_co2}, water={sustainability_metrics.water_liters}, model={sustainability_metrics.model_name}")
+            # self.logger.info(f"Calculator returned: energy={sustainability_metrics.energy_kwh}, carbon={sustainability_metrics.carbon_g_co2}, water={sustainability_metrics.water_liters}, model={sustainability_metrics.model_name}")
             
             # Convert to the format expected by the frontend with appropriate precision
             # Use scientific notation or more decimal places for very small values
@@ -129,7 +130,7 @@ class RaiService:
                 "cost": cost_str
             }
             
-            self.logger.info(f"Final formatted result: {result}")
+            # self.logger.info(f"Final formatted result: {result}")
             return result
             
         except Exception as e:
@@ -151,7 +152,7 @@ class RaiService:
         """
         await websocket.accept()
         self.active_connections.append(websocket)
-        self.logger.info("New sustainability metrics WebSocket client connected")
+        # self.logger.info("New sustainability metrics WebSocket client connected")
         
         # Send current metrics immediately upon connection
         try:
@@ -171,7 +172,7 @@ class RaiService:
                 await asyncio.sleep(1)
         except WebSocketDisconnect:
             self.active_connections.remove(websocket)
-            self.logger.info("Sustainability metrics WebSocket client disconnected")
+            # self.logger.info("Sustainability metrics WebSocket client disconnected")
         except Exception as e:
             self.logger.error(f"WebSocket error: {e}")
             if websocket in self.active_connections:
@@ -185,13 +186,13 @@ class RaiService:
             token_accounting: Token accounting data from NeuroSan
         """
         try:
-            self.logger.info(f"Received token accounting data: {token_accounting}")
+            # self.logger.info(f"Received token accounting data: {token_accounting}")
             
             # Calculate new metrics
             new_metrics = self._calculate_metrics_from_token_accounting(token_accounting, agent_name)
             self.current_metrics = new_metrics
             
-            self.logger.info(f"Calculated new sustainability metrics: {new_metrics}")
+            # self.logger.info(f"Calculated new sustainability metrics: {new_metrics}")
             
             # Broadcast to all connected WebSocket clients
             await self._broadcast_metrics()

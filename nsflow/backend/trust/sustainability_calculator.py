@@ -178,17 +178,18 @@ class SustainabilityCalculator:
             time_taken = token_data.get("time_taken_in_seconds", 0)
             model_name = token_data.get("model", "unknown")
             
-            self.logger.info(f"SustainabilityCalculator input: total_tokens={total_tokens}, model={model_name}")
+            # Turning off logging here for the terminal logs to reduce noise
+            # self.logger.info(f"SustainabilityCalculator input: total_tokens={total_tokens}, model={model_name}")
             
             # Get model profile
             model_profile = self._get_model_profile(model_name)
-            self.logger.info(f"Selected model profile: {model_profile}")
+            # self.logger.info(f"Selected model profile: {model_profile}")
             
             # Calculate energy consumption using research-based method
             energy_wh = self._calculate_energy_from_tokens_research(total_tokens, model_profile)
             energy_kwh = energy_wh / 1000.0  # Convert Wh to kWh
             
-            self.logger.info(f"Calculated energy: {energy_wh} Wh = {energy_kwh} kWh")
+            # self.logger.info(f"Calculated energy: {energy_wh} Wh = {energy_kwh} kWh")
             
             # Calculate carbon footprint
             carbon_g = self._calculate_carbon_footprint(energy_kwh, model_name)
@@ -196,7 +197,7 @@ class SustainabilityCalculator:
             # Calculate water usage
             water_l = self._calculate_water_usage(energy_kwh, model_name)
             
-            self.logger.info(f"Final metrics: energy={energy_kwh} kWh, carbon={carbon_g} g, water={water_l} L")
+            # self.logger.info(f"Final metrics: energy={energy_kwh} kWh, carbon={carbon_g} g, water={water_l} L")
             
             # Generate energy context
             energy_context = self._get_energy_context(energy_wh)
@@ -260,7 +261,7 @@ class SustainabilityCalculator:
             else:
                 normalized = "llama2-7b"  # Default to local model
         
-        self.logger.info(f"Model name '{model_name}' normalized to '{normalized}'")
+        # self.logger.info(f"Model name '{model_name}' normalized to '{normalized}'")
         return normalized
     
     def _calculate_energy_from_tokens_research(self, total_tokens: int, model_profile: Dict[str, Any]) -> float:
