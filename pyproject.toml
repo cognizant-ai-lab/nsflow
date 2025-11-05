@@ -10,8 +10,8 @@ name = "nsflow"
 description = "A Neuro-San powered Smart Agent Network Framework"
 keywords = ["NsFlow", "NeuroSan", "agent-network"]
 # This license name comes from doc recommendation here
-# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license
-license = "LicenseRef-CognizantAcademicSource"
+# https://packaging.python.org/en/latest/guides/licensing-examples-and-user-scenarios/
+license = "Apache-2.0"
 license-files = ["LICENSE.txt"]
 requires-python = ">=3.10"
 readme = "README.md"
