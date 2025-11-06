@@ -10,7 +10,6 @@ Simplified log bridge for subprocesses:
 
 from __future__ import annotations
 
-import ast
 import json
 import logging
 import re
@@ -21,9 +20,22 @@ from typing import Any, Dict, List, Optional, TextIO
 
 from logging.handlers import TimedRotatingFileHandler
 from rich.logging import RichHandler
+from rich.console import Console
+from rich.theme import Theme
+from rich.text import Text
 
 
 # ---------------- Colors / styles via RichHandler (we color header; JSON stays pretty) ----------------
+def _rich_time_text(record=None, date=None):
+    now = datetime.now().astimezone()
+    return Text(f"[{now.strftime('%Y-%m-%d %H:%M:%S')} {now.tzname()}]", style="logging.time")
+
+
+class TZFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created).astimezone()
+        return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {dt.tzname()}"
+
 
 def setup_rich_logging(level: str = "INFO", runner_log_file: Optional[str] = None) -> None:
     """
@@ -34,12 +46,22 @@ def setup_rich_logging(level: str = "INFO", runner_log_file: Optional[str] = Non
     root.setLevel(logging.DEBUG)           # capture everything; handlers decide levels
     root.handlers.clear()
 
-    handler = RichHandler(  # pretty console levels/time
+    # Customize colors here
+    # use any formatting supported by Rich's Theme
+    # example: "green", "bright_green", "green3", "#34d399", "rgb(52,211,153)", "color(118)", etc.
+    theme = Theme({"logging.time": "bright_cyan"})
+    console = Console(theme=theme)
+
+    # pretty console levels/time
+    handler = RichHandler(
+        console=console,
         rich_tracebacks=False,
         markup=False,
         show_time=True,
         show_path=False,
         omit_repeated_times=False,
+        # Use ISO-like + TZ, e.g. [2025-11-06 08:54:23 PST]
+        log_time_format=_rich_time_text,
     )
     handler.setLevel(getattr(logging, level.upper(), logging.INFO))
     handler.setFormatter(logging.Formatter("%(message)s"))
@@ -50,9 +72,9 @@ def setup_rich_logging(level: str = "INFO", runner_log_file: Optional[str] = Non
         file_handler = TimedRotatingFileHandler(runner_log_file, when="midnight", backupCount=7, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(
-            logging.Formatter(
+            TZFormatter(
                 fmt="%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
+                # datefmt="%Y-%m-%d %H:%M:%S %Z",
             )
         )
         root.addHandler(file_handler)
