@@ -94,7 +94,8 @@ class NsWebsocketUtils:
         websocket = self.websocket
         await websocket.accept()
         # sid = str(websocket.client) + "_" + str(uuid.uuid4().hex[:8])
-        sid = str(websocket.client.host) + ":" + str(websocket.client.port) + ":" + str(uuid.uuid4().hex[:8])
+        sid = str(self.agent_name) + ":" + str(websocket.client.host) + \
+            ":" + str(websocket.client.port) + ":" + str(uuid.uuid4().hex[:12])
 
         self.active_chat_connections[sid] = websocket
         await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "nsflow")
