@@ -76,7 +76,7 @@ class WebsocketLogsManager:
                 # Skip duplicate log
                 return
         # Log the message
-        self.logger.info("%s: %s", source, message)
+        # self.logger.info("%s: %s", source, message)
         self.log_buffer.append(log_entry)
         if len(self.log_buffer) > self.LOG_BUFFER_SIZE:
             self.log_buffer.pop(0)
