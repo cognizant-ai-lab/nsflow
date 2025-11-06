@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
-from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils
+from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,7 +39,7 @@ def get_networks():
 async def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
     try:
-        ns_grpc_utils = NsGrpcWsUtils(network_name, None)
+        ns_grpc_utils = NsWebsocketUtils(network_name, None)
         result = ns_grpc_utils.get_connectivity()
 
     except Exception as e:
@@ -165,7 +165,7 @@ def get_latest_sly_data(network_name: str):
     """Retrieves the latest sly_data for a given network."""
     logging.info("Fetching latest sly_data for network: %s", network_name)
     try:
-        latest_data = NsGrpcWsUtils.get_latest_sly_data(network_name)
+        latest_data = NsWebsocketUtils.get_latest_sly_data(network_name)
 
         if not latest_data:
             raise HTTPException(status_code=404, detail=f"No sly_data available for network '{network_name}'")

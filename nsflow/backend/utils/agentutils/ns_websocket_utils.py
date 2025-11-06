@@ -40,7 +40,7 @@ latest_sly_data_storage: Dict[str, Any] = {}
 
 
 # pylint: disable=too-many-instance-attributes
-class NsGrpcWsUtils:
+class NsWebsocketUtils:
     """
     Encapsulates session management and WebSocket interactions for a NeuroSAN agent.
     Manages:
@@ -135,7 +135,7 @@ class NsGrpcWsUtils:
                 # Store the latest sly_data for this network
                 if state.get("sly_data") is not None:
                     latest_sly_data_storage[self.agent_name] = state["sly_data"]
-                    logging.info("Updated latest sly_data for network %s", self.agent_name)
+                    # logging.info("Updated latest sly_data for network %s", self.agent_name)
 
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
 

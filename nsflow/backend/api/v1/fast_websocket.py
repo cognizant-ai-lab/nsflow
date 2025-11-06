@@ -18,7 +18,7 @@ For now, we have separate end-points for OpenAPI specs
 
 from fastapi import APIRouter, WebSocket
 
-from nsflow.backend.utils.agentutils.ns_grpc_ws_utils import NsGrpcWsUtils
+from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.trust.rai_service import RaiService
 
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/v1/ws")
 async def websocket_chat(websocket: WebSocket, agent_name: str):
     """WebSocket route for streaming chat communication."""
     # Instantiate the service API class
-    ns_api = NsGrpcWsUtils(agent_name, websocket)
+    ns_api = NsWebsocketUtils(agent_name, websocket)
     await ns_api.handle_user_input()
 
 
