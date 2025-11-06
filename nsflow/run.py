@@ -21,6 +21,8 @@ from typing import Any, Dict
 # Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
 
+from nsflow.backend.utils.logutils.logging_setup import setup_rich_logging, attach_process_logger
+
 
 # pylint: disable=too-many-instance-attributes
 class NsFlowRunner:
@@ -71,14 +73,10 @@ class NsFlowRunner:
         # Set up logging
         os.makedirs(logs_dir_path, exist_ok=True)
         os.makedirs(thinking_dir_path, exist_ok=True)
-        
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(os.path.join(self.config["nsflow_log_dir"], "runner.log"), mode="a"),
-            ],
+
+        setup_rich_logging(
+            level=self.config.get("nsflow_log_level", "info"),
+            runner_log_file=os.path.join(self.config["nsflow_log_dir"], "runner.log"),
         )
 
         # Parse CLI args
@@ -254,38 +252,25 @@ The type of connection to initiate. Choices are to connect to:
                 self.logger.warning("Config key '%s' not found for env var '%s'", config_key, env_var)
 
     def start_process(self, command, process_name, log_file):
-        """Start a subprocess and capture logs."""
+        """Start a subprocess and hook our log bridge (no run.py streaming)."""
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if self.is_windows else 0
 
-        with open(log_file, "w", encoding="utf-8") as log:  # noqa: F841
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-                preexec_fn=None if self.is_windows else os.setpgrp,
-                creationflags=creation_flags,
-            )
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+            preexec_fn=None if self.is_windows else os.setpgrp,
+            creationflags=creation_flags,
+        )
 
-        self.logger.info("Started %s with PID %s", process_name, process.pid)
+        self.logger.info("Started %s with PID %s (tee -> %s)", process_name, process.pid, log_file)
 
-        # Start log streaming in a thread
-        threading.Thread(target=self.stream_output, args=(process.stdout, log_file, process_name)).start()
-        threading.Thread(target=self.stream_output, args=(process.stderr, log_file, process_name)).start()
-
+        # Let logging_setup own reading/parsing/printing/writing
+        attach_process_logger(process, process_name, log_file)
         return process
-
-    def stream_output(self, pipe, log_file, prefix):
-        """Stream process output to console and log file."""
-        with open(log_file, "a", encoding="utf-8") as log:
-            for line in iter(pipe.readline, ""):
-                formatted_line = f"{prefix}: {line.strip()}"
-                print(formatted_line)
-                log.write(formatted_line + "\n")
-            # log.flush()
-        pipe.close()
 
     def start_neuro_san(self):
         """Start the Neuro SAN server."""
@@ -429,6 +414,5 @@ The type of connection to initiate. Choices are to connect to:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     runner = NsFlowRunner()
     runner.run()
