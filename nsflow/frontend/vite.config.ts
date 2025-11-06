@@ -34,6 +34,12 @@ export default defineConfig(() => {
           changeOrigin: true,
           secure: false,
         },
+        // WebSockets (note: ws: true)
+        '/api/v1/ws': {
+          target: 'ws://localhost:8005',
+          changeOrigin: true,
+          ws: true,
+        },
       },
       historyApiFallback: true, // Needed to support page refresh on /home
     },

@@ -39,12 +39,12 @@ const SustainabilityScore: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { wsUrl } = useApiPort();
-  const { activeNetwork } = useChatContext();
+  const { sessionId, activeNetwork } = useChatContext();
   const theme = useTheme();
 
-  const sustainabilityWsUrl = useMemo(() => 
-    wsUrl && activeNetwork ? `${wsUrl}/api/v1/ws/sustainability/${activeNetwork}` : null,
-    [wsUrl, activeNetwork]
+  const sustainabilityWsUrl = useMemo(() =>
+    wsUrl && activeNetwork ? `${wsUrl}/api/v1/ws/sustainability/${activeNetwork}/${sessionId}` : null,
+    [wsUrl, activeNetwork, sessionId]
   );
 
   useEffect(() => {

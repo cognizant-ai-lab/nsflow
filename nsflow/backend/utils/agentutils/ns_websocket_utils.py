@@ -35,7 +35,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 user_sessions_lock = asyncio.Lock()
 user_sessions = {}
 
-# Global storage for latest sly_data by network name
+# Global storage for latest sly_data by network name and session
+# Key format: "agent_name:session_id"
 latest_sly_data_storage: Dict[str, Any] = {}
 
 
@@ -54,12 +55,14 @@ class NsWebsocketUtils:
     DEFAULT_PROMPT: str = "Please enter your response ('quit' to terminate):\n"
 
     def __init__(self, agent_name: str,
-                 websocket: WebSocket):
+                 websocket: WebSocket,
+                 session_id: str = None):
         """
         Initialize the Agent service API wrapper.
         :param agent_name: Name of the NeuroSAN agent(Network) to connect to.
         :param websocket: The WebSocket connection instance.
-        :param forwarded_request_metadata: List of metadata keys to extract from incoming headers.
+        :param session_id: Unique session identifier for this user connection.
+                          If not provided, a new one will be generated.
         """
         try:
             config = NsConfigsRegistry.get_current()
@@ -72,6 +75,7 @@ class NsWebsocketUtils:
         self.connection = config.connection_type
 
         self.agent_name = agent_name
+        self.session_id = session_id or str(uuid.uuid4().hex[:12])
         self.use_direct = False
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
@@ -84,7 +88,7 @@ class NsWebsocketUtils:
         logging.info("Using thinking file: %s", self.thinking_file)
         logging.info("Using thinking dir: %s", self.thinking_dir)
 
-        self.logs_manager = LogsRegistry.register(agent_name)
+        self.logs_manager = LogsRegistry.register(agent_name, self.session_id)
         self.session = self.create_agent_session()
 
     # pylint: disable=too-many-function-args
@@ -93,17 +97,17 @@ class NsWebsocketUtils:
         Handle incoming WebSocket messages and process them using the agent session."""
         websocket = self.websocket
         await websocket.accept()
-        # sid = str(websocket.client) + "_" + str(uuid.uuid4().hex[:8])
-        sid = str(self.agent_name) + ":" + str(websocket.client.host) + \
-            ":" + str(websocket.client.port) + ":" + str(uuid.uuid4().hex[:12])
+        # Obtain session_id from the frontend
+        # sid = str(self.agent_name) + ":" + str(websocket.client.host) + \
+        #     ":" + str(websocket.client.port) + ":" + str(uuid.uuid4().hex[:12])
 
-        self.active_chat_connections[sid] = websocket
-        await self.logs_manager.log_event(f"Chat client {sid} connected to agent: {self.agent_name}", "nsflow")
+        self.active_chat_connections[self.session_id] = websocket
+        await self.logs_manager.log_event(f"Chat client {self.session_id} connected to agent: {self.agent_name}", "nsflow")
 
         async with user_sessions_lock:
-            if sid not in user_sessions:
-                user_sessions[sid] = await self.create_user_session(sid)
-            user_session = user_sessions[sid]
+            if self.session_id not in user_sessions:
+                user_sessions[self.session_id] = await self.create_user_session(self.session_id)
+            user_session = user_sessions[self.session_id]
 
         try:
             while True:
@@ -133,23 +137,24 @@ class NsWebsocketUtils:
                     await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
                     await self.logs_manager.sly_data_event(sly_data_str)
 
-                # Store the latest sly_data for this network
+                # Store the latest sly_data for this network and session
                 if state.get("sly_data") is not None:
-                    latest_sly_data_storage[self.agent_name] = state["sly_data"]
-                    # logging.info("Updated latest sly_data for network %s", self.agent_name)
+                    storage_key = f"{self.agent_name}:{self.session_id}"
+                    latest_sly_data_storage[storage_key] = state["sly_data"]
+                    # logging.info("Updated latest sly_data for network %s session %s", self.agent_name, self.session_id)
 
-                await self.logs_manager.log_event(f"Streaming chat finished for client: {sid}", "nsflow")
+                await self.logs_manager.log_event(f"Streaming chat finished for client: {self.session_id}", "nsflow")
 
         except WebSocketDisconnect:
-            await self.logs_manager.log_event(f"WebSocket chat client disconnected: {sid}", "nsflow")
+            await self.logs_manager.log_event(f"WebSocket chat client disconnected: {self.session_id}", "nsflow")
         except Exception as e:
-            logging.error("Unexpected error in WebSocket handler for %s: %s", sid, e)
-            await self.logs_manager.log_event(f"Error in session {sid}: {e}", "nsflow")
+            logging.error("Unexpected error in WebSocket handler for %s: %s", self.session_id, e)
+            await self.logs_manager.log_event(f"Error in session {self.session_id}: {e}", "nsflow")
         finally:
             # clean up
-            self.active_chat_connections.pop(sid, None)
+            self.active_chat_connections.pop(self.session_id, None)
             async with user_sessions_lock:
-                user_sessions.pop(sid, None)
+                user_sessions.pop(self.session_id, None)
 
     async def create_user_session(self, sid: str) -> Dict[str, Any]:
         """method to create a user session with the given WebSocket connection."""
@@ -169,7 +174,7 @@ class NsWebsocketUtils:
                                                   thinking_dir=self.thinking_dir)
         # Add a processor to handle agent logs
         # and to highlight the agents that respond in the agent network diagram
-        agent_log_processor = AgentLogProcessor(self.agent_name, sid)
+        agent_log_processor = AgentLogProcessor(self.agent_name, self.session_id)
         input_processor.processor.add_processor(agent_log_processor)
 
         # Note: If nothing is specified the server assumes the chat_filter_type
@@ -212,14 +217,19 @@ class NsWebsocketUtils:
         return AgentSessionFactory()
 
     @classmethod
-    def get_latest_sly_data(cls, network_name: str) -> dict:
+    def get_latest_sly_data(cls, network_name: str, session_id: str = None) -> dict:
         """
-        Retrieve the latest sly_data for a given network.
-        
+        Retrieve the latest sly_data for a given network and session.
+
         Args:
             network_name: The name of the network to get sly_data for
-            
+            session_id: The session identifier. If None, tries to get any data for the network
+
         Returns:
-            dict: The latest sly_data for the network, or empty dict if none available
+            dict: The latest sly_data for the network:session, or empty dict if none available
         """
+        if session_id:
+            storage_key = f"{network_name}:{session_id}"
+            return latest_sly_data_storage.get(storage_key, {})
+        # Fallback: try to find any session data for this network (backward compatibility)
         return latest_sly_data_storage.get(network_name, {})

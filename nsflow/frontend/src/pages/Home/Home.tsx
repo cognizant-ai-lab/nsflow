@@ -69,12 +69,12 @@ const HomeContent: React.FC = () => {
 
                   <Panel defaultSize={34} minSize={20} maxSize={40}>
                     <PanelGroup direction="horizontal">
-                      <Panel defaultSize={50} minSize={30} maxSize={70}>
+                      <Panel defaultSize={70} minSize={30} maxSize={70}>
                         {/* LogsPanel */}
                         <LogsPanel />
                       </Panel>
                       <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                      <Panel defaultSize={20} minSize={15} maxSize={30}>
+                      <Panel defaultSize={30} minSize={15} maxSize={30}>
                         {/* InfoPanel */}
                         <InfoPanel />
                       </Panel>

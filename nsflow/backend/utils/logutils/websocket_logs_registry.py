@@ -24,24 +24,28 @@ from nsflow.backend.utils.logutils.websocket_logs_manager import WebsocketLogsMa
 class LogsRegistry:
     """
     Registry for shared WebsocketLogsManager instances.
-    Provides a way to access or create logs managers scoped by `agent_name`,
-    ensuring shared broadcasting of logs and internal chat messages.
+    Provides a way to access or create logs managers scoped by `agent_name` and `session_id`,
+    ensuring isolated broadcasting of logs and internal chat messages per user session.
     """
 
     _managers: Dict[str, WebsocketLogsManager] = {}
 
     @classmethod
-    def register(cls, agent_name: str = "global") -> WebsocketLogsManager:
+    def register(cls, agent_name: str = "global", session_id: str = "global") -> WebsocketLogsManager:
         """
-        Retrieve a WebsocketLogsManager for the given agent name.
+        Retrieve a WebsocketLogsManager for the given agent name and session ID.
 
-        If an instance does not already exist for the specified agent_name,
-        a new one is created and stored. This ensures that all components
-        interacting with the same agent share the same logs manager.
+        If an instance does not already exist for the specified agent_name:session_id pair,
+        a new one is created and stored. This ensures that each user session has its own
+        isolated logs manager, preventing message cross-contamination in multi-user scenarios.
+
         :param agent_name: The name of the agent to get the log manager for.
                            Defaults to "global" for shared/global logging.
-        :return: A WebsocketLogsManager instance tied to the given agent_name.
+        :param session_id: The unique session identifier for this user connection.
+                          Defaults to "global" for backward compatibility.
+        :return: A WebsocketLogsManager instance tied to the given agent_name:session_id pair.
         """
-        if agent_name not in cls._managers:
-            cls._managers[agent_name] = WebsocketLogsManager(agent_name)
-        return cls._managers[agent_name]
+        key = f"{agent_name}:{session_id}"
+        if key not in cls._managers:
+            cls._managers[key] = WebsocketLogsManager(agent_name, session_id)
+        return cls._managers[key]

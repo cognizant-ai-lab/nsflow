@@ -12,6 +12,11 @@
 import { createContext, useContext, useState, ReactNode, useRef } from "react";
 import { getWandName } from "../utils/config";
 
+// Generate a unique session ID for this browser session
+const generateSessionId = (): string => {
+  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+};
+
 type Message = {
   sender: "system" | "internal" | "user" | "agent" | string;
   text: string | object; // Allow objects for SlyData messages;
@@ -21,6 +26,7 @@ type Message = {
 };
 
 type ChatContextType = {
+  sessionId: string; // Unique session identifier for WebSocket connections
   chatMessages: Message[];
   internalChatMessages: Message[];
   slyDataMessages: Message[];
@@ -50,13 +56,13 @@ type ChatContextType = {
   slyDataWs: WebSocket | null;
   logWs: WebSocket | null;
   progressWs: WebSocket | null;
-  
+
   setChatWs: (ws: WebSocket | null) => void;
   setInternalChatWs: (ws: WebSocket | null) => void;
   setSlyDataWs: (ws: WebSocket | null) => void;
   setLogWs: (ws: WebSocket | null) => void;
   setProgressWs: (ws: WebSocket | null) => void;
-  
+
   newSlyData: string;
   newLog: string;
   newProgress: string;
@@ -81,6 +87,9 @@ type ChatContextType = {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
+  // Generate a unique session ID once when the context is created
+  const [sessionId] = useState<string>(() => generateSessionId());
+
   const [chatMessages, setChatMessages] = useState<Message[]>([
     { sender: "system", text: "Welcome to the chat!" },
   ]);
@@ -189,7 +198,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   
 
   return (
-    <ChatContext.Provider value={{ 
+    <ChatContext.Provider value={{
+      sessionId, // Unique session ID for WebSocket connections
       chatMessages, internalChatMessages, slyDataMessages, logMessages, progressMessages,
 
       addChatMessage, addInternalChatMessage, addSlyDataMessage, addLogMessage, addProgressMessage,

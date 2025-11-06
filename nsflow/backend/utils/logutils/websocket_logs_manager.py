@@ -36,20 +36,23 @@ class WebsocketLogsManager:
     Enables sending structured logs and internal chat messages over WebSocket connections.
     Each instance manages a list of connected WebSocket clients and can broadcast messages
     to clients in real-time. Supports both general logs and internal chat streams.
+    Scoped per agent and session to ensure multi-user isolation.
     """
     LOG_BUFFER_SIZE = 100
 
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, session_id: str = "global"):
         """
-        Initialize a logs manager scoped to a specific agent.
+        Initialize a logs manager scoped to a specific agent and session.
         :param agent_name: The name of the agent (e.g. "coach", "refiner", or "global").
+        :param session_id: The unique session identifier for this user connection.
         """
         self.agent_name = agent_name
+        self.session_id = session_id
         self.active_log_connections: List[WebSocket] = []
         self.active_internal_chat_connections: List[WebSocket] = []
         self.active_sly_data_connections: List[WebSocket] = []
         self.active_progress_connections: List[WebSocket] = []
-        self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}")
+        self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}:{self.session_id}")
         self.log_buffer: List[Dict] = []
 
     def get_timestamp(self):
