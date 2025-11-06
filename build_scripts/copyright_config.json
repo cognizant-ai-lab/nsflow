@@ -1,6 +1,6 @@
 {
     "source_available_copyright": [
         "nsflow/backend",
-        "tests"
+        "tests/nsflow"
     ]
 }
