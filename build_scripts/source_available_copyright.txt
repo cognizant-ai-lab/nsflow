@@ -14,19 +14,3 @@
 # limitations under the License.
 #
 # END COPYRIGHT
-
-from importlib.metadata import version as actual_version
-from fastapi.testclient import TestClient
-from nsflow.backend.main import app
-
-client = TestClient(app)
-
-
-def test_fetch_version_nsflow_matches_actual():
-    """Ensure the version returned from the endpoint matches importlib metadata"""
-    expected = actual_version("nsflow")
-    response = client.get("/api/v1/version/nsflow")
-
-    assert response.status_code == 200
-    returned_version = response.json()["version"]
-    assert returned_version == expected
