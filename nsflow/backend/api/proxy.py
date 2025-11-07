@@ -14,6 +14,50 @@
 # imitations under the License.
 #
 # END COPYRIGHT
+"""
+NSFlow -> Neuro-SAN HTTP proxy.
+
+Purpose
+-------
+Expose a single same-origin endpoint (under /api/proxy/*) from the NSFlow web app
+that securely forwards requests to the Neuro-SAN server. This avoids browser CORS
+issues and lets you centrally manage which upstream paths/methods are allowed.
+
+Current Mode (default)
+----------------------
+- Allow ALL paths and forward only the configured HTTP methods (default: GET, POST).
+- Passes through query params and body, strips hop-by-hop headers, and can attach
+  an Authorization bearer token if NEURO_SAN_SHARED_TOKEN is set.
+
+How to Lock Down Later (no code changes)
+----------------------------------------
+- Set PROXY_ALLOW_ALL=false to enable a simple allowlist by *first path segment*.
+- Provide a comma-separated list in PROXY_ALLOWED_PATHS, e.g.:
+    PROXY_ALLOWED_PATHS="list,chat,status,v1"
+- Optionally restrict methods via PROXY_ALLOWED_METHODS (e.g. "GET,POST").
+
+Key Environment Variables
+-------------------------
+- PROXY_ALLOW_ALL          : "true"/"false" (default "true"). When false, only
+                             paths whose first segment appears in PROXY_ALLOWED_PATHS
+                             are forwarded.
+- PROXY_ALLOWED_PATHS      : Comma-separated allowlist of first segments (effective
+                             only when PROXY_ALLOW_ALL=false).
+- PROXY_ALLOWED_METHODS    : Comma-separated HTTP methods (default "GET,POST").
+- PROXY_MAX_BODY_MB        : Max request body size in MB (default 10).
+- NEURO_SAN_SERVER_CONNECTION : "http" or "https" (default "https").
+- NEURO_SAN_SERVER_HOST    : Upstream host, e.g., "neuro-san.onrender.com".
+- NEURO_SAN_SERVER_HTTP_PORT : Upstream port, e.g., "443".
+- NEURO_SAN_SHARED_TOKEN   : Optional shared secret; if set, proxy adds
+                             "Authorization: Bearer <token>" to forwarded requests.
+
+Notes
+-----
+- Keep PROXY_ALLOW_ALL=true during early integration, then flip to false and
+  populate PROXY_ALLOWED_PATHS when you’re ready to restrict access.
+- Upstream (Neuro-SAN) should validate the shared token if you set it here.
+"""
+
 import os
 from typing import Set
 from fastapi import APIRouter, Request, HTTPException
