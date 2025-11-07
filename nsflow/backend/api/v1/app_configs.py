@@ -49,6 +49,7 @@ def get_runtime_config():
         "NSFLOW_PORT": os.getenv("NSFLOW_PORT", "4173"),
         "VITE_API_PROTOCOL": os.getenv("VITE_API_PROTOCOL", "http"),
         "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
+        "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),
         "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
         # NEW: feature flags (booleans)
         "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
