@@ -40,36 +40,61 @@ export const ApiPortProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const config = getAppConfig();
-    const host = config.NSFLOW_HOST || "localhost";
-    const port = parseInt(config.NSFLOW_PORT || "8005", 10);
-    const httpProtocol = config.VITE_API_PROTOCOL || "http";
-    const wsProtocol = config.VITE_WS_PROTOCOL || "ws";
+    (async () => {
+      const config = getAppConfig();
 
-    const resolvedApiUrl = `${httpProtocol}://${host}:${port}`;
-    const resolvedWsUrl = `${wsProtocol}://${host}:${port}`;
+      // 1) PRODUCTION: try same-origin first
+      const sameOrigin = window.location.origin; // e.g., https://nsflow.onrender.com
+      try {
+        const r = await fetch(`${sameOrigin}/api/v1/ping`, { method: "GET" });
+        if (r.ok) {
+          setApiUrl(sameOrigin);
+          // WebSocket protocol from current page:
+          const wsProto = sameOrigin.startsWith("https") ? "wss" : "ws";
+          const wsBase = sameOrigin.replace(/^https?/, wsProto);
+          setWsUrl(wsBase);
+          setApiPort(0); // not used in same-origin
+          setIsReady(true);
+          return;
+        }
+      } catch (e) {
+        // ignore; we'll fall back
+      }
 
-    // Try hitting the default backend port
-    fetch(`${resolvedApiUrl}/api/v1/ping`)
-      .then((res) => {
-        if (res.ok) {
-          console.log("FastAPI backend is running on:", resolvedApiUrl);
-          setApiPort(port);
+      // 2) DEV FALLBACK: use config host/port (ONLY for local dev)
+      // Avoid 0.0.0.0 in browser; if present, treat as localhost
+      const host = (config.NSFLOW_HOST || "localhost").replace(/^0\.0\.0\.0$/, "localhost");
+      const port = parseInt(config.NSFLOW_PORT || `${NSFLOW_DEV_PORT}`, 10);
+      const httpProtocol = config.VITE_API_PROTOCOL || "http";
+      const wsProtocol = config.VITE_WS_PROTOCOL || "ws";
+
+      const resolvedApiUrl = port ? `${httpProtocol}://${host}:${port}` : `${httpProtocol}://${host}`;
+      const resolvedWsUrl  = port ? `${wsProtocol}://${host}:${port}`    : `${wsProtocol}://${host}`;
+
+      try {
+        const r2 = await fetch(`${resolvedApiUrl}/api/v1/ping`);
+        if (r2.ok) {
           setApiUrl(resolvedApiUrl);
           setWsUrl(resolvedWsUrl);
+          setApiPort(port);
         } else {
-          throw new Error(`Backend ping failed`);
+          // last ditch: dev port 8005
+          const fallback = `${httpProtocol}://${host}:${NSFLOW_DEV_PORT}`;
+          const fallbackWs = `${wsProtocol}://${host}:${NSFLOW_DEV_PORT}`;
+          setApiUrl(fallback);
+          setWsUrl(fallbackWs);
+          setApiPort(NSFLOW_DEV_PORT);
         }
-      })
-      .catch((err) => {
-        console.warn("[!] Backend not reachable, switching to NSFLOW_DEV_PORT:", err);
-        const fallbackUrl = `${httpProtocol}://${host}:${NSFLOW_DEV_PORT}`;
+      } catch {
+        const fallback = `${httpProtocol}://${host}:${NSFLOW_DEV_PORT}`;
         const fallbackWs = `${wsProtocol}://${host}:${NSFLOW_DEV_PORT}`;
-        setApiPort(NSFLOW_DEV_PORT);
-        setApiUrl(fallbackUrl);
+        setApiUrl(fallback);
         setWsUrl(fallbackWs);
-      })
-      .finally(() => setIsReady(true));;
+        setApiPort(NSFLOW_DEV_PORT);
+      } finally {
+        setIsReady(true);
+      }
+    })();
   }, []);
 
   return (

@@ -20,10 +20,11 @@ import { useState, useRef, useEffect } from "react";
 import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useLocation } from "react-router-dom";
-import { AppBar, Toolbar, Typography, IconButton, Button, 
-  MenuItem,  Box, useTheme as useMuiTheme, alpha, Paper } from "@mui/material";
+import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
+  MenuItem,  Box, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
-  Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon
+  Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
+  KeyboardArrowDown as ArrowDownIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
@@ -36,28 +37,13 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }) => {
   const { apiUrl } = useApiPort();
-  const [exportDropdown, setExportDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
-  
+
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
-
-
-  // Handle clicking outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setExportDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   const handleExportNotebook = async () => {
     if (!selectedNetwork) return alert("Please select an agent network first.");
@@ -71,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setExportDropdown(false);
+    setAnchorEl(null);
   };
 
   const handleExportAgentNetwork = async () => {
@@ -86,7 +72,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setExportDropdown(false);
+    setAnchorEl(null);
   };
 
   const handleNavigateToEditor = () => {
@@ -98,9 +84,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
   };
 
   return (
-    <AppBar 
+    <AppBar
       key={`header-${isDarkMode ? 'dark' : 'light'}`}
-      position="static" 
+      position="static"
       elevation={2}
       sx={{
         backgroundColor: isOnEditorPage
@@ -112,16 +98,18 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
         backdropFilter: 'blur(6px)',
         boxShadow: `0 2px 6px ${alpha(muiTheme.palette.common.black, 0.15)}`,
         transition: 'background-color 0.3s ease',
+        overflow: 'visible',
       }}
     >
 
-      <Toolbar sx={{ 
-        minHeight: '56px !important', 
+      <Toolbar sx={{
+        minHeight: '56px !important',
         px: 2,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        width: '100%'
+        width: '100%',
+        overflow: 'visible',
       }}>
         {/* Left - App Icon and Title */}
         <Box sx={{ 
@@ -162,14 +150,15 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
         </Box>
 
         {/* Middle - Navigation Buttons */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 1,
           flex: '0 0 auto',
           position: 'absolute',
           left: '50%',
-          transform: 'translateX(-50%)'
+          transform: 'translateX(-50%)',
+          overflow: 'visible',
         }}>
           {/* Reload */}
           {!isOnEditorPage && (
@@ -235,49 +224,87 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
           {/* Export Dropdown */}
           {!isOnEditorPage && (
-            <Box ref={dropdownRef} sx={{ position: 'relative' }}>
+            <>
               <Button
                 variant="outlined"
                 startIcon={<DownloadIcon />}
-                endIcon={<Typography sx={{ transform: exportDropdown ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▶</Typography>}
-                onClick={() => setExportDropdown(!exportDropdown)}
+                endIcon={
+                  <ArrowDownIcon
+                    sx={{
+                      fontSize: '18px',
+                      transform: anchorEl ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.3s ease'
+                    }}
+                  />
+                }
+                onClick={(e) => setAnchorEl(e.currentTarget)}
                 sx={{
                   color: muiTheme.palette.text.primary,
                   borderColor: muiTheme.palette.primary.main,
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
                   '&:hover': {
-                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.15),
                     borderColor: muiTheme.palette.primary.main,
-                  }
+                  },
+                  transition: 'all 0.2s ease'
                 }}
               >
                 Export
               </Button>
 
-              {exportDropdown && (
-                <Paper
-                  elevation={8}
-                  sx={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+                sx={{
+                  '& .MuiPaper-root': {
+                    minWidth: 220,
                     mt: 1,
-                    minWidth: 200,
-                    zIndex: muiTheme.zIndex.modal,
-                    backgroundColor: muiTheme.palette.background.paper,
+                    borderRadius: 1,
                     border: `1px solid ${muiTheme.palette.divider}`,
+                  }
+                }}
+              >
+                <MenuItem
+                  onClick={handleExportNotebook}
+                  sx={{
+                    py: 1.5,
+                    px: 2,
+                    '&:hover': {
+                      backgroundColor: alpha(muiTheme.palette.primary.main, 0.1)
+                    }
                   }}
                 >
-                  <MenuItem onClick={handleExportNotebook}>
-                    <EditIcon sx={{ mr: 1 }} />
+                  <EditIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Export as Notebook
-                  </MenuItem>
-                  <MenuItem onClick={handleExportAgentNetwork}>
-                    <NetworkIcon sx={{ mr: 1 }} />
-                    Export Agent Network
-                  </MenuItem>
-                </Paper>
-              )}
-            </Box>
+                  </Typography>
+                </MenuItem>
+                <MenuItem
+                  onClick={handleExportAgentNetwork}
+                  sx={{
+                    py: 1.5,
+                    px: 2,
+                    '&:hover': {
+                      backgroundColor: alpha(muiTheme.palette.primary.main, 0.1)
+                    }
+                  }}
+                >
+                  <NetworkIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    Export as HOCON
+                  </Typography>
+                </MenuItem>
+              </Menu>
+            </>
           )}
         </Box>
 
