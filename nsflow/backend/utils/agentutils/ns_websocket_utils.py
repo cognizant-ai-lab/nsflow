@@ -159,7 +159,11 @@ class NsWebsocketUtils:
                 user_sessions.pop(self.session_id, None)
 
     async def create_user_session(self, sid: str) -> Dict[str, Any]:
-        """method to create a user session with the given WebSocket connection."""
+        """method to create a user session with the given WebSocket connection.
+        :param sid: Unique session identifier for this user connection.
+                          If not provided, a new one will be generated.
+        "return user_session: A dictionary with user_session related keys
+        """
 
         # Agent session gets created in init
         chat_filter: Dict[str, Any] = {"chat_filter_type": "MAXIMAL"}
@@ -176,7 +180,7 @@ class NsWebsocketUtils:
                                                   thinking_dir=self.thinking_dir)
         # Add a processor to handle agent logs
         # and to highlight the agents that respond in the agent network diagram
-        agent_log_processor = AgentLogProcessor(self.agent_name, self.session_id)
+        agent_log_processor = AgentLogProcessor(self.agent_name, sid)
         input_processor.processor.add_processor(agent_log_processor)
 
         # Note: If nothing is specified the server assumes the chat_filter_type
