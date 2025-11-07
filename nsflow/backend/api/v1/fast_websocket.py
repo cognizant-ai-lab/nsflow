@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,9 +22,9 @@ For now, we have separate end-points for OpenAPI specs
 
 from fastapi import APIRouter, WebSocket
 
+from nsflow.backend.trust.rai_service import RaiService
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
-from nsflow.backend.trust.rai_service import RaiService
 
 router = APIRouter(prefix="/api/v1/ws")
 

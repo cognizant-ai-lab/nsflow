@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,10 @@
 # END COPYRIGHT
 
 import os
-from nsflow.backend.db.database import SessionLocal, Base, engine
+
 from nsflow.backend.db import models
+from nsflow.backend.db.database import Base, SessionLocal, engine
+
 
 class ObservabilityUtils:
     def __init__(self):

@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,9 @@
 # END COPYRIGHT
 
 from importlib.metadata import version as actual_version
+
 from fastapi.testclient import TestClient
+
 from nsflow.backend.main import app
 
 client = TestClient(app)

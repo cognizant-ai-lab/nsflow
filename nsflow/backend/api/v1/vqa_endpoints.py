@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,14 +17,9 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Annotated
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter
-from fastapi import File
-from fastapi import Form
-from fastapi import HTTPException
-from fastapi import UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import StringConstraints
 from werkzeug.utils import secure_filename

@@ -20,9 +20,9 @@ import signal
 import socket
 import subprocess
 import sys
-import threading
 import time
 from typing import Any, Dict
+
 # Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
 
@@ -50,6 +50,7 @@ log_cfg = {
         "fmt": "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
     },
 }
+
 
 # pylint: disable=too-many-instance-attributes
 class NsFlowRunner:
@@ -104,7 +105,7 @@ class NsFlowRunner:
         self.log_bridge = ProcessLogBridge(
             level=self.config.get("nsflow_log_level", "info"),
             runner_log_file=os.path.join(self.config["nsflow_log_dir"], "runner.log"),
-            config=log_cfg
+            config=log_cfg,
         )
 
         # Parse CLI args
@@ -162,10 +163,13 @@ The type of connection to initiate. Choices are to connect to:
             "Requires your agent server to be set up with certificates that are well known. "
             "This is not something that our basic server setup supports out-of-the-box.",
         )
-        parser.add_argument("--default-sly-data", type=str,
-                            default=self.config["default_sly_data"],
-                            help="JSON string containing data that is out-of-band to the chat stream, "
-                                "but is still essential to agent function")
+        parser.add_argument(
+            "--default-sly-data",
+            type=str,
+            default=self.config["default_sly_data"],
+            help="JSON string containing data that is out-of-band to the chat stream, "
+            "but is still essential to agent function",
+        )
         parser.add_argument(
             "--nsflow-host",
             type=str,
@@ -243,7 +247,7 @@ The type of connection to initiate. Choices are to connect to:
             "NEURO_SAN_SERVER_HTTP_PORT": "server_http_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",
-            "DEFAULT_SLY_DATA": "default_sly_data"
+            "DEFAULT_SLY_DATA": "default_sly_data",
         }
 
         self.logger.info("\n" + "=" * 50)
@@ -374,7 +378,7 @@ The type of connection to initiate. Choices are to connect to:
                 return True
             except Exception:
                 return False
-    
+
     def conditional_start_servers(self):
         """Start both neuro-san and nsflow basis given conditions"""
         # Handle mutually exclusive modes

@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,11 @@
 
 import asyncio
 from copy import copy
-from typing import Dict, Any, Optional, Generator
+from typing import Any, Dict, Generator, Optional
 
+from neuro_san.client.streaming_input_processor import StreamingInputProcessor
 from neuro_san.interfaces.agent_session import AgentSession
 from neuro_san.internals.messages.origination import Origination
-from neuro_san.client.streaming_input_processor import StreamingInputProcessor
 
 
 # pylint: disable=too-many-locals, useless-parent-delegation
@@ -29,13 +28,16 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
     """
     Processes AgentCli input by using the neuro-san streaming API.
     """
+
     _sentinel = object()
 
-    def __init__(self,
-                 default_input: str = "",
-                 thinking_file: str = None,
-                 session: AgentSession = None,
-                 thinking_dir: str = None):
+    def __init__(
+        self,
+        default_input: str = "",
+        thinking_file: str = None,
+        session: AgentSession = None,
+        thinking_dir: str = None,
+    ):
         """
         Constructor
         """
@@ -62,8 +64,7 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
         # Note that by design, a client does not have to interpret the
         # chat_context at all. It merely needs to pass it along to continue
         # the conversation.
-        chat_request: Dict[str, Any] = self.formulate_chat_request(user_input, sly_data,
-                                                                   chat_context, chat_filter)
+        chat_request: Dict[str, Any] = self.formulate_chat_request(user_input, sly_data, chat_context, chat_filter)
         self.reset()
 
         return_state: Dict[str, Any] = copy(state)
@@ -100,7 +101,7 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
             "user_input": None,
             "sly_data": sly_data,
             "origin_str": origin_str,
-            "token_accounting": self.processor.get_token_accounting()
+            "token_accounting": self.processor.get_token_accounting(),
         }
         return_state.update(update)
 

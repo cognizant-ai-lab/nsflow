@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,10 @@
 import asyncio
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from fastapi import WebSocket, WebSocketDisconnect
+
 from nsflow.backend.trust.sustainability_calculator import SustainabilityCalculator
 
 
@@ -42,29 +43,25 @@ class RaiService:
         # Turning off some of the logs in this class to reduce terminal noise
         self.logger = logging.getLogger(self.__class__.__name__)
         self.current_metrics = self._get_default_metrics("unknown")
-        
+
     @classmethod
     def get_instance(cls):
         """Singleton pattern to ensure single instance across the application."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     def _get_default_metrics(self, agent_name: str = "ollama") -> Dict[str, str]:
         """Return default sustainability metrics."""
         # self.logger.info(f"Returning default sustainability metrics for agent: {agent_name}")
-        return {
-            "energy": "0.00 kWh",
-            "carbon": "0.00 g CO₂",
-            "water": "0.00 L",
-            "model": "",
-            "cost": "$0.000"
-        }
-    
-    def _calculate_metrics_from_token_accounting(self, token_accounting: Dict[str, Any], agent_name: str = "ollama") -> Dict[str, str]:
+        return {"energy": "0.00 kWh", "carbon": "0.00 g CO₂", "water": "0.00 L", "model": "", "cost": "$0.000"}
+
+    def _calculate_metrics_from_token_accounting(
+        self, token_accounting: Dict[str, Any], agent_name: str = "ollama"
+    ) -> Dict[str, str]:
         """
         Calculate sustainability metrics from token accounting data using research-based calculations.
-        
+
         Args:
             token_accounting: Dictionary containing token usage data from NeuroSan
                 - total_tokens: Total number of tokens processed
@@ -72,28 +69,30 @@ class RaiService:
                 - total_cost: Cost of the request
                 - successful_requests: Number of successful requests
                 - model: Model name (if available)
-        
+
         Returns:
             List of sustainability metrics with updated values
         """
         try:
             # self.logger.info(f"Processing token accounting in _calculate_metrics_from_token_accounting: {token_accounting}")
-            
+
             # Add model name to token accounting data if not already present
             enhanced_token_data = token_accounting.copy()
             if "model" not in enhanced_token_data:
-                enhanced_token_data["model"] = "llm"  # Generic placeholder for demo - will be replaced with actual model detection
-            
+                enhanced_token_data["model"] = (
+                    "llm"  # Generic placeholder for demo - will be replaced with actual model detection
+                )
+
             # self.logger.info(f"Enhanced token data with model: {enhanced_token_data}")
-            
+
             # Use the research-based calculator
             sustainability_metrics = self.calculator.calculate_from_token_accounting(enhanced_token_data)
-            
+
             # self.logger.info(f"Calculator returned: energy={sustainability_metrics.energy_kwh}, carbon={sustainability_metrics.carbon_g_co2}, water={sustainability_metrics.water_liters}, model={sustainability_metrics.model_name}")
-            
+
             # Convert to the format expected by the frontend with appropriate precision
             # Use scientific notation or more decimal places for very small values
-            
+
             # Format energy with appropriate precision
             if sustainability_metrics.energy_kwh >= 0.001:
                 energy_str = f"{sustainability_metrics.energy_kwh:.3f} kWh"
@@ -101,7 +100,7 @@ class RaiService:
                 energy_str = f"{sustainability_metrics.energy_kwh:.4f} kWh"
             else:
                 energy_str = f"{sustainability_metrics.energy_kwh:.2e} kWh"
-            
+
             # Format carbon with appropriate precision
             if sustainability_metrics.carbon_g_co2 >= 1.0:
                 carbon_str = f"{sustainability_metrics.carbon_g_co2:.0f} g CO₂"
@@ -109,7 +108,7 @@ class RaiService:
                 carbon_str = f"{sustainability_metrics.carbon_g_co2:.1f} g CO₂"
             else:
                 carbon_str = f"{sustainability_metrics.carbon_g_co2:.2f} g CO₂"
-            
+
             # Format water with appropriate precision - use mL for very small values
             if sustainability_metrics.water_liters >= 0.001:
                 water_str = f"{sustainability_metrics.water_liters:.3f} L"
@@ -124,25 +123,25 @@ class RaiService:
                     water_str = f"{water_ml:.3f} mL"
                 else:
                     water_str = f"{water_ml:.4f} mL"
-            
+
             # Format cost from token accounting data
-            cost_value = token_accounting.get('total_cost', 0.0)
+            cost_value = token_accounting.get("total_cost", 0.0)
             if cost_value > 0:
                 cost_str = f"${cost_value:.3f}"
             else:
                 cost_str = "$0.000"
-            
+
             result = {
                 "energy": energy_str,
                 "carbon": carbon_str,
                 "water": water_str,
                 "model": sustainability_metrics.model_name,
-                "cost": cost_str
+                "cost": cost_str,
             }
-            
+
             # self.logger.info(f"Final formatted result: {result}")
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Error calculating sustainability metrics: {e}")
             return {
@@ -150,9 +149,9 @@ class RaiService:
                 "carbon": "00 g CO₂",
                 "water": "0.00 L",
                 "model": "-",
-                "cost": "$0.00"
+                "cost": "$0.00",
             }  # Return default metrics on error
-    
+
     async def handle_websocket(self, websocket: WebSocket, agent_name: str = "ollama", session_id: str = "global"):
         """
         Handle a new WebSocket connection for real-time sustainability metrics.
@@ -202,8 +201,10 @@ class RaiService:
                 # Clean up empty session lists
                 if not self.active_connections[session_id]:
                     del self.active_connections[session_id]
-    
-    async def update_metrics_from_token_accounting(self, token_accounting: Dict[str, Any], agent_name: str = "ollama", session_id: str = "global"):
+
+    async def update_metrics_from_token_accounting(
+        self, token_accounting: Dict[str, Any], agent_name: str = "ollama", session_id: str = "global"
+    ):
         """
         Update sustainability metrics based on new token accounting data and broadcast to session clients.
 
@@ -265,12 +266,14 @@ class RaiService:
             del self.active_connections[session_id]
 
         if disconnected_clients:
-            self.logger.info(f"Removed {len(disconnected_clients)} disconnected WebSocket clients from session {session_id}")
-    
+            self.logger.info(
+                f"Removed {len(disconnected_clients)} disconnected WebSocket clients from session {session_id}"
+            )
+
     def get_current_metrics(self) -> Dict[str, str]:
         """
         Get the current sustainability metrics.
-        
+
         Returns:
             List of current sustainability metrics
         """

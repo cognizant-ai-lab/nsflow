@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +21,7 @@ This allows consistent reuse of log managers across different components
 """
 
 from typing import Dict
+
 from nsflow.backend.utils.logutils.websocket_logs_manager import WebsocketLogsManager
 
 

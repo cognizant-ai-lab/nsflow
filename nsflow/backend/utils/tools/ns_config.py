@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@
 
 from dataclasses import dataclass
 
+
 @dataclass
 class NsConfig:
     """
@@ -24,6 +24,7 @@ class NsConfig:
     This class is responsible for storing and retrieving configuration
     parameters such as connectivity, host and port for the Neuro-San server.
     """
+
     host: str
     port: int
     connection_type: str = "grpc"
@@ -35,8 +36,4 @@ class NsConfig:
 
     def to_dict(self):
         """Return the dict form of a config"""
-        return {
-            "ns_server_host": self.host,
-            "ns_server_port": self.port,
-            "ns_connection_type": self.connection_type
-        }
+        return {"ns_server_host": self.host, "ns_server_port": self.port, "ns_connection_type": self.connection_type}

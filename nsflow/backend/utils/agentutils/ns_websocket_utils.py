@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,21 +16,19 @@
 
 import asyncio
 import json
-import os
 import logging
+import os
 import tempfile
-from typing import Dict, Any
 import uuid
+from typing import Any, Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
-
 from neuro_san.client.agent_session_factory import AgentSessionFactory
 
+from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
-
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
-from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -59,9 +56,7 @@ class NsWebsocketUtils:
     DEFAULT_INPUT: str = ""
     DEFAULT_PROMPT: str = "Please enter your response ('quit' to terminate):\n"
 
-    def __init__(self, agent_name: str,
-                 websocket: WebSocket,
-                 session_id: str = None):
+    def __init__(self, agent_name: str, websocket: WebSocket, session_id: str = None):
         """
         Initialize the Agent service API wrapper.
         :param agent_name: Name of the NeuroSAN agent(Network) to connect to.
@@ -72,8 +67,10 @@ class NsWebsocketUtils:
         try:
             config = NsConfigsRegistry.get_current()
         except RuntimeError as e:
-            raise RuntimeError("No active NsConfigStore. \
-                               Please set it via /set_config before using endpoints.") from e
+            raise RuntimeError(
+                "No active NsConfigStore. \
+                               Please set it via /set_config before using endpoints."
+            ) from e
 
         self.server_host = config.host
         self.server_port = config.port
@@ -104,7 +101,9 @@ class NsWebsocketUtils:
         await websocket.accept()
         # Use session_id from the frontend
         self.active_chat_connections[self.session_id] = websocket
-        await self.logs_manager.log_event(f"Chat client {self.session_id} connected to agent: {self.agent_name}", "nsflow")
+        await self.logs_manager.log_event(
+            f"Chat client {self.session_id} connected to agent: {self.agent_name}", "nsflow"
+        )
 
         async with user_sessions_lock:
             if self.session_id not in user_sessions:
@@ -118,8 +117,8 @@ class NsWebsocketUtils:
                 user_input = message_data.get("message", "")
                 sly_data = message_data.get("sly_data", {})
 
-                input_processor = user_session['input_processor']
-                state = user_session['state']
+                input_processor = user_session["input_processor"]
+                state = user_session["state"]
                 # Update user input in state
                 state["user_input"] = user_input
                 # Update sly_data in state based on user input
@@ -127,7 +126,7 @@ class NsWebsocketUtils:
 
                 # Update the state
                 state = await input_processor.async_process_once(state)
-                user_session['state'] = state
+                user_session["state"] = state
                 last_chat_response = state.get("last_chat_response")
 
                 # Start a background task and pass necessary data
@@ -174,10 +173,9 @@ class NsWebsocketUtils:
             "sly_data": {},
         }
 
-        input_processor = AsyncStreamingInputProcessor(default_input="",
-                                                  thinking_file=self.thinking_file,
-                                                  session=self.session,
-                                                  thinking_dir=self.thinking_dir)
+        input_processor = AsyncStreamingInputProcessor(
+            default_input="", thinking_file=self.thinking_file, session=self.session, thinking_dir=self.thinking_dir
+        )
         # Add a processor to handle agent logs
         # and to highlight the agents that respond in the agent network diagram
         agent_log_processor = AgentLogProcessor(self.agent_name, sid)
@@ -190,21 +188,17 @@ class NsWebsocketUtils:
         #       end user will not care about and not appreciate the extra
         #       data charges on their cell phone.
 
-        user_session = {
-            "input_processor": input_processor,
-            "state": state,
-            "sid": sid
-        }
+        user_session = {"input_processor": input_processor, "state": state, "sid": sid}
         return user_session
 
     def create_agent_session(self):
         """Open a session with the factory"""
-         # Open a session with the factory
+        # Open a session with the factory
         factory: AgentSessionFactory = self.get_agent_session_factory()
         metadata: Dict[str, str] = {"user_id": os.environ.get("USER")}
-        session = factory.create_session(self.connection, self.agent_name,
-                                              self.server_host, self.server_port, self.use_direct,
-                                              metadata)
+        session = factory.create_session(
+            self.connection, self.agent_name, self.server_host, self.server_port, self.use_direct, metadata
+        )
         logging.info("Created agent session for agent: %s", str(session.get_request_path(self.connection)))
         return session
 

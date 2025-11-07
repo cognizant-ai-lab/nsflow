@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,42 +14,40 @@
 #
 # END COPYRIGHT
 
-# pylint: disable=too-many-lines
-from functools import lru_cache
 import logging
 import os
-from typing import Any
-from typing import Dict
-from typing import Optional
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Query
+
+# pylint: disable=too-many-lines
+from functools import lru_cache
+from typing import Any, Dict, Optional
 
 import aiofiles
+from fastapi import APIRouter, HTTPException, Query
 
-from nsflow.backend.models.editor_models import NetworkTemplate
-from nsflow.backend.models.editor_models import TemplateType
-from nsflow.backend.models.editor_models import EditorState
-from nsflow.backend.models.editor_models import ValidationResult
-from nsflow.backend.models.editor_models import NetworkInfo
-from nsflow.backend.models.editor_models import NetworksList
-from nsflow.backend.models.editor_models import AgentCreateRequest
-from nsflow.backend.models.editor_models import AgentUpdateRequest
-from nsflow.backend.models.editor_models import AgentDuplicateRequest
-from nsflow.backend.models.editor_models import BaseAgentProperties
-from nsflow.backend.models.editor_models import EdgeRequest
-from nsflow.backend.models.editor_models import NetworkExportRequest
-from nsflow.backend.models.editor_models import UndoRedoResponse
-from nsflow.backend.models.editor_models import NetworkConnectivity
-from nsflow.backend.models.editor_models import StateConnectivityResponse
-from nsflow.backend.models.editor_models import NetworkStateInfo
-from nsflow.backend.models.editor_models import TopLevelConfig
-from nsflow.backend.models.editor_models import TopLevelConfigUpdateRequest
-from nsflow.backend.models.editor_models import ToolboxAgentCreateRequest
-from nsflow.backend.models.editor_models import ToolboxInfo
-
-from nsflow.backend.utils.editor.simple_state_registry import get_registry
+from nsflow.backend.models.editor_models import (
+    AgentCreateRequest,
+    AgentDuplicateRequest,
+    AgentUpdateRequest,
+    BaseAgentProperties,
+    EdgeRequest,
+    EditorState,
+    NetworkConnectivity,
+    NetworkExportRequest,
+    NetworkInfo,
+    NetworksList,
+    NetworkStateInfo,
+    NetworkTemplate,
+    StateConnectivityResponse,
+    TemplateType,
+    ToolboxAgentCreateRequest,
+    ToolboxInfo,
+    TopLevelConfig,
+    TopLevelConfigUpdateRequest,
+    UndoRedoResponse,
+    ValidationResult,
+)
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
+from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.editor.toolbox_service import get_toolbox_service
 
 logger = logging.getLogger(__name__)
@@ -68,6 +65,7 @@ def get_hocon_reader():
 
 
 # Network-level operations
+
 
 @router.get("/schemas/base-agent-properties", response_model=Dict[str, Any])
 def get_agent_create_schema():
@@ -94,7 +92,7 @@ async def list_all_networks():
             registry_networks=result["registry_networks"],
             editing_sessions=editing_sessions,
             total_registry=result["total_registry"],
-            total_sessions=result["total_sessions"]
+            total_sessions=result["total_sessions"],
         )
     except Exception as e:
         logger.error("Error listing networks: %s", e)
@@ -122,9 +120,7 @@ async def create_network(template: NetworkTemplate):
 
         registry = get_registry()
         design_id, manager = registry.create_new_network(
-            network_name=network_name,
-            template_type=template.type.value,
-            **template_kwargs
+            network_name=network_name, template_type=template.type.value, **template_kwargs
         )
 
         state = manager.get_state()
@@ -139,8 +135,9 @@ async def create_network(template: NetworkTemplate):
             corrected_first_level = template_kwargs.get("agents_per_level", [1])[0]
             if original_first_level != corrected_first_level:
                 corrections_applied.append(
-                    f"First level agents corrected from"\
-                    f" {original_first_level} to {corrected_first_level} (frontman requirement)")
+                    f"First level agents corrected from"
+                    f" {original_first_level} to {corrected_first_level} (frontman requirement)"
+                )
 
         if not template.name:
             corrections_applied.append(f"Network name auto-generated: '{state['network_name']}'")
@@ -153,7 +150,7 @@ async def create_network(template: NetworkTemplate):
             "template_type": template.type.value,
             "template_parameters": template_kwargs,
             "validation": validation,
-            "agent_count": len(state["agents"])
+            "agent_count": len(state["agents"]),
         }
 
         if corrections_applied:
@@ -188,7 +185,7 @@ async def load_network_from_registry(network_name: str):
             "original_network_name": network_name,
             "message": f"Network '{network_name}' loaded successfully",
             "validation": validation,
-            "agent_count": len(state["agents"])
+            "agent_count": len(state["agents"]),
         }
     except Exception as e:
         logger.error("Error loading network from registry: %s", e)
@@ -243,7 +240,7 @@ async def delete_network(design_id: str):
 
         return {
             "success": True,
-            "message": f"Network session '{design_id}' and all associated files deleted successfully"
+            "message": f"Network session '{design_id}' and all associated files deleted successfully",
         }
     except HTTPException:
         raise
@@ -268,22 +265,14 @@ async def set_network_name(design_id: str, request: Dict[str, str]):
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "set_network_name",
-                "args": {
-                    "name": new_name
-                }
-            })
+            operation_store.apply({"op": "set_network_name", "args": {"name": new_name}})
         else:
             # Fallback to direct manager call
             success = manager.set_network_name(new_name)
             if not success:
                 raise HTTPException(status_code=500, detail="Failed to set network name")
 
-        return {
-            "success": True,
-            "message": f"Network name set to '{new_name}'"
-        }
+        return {"success": True, "message": f"Network name set to '{new_name}'"}
     except HTTPException:
         raise
     except Exception as e:
@@ -327,12 +316,7 @@ async def update_top_level_config(design_id: str, request: TopLevelConfigUpdateR
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "update_top_level_config",
-                "args": {
-                    "updates": updates
-                }
-            })
+            operation_store.apply({"op": "update_top_level_config", "args": {"updates": updates}})
         else:
             # Fallback to direct manager call
             success = manager.update_top_level_config(updates)
@@ -343,7 +327,7 @@ async def update_top_level_config(design_id: str, request: TopLevelConfigUpdateR
             "success": True,
             "message": "Top-level configuration updated successfully",
             "updated_fields": list(updates.keys()),
-            "updates": updates
+            "updates": updates,
         }
     except HTTPException:
         raise
@@ -353,6 +337,7 @@ async def update_top_level_config(design_id: str, request: TopLevelConfigUpdateR
 
 
 # Agent-level operations
+
 
 @router.post("/networks/{design_id}/agents")
 async def create_agent(design_id: str, request: AgentCreateRequest):
@@ -371,35 +356,26 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
         if operation_store:
             if request.parent_name:
                 # Atomic operation: create agent with parent (add_agent + add_edge)
-                operation_store.apply({
-                    "op": "create_agent_with_parent",
-                    "args": {
-                        "name": request.name,
-                        "parent": request.parent_name,
-                        "agent_data": agent_data
+                operation_store.apply(
+                    {
+                        "op": "create_agent_with_parent",
+                        "args": {"name": request.name, "parent": request.parent_name, "agent_data": agent_data},
                     }
-                })
+                )
             else:
                 # Simple agent creation without parent
-                operation_store.apply({
-                    "op": "add_agent",
-                    "args": {
-                        "name": request.name,
-                        "parent": None,
-                        "agent_data": agent_data
-                    }
-                })
+                operation_store.apply(
+                    {"op": "add_agent", "args": {"name": request.name, "parent": None, "agent_data": agent_data}}
+                )
         else:
             # Fallback to direct manager call
             success = manager.add_agent(
-                agent_name=request.name,
-                parent_name=request.parent_name,
-                agent_data=agent_data
+                agent_name=request.name, parent_name=request.parent_name, agent_data=agent_data
             )
             if not success:
                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to create agent '{request.name}' (may already exist)")
+                    status_code=400, detail=f"Failed to create agent '{request.name}' (may already exist)"
+                )
 
         parent_msg = f" with parent '{request.parent_name}'" if request.parent_name else ""
         inferred_type = request.infer_agent_type()
@@ -408,7 +384,7 @@ async def create_agent(design_id: str, request: AgentCreateRequest):
             "message": f"Agent '{request.name}' created successfully{parent_msg}",
             "parent_name": request.parent_name,
             "agent_type": inferred_type,
-            "agent_properties": agent_data
+            "agent_properties": agent_data,
         }
     except HTTPException:
         raise
@@ -435,13 +411,7 @@ async def update_agent(design_id: str, agent_name: str, request: AgentUpdateRequ
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "update_agent",
-                "args": {
-                    "name": agent_name,
-                    "updates": updates
-                }
-            })
+            operation_store.apply({"op": "update_agent", "args": {"name": agent_name, "updates": updates}})
         else:
             # Fallback to direct manager call
             success = manager.update_agent(agent_name, updates)
@@ -451,7 +421,7 @@ async def update_agent(design_id: str, agent_name: str, request: AgentUpdateRequ
         return {
             "success": True,
             "message": f"Agent '{agent_name}' updated successfully",
-            "updated_fields": list(updates.keys())
+            "updated_fields": list(updates.keys()),
         }
     except HTTPException:
         raise
@@ -472,25 +442,18 @@ async def duplicate_agent(design_id: str, agent_name: str, request: AgentDuplica
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "duplicate_agent",
-                "args": {
-                    "agent_name": agent_name,
-                    "new_name": request.new_name
-                }
-            })
+            operation_store.apply(
+                {"op": "duplicate_agent", "args": {"agent_name": agent_name, "new_name": request.new_name}}
+            )
         else:
             # Fallback to direct manager call
             success = manager.duplicate_agent(agent_name, request.new_name)
             if not success:
                 raise HTTPException(
-                    status_code=400,
-                    detail="Failed to duplicate agent (source not found or target exists)")
+                    status_code=400, detail="Failed to duplicate agent (source not found or target exists)"
+                )
 
-        return {
-            "success": True,
-            "message": f"Agent '{agent_name}' duplicated as '{request.new_name}'"
-        }
+        return {"success": True, "message": f"Agent '{agent_name}' duplicated as '{request.new_name}'"}
     except HTTPException:
         raise
     except Exception as e:
@@ -510,22 +473,14 @@ async def delete_agent(design_id: str, agent_name: str):
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "delete_agent",
-                "args": {
-                    "name": agent_name
-                }
-            })
+            operation_store.apply({"op": "delete_agent", "args": {"name": agent_name}})
         else:
             # Fallback to direct manager call
             success = manager.delete_agent(agent_name)
             if not success:
                 raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
 
-        return {
-            "success": True,
-            "message": f"Agent '{agent_name}' deleted successfully"
-        }
+        return {"success": True, "message": f"Agent '{agent_name}' deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
@@ -547,11 +502,7 @@ async def get_agent(design_id: str, agent_name: str):
         if not agent:
             raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
 
-        return {
-            "agent": agent,
-            "design_id": design_id,
-            "network_name": state["network_name"]
-        }
+        return {"agent": agent, "design_id": design_id, "network_name": state["network_name"]}
     except HTTPException:
         raise
     except Exception as e:
@@ -560,6 +511,7 @@ async def get_agent(design_id: str, agent_name: str):
 
 
 # Edge operations
+
 
 @router.post("/networks/{design_id}/edges")
 async def add_edge(design_id: str, request: EdgeRequest):
@@ -573,26 +525,18 @@ async def add_edge(design_id: str, request: EdgeRequest):
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "add_edge",
-                "args": {
-                    "src": request.source_agent,
-                    "dst": request.target_agent
-                }
-            })
+            operation_store.apply(
+                {"op": "add_edge", "args": {"src": request.source_agent, "dst": request.target_agent}}
+            )
         else:
             # Fallback to direct manager call
             success = manager.add_edge(request.source_agent, request.target_agent)
             if not success:
                 raise HTTPException(
-                    status_code=400,
-                    detail="Failed to add edge (agents not found or would create cycle)"
+                    status_code=400, detail="Failed to add edge (agents not found or would create cycle)"
                 )
 
-        return {
-            "success": True,
-            "message": f"Edge added from '{request.source_agent}' to '{request.target_agent}'"
-        }
+        return {"success": True, "message": f"Edge added from '{request.source_agent}' to '{request.target_agent}'"}
     except HTTPException:
         raise
     except Exception as e:
@@ -612,23 +556,16 @@ async def remove_edge(design_id: str, request: EdgeRequest):
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "remove_edge",
-                "args": {
-                    "src": request.source_agent,
-                    "dst": request.target_agent
-                }
-            })
+            operation_store.apply(
+                {"op": "remove_edge", "args": {"src": request.source_agent, "dst": request.target_agent}}
+            )
         else:
             # Fallback to direct manager call
             success = manager.remove_edge(request.source_agent, request.target_agent)
             if not success:
                 raise HTTPException(status_code=400, detail="Failed to remove edge (agents not found)")
 
-        return {
-            "success": True,
-            "message": f"Edge removed from '{request.source_agent}' to '{request.target_agent}'"
-        }
+        return {"success": True, "message": f"Edge removed from '{request.source_agent}' to '{request.target_agent}'"}
     except HTTPException:
         raise
     except Exception as e:
@@ -637,6 +574,7 @@ async def remove_edge(design_id: str, request: EdgeRequest):
 
 
 # Toolbox operations
+
 
 @router.get("/toolbox/tools", response_model=ToolboxInfo)
 async def get_available_tools(toolbox_info_file: Optional[str] = Query(None, description="Path to toolbox info file")):
@@ -672,36 +610,30 @@ async def create_toolbox_agent(design_id: str, request: ToolboxAgentCreateReques
         if operation_store:
             if request.parent_name:
                 # Atomic operation: create toolbox agent with parent
-                operation_store.apply({
-                    "op": "create_toolbox_agent_with_parent",
-                    "args": {
-                        "name": request.name,
-                        "toolbox": request.toolbox,
-                        "parent": request.parent_name
+                operation_store.apply(
+                    {
+                        "op": "create_toolbox_agent_with_parent",
+                        "args": {"name": request.name, "toolbox": request.toolbox, "parent": request.parent_name},
                     }
-                })
+                )
             else:
                 # Simple toolbox agent creation without parent
-                operation_store.apply({
-                    "op": "add_toolbox_agent",
-                    "args": {
-                        "name": request.name,
-                        "toolbox": request.toolbox,
-                        "parent": None
+                operation_store.apply(
+                    {
+                        "op": "add_toolbox_agent",
+                        "args": {"name": request.name, "toolbox": request.toolbox, "parent": None},
                     }
-                })
+                )
         else:
             # Fallback to direct manager call
             agent_data = request.to_agent_data_dict()
             success = manager.add_agent(
-                agent_name=request.name,
-                parent_name=request.parent_name,
-                agent_data=agent_data
+                agent_name=request.name, parent_name=request.parent_name, agent_data=agent_data
             )
             if not success:
                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to create toolbox agent '{request.name}' (may already exist)")
+                    status_code=400, detail=f"Failed to create toolbox agent '{request.name}' (may already exist)"
+                )
 
         parent_msg = f" with parent '{request.parent_name}'" if request.parent_name else ""
         return {
@@ -710,7 +642,7 @@ async def create_toolbox_agent(design_id: str, request: ToolboxAgentCreateReques
             "agent_name": request.name,
             "toolbox": request.toolbox,
             "parent_name": request.parent_name,
-            "agent_type": "toolbox"
+            "agent_type": "toolbox",
         }
     except HTTPException:
         raise
@@ -740,12 +672,7 @@ async def delete_toolbox_agent(design_id: str, agent_name: str):
         # Use operation store for versioned operations
         operation_store = registry.get_operation_store(design_id)
         if operation_store:
-            operation_store.apply({
-                "op": "delete_agent",
-                "args": {
-                    "name": agent_name
-                }
-            })
+            operation_store.apply({"op": "delete_agent", "args": {"name": agent_name}})
         else:
             # Fallback to direct manager call
             success = manager.delete_agent(agent_name)
@@ -755,7 +682,7 @@ async def delete_toolbox_agent(design_id: str, agent_name: str):
         return {
             "success": True,
             "message": f"Toolbox agent '{agent_name}' deleted successfully",
-            "toolbox": agent.get("toolbox")
+            "toolbox": agent.get("toolbox"),
         }
     except HTTPException:
         raise
@@ -765,6 +692,7 @@ async def delete_toolbox_agent(design_id: str, agent_name: str):
 
 
 # Connectivity and visualization
+
 
 @router.get("/networks/{design_id}/connectivity")
 async def get_network_connectivity(design_id: str):
@@ -787,27 +715,24 @@ async def get_network_connectivity(design_id: str):
             children = [child for child in agent.get("tools", []) if child in state["agents"]]
             parent = agent.get("_parent")
 
-            nodes.append({
-                "id": agent_name,
-                "type": "agent",
-                "data": {
-                    "label": agent_name,
-                    "parent": parent,
-                    "children": children,
-                    "dropdown_tools": [],  # Non-agent tools
-                    "sub_networks": []  # External tools
-                },
-                "position": {"x": 100, "y": 100}
-            })
+            nodes.append(
+                {
+                    "id": agent_name,
+                    "type": "agent",
+                    "data": {
+                        "label": agent_name,
+                        "parent": parent,
+                        "children": children,
+                        "dropdown_tools": [],  # Non-agent tools
+                        "sub_networks": [],  # External tools
+                    },
+                    "position": {"x": 100, "y": 100},
+                }
+            )
 
             # Create edges for children
             for child in children:
-                edges.append({
-                    "id": f"{agent_name}-{child}",
-                    "source": agent_name,
-                    "target": child,
-                    "animated": True
-                })
+                edges.append({"id": f"{agent_name}-{child}", "source": agent_name, "target": child, "animated": True})
 
             # Store agent details
             agent_details[agent_name] = {
@@ -816,7 +741,7 @@ async def get_network_connectivity(design_id: str):
                 "class": agent.get("class"),
                 "function": agent.get("function"),
                 "dropdown_tools": [],
-                "sub_networks": []
+                "sub_networks": [],
             }
 
         return {
@@ -824,7 +749,7 @@ async def get_network_connectivity(design_id: str):
             "edges": edges,
             "agent_details": agent_details,
             "design_id": design_id,
-            "network_name": state["network_name"]
+            "network_name": state["network_name"],
         }
     except HTTPException:
         raise
@@ -834,6 +759,7 @@ async def get_network_connectivity(design_id: str):
 
 
 # Validation
+
 
 @router.get("/networks/{design_id}/validate", response_model=ValidationResult)
 async def validate_network(design_id: str):
@@ -855,6 +781,7 @@ async def validate_network(design_id: str):
 
 # Undo/Redo
 
+
 @router.post("/networks/{design_id}/undo", response_model=UndoRedoResponse)
 async def undo_operation(design_id: str):
     """Undo last operation using operation store"""
@@ -874,7 +801,7 @@ async def undo_operation(design_id: str):
             success=success,
             can_undo=len(history) > 0,
             can_redo=len(redo_stack) > 0,
-            message="Undo successful" if success else "Nothing to undo"
+            message="Undo successful" if success else "Nothing to undo",
         )
     except HTTPException:
         raise
@@ -902,7 +829,7 @@ async def redo_operation(design_id: str):
             success=success,
             can_undo=len(history) > 0,
             can_redo=len(redo_stack) > 0,
-            message="Redo successful" if success else "Nothing to redo"
+            message="Redo successful" if success else "Nothing to redo",
         )
     except HTTPException:
         raise
@@ -951,17 +878,16 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
         if request.validate_before_export:
             validation_result = manager.validate_network()
             if not validation_result["valid"]:
-                return {
-                    "success": False,
-                    "message": "Network validation failed",
-                    "validation": validation_result
-                }
+                return {"success": False, "message": "Network validation failed", "validation": validation_result}
 
         # Determine output filename based on whether this is new or edited from registry
         output_path = request.output_path
         if not output_path:
             # Auto-determine filename based on new vs edited from registry
-            from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR  # pylint: disable=import-outside-toplevel
+            from nsflow.backend.utils.agentutils.agent_network_utils import (  # pylint: disable=import-outside-toplevel
+                REGISTRY_DIR,
+            )
+
             filename_for_export = determine_export_filename(network_name, original_network_name)
             if filename_for_export.strip() == "":
                 filename_for_export = f"network_{design_id[:8]}"
@@ -1018,8 +944,9 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
 
             # Determine action message
             if original_network_name:
-                action_message = f"Network exported to {output_path}"\
-                     f" (replaced existing '{original_network_name}.hocon')"
+                action_message = (
+                    f"Network exported to {output_path}" f" (replaced existing '{original_network_name}.hocon')"
+                )
             else:
                 action_message = f"Network exported to {output_path} (new file)"
 
@@ -1029,7 +956,7 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
                 "output_path": output_path,
                 "filename": filename_for_manifest,
                 "action": "replace" if original_network_name else "create",
-                "original_name": original_network_name
+                "original_name": original_network_name,
             }
         raise HTTPException(status_code=500, detail="Failed to export network")
 
@@ -1062,8 +989,8 @@ async def save_session(design_id: str):
                     "network_name": draft_info.get("network_name"),
                     "operation_count": draft_info.get("operation_count", 0),
                     "last_saved": draft_info.get("last_saved"),
-                    "draft_path": draft_info.get("draft_path")
-                }
+                    "draft_path": draft_info.get("draft_path"),
+                },
             }
         raise HTTPException(status_code=500, detail="Failed to save draft")
 
@@ -1082,11 +1009,7 @@ async def load_draft_session(design_id: str):
 
         # Check if already loaded
         if registry.get_manager(design_id):
-            return {
-                "success": True,
-                "message": f"Draft '{design_id}' is already loaded",
-                "design_id": design_id
-            }
+            return {"success": True, "message": f"Draft '{design_id}' is already loaded", "design_id": design_id}
 
         # Load the draft
         loaded_design_id, manager = registry.load_draft_state(design_id)
@@ -1103,7 +1026,7 @@ async def load_draft_session(design_id: str):
             "agent_count": len(state["agents"]),
             "operation_count": draft_info.get("operation_count", 0),
             "can_undo": draft_info.get("can_undo", False),
-            "can_redo": draft_info.get("can_redo", False)
+            "can_redo": draft_info.get("can_redo", False),
         }
     except Exception as e:
         logger.error("Error loading draft session: %s", e)
@@ -1111,6 +1034,7 @@ async def load_draft_session(design_id: str):
 
 
 # Legacy endpoints for backward compatibility
+
 
 @router.get("/list")
 async def list_networks():
@@ -1128,11 +1052,7 @@ async def get_connectivity(network_name: str):
     """Get connectivity information for a network (legacy endpoint)"""
     try:
         result = get_hocon_reader().parse_agent_network_for_editor(network_name)
-        return NetworkConnectivity(
-            nodes=result["nodes"],
-            edges=result["edges"],
-            agent_details=result["agent_details"]
-        )
+        return NetworkConnectivity(nodes=result["nodes"], edges=result["edges"], agent_details=result["agent_details"])
     except HTTPException:
         raise
     except Exception as e:
@@ -1156,8 +1076,8 @@ async def get_state_networks():
                 source="editor_session",
                 has_state=True,
                 agent_count=session["agent_count"],
-                agents=None  # Would need to get from state if needed
-                )
+                agents=None,  # Would need to get from state if needed
+            )
             networks_info.append(info)
 
         return {"networks": networks_info}
@@ -1184,7 +1104,7 @@ async def get_network_state_legacy(network_name: str):
                     "network_name": network_name,
                     "state": state,
                     "last_updated": state.get("meta", {}).get("updated_at"),
-                    "source": "editor_session"
+                    "source": "editor_session",
                 }
         raise HTTPException(status_code=404, detail=f"No state found for network '{network_name}'")
 
@@ -1216,26 +1136,21 @@ async def get_network_state_connectivity(network_name: str):
             is_defined = bool(agent.get("instructions") or agent.get("function"))
             parent = agent.get("_parent")
 
-            nodes.append({
-                "id": agent_name,
-                "type": "agent",
-                "data": {
-                    "label": agent_name,
-                    "parent": parent,
-                    "is_defined": is_defined
-                },
-                "position": {"x": 100, "y": 100}
-            })
+            nodes.append(
+                {
+                    "id": agent_name,
+                    "type": "agent",
+                    "data": {"label": agent_name, "parent": parent, "is_defined": is_defined},
+                    "position": {"x": 100, "y": 100},
+                }
+            )
 
             # Create edges for children
             for child in agent.get("tools", []):
                 if child in state["agents"]:
-                    edges.append({
-                        "id": f"{agent_name}-{child}",
-                        "source": agent_name,
-                        "target": child,
-                        "animated": True
-                    })
+                    edges.append(
+                        {"id": f"{agent_name}-{child}", "source": agent_name, "target": child, "animated": True}
+                    )
 
         # Calculate metrics
         defined_agents = len([node for node in nodes if node.get("data", {}).get("is_defined", False)])
@@ -1251,7 +1166,7 @@ async def get_network_state_connectivity(network_name: str):
             connected_components=connected_components,
             total_agents=len(nodes),
             defined_agents=defined_agents,
-            undefined_agents=undefined_agents
+            undefined_agents=undefined_agents,
         )
 
     except HTTPException:
@@ -1263,6 +1178,7 @@ async def get_network_state_connectivity(network_name: str):
 
 # Utility endpoints
 
+
 @router.post("/cleanup")
 async def cleanup_old_sessions(max_age_days: int = Query(default=7, ge=1, le=30)):
     """Clean up old editing sessions"""
@@ -1270,11 +1186,7 @@ async def cleanup_old_sessions(max_age_days: int = Query(default=7, ge=1, le=30)
         # Cleanup not implemented in simplified version
         deleted_count = 0
         _ = max_age_days
-        return {
-            "success": True,
-            "message": f"Cleaned up {deleted_count} old sessions",
-            "deleted_count": deleted_count
-        }
+        return {"success": True, "message": f"Cleaned up {deleted_count} old sessions", "deleted_count": deleted_count}
     except Exception as e:
         logger.error("Error cleaning up sessions: %s", e)
         raise HTTPException(status_code=500, detail=f"Error cleaning up sessions: {str(e)}") from e
@@ -1291,19 +1203,19 @@ async def get_available_templates():
                 "description": "A simple network with just one agent (frontman)",
                 "parameters": ["agent_name"],
                 "defaults": {"agent_name": "frontman"},
-                "validation_rules": ["agent_name is optional, defaults to 'frontman'"]
+                "validation_rules": ["agent_name is optional, defaults to 'frontman'"],
             },
             {
                 "type": TemplateType.HIERARCHICAL.value,
-                "name": "Hierarchical Network", 
+                "name": "Hierarchical Network",
                 "description": "A hierarchical network with multiple levels",
                 "parameters": ["levels", "agents_per_level"],
                 "defaults": {"levels": 2, "agents_per_level": [1, 2]},
                 "validation_rules": [
                     "levels must be >= 2",
                     "agents_per_level[0] is always 1 (frontman)",
-                    "all other levels must have >= 1 agent"
-                ]
+                    "all other levels must have >= 1 agent",
+                ],
             },
             {
                 "type": TemplateType.SEQUENTIAL.value,
@@ -1311,12 +1223,12 @@ async def get_available_templates():
                 "description": "A linear sequence of agents",
                 "parameters": ["sequence_length"],
                 "defaults": {"sequence_length": 3},
-                "validation_rules": ["sequence_length must be >= 2"]
-            }
+                "validation_rules": ["sequence_length must be >= 2"],
+            },
         ],
         "auto_corrections": {
             "network_name": "Auto-generated if not provided or invalid",
             "hierarchical_first_level": "First level always corrected to 1 agent (frontman)",
-            "minimum_values": "Parameters below minimum are corrected to minimum valid values"
-        }
+            "minimum_values": "Parameters below minimum are corrected to minimum valid values",
+        },
     }

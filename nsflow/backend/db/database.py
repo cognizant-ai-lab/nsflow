@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,9 @@
 # END COPYRIGHT
 
 import os
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 NSFLOW_OBSERVABILITY = int(os.getenv("NSFLOW_OBSERVABILITY", 0))
 DB_URL = "sqlite:///./nsflow_observability.db" if NSFLOW_OBSERVABILITY else None

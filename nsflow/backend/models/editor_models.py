@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,23 +14,20 @@
 #
 # END COPYRIGHT
 
-from enum import Enum
 import re
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Any
-from typing import Union
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel, Field, field_validator
 
 # pylint: disable=no-self-argument, no-member
 
 # Extended models for comprehensive editor functionality
 
+
 class TemplateType(str, Enum):
     """Available network template types"""
+
     SINGLE_AGENT = "single_agent"
     HIERARCHICAL = "hierarchical"
     SEQUENTIAL = "sequential"
@@ -39,40 +35,38 @@ class TemplateType(str, Enum):
 
 class NetworkTemplate(BaseModel):
     """Template configuration for creating new networks"""
+
     type: TemplateType = Field(default=TemplateType.SINGLE_AGENT, description="Template type")
-    name: Optional[str] = Field(
-        None, description="Network name (will be auto-generated if not provided)")
+    name: Optional[str] = Field(None, description="Network name (will be auto-generated if not provided)")
 
     # Template-specific parameters
-    levels: Optional[int] = Field(
-        None, description="Number of levels for hierarchical template (min: 2)")
+    levels: Optional[int] = Field(None, description="Number of levels for hierarchical template (min: 2)")
     agents_per_level: Optional[List[int]] = Field(
-        None, description="Agents per level for hierarchical (first level always 1)")
-    sequence_length: Optional[int] = Field(
-        None, description="Length for sequential template (min: 2)")
-    agent_name: Optional[str] = Field(
-        None, description="Agent name for single agent template")
+        None, description="Agents per level for hierarchical (first level always 1)"
+    )
+    sequence_length: Optional[int] = Field(None, description="Length for sequential template (min: 2)")
+    agent_name: Optional[str] = Field(None, description="Agent name for single agent template")
 
-    @field_validator('levels')
+    @field_validator("levels")
     def validate_levels(cls, v, info):
         """Only validate levels for hierarchical templates"""
-        template_type = info.data.get('type')
+        template_type = info.data.get("type")
         if template_type == TemplateType.HIERARCHICAL and v is not None and v < 2:
             raise ValueError("Hierarchical template must have at least 2 levels")
         return v
 
-    @field_validator('sequence_length')
+    @field_validator("sequence_length")
     def validate_sequence_length(cls, v, info):
         """Only validate sequence_length for sequential templates"""
-        template_type = info.data.get('type')
+        template_type = info.data.get("type")
         if template_type == TemplateType.SEQUENTIAL and v is not None and v < 2:
             raise ValueError("Sequential template must have at least 2 agents")
         return v
 
-    @field_validator('agents_per_level')
+    @field_validator("agents_per_level")
     def validate_agents_per_level(cls, v, info):
         """Only validate agents_per_level for hierarchical templates"""
-        template_type = info.data.get('type')
+        template_type = info.data.get("type")
         if template_type == TemplateType.HIERARCHICAL and v is not None:
             if len(v) == 0:
                 raise ValueError("agents_per_level cannot be empty")
@@ -87,8 +81,7 @@ class NetworkTemplate(BaseModel):
                     v[i] = 1
         return v
 
-
-    @field_validator('name')
+    @field_validator("name")
     def validate_name(cls, v):
         """validate name"""
         if v is not None:
@@ -96,7 +89,7 @@ class NetworkTemplate(BaseModel):
             if v in {"string", ""}:
                 return None  # Will be auto-generated
             # Basic name validation
-            if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
+            if not re.match(r"^[a-zA-Z0-9_\-]+$", v):
                 raise ValueError("Network name must contain only alphanumeric characters, underscores, and hyphens")
         return v
 
@@ -114,7 +107,7 @@ class NetworkTemplate(BaseModel):
                 agents_per_level = list(self.agents_per_level)
                 while len(agents_per_level) < params["levels"]:
                     agents_per_level.append(2)  # Default 2 agents per additional level
-                agents_per_level = agents_per_level[:params["levels"]]  # Trim if too many
+                agents_per_level = agents_per_level[: params["levels"]]  # Trim if too many
                 params["agents_per_level"] = agents_per_level
             else:
                 params["agents_per_level"] = [1] + [2] * (params["levels"] - 1)
@@ -127,6 +120,7 @@ class NetworkTemplate(BaseModel):
 
 class EditorState(BaseModel):
     """Complete editor state structure"""
+
     design_id: str = Field(..., description="Unique identifier for this design session")
     network_name: str = Field(..., description="Network name")
     meta: Dict[str, Any] = Field(..., description="Metadata")
@@ -140,6 +134,7 @@ class EditorState(BaseModel):
 
 class ValidationResult(BaseModel):
     """Network validation result"""
+
     valid: bool = Field(..., description="Whether network is valid")
     warnings: List[str] = Field(default_factory=list, description="Validation warnings")
     errors: List[str] = Field(default_factory=list, description="Validation errors")
@@ -147,10 +142,10 @@ class ValidationResult(BaseModel):
 
 class NetworkInfo(BaseModel):
     """Network information summary"""
+
     design_id: str = Field(..., description="Design ID")
     network_name: str = Field(..., description="Network name")
-    original_network_name: Optional[str] = Field(
-        None, description="Original network name if loaded from registry")
+    original_network_name: Optional[str] = Field(None, description="Original network name if loaded from registry")
     source: str = Field(..., description="Source: new, registry, copilot")
     agent_count: int = Field(..., description="Number of agents")
     created_at: Optional[str] = Field(None, description="Creation timestamp")
@@ -162,6 +157,7 @@ class NetworkInfo(BaseModel):
 
 class NetworksList(BaseModel):
     """List of all available networks"""
+
     registry_networks: List[str] = Field(..., description="Networks available in registry")
     editing_sessions: List[NetworkInfo] = Field(..., description="Current editing sessions")
     total_registry: int = Field(..., description="Total registry networks")
@@ -170,27 +166,33 @@ class NetworksList(BaseModel):
 
 class LLMConfig(BaseModel):
     """Model for LLM configuration - flexible structure for any LLM provider"""
+
     # Common LLM parameters
     model_name: Optional[str] = Field(
-        None, description="Model name", examples=["gpt-4o", "claude-3-sonnet", "gpt-4o-mini"])
+        None, description="Model name", examples=["gpt-4o", "claude-3-sonnet", "gpt-4o-mini"]
+    )
     class_: Optional[str] = Field(
-        None, alias="class", description="LLM class type", examples=["OpenAILLM", "AnthropicLLM"])
+        None, alias="class", description="LLM class type", examples=["OpenAILLM", "AnthropicLLM"]
+    )
 
     # Advanced parameters
     temperature: Optional[float] = Field(
-        None, ge=0.0, le=2.0, description="Temperature setting (0.0-2.0)", examples=[0.7, 0.5, 1.0])
+        None, ge=0.0, le=2.0, description="Temperature setting (0.0-2.0)", examples=[0.7, 0.5, 1.0]
+    )
     max_tokens: Optional[int] = Field(
-        None, gt=0, description="Maximum tokens to generate", examples=[2000, 4000, 1000])
+        None, gt=0, description="Maximum tokens to generate", examples=[2000, 4000, 1000]
+    )
     api_key: Optional[str] = Field(None, description="API key", examples=["sk-..."])
-    api_base: Optional[str] = Field(
-        None, description="API base URL", examples=["https://api.openai.com/v1"])
+    api_base: Optional[str] = Field(None, description="API base URL", examples=["https://api.openai.com/v1"])
     top_p: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="Top-p sampling (0.0-1.0)", examples=[0.9, 0.8, 1.0])
+        None, ge=0.0, le=1.0, description="Top-p sampling (0.0-1.0)", examples=[0.9, 0.8, 1.0]
+    )
     reasoning: Optional[bool] = Field(
         None,
-        description="Controls the reasoning/thinking mode for supported models. "\
-            "If None (Default), The model will use its default reasoning behavior.",
-            examples=[True, False])
+        description="Controls the reasoning/thinking mode for supported models. "
+        "If None (Default), The model will use its default reasoning behavior.",
+        examples=[True, False],
+    )
 
     # Allow any additional custom fields for flexibility
     # pylint: disable=too-few-public-methods
@@ -201,46 +203,54 @@ class LLMConfig(BaseModel):
 
 class BaseAgentProperties(BaseModel):
     """Base class containing all common agent properties"""
+
     # Make name part of the base, but optional here
     name: Optional[str] = Field(None, description="Agent name")
     # Core agent properties
     instructions: Optional[str] = Field(
-        None, description="Agent instructions",
-        examples=["You are a helpful assistant", "Analyze the data and provide insights"])
+        None,
+        description="Agent instructions",
+        examples=["You are a helpful assistant", "Analyze the data and provide insights"],
+    )
     function: Optional[Dict[str, Any]] = Field(
-        None, description="Agent function definition",
-        examples=[{"description": "Get weather info", "parameters": {"type": "object"}}])
+        None,
+        description="Agent function definition",
+        examples=[{"description": "Get weather info", "parameters": {"type": "object"}}],
+    )
     class_: Optional[str] = Field(
-        None, alias="class",
-        description="Coded tool class (makes this a coded tool agent)", examples=["WeatherTool", "DataAnalyzer"])
+        None,
+        alias="class",
+        description="Coded tool class (makes this a coded tool agent)",
+        examples=["WeatherTool", "DataAnalyzer"],
+    )
     command: Optional[str] = Field(
-        None, description="Agent command template",
-        examples=["python analyze.py {input}", "curl -X GET {url}"])
+        None, description="Agent command template", examples=["python analyze.py {input}", "curl -X GET {url}"]
+    )
     tools: Optional[List[str]] = Field(
-        None, description="List of downstream agent names", examples=[["agent1", "agent2"], ["data_processor"]])
+        None, description="List of downstream agent names", examples=[["agent1", "agent2"], ["data_processor"]]
+    )
     toolbox: Optional[str] = Field(
-        None, description="Toolbox reference (makes this a toolbox agent)",
-        examples=["data_analysis_toolbox", "web_scraping_toolbox"])
+        None,
+        description="Toolbox reference (makes this a toolbox agent)",
+        examples=["data_analysis_toolbox", "web_scraping_toolbox"],
+    )
     args: Optional[Dict[str, Any]] = Field(
-        None, description="Agent arguments", examples=[{"timeout": 30, "retries": 3}])
+        None, description="Agent arguments", examples=[{"timeout": 30, "retries": 3}]
+    )
     allow: Optional[Dict[str, Any]] = Field(
-        None, description="Allow configuration", examples=[{"tools": ["web_search"], "functions": ["get_weather"]}])
-    display_as: Optional[str] = Field(
-        None, description="Display name", examples=["Data Analyst", "Weather Assistant"])
-    max_message_history: Optional[int] = Field(
-        None, description="Maximum message history", examples=[10, 50, 100])
-    verbose: Optional[bool] = Field(
-        None, description="Verbose mode", examples=[True, False])
+        None, description="Allow configuration", examples=[{"tools": ["web_search"], "functions": ["get_weather"]}]
+    )
+    display_as: Optional[str] = Field(None, description="Display name", examples=["Data Analyst", "Weather Assistant"])
+    max_message_history: Optional[int] = Field(None, description="Maximum message history", examples=[10, 50, 100])
+    verbose: Optional[bool] = Field(None, description="Verbose mode", examples=[True, False])
 
     # LLM configuration - optional, only shown when needed
     llm_config: Optional[Union[LLMConfig, Dict[str, Any]]] = Field(
         default=None,
         description="LLM configuration (optional - only specify if you need custom LLM settings)",
-        examples=[
-            {"model_name": "gpt-4o", "temperature": 0.7},
-            {"model_name": "claude-3-sonnet", "max_tokens": 4000}
-        ]
+        examples=[{"model_name": "gpt-4o", "temperature": 0.7}, {"model_name": "claude-3-sonnet", "max_tokens": 4000}],
     )
+
     # pylint: disable=too-few-public-methods
     class Config:
         extra = "allow"
@@ -249,19 +259,20 @@ class BaseAgentProperties(BaseModel):
 
 class AgentCreateRequest(BaseAgentProperties):
     """Request to create a new agent"""
+
     # Required field
     name: str = Field(..., description="Agent name", examples=["data_analyst", "weather_assistant", "frontman"])
 
     # Optional parent relationship
-    parent_name: Optional[str] = Field(
-        None, description="Parent agent name", examples=["frontman", "coordinator"])
+    parent_name: Optional[str] = Field(None, description="Parent agent name", examples=["frontman", "coordinator"])
 
     # Legacy fields for backward compatibility
     agent_data: Optional[Dict[str, Any]] = Field(None, description="Legacy agent configuration")
     template: Optional[str] = Field(
-        None, description="Template to base agent on", examples=["basic_agent", "data_processor"])
+        None, description="Template to base agent on", examples=["basic_agent", "data_processor"]
+    )
 
-    @field_validator('name')
+    @field_validator("name")
     def validate_name(cls, v):
         """Validate name"""
         if not v or not v.strip():
@@ -272,7 +283,7 @@ class AgentCreateRequest(BaseAgentProperties):
         """Infer agent type based on provided fields"""
         # Get the model dump to check the actual values
         model_data = self.model_dump()
-        class_value = model_data.get('class_')
+        class_value = model_data.get("class_")
 
         if class_value:
             return "coded_tool"
@@ -316,6 +327,7 @@ class AgentCreateRequest(BaseAgentProperties):
 
 class AgentUpdateRequest(BaseAgentProperties):
     """Request to update an agent"""
+
     # Optional name field for updates
     name: Optional[str] = Field(None, description="Agent name")
 
@@ -352,9 +364,10 @@ class AgentUpdateRequest(BaseAgentProperties):
 
 class AgentDuplicateRequest(BaseModel):
     """Request to duplicate an agent"""
+
     new_name: str = Field(..., description="Name for the duplicated agent")
 
-    @field_validator('new_name')
+    @field_validator("new_name")
     def validate_new_name(cls, v):
         """Validate new name"""
         if not v or not v.strip():
@@ -364,16 +377,18 @@ class AgentDuplicateRequest(BaseModel):
 
 class EdgeRequest(BaseModel):
     """Request to add/remove edges between agents"""
+
     source_agent: str = Field(..., description="Source agent name")
     target_agent: str = Field(..., description="Target agent name")
 
 
 class NetworkExportRequest(BaseModel):
     """Request to export network to HOCON"""
+
     output_path: Optional[str] = Field(None, description="Output file path (auto-generated if not provided)")
     validate_before_export: bool = Field(default=True, description="Validate before export")
 
-    @field_validator('output_path')
+    @field_validator("output_path")
     def validate_output_path(cls, v):
         """Validate output path"""
         if v is not None:
@@ -386,6 +401,7 @@ class NetworkExportRequest(BaseModel):
 
 class UndoRedoResponse(BaseModel):
     """Response for undo/redo operations"""
+
     success: bool = Field(..., description="Whether operation succeeded")
     can_undo: bool = Field(..., description="Whether undo is still available")
     can_redo: bool = Field(..., description="Whether redo is still available")
@@ -395,6 +411,7 @@ class UndoRedoResponse(BaseModel):
 # NetworkConnectivity is used by legacy endpoints
 class NetworkConnectivity(BaseModel):
     """Model for network connectivity information"""
+
     nodes: List[Dict[str, Any]] = Field(..., description="Network nodes")
     edges: List[Dict[str, Any]] = Field(..., description="Network edges")
     agent_details: Dict[str, Any] = Field(..., description="Agent details")
@@ -403,6 +420,7 @@ class NetworkConnectivity(BaseModel):
 # State Dictionary Models
 class StateConnectivityResponse(BaseModel):
     """Model for state-based connectivity response"""
+
     nodes: List[Dict[str, Any]] = Field(..., description="Network nodes from state")
     edges: List[Dict[str, Any]] = Field(..., description="Network edges from state")
     network_name: str = Field(..., description="Network name")
@@ -414,6 +432,7 @@ class StateConnectivityResponse(BaseModel):
 
 class NetworkStateInfo(BaseModel):
     """Model for network state information"""
+
     name: str = Field(..., description="Network name")
     last_updated: Optional[str] = Field(None, description="Last update timestamp")
     source: Optional[str] = Field(None, description="Source of the state update")
@@ -424,10 +443,13 @@ class NetworkStateInfo(BaseModel):
 
 class CommonDefs(BaseModel):
     """Model for common definitions in HOCON"""
+
     replacement_strings: Optional[Dict[str, str]] = Field(
-        None, description="String replacements", examples=[{"API_URL": "https://api.example.com"}])
+        None, description="String replacements", examples=[{"API_URL": "https://api.example.com"}]
+    )
     replacement_values: Optional[Dict[str, Any]] = Field(
-        None, description="Value replacements", examples=[{"MAX_RETRIES": 3, "TIMEOUT": 30.0}])
+        None, description="Value replacements", examples=[{"MAX_RETRIES": 3, "TIMEOUT": 30.0}]
+    )
 
     # pylint: disable=too-few-public-methods
     class Config:
@@ -436,12 +458,15 @@ class CommonDefs(BaseModel):
 
 class NetworkMetadata(BaseModel):
     """Model for network metadata"""
+
     description: Optional[str] = Field(
         None,
         description="Network description",
-        examples=["Customer service agent network", "Data processing pipeline"])
+        examples=["Customer service agent network", "Data processing pipeline"],
+    )
     tags: Optional[List[str]] = Field(
-        None, description="Network tags", examples=[["production", "customer-facing"], ["data", "analytics"]])
+        None, description="Network tags", examples=[["production", "customer-facing"], ["data", "analytics"]]
+    )
 
     # pylint: disable=too-few-public-methods
     class Config:
@@ -450,36 +475,35 @@ class NetworkMetadata(BaseModel):
 
 class TopLevelConfig(BaseModel):
     """Model for top-level network configuration"""
+
     # Common definitions
-    commondefs: Optional[CommonDefs] = Field(
-        None, description="Common definitions for string/value replacements")
+    commondefs: Optional[CommonDefs] = Field(None, description="Common definitions for string/value replacements")
 
     # Include statements
     includes: Optional[List[str]] = Field(
-        None, description="List of HOCON files to include", examples=[["aaosa.conf", "aaosa_basic.conf"]])
+        None, description="List of HOCON files to include", examples=[["aaosa.conf", "aaosa_basic.conf"]]
+    )
 
     # File references
-    llm_info_file: Optional[str] = Field(
-        None, description="Path to LLM info file", examples=["configs/llm_info.json"])
+    llm_info_file: Optional[str] = Field(None, description="Path to LLM info file", examples=["configs/llm_info.json"])
     toolbox_info_file: Optional[str] = Field(
-        None, description="Path to toolbox info file", examples=["configs/toolbox_info.json"])
+        None, description="Path to toolbox info file", examples=["configs/toolbox_info.json"]
+    )
 
     # LLM configuration
-    llm_config: Optional[Union[LLMConfig, Dict[str, Any]]] = Field(
-        None, description="Top-level LLM configuration")
+    llm_config: Optional[Union[LLMConfig, Dict[str, Any]]] = Field(None, description="Top-level LLM configuration")
 
     # Execution parameters
-    verbose: Optional[bool] = Field(
-        None,
-        description="Enable verbose logging",
-        examples=[True, False])
+    verbose: Optional[bool] = Field(None, description="Enable verbose logging", examples=[True, False])
     max_iterations: Optional[int] = Field(None, gt=0, description="Maximum iterations", examples=[100, 50, 200])
     max_execution_seconds: Optional[int] = Field(
-        None, gt=0, description="Maximum execution time in seconds", examples=[300, 600, 1800])
+        None, gt=0, description="Maximum execution time in seconds", examples=[300, 600, 1800]
+    )
 
     # Error handling
     error_formatter: Optional[str] = Field(
-        None, description="Error formatter class", examples=["DefaultErrorFormatter", "CustomErrorFormatter"])
+        None, description="Error formatter class", examples=["DefaultErrorFormatter", "CustomErrorFormatter"]
+    )
     error_fragments: Optional[Dict[str, Any]] = Field(None, description="Error fragment configuration")
 
     # Metadata
@@ -492,6 +516,7 @@ class TopLevelConfig(BaseModel):
 
 class TopLevelConfigUpdateRequest(BaseModel):
     """Request to update top-level configuration"""
+
     # Allow partial updates of any top-level field
     commondefs: Optional[CommonDefs] = Field(None, description="Update common definitions")
     includes: Optional[List[str]] = Field(None, description="Update include statements")
@@ -544,17 +569,20 @@ class TopLevelConfigUpdateRequest(BaseModel):
 
 class ToolboxAgent(BaseModel):
     """Model for toolbox-based agents (simplified structure)"""
-    name: str = Field(..., description="Agent name", examples=["data_processor", "web_scraper"])
-    toolbox: str = Field(..., description="Toolbox tool name", examples=["DataAnalyzer", "WebScraper", "FileProcessor"])
 
-    @field_validator('name')
+    name: str = Field(..., description="Agent name", examples=["data_processor", "web_scraper"])
+    toolbox: str = Field(
+        ..., description="Toolbox tool name", examples=["DataAnalyzer", "WebScraper", "FileProcessor"]
+    )
+
+    @field_validator("name")
     def validate_name(cls, v):
         """Validate the name"""
         if not v or not v.strip():
             raise ValueError("Agent name cannot be empty")
         return v.strip()
 
-    @field_validator('toolbox')
+    @field_validator("toolbox")
     def validate_toolbox(cls, v):
         """Validate the toolbox"""
         if not v or not v.strip():
@@ -567,24 +595,25 @@ class ToolboxAgent(BaseModel):
             "name": self.name,
             "toolbox": self.toolbox,
             "agent_type": "toolbox",
-            "instructions": f"Toolbox agent using {self.toolbox}"
+            "instructions": f"Toolbox agent using {self.toolbox}",
         }
 
 
 class ToolboxAgentCreateRequest(BaseModel):
     """Request to create a toolbox agent"""
+
     name: str = Field(..., description="Agent name", examples=["data_processor", "web_scraper"])
     toolbox: str = Field(..., description="Toolbox tool name", examples=["DataAnalyzer", "WebScraper"])
     parent_name: Optional[str] = Field(None, description="Parent agent name", examples=["frontman", "coordinator"])
 
-    @field_validator('name')
+    @field_validator("name")
     def validate_name(cls, v):
         """Validate the name"""
         if not v or not v.strip():
             raise ValueError("Agent name cannot be empty")
         return v.strip()
 
-    @field_validator('toolbox')
+    @field_validator("toolbox")
     def validate_toolbox(cls, v):
         """Validate the toolbox"""
         if not v or not v.strip():
@@ -597,12 +626,14 @@ class ToolboxAgentCreateRequest(BaseModel):
             "name": self.name,
             "toolbox": self.toolbox,
             "agent_type": "toolbox",
-            "instructions": f"Toolbox agent using {self.toolbox}"
+            "instructions": f"Toolbox agent using {self.toolbox}",
         }
+
 
 # pylint: disable=too-few-public-methods
 class ToolboxInfo(BaseModel):
     """Model for toolbox information"""
+
     tools: Optional[Dict[str, Any]] = Field(None, description="Available tools in the toolbox")
     error: Optional[str] = Field(None, description="Error message if toolbox not available")
 

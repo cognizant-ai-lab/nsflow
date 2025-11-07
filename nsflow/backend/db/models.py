@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,12 @@
 #
 # END COPYRIGHT
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+
 from .database import Base
+
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -28,6 +29,7 @@ class Session(Base):
     end_time = Column(DateTime, nullable=True)
     system_message = Column(Text)
     agent_name = Column(String)
+
 
 class Interaction(Base):
     __tablename__ = "interactions"
@@ -39,6 +41,7 @@ class Interaction(Base):
     interaction_summary = Column(Text)
     timestamp = Column(DateTime, default=datetime.now(datetime.timezone.utc))
 
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
     id = Column(Integer, primary_key=True)
@@ -49,6 +52,7 @@ class ChatMessage(Base):
     origin_tool = Column(String)
     instantiation_index = Column(Integer)
     timestamp = Column(DateTime, default=datetime.now(datetime.timezone.utc))
+
 
 class UsageMetrics(Base):
     __tablename__ = "usage_metrics"

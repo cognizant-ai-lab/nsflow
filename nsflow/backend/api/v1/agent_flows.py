@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,7 @@ import logging
 import os
 from typing import Any, Dict
 
-from fastapi import HTTPException
-from fastapi import APIRouter
-from fastapi import Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
@@ -39,8 +36,10 @@ def get_networks():
     return agent_utils.list_available_networks()
 
 
-@router.get("/connectivity/{network_name:path}", responses={200: {"description": "Agent Network found"},
-                                                  404: {"description": "Agent Network not found"}})
+@router.get(
+    "/connectivity/{network_name:path}",
+    responses={200: {"description": "Agent Network found"}, 404: {"description": "Agent Network not found"}},
+)
 async def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
     try:
@@ -164,8 +163,10 @@ async def get_agent_details_from_json(agent_name: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to build agent details") from e
 
 
-@router.get("/slydata/{network_name}", responses={200: {"description": "Latest SlyData found"},
-                                                  404: {"description": "No SlyData available"}})
+@router.get(
+    "/slydata/{network_name}",
+    responses={200: {"description": "Latest SlyData found"}, 404: {"description": "No SlyData available"}},
+)
 def get_latest_sly_data(network_name: str):
     """Retrieves the latest sly_data for a given network."""
     logging.info("Fetching latest sly_data for network: %s", network_name)
@@ -182,8 +183,10 @@ def get_latest_sly_data(network_name: str):
         raise HTTPException(status_code=500, detail="Failed to retrieve sly_data") from e
 
 
-@router.get("/compact_connectivity/{network_name}", responses={200: {"description": "Connectivity Info"},
-                                                       404: {"description": "HOCON file not found"}})
+@router.get(
+    "/compact_connectivity/{network_name}",
+    responses={200: {"description": "Connectivity Info"}, 404: {"description": "HOCON file not found"}},
+)
 def get_connectivity_info(network_name: str):
     """Retrieves the network structure for a given local HOCON based agent network."""
     file_path = agent_utils.get_network_file_path(network_name)
@@ -193,16 +196,20 @@ def get_connectivity_info(network_name: str):
     return agent_utils.parse_agent_network(network_name)
 
 
-@router.get("/networkconfig/{network_name}", responses={200: {"description": "Connectivity Info"},
-                                                        404: {"description": "HOCON file not found"}})
+@router.get(
+    "/networkconfig/{network_name}",
+    responses={200: {"description": "Connectivity Info"}, 404: {"description": "HOCON file not found"}},
+)
 def get_networkconfig(network_name: str):
     """Retrieves the entire details from a HOCON network configuration file."""
     logging.info("network_name: %s", network_name)
     return agent_utils.get_agent_network(network_name)
 
 
-@router.get("/networkconfig/{network_name}/agent/{agent_name}", responses={200: {"description": "Agent Info found"},
-                                                                           404: {"description": "Info not found"}})
+@router.get(
+    "/networkconfig/{network_name}/agent/{agent_name}",
+    responses={200: {"description": "Agent Info found"}, 404: {"description": "Info not found"}},
+)
 def fetch_agent_info(network_name: str, agent_name: str):
     """Retrieves the entire details of an Agent from a HOCON network configuration file."""
     logging.info("network_name: %s, agent_name: %s", network_name, agent_name)

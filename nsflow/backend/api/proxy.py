@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,41 +59,45 @@ Notes
 
 import os
 from typing import Set
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import Response
+
 import httpx
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 
 router_proxy = APIRouter()
 
 AGENT_PROTO = os.getenv("NEURO_SAN_SERVER_CONNECTION", "https")
-AGENT_HOST  = os.getenv("NEURO_SAN_SERVER_HOST", "neuro-san.onrender.com")
-AGENT_PORT  = os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "443")
+AGENT_HOST = os.getenv("NEURO_SAN_SERVER_HOST", "neuro-san.onrender.com")
+AGENT_PORT = os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "443")
 # BODY_CAPACITY = 10 * 1024 * 1024 (10 MB)
 BODY_CAPACITY = int(os.getenv("BODY_CAPACITY", 10 * 1024 * 1024))
 SHARED_TOKEN = os.getenv("NEURO_SAN_SHARED_TOKEN")  # set same value on neuro-san
 
-BASE = f"{AGENT_PROTO}://{AGENT_HOST}" + (f":{AGENT_PORT}" if AGENT_PORT not in ("80","443") else "")
+BASE = f"{AGENT_PROTO}://{AGENT_HOST}" + (f":{AGENT_PORT}" if AGENT_PORT not in ("80", "443") else "")
 
 # Use simple policy knobs
 # Allow ALL paths by default. Later, set PROXY_ALLOW_ALL="false" and list allowed segments.
-PROXY_ALLOW_ALL = os.getenv("PROXY_ALLOW_ALL", "true").strip().lower() in {"1","true","yes","on"}
+PROXY_ALLOW_ALL = os.getenv("PROXY_ALLOW_ALL", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 # Comma-separated first-segment allowlist (effective only when PROXY_ALLOW_ALL=false)
 # Example: "list,chat,status,v1"
-ALLOWED_PATHS: Set[str] = {
-    s.strip().strip("/") for s in os.getenv("PROXY_ALLOWED_PATHS", "").split(",") if s.strip()
-}
+ALLOWED_PATHS: Set[str] = {s.strip().strip("/") for s in os.getenv("PROXY_ALLOWED_PATHS", "").split(",") if s.strip()}
 
 # Methods (keep simple; change via env if needed)
 ALLOWED_METHODS: Set[str] = {
-    m.strip().upper() for m in os.getenv("PROXY_ALLOWED_METHODS", "GET,POST").split(",")
-    if m.strip()
+    m.strip().upper() for m in os.getenv("PROXY_ALLOWED_METHODS", "GET,POST").split(",") if m.strip()
 }
 
 # Hop-by-hop headers to strip
 HOP_BY_HOP = {
-    "connection","keep-alive","proxy-authenticate","proxy-authorization",
-    "te","trailers","transfer-encoding","upgrade"
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
 }
 
 # Shared client
@@ -104,6 +107,7 @@ client = httpx.AsyncClient(
     limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
     headers={"User-Agent": "nsflow-proxy/1.0"},
 )
+
 
 @router_proxy.api_route("/proxy/{path:path}", methods=list(ALLOWED_METHODS))
 async def proxy(path: str, request: Request):
@@ -151,9 +155,10 @@ async def proxy(path: str, request: Request):
         media_type=upstream.headers.get("content-type"),
     )
 
+
 ## Usage pattern
 # 1) Allow weverything (default sate)
-#Do nothing, or explicitly set on nsflow:
+# Do nothing, or explicitly set on nsflow:
 
 # PROXY_ALLOW_ALL=true
 
