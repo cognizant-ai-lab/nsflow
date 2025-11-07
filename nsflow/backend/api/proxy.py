@@ -25,7 +25,7 @@ router_proxy = APIRouter()
 NEURO_PROTO = os.getenv("NEURO_SAN_SERVER_CONNECTION", "https")
 NEURO_HOST  = os.getenv("NEURO_SAN_SERVER_HOST", "neuro-san.onrender.com")
 NEURO_PORT  = os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "443")
-SHARED_TOKEN = os.getenv("NEUROSAN_SHARED_TOKEN")  # set same value on neuro-san
+SHARED_TOKEN = os.getenv("NEURO_SAN_SHARED_TOKEN")  # set same value on neuro-san
 
 BASE = f"{NEURO_PROTO}://{NEURO_HOST}" + (f":{NEURO_PORT}" if NEURO_PORT not in ("80","443") else "")
 
