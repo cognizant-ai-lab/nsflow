@@ -21,6 +21,7 @@ No locks, no complex patterns - just simple state management.
 
 import json
 import logging
+from pathlib import Path
 import os
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -33,6 +34,8 @@ from nsflow.backend.utils.editor.ops_store import OperationStore
 from nsflow.backend.utils.editor.simple_state_manager import SimpleStateManager
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_EXPORT_EXTS = {".hocon", ".conf"}
 
 
 class SimpleStateRegistry:
@@ -519,45 +522,82 @@ class SimpleStateRegistry:
 
         return False
 
+    def sanitize_export_filename(self, name_or_path: Optional[str], fallback_stem: str) -> str:
+        """
+        Return a safe filename with an allowed extension.
+        - Directory components are stripped.
+        - Name is passed through secure_filename.
+        - Enforces a single extension from an allowlist; defaults to .hocon.
+        """
+        raw = (name_or_path or "").strip()
+        # Take only the final path component if someone passed "dir/../weird/name.conf"
+        candidate = os.path.basename(raw) if raw else ""
+        candidate = secure_filename(candidate)
+
+        if not candidate:
+            candidate = secure_filename(fallback_stem)
+
+        # Disallow leading dots and special names
+        if candidate.startswith("."):
+            raise ValueError("Invalid filename: hidden or dotfile names are not allowed.")
+
+        # Split out extension and enforce allowlist
+        stem, ext = os.path.splitext(candidate)
+        if not stem:
+            raise ValueError("Invalid filename: empty stem.")
+
+        # Enforce at most one dot total: "name.ext" only
+        if candidate.count(".") > 1:
+            raise ValueError("Invalid filename: multiple dots are not allowed.")
+
+        ext = ext.lower() if ext else ".hocon"
+        if ext not in _ALLOWED_EXPORT_EXTS:
+            ext = ".hocon"
+
+        return f"{stem}{ext}"
+
     def export_to_hocon_file(self, design_id: str, output_path: Optional[str] = "") -> bool:
-        """Export editing session to HOCON file"""
+        """Export editing session to a HOCON-like file safely under EXPORT_ROOT_DIR."""
         manager = self.managers.get(design_id)
         if not manager:
             return False
 
         try:
-            # Validate network first
+            # 1) Validate the network first
             validation_result = manager.validate_network()
-            if not validation_result["valid"]:
-                logger.error(f"Network validation failed: {validation_result['errors']}")
+            if not validation_result.get("valid"):
+                logger.error(f"Network validation failed: {validation_result.get('errors')}")
                 return False
 
-            if output_path is not None:
-                # Validate and sanitize output path
-                sanitized_path = os.path.normpath(os.path.abspath(output_path))
-                export_root = os.path.normpath(os.path.abspath(EXPORT_ROOT_DIR))
-                if os.path.commonpath([export_root, sanitized_path]) != export_root:
-                    logger.error(
-                        f"Refused export for path outside of export root: {sanitized_path}.\nEnsure that you're saving within {export_root}."
-                    )
-                    return False
-            else:
-                # use EXPORT_ROOT_DIR with network name
-                network_name = manager.current_state.get("network_name", f"network_{secure_filename(design_id[:8])}")
-                filename = secure_filename(f"{network_name}.hocon")
-                sanitized_path = os.path.normpath(os.path.join(EXPORT_ROOT_DIR, filename))
+            # 2) Compute a safe filename (no directories) and final path under trusted root
+            export_root = Path(EXPORT_ROOT_DIR).resolve()
+            export_root.mkdir(parents=True, exist_ok=True)
 
-            # Export to HOCON format
+            # Derive a reasonable fallback stem from the network name or design_id
+            fallback_stem = manager.current_state.get("network_name", f"network_{secure_filename(design_id[:8])}")
+
+            try:
+                filename = self.sanitize_export_filename(output_path, fallback_stem)
+            except ValueError as e:
+                logger.error(f"Refused export due to invalid filename: {e}")
+                return False
+
+            final_path = (export_root / filename).resolve()
+
+            # 3) Final guard: ensure the parent is exactly the trusted root (no subdirs)
+            if final_path.parent != export_root:
+                logger.error("Refused export: computed path escapes export root or uses subdirectories.")
+                return False
+
+            # 4) Export to HOCON format (string)
             hocon_config = manager.export_to_hocon()
-
-            # Convert to HOCON string (simplified - in production you'd use pyhocon)
-            # For now, we'll save as JSON with HOCON-like formatting
             hocon_content = self._dict_to_hocon_string(hocon_config)
 
-            with open(sanitized_path, "w", encoding="utf-8") as f:
+            # 5) Write the file
+            with open(final_path, "w", encoding="utf-8") as f:
                 f.write(hocon_content)
 
-            logger.info(f"Exported network to {sanitized_path}")
+            logger.info(f"Exported network to {final_path}")
             return True
 
         except Exception as e:
