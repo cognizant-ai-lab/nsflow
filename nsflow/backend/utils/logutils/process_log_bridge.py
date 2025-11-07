@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,10 +20,10 @@ import logging
 import re
 import threading
 from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict, Optional, TextIO, Tuple
 
-from logging.handlers import TimedRotatingFileHandler
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
@@ -42,13 +41,20 @@ class ProcessLogBridge:
     - Tee raw lines to per-process log files
     - Multi-line JSON reassembly (brace-balanced)
     """
+
     # ---------- constants ----------
     _LEVEL_WORD = re.compile(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\b", re.IGNORECASE)
     _MESSAGE_TYPE_TO_LEVEL: Dict[str, int] = {
-        "trace": logging.DEBUG, "debug": logging.DEBUG,
-        "info": logging.INFO, "other": logging.INFO, "success": logging.INFO,
-        "warning": logging.WARNING, "warn": logging.WARNING,
-        "error": logging.ERROR, "critical": logging.CRITICAL, "fatal": logging.CRITICAL,
+        "trace": logging.DEBUG,
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "other": logging.INFO,
+        "success": logging.INFO,
+        "warning": logging.WARNING,
+        "warn": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+        "fatal": logging.CRITICAL,
     }
 
     _TB_START = "Traceback (most recent call last):"
@@ -59,10 +65,9 @@ class ProcessLogBridge:
     _META_REGEXES = {f: re.compile(rf'"{f}"\s*:\s*"(?P<val>[^"]*)"', re.IGNORECASE) for f in _META_FIELDS}
 
     # ---------- construction ----------
-    def __init__(self,
-                 level: str = "INFO",
-                 runner_log_file: Optional[str] = None,
-                 config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, level: str = "INFO", runner_log_file: Optional[str] = None, config: Optional[Dict[str, Any]] = None
+    ):
         self.level_name = level.upper()
         self.runner_log_file = runner_log_file
         cfg = config or {}
@@ -75,7 +80,6 @@ class ProcessLogBridge:
         theme_styles.update(cfg.get("theme", {}))
 
         self._time_style_key = cfg.get("time_style_key", "logging.time")
-
 
         # rich console / handler
         theme = Theme(theme_styles)
@@ -105,12 +109,11 @@ class ProcessLogBridge:
             when = file_cfg.get("when", "midnight")
             backup_count = int(file_cfg.get("backupCount", 7))
             encoding = file_cfg.get("encoding", "utf-8")
-            fmt = file_cfg.get("fmt",
-                "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s")
+            fmt = file_cfg.get("fmt", "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s")
             Path(runner_log_file).parent.mkdir(parents=True, exist_ok=True)
             self.file_handler = TimedRotatingFileHandler(
                 runner_log_file, when=when, backupCount=backup_count, encoding=encoding
-                )
+            )
             self.file_handler.setLevel(logging.DEBUG)
             # keep tz-aware timestamps for file logs
             self.file_handler.setFormatter(self._TZFormatter(fmt=fmt))
@@ -321,7 +324,7 @@ class ProcessLogBridge:
         s = text.find("{")
         e = text.rfind("}")
         if s != -1 and e != -1 and e > s:
-            frag = text[s:e + 1]
+            frag = text[s : e + 1]
             try:
                 obj = json.loads(frag)
                 return obj if isinstance(obj, dict) else {"message": obj}
@@ -344,9 +347,7 @@ class ProcessLogBridge:
         except Exception:
             pass
         # mild cleanup: unescape \n \t \r and drop trailing commas
-        s2 = (s.replace("\\r", "\r")
-                .replace("\\t", "\t")
-                .replace("\\n", "\n"))
+        s2 = s.replace("\\r", "\r").replace("\\t", "\t").replace("\\n", "\n")
         s2 = re.sub(r",\s*(?=[}\]])", "", s2)
         s2 = re.sub(r"\n{3,}", "\n\n", s2)
         try:
@@ -376,12 +377,8 @@ class ProcessLogBridge:
 
     # ---------- traceback helpers ----------
     def _normalize_traceback_str(self, message: str) -> str:
-        message = (message or "")
-        message = (message
-                   .replace("\\r", "\r")
-                   .replace("\\t", "\t")
-                   .replace("\\n", "\n")
-                   .replace('\\"', '"'))
+        message = message or ""
+        message = message.replace("\\r", "\r").replace("\\t", "\t").replace("\\n", "\n").replace('\\"', '"')
         for old, new in [
             (self._TB_START, f"\n{self._TB_START}\n"),
             (self._TB_CHAIN_1, f"\n{self._TB_CHAIN_1}\n"),
