@@ -26,7 +26,7 @@ from typing import Any, Dict
 # Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
 
-from nsflow.backend.utils.logutils.logging_setup import ProcessLogBridge
+from nsflow.backend.utils.logutils.process_log_bridge import ProcessLogBridge
 
 log_cfg = {
     # Refer rich guidelines for more options:
