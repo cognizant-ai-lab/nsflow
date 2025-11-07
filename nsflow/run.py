@@ -26,8 +26,30 @@ from typing import Any, Dict
 # Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
 
-from nsflow.backend.utils.logutils.logging_setup import setup_rich_logging, attach_process_logger
+from nsflow.backend.utils.logutils.logging_setup import ProcessLogBridge
 
+log_cfg = {
+    # Refer rich guidelines for more options:
+    # https://rich.readthedocs.io/en/latest/index.html
+    "theme": {
+        # Change timestamp color
+        "logging.time": "bright_cyan",
+        # Add more named styles from Rich for your own use
+        "logging.level.error": "bold red",
+    },
+    # which theme key to use for the timestamp
+    "time_style_key": "logging.time",
+    "rich": {
+        # you can also inject RichHandler flags here later without code changes
+        "show_time": True,
+        "show_path": False,
+    },
+    "file": {
+        "when": "midnight",
+        "backupCount": 10,
+        "fmt": "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
+    },
+}
 
 # pylint: disable=too-many-instance-attributes
 class NsFlowRunner:
@@ -79,9 +101,10 @@ class NsFlowRunner:
         os.makedirs(logs_dir_path, exist_ok=True)
         os.makedirs(thinking_dir_path, exist_ok=True)
 
-        setup_rich_logging(
+        self.log_bridge = ProcessLogBridge(
             level=self.config.get("nsflow_log_level", "info"),
             runner_log_file=os.path.join(self.config["nsflow_log_dir"], "runner.log"),
+            config=log_cfg
         )
 
         # Parse CLI args
@@ -273,8 +296,8 @@ The type of connection to initiate. Choices are to connect to:
 
         self.logger.info("Started %s with PID %s (tee -> %s)", process_name, process.pid, log_file)
 
-        # Let logging_setup own reading/parsing/printing/writing
-        attach_process_logger(process, process_name, log_file)
+        # Let log_bridge own reading/parsing/printing/writing
+        self.log_bridge.attach_process_logger(process, process_name, log_file)
         return process
 
     def start_neuro_san(self):

@@ -1,13 +1,19 @@
-"""
-Simplified log bridge for subprocesses:
-- Colorful console via logging + rich
-- Pretty JSON (single or multi-line)
-- Severity from 'message_type' or text tokens
-- Special handling for NeuroSan 'Request reporting: { ... }' block
-- Tee to terminal + per-process log file
-- Run.py stays minimal (no custom streaming there)
-"""
 
+# Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# imitations under the License.
+#
+# END COPYRIGHT
 from __future__ import annotations
 
 import json
@@ -16,398 +22,444 @@ import re
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any, Dict, Optional, TextIO, Tuple
 
 from logging.handlers import TimedRotatingFileHandler
-from rich.logging import RichHandler
 from rich.console import Console
-from rich.theme import Theme
+from rich.logging import RichHandler
+from rich.syntax import Syntax
 from rich.text import Text
+from rich.theme import Theme
 
 
-# ---------------- Colors / styles via RichHandler (we color header; JSON stays pretty) ----------------
-def _rich_time_text(record=None, date=None):
-    now = datetime.now().astimezone()
-    return Text(f"[{now.strftime('%Y-%m-%d %H:%M:%S')} {now.tzname()}]", style="logging.time")
-
-
-class TZFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
-        dt = datetime.fromtimestamp(record.created).astimezone()
-        return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {dt.tzname()}"
-
-
-def setup_rich_logging(level: str = "INFO", runner_log_file: Optional[str] = None) -> None:
+class ProcessLogBridge:
     """
-    Configure the root logger to show colorful console output and (optionally) write the runner's own log file.
-    Does not affect child-process tee files; those are managed by ProcessLogTee.
+    ProcessLogBridge: single-class logging bridge
+    - Rich console with colored ISO+TZ timestamps
+    - Severity from 'message_type' or text tokens
+    - Pretty JSON (including nested JSON-in-"message")
+    - Traceback text reflow + syntax-highlight (via Rich)
+    - Tee raw lines to per-process log files
+    - Multi-line JSON reassembly (brace-balanced)
     """
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)           # capture everything; handlers decide levels
-    root.handlers.clear()
+    # ---------- constants ----------
+    _LEVEL_WORD = re.compile(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\b", re.IGNORECASE)
+    _MESSAGE_TYPE_TO_LEVEL: Dict[str, int] = {
+        "trace": logging.DEBUG, "debug": logging.DEBUG,
+        "info": logging.INFO, "other": logging.INFO, "success": logging.INFO,
+        "warning": logging.WARNING, "warn": logging.WARNING,
+        "error": logging.ERROR, "critical": logging.CRITICAL, "fatal": logging.CRITICAL,
+    }
 
-    # Customize colors here
-    # use any formatting supported by Rich's Theme
-    # example: "green", "bright_green", "green3", "#34d399", "rgb(52,211,153)", "color(118)", etc.
-    theme = Theme({"logging.time": "bright_cyan"})
-    console = Console(theme=theme)
+    _TB_START = "Traceback (most recent call last):"
+    _TB_CHAIN_1 = "During handling of the above exception, another exception occurred:"
+    _TB_CHAIN_2 = "The above exception was the direct cause of the following exception:"
+    _REQUEST_REPORTING_INNER = re.compile(r'Request reporting:\s*\{(?P<inner>.*?)\}\s*",', re.IGNORECASE | re.DOTALL)
+    _META_FIELDS = ["user_id", "Timestamp", "source", "message_type", "request_id"]
+    _META_REGEXES = {f: re.compile(rf'"{f}"\s*:\s*"(?P<val>[^"]*)"', re.IGNORECASE) for f in _META_FIELDS}
 
-    # pretty console levels/time
-    handler = RichHandler(
-        console=console,
-        rich_tracebacks=False,
-        markup=False,
-        show_time=True,
-        show_path=False,
-        omit_repeated_times=False,
-        # Use ISO-like + TZ, e.g. [2025-11-06 08:54:23 PST]
-        log_time_format=_rich_time_text,
-    )
-    handler.setLevel(getattr(logging, level.upper(), logging.INFO))
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    root.addHandler(handler)
+    # ---------- construction ----------
+    def __init__(self,
+                 level: str = "INFO",
+                 runner_log_file: Optional[str] = None,
+                 config: Optional[Dict[str, Any]] = None):
+        self.level_name = level.upper()
+        self.runner_log_file = runner_log_file
+        cfg = config or {}
 
-    if runner_log_file:
-        Path(runner_log_file).parent.mkdir(parents=True, exist_ok=True)
-        file_handler = TimedRotatingFileHandler(runner_log_file, when="midnight", backupCount=7, encoding="utf-8")
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(
-            TZFormatter(
-                fmt="%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
-                # datefmt="%Y-%m-%d %H:%M:%S %Z",
-            )
-        )
-        root.addHandler(file_handler)
+        # ---- THEME (colors/styles) ----
+        # Rich theme docs support names ("cyan", "bright_cyan", "magenta"),
+        # hex ("#34d399"), rgb("rgb(52,211,153)"), or color(index) ("color(118)").
+        # We'll merge user theme over a sensible default.
+        theme_styles = {"logging.time": "bright_cyan"}
+        theme_styles.update(cfg.get("theme", {}))
 
-    logging.getLogger(__name__).info("Runner logging initialized (rich console enabled)")
-
-# ---------------- Severity heuristics ----------------
-
-MESSAGE_TYPE_TO_LEVEL: Dict[str, int] = {
-    "trace": logging.DEBUG,
-    "debug": logging.DEBUG,
-    "info": logging.INFO,
-    "other": logging.INFO,
-    "success": logging.INFO,
-    "warning": logging.WARNING,
-    "warn": logging.WARNING,
-    "error": logging.ERROR,
-    "critical": logging.CRITICAL,
-    "fatal": logging.CRITICAL,
-}
-
-LEVEL_WORD = re.compile(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\b", re.IGNORECASE)
+        self._time_style_key = cfg.get("time_style_key", "logging.time")
 
 
-def infer_level_from_message_type(record: Dict[str, Any]) -> int:
-    mt = str(record.get("message_type", "")).strip().lower()
-    return MESSAGE_TYPE_TO_LEVEL.get(mt, logging.INFO)
+        # rich console / handler
+        theme = Theme(theme_styles)
+        self.console: Console = Console(theme=theme)
 
+        # Base kwargs with safe defaults, then let config["rich"] override.
+        rh_kwargs = {
+            "console": self.console,
+            "rich_tracebacks": False,
+            "markup": False,
+            "show_time": True,
+            "show_path": False,
+            "omit_repeated_times": False,
+            # we provide a callable that returns colored Text each time
+            "log_time_format": self._rich_time_text,
+        }
+        rh_kwargs.update(cfg.get("rich", {}))
 
-def infer_level_from_text(line: str, default: int = logging.INFO) -> int:
-    if not line:
-        return default
-    m = LEVEL_WORD.search(line)
-    if not m:
-        if "traceback" in line.lower():
-            return logging.ERROR
-        return default
-    word = m.group(1).upper()
-    return logging.CRITICAL if word == "FATAL" else getattr(logging, word, default)
+        self.rich_handler: RichHandler = RichHandler(**rh_kwargs)
+        self.rich_handler.setLevel(getattr(logging, self.level_name, logging.INFO))
+        self.rich_handler.setFormatter(logging.Formatter("%(message)s"))
 
+        # file handler (optional)
+        self.file_handler: Optional[TimedRotatingFileHandler] = None
+        if runner_log_file:
+            file_cfg = cfg.get("file", {})
+            when = file_cfg.get("when", "midnight")
+            backup_count = int(file_cfg.get("backupCount", 7))
+            encoding = file_cfg.get("encoding", "utf-8")
+            fmt = file_cfg.get("fmt",
+                "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s")
+            Path(runner_log_file).parent.mkdir(parents=True, exist_ok=True)
+            self.file_handler = TimedRotatingFileHandler(
+                runner_log_file, when=when, backupCount=backup_count, encoding=encoding
+                )
+            self.file_handler.setLevel(logging.DEBUG)
+            # keep tz-aware timestamps for file logs
+            self.file_handler.setFormatter(self._TZFormatter(fmt=fmt))
 
-# ---------------- JSON helpers ----------------
+        # root logger config
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        root.handlers.clear()
+        root.addHandler(self.rich_handler)
+        if self.file_handler:
+            root.addHandler(self.file_handler)
 
-def pretty_json(obj: Any) -> str:
-    try:
-        return json.dumps(obj, indent=2, ensure_ascii=False)
-    except Exception:
-        return str(obj)
+        self._logger = logging.getLogger(self.__class__.__name__)
+        self._logger.info("Runner logging initialized (rich console enabled)")
 
+        # Per-stream state: (process_name, stream_tag) -> state
+        # state keys: tee(TextIO), buffer(list[str]), balance(int), collecting(bool), logger(logging.Logger)
+        self._streams: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
-def lenient_inner_json_parse(val: Any) -> Optional[Any]:
-    """
-    Try to parse a JSON-ish string inside 'message', tolerating JSON5-like trailing commas
-    and common escaping. Returns a Python object (dict/list) or None.
-    Never raises.
-    """
-    if not isinstance(val, str):
-        return None
+    # ---------- public API ----------
+    def attach_process_logger(self, process, process_name: str, log_file: str) -> None:
+        """
+        Drain stdout/stderr in background threads, pretty-print to terminal, mirror raw to file.
+        """
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        tee_out = open(log_file, "a", encoding="utf-8")
+        tee_err = open(log_file, "a", encoding="utf-8")
+        self._streams[(process_name, "STDOUT")] = self._make_stream_state(process_name, tee_out)
+        self._streams[(process_name, "STDERR")] = self._make_stream_state(process_name, tee_err)
 
-    s = val.strip()
-    if not s:
-        return None
+        t_out = threading.Thread(target=self._drain_pipe, args=(process.stdout, process_name, "STDOUT"), daemon=True)
+        t_err = threading.Thread(target=self._drain_pipe, args=(process.stderr, process_name, "STDERR"), daemon=True)
+        t_out.start()
+        t_err.start()
 
-    # Fast path: if it already looks like JSON
-    if not (s.lstrip().startswith("{") or s.lstrip().startswith("[")):
-        return None
+    # ---------- helpers: logging/time ----------
+    @classmethod
+    def _now_local(cls) -> datetime:
+        return datetime.now().astimezone()
 
-    # Try strict first
-    try:
-        return json.loads(s)
-    except Exception:
-        pass
+    def _rich_time_text(self, record=None, date=None):
+        now = self._now_local()
+        return Text(f"[{now.strftime('%Y-%m-%d %H:%M:%S')} {now.tzname()}]", style=self._time_style_key)
 
-    # ---- Lenient cleanup pass ----
-    # 1) Unescape typical JSON-escaped control chars (if present as literals)
-    #    We do a light touch – not full decoding (outer record already decoded).
-    s2 = (s
-          .replace("\\r", "\r")
-          .replace("\\t", "\t")
-          .replace("\\n", "\n"))
+    class _TZFormatter(logging.Formatter):
+        def formatTime(self, record, datefmt=None):
+            dt = datetime.fromtimestamp(record.created).astimezone()
+            return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {dt.tzname()}"
 
-    # 2) Remove trailing commas before closing } or ] (JSON5 style)
-    #    e.g. {"a":1,} -> {"a":1}  ,  [1,2,] -> [1,2]
-    s2 = re.sub(r",\s*(?=[}\]])", "", s2)
+    # ---------- helpers: per-stream state ----------
+    def _make_stream_state(self, process_name: str, tee: TextIO) -> Dict[str, Any]:
+        return {
+            "tee": tee,
+            "buffer": [],
+            "balance": 0,
+            "collecting": False,
+            "logger": logging.getLogger(process_name),
+        }
 
-    # 3) Compact consecutive newlines (cosmetic; avoids parse issues from weird breaks)
-    s2 = re.sub(r"\n{3,}", "\n\n", s2)
+    @staticmethod
+    def _write_tee(state: Dict[str, Any], raw: str) -> None:
+        try:
+            state["tee"].write(f"{raw}\n")
+        except Exception:
+            pass
 
-    try:
-        return json.loads(s2)
-    except Exception:
-        return None
+    @staticmethod
+    def _close_stream(state: Dict[str, Any]) -> None:
+        try:
+            state["tee"].flush()
+            state["tee"].close()
+        except Exception:
+            pass
 
+    # ---------- pipe draining ----------
+    def _drain_pipe(self, pipe, process_name: str, stream_tag: str) -> None:
+        key = (process_name, stream_tag)
+        state = self._streams[key]
+        try:
+            for line in iter(pipe.readline, ""):
+                self._handle_line(state, line.rstrip("\n"))
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+            self._close_stream(state)
 
-def count_braces_outside_quotes(s: str) -> int:
-    depth = 0
-    in_str = False
-    esc = False
-    for ch in s:
-        if esc:
-            esc = False
-            continue
-        if ch == "\\":
-            esc = True
-            continue
-        if ch == '"':
-            in_str = not in_str
-            continue
-        if in_str:
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-    return depth
+    # ---------- line handling ----------
+    def _handle_line(self, state: Dict[str, Any], line: str) -> None:
+        if line == "":
+            self._write_tee(state, line)
+            return
 
+        # Mirror raw first
+        self._write_tee(state, line)
 
-# ---------------- NeuroSan "Request reporting" reassembly ----------------
+        # Single-line JSON?
+        obj = self._try_parse_json_fragment(line)
+        if obj is not None:
+            self._emit_json_block(state, obj)
+            return
 
-_REQUEST_REPORTING_INNER = re.compile(
-    r'Request reporting:\s*\{(?P<inner>.*?)\}\s*",', re.IGNORECASE | re.DOTALL
-)
-_META_FIELDS = ["user_id", "Timestamp", "source", "message_type", "request_id"]
-_META_REGEXES = {f: re.compile(rf'"{f}"\s*:\s*"(?P<val>[^"]*)"', re.IGNORECASE) for f in _META_FIELDS}
+        # Multi-line accumulation
+        if not state["collecting"]:
+            if self._reasm_start_if_jsonish(state, line):
+                if state["balance"] <= 0:  # closed on same line
+                    block = self._reasm_flush(state)
+                    self._emit_collected(state, block)
+                return
+            # Plain text fallback
+            self._emit_text_line(state, line)
+            return
 
+        # we are collecting
+        self._reasm_add(state, line)
+        if self._reasm_should_flush(state, line):
+            block = self._reasm_flush(state)
+            self._emit_collected(state, block)
 
-def rebuild_neurosan_request_reporting(text_block: str) -> Optional[Dict[str, Any]]:
-    m = _REQUEST_REPORTING_INNER.search(text_block)
-    if not m:
-        return None
-    inner_src = "{" + m.group("inner").strip() + "}"
-    try:
-        inner = json.loads(inner_src)
-    except Exception:
-        inner = inner_src
-    out: Dict[str, Any] = {"message": inner}
-    for f, rx in _META_REGEXES.items():
-        mm = rx.search(text_block)
-        if mm:
-            out[f] = mm.group("val")
-    out.setdefault("Timestamp", datetime.utcnow().isoformat())
-    out.setdefault("source", "HttpServer")
-    out.setdefault("message_type", "Other")
-    return out
+    # ---------- reassembler (stateful, no extra classes) ----------
+    @staticmethod
+    def _count_braces_outside_quotes(s: str) -> int:
+        depth = 0
+        in_str = False
+        esc = False
+        for ch in s:
+            if esc:
+                esc = False
+                continue
+            if ch == "\\":
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+        return depth
 
-
-# ---------------- Per-process line reassembler (generic) ----------------
-
-class JsonReassembler:
-    """
-    Accumulates lines until a JSON object is complete (brace-balanced),
-    then returns the full text block to parse.
-    """
-    def __init__(self) -> None:
-        self.buffer: List[str] = []
-        self.balance: int = 0
-        self.collecting: bool = False
-
-    def start_if_jsonish(self, line: str) -> bool:
+    def _reasm_start_if_jsonish(self, state: Dict[str, Any], line: str) -> bool:
         if "{" in line:
-            self.buffer = [line]
-            self.balance = count_braces_outside_quotes(line)
-            self.collecting = True
+            state["buffer"] = [line]
+            state["balance"] = self._count_braces_outside_quotes(line)
+            state["collecting"] = True
             return True
         return False
 
-    def add_line(self, line: str) -> None:
-        self.buffer.append(line)
-        self.balance += count_braces_outside_quotes(line)
+    def _reasm_add(self, state: Dict[str, Any], line: str) -> None:
+        state["buffer"].append(line)
+        state["balance"] += self._count_braces_outside_quotes(line)
 
-    def should_flush(self, line: str) -> bool:
-        if self.balance <= 0:
+    @staticmethod
+    def _reasm_should_flush(state: Dict[str, Any], line: str) -> bool:
+        if state["balance"] <= 0:
             return True
-        # tolerant end for broken NeuroSan prints
         if '"request_id"' in line and line.rstrip().endswith("}"):
             return True
         return False
 
-    def flush(self) -> str:
-        text = "\n".join(self.buffer).strip()
-        self.buffer.clear()
-        self.balance = 0
-        self.collecting = False
+    @staticmethod
+    def _reasm_flush(state: Dict[str, Any]) -> str:
+        text = "\n".join(state["buffer"]).strip()
+        state["buffer"].clear()
+        state["balance"] = 0
+        state["collecting"] = False
         return text
 
-    def is_collecting(self) -> bool:
-        return self.collecting
+    # ---------- severity ----------
+    def _infer_level_from_message_type(self, record: Dict[str, Any]) -> int:
+        mt = str(record.get("message_type", "")).strip().lower()
+        return self._MESSAGE_TYPE_TO_LEVEL.get(mt, logging.INFO)
 
+    def _infer_level_from_text(self, line: str, default: int = logging.INFO) -> int:
+        if not line:
+            return default
+        m = self._LEVEL_WORD.search(line)
+        if not m:
+            if "traceback" in line.lower():
+                return logging.ERROR
+            return default
+        word = m.group(1).upper()
+        return logging.CRITICAL if word == "FATAL" else getattr(logging, word, default)
 
-# ---------------- Process tee (console + file) ----------------
-
-class ProcessLogTee:
-    """
-    Reads a process pipe line-by-line (in a background thread),
-    pretty-prints JSON to terminal (via logging) and mirrors raw lines to a file.
-    Keeps 'server-agnostic' behavior; NeuroSan special-case is localized.
-    """
-
-    def __init__(self, process_name: str, tee_file: str) -> None:
-        self.process_name = process_name
-        self.tee_file_path = tee_file
-        Path(tee_file).parent.mkdir(parents=True, exist_ok=True)
-        self._tee: TextIO = open(tee_file, "a", encoding="utf-8")
-        self._logger = logging.getLogger(process_name)
-        self._reasm = JsonReassembler()
-
-    def close(self) -> None:
+    # ---------- json helpers ----------
+    @staticmethod
+    def _pretty_json(obj: Any) -> str:
         try:
-            self._tee.flush()
-            self._tee.close()
+            return json.dumps(obj, indent=2, ensure_ascii=False)
+        except Exception:
+            return str(obj)
+
+    @staticmethod
+    def _try_parse_json_fragment(text: str) -> Optional[Dict[str, Any]]:
+        if not text:
+            return None
+        # strict
+        try:
+            obj = json.loads(text)
+            return obj if isinstance(obj, dict) else {"message": obj}
         except Exception:
             pass
+        # first {...}
+        s = text.find("{")
+        e = text.rfind("}")
+        if s != -1 and e != -1 and e > s:
+            frag = text[s:e + 1]
+            try:
+                obj = json.loads(frag)
+                return obj if isinstance(obj, dict) else {"message": obj}
+            except Exception:
+                return None
+        return None
 
-    def _write_tee(self, raw: str) -> None:
+    @staticmethod
+    def _lenient_inner_json_parse(val: Any) -> Optional[Any]:
+        if not isinstance(val, str):
+            return None
+        s = val.strip()
+        if not s:
+            return None
+        if not (s.lstrip().startswith("{") or s.lstrip().startswith("[")):
+            return None
+        # strict
         try:
-            self._tee.write(f"{raw}\n")
+            return json.loads(s)
         except Exception:
             pass
+        # mild cleanup: unescape \n \t \r and drop trailing commas
+        s2 = (s.replace("\\r", "\r")
+                .replace("\\t", "\t")
+                .replace("\\n", "\n"))
+        s2 = re.sub(r",\s*(?=[}\]])", "", s2)
+        s2 = re.sub(r"\n{3,}", "\n\n", s2)
+        try:
+            return json.loads(s2)
+        except Exception:
+            return None
 
-    # def _header(self, level: int, source: Optional[str]) -> str:
-    #     lvl = logging.getLevelName(level)
-    #     src = f"{self.process_name}:{source}" if source else self.process_name
-    #     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    #     return f"{ts} | {lvl:<8} | {src} - "
-    
-    def _header(self, level: int, source: Optional[str]) -> str:
-        # Only include the source here; Rich prints [time] LEVEL for us
-        src = f"{self.process_name}:{source}" if source else self.process_name
-        return f"{src} - "
+    # ---------- special NeuroSan block ----------
+    def _rebuild_neurosan_request_reporting(self, text_block: str) -> Optional[Dict[str, Any]]:
+        m = self._REQUEST_REPORTING_INNER.search(text_block)
+        if not m:
+            return None
+        inner_src = "{" + m.group("inner").strip() + "}"
+        try:
+            inner = json.loads(inner_src)
+        except Exception:
+            inner = inner_src
+        out: Dict[str, Any] = {"message": inner}
+        for f, rx in self._META_REGEXES.items():
+            mm = rx.search(text_block)
+            if mm:
+                out[f] = mm.group("val")
+        out.setdefault("Timestamp", self._now_local().isoformat())
+        out.setdefault("source", "HttpServer")
+        out.setdefault("message_type", "Other")
+        return out
 
-    def _log(self, level: int, msg: str) -> None:
-        # One call; RichHandler formats color nicely
-        if level >= logging.CRITICAL:
-            self._logger.critical(msg)
-        elif level >= logging.ERROR:
-            self._logger.error(msg)
-        elif level >= logging.WARNING:
-            self._logger.warning(msg)
-        elif level >= logging.INFO:
-            self._logger.info(msg)
-        else:
-            self._logger.debug(msg)
+    # ---------- traceback helpers ----------
+    def _normalize_traceback_str(self, message: str) -> str:
+        message = (message or "")
+        message = (message
+                   .replace("\\r", "\r")
+                   .replace("\\t", "\t")
+                   .replace("\\n", "\n")
+                   .replace('\\"', '"'))
+        for old, new in [
+            (self._TB_START, f"\n{self._TB_START}\n"),
+            (self._TB_CHAIN_1, f"\n{self._TB_CHAIN_1}\n"),
+            (self._TB_CHAIN_2, f"\n{self._TB_CHAIN_2}\n"),
+            ("  File", "\n  File"),
+            ('File "', '\nFile "'),
+            ("ValueError:", "\nValueError:"),
+            ("TypeError:", "\nTypeError:"),
+            ("RuntimeError:", "\nRuntimeError:"),
+            ("ImportError:", "\nImportError:"),
+            ("Exception:", "\nException:"),
+            ("Error:", "\nError:"),
+        ]:
+            message = message.replace(old, new)
+        message = re.sub(r"\n{3,}", "\n\n", message)
+        return message.strip()
 
-    def _emit_json_block(self, record: Dict[str, Any]) -> None:
-        level = infer_level_from_message_type(record)
+    def _looks_like_traceback(self, s: str) -> bool:
+        if self._TB_START in (s or ""):
+            return True
+        return bool(re.search(r'File ".*?", line \d+(?:, in .*)?', s or ""))
+
+    # ---------- emitters ----------
+    def _src_header(self, process_name: str, source: Optional[str]) -> str:
+        return f"{process_name}:{source}" if source else process_name
+
+    def _emit_json_block(self, state: Dict[str, Any], record: Dict[str, Any]) -> None:
+        level = self._infer_level_from_message_type(record)
         src = str(record.get("source") or "").strip() or None
-        # Build a display copy so we never mutate the original (raw tee stays exact)
-        display_rec = dict(record)
+        header = self._src_header(state["logger"].name, src)
 
-        # If "message" is itself a JSON string, show it as a pretty nested object
-        inner = lenient_inner_json_parse(display_rec.get("message"))
+        # Display copy
+        display_rec = dict(record)
+        inner = self._lenient_inner_json_parse(display_rec.get("message"))
         if inner is not None:
             display_rec["message"] = inner
 
-        body = pretty_json(display_rec)
-        self._log(level, self._header(level, src) + "\n" + body)
+        body = self._pretty_json(display_rec)
+        self._log(state, level, header + "\n" + body)
 
-    def _emit_text_line(self, line: str) -> None:
-        level = infer_level_from_text(line, logging.INFO)
-        self._log(level, self._header(level, None) + line)
+        # If message was traceback-like text, pretty print after
+        msg = record.get("message")
+        if isinstance(msg, str):
+            tb_text = self._normalize_traceback_str(msg)
+            if self._looks_like_traceback(tb_text):
+                self._log(state, level, header + " (traceback)")
+                self.console.print(Syntax(tb_text, "pytb", word_wrap=False))
 
-    def handle_line(self, raw_line: str) -> None:
-        line = raw_line.rstrip("\n")
-        if not line:
-            self._write_tee(raw_line)
-            return
+    def _emit_text_line(self, state: Dict[str, Any], line: str) -> None:
+        level = self._infer_level_from_text(line, logging.INFO)
+        header = self._src_header(state["logger"].name, None)
+        self._log(state, level, header + " - " + line)
 
-        # Mirror raw first (exactness on disk)
-        self._write_tee(line)
-
-        # Try single-line JSON
-        obj = lenient_inner_json_parse(line)
+    def _emit_collected(self, state: Dict[str, Any], block: str) -> None:
+        obj = self._try_parse_json_fragment(block)
         if obj is not None:
-            self._emit_json_block(obj)
+            self._emit_json_block(state, obj)
             return
 
-        # Multi-line collection path
-        if not self._reasm.is_collecting():
-            if self._reasm.start_if_jsonish(line):
-                # If it already closes on same line:
-                if self._reasm.balance <= 0:
-                    block = self._reasm.flush()
-                    self._emit_collected(block)
-                return
-            # Plain text fallback
-            self._emit_text_line(line)
-            return
-
-        # We are collecting
-        self._reasm.add_line(line)
-        if self._reasm.should_flush(line):
-            block = self._reasm.flush()
-            self._emit_collected(block)
-
-    def _emit_collected(self, block: str) -> None:
-        obj = lenient_inner_json_parse(block)
-        if obj is not None:
-            self._emit_json_block(obj)
-            return
-
-        rebuilt = rebuild_neurosan_request_reporting(block)
+        rebuilt = self._rebuild_neurosan_request_reporting(block)
         if rebuilt is not None:
-            self._emit_json_block(rebuilt)
+            self._emit_json_block(state, rebuilt)
             return
 
-        # Still not JSON → collapse to one line
         flat = " ".join(p.strip() for p in block.splitlines() if p.strip())
-        self._emit_text_line(flat)
+        self._emit_text_line(state, flat)
 
-
-# ---------------- Public API used by run.py ----------------
-
-def attach_process_logger(process, process_name: str, log_file: str) -> None:
-    """
-    Create two background threads to drain stdout/stderr of the process,
-    pretty-print to terminal, and tee *raw* lines to log_file.
-    """
-    tee_out = ProcessLogTee(process_name, log_file)
-    tee_err = ProcessLogTee(process_name, log_file)
-
-    t_out = threading.Thread(target=drain_pipe, args=(process.stdout, tee_out), daemon=True)
-    t_err = threading.Thread(target=drain_pipe, args=(process.stderr, tee_err), daemon=True)
-    t_out.start()
-    t_err.start()
-
-
-def drain_pipe(pipe, tee: ProcessLogTee) -> None:
-    try:
-        for line in iter(pipe.readline, ""):
-            tee.handle_line(line)
-    finally:
-        try:
-            pipe.close()
-        except Exception:
-            pass
-        tee.close()
+    # ---------- logging wrapper ----------
+    @staticmethod
+    def _log(state: Dict[str, Any], level: int, msg: str) -> None:
+        lg = state["logger"]
+        if level >= logging.CRITICAL:
+            lg.critical(msg)
+        elif level >= logging.ERROR:
+            lg.error(msg)
+        elif level >= logging.WARNING:
+            lg.warning(msg)
+        elif level >= logging.INFO:
+            lg.info(msg)
+        else:
+            lg.debug(msg)
