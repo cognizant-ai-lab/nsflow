@@ -16,7 +16,7 @@ limitations under the License.
 */
 
 import * as React from "react";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useLocation } from "react-router-dom";
