@@ -536,14 +536,14 @@ class SimpleStateRegistry:
                 # Validate and sanitize output path
                 sanitized_path = os.path.normpath(os.path.abspath(output_path))
                 export_root = os.path.normpath(os.path.abspath(EXPORT_ROOT_DIR))
-                if not sanitized_path.startswith(export_root):
+                if os.path.commonpath([export_root, sanitized_path]) != export_root:
                     logger.error(
                         f"Refused export for path outside of export root: {sanitized_path}.\nEnsure that you're saving within {export_root}."
                     )
                     return False
             else:
                 # use EXPORT_ROOT_DIR with network name
-                network_name = manager.current_state.get("network_name", f"network_{design_id[:8]}")
+                network_name = manager.current_state.get("network_name", f"network_{secure_filename(design_id[:8])}")
                 filename = secure_filename(f"{network_name}.hocon")
                 sanitized_path = os.path.normpath(os.path.join(EXPORT_ROOT_DIR, filename))
 
