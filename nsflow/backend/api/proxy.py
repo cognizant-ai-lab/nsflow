@@ -69,6 +69,8 @@ router_proxy = APIRouter()
 AGENT_PROTO = os.getenv("NEURO_SAN_SERVER_CONNECTION", "https")
 AGENT_HOST  = os.getenv("NEURO_SAN_SERVER_HOST", "neuro-san.onrender.com")
 AGENT_PORT  = os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "443")
+# BODY_CAPACITY = 10 * 1024 * 1024 (10 MB)
+BODY_CAPACITY = int(os.getenv("BODY_CAPACITY", 10 * 1024 * 1024))
 SHARED_TOKEN = os.getenv("NEURO_SAN_SHARED_TOKEN")  # set same value on neuro-san
 
 BASE = f"{AGENT_PROTO}://{AGENT_HOST}" + (f":{AGENT_PORT}" if AGENT_PORT not in ("80","443") else "")
@@ -129,7 +131,7 @@ async def proxy(path: str, request: Request):
 
     # Optional body cap (10MB)
     body = await request.body()
-    if len(body) > 10 * 1024 * 1024:
+    if len(body) > BODY_CAPACITY:
         raise HTTPException(status_code=413, detail="Payload too large")
 
     # Forward
