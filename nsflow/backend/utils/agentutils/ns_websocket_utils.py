@@ -80,7 +80,7 @@ class NsWebsocketUtils:
         self.connection = config.connection_type
 
         self.agent_name = agent_name
-        self.session_id = session_id or str(uuid.uuid4().hex[:12])
+        self.session_id = session_id or str(uuid.uuid4().hex)
         self.use_direct = False
         self.websocket = websocket
         self.active_chat_connections: Dict[str, WebSocket] = {}
@@ -102,10 +102,7 @@ class NsWebsocketUtils:
         Handle incoming WebSocket messages and process them using the agent session."""
         websocket = self.websocket
         await websocket.accept()
-        # Obtain session_id from the frontend
-        # sid = str(self.agent_name) + ":" + str(websocket.client.host) + \
-        #     ":" + str(websocket.client.port) + ":" + str(uuid.uuid4().hex[:12])
-
+        # Use session_id from the frontend
         self.active_chat_connections[self.session_id] = websocket
         await self.logs_manager.log_event(f"Chat client {self.session_id} connected to agent: {self.agent_name}", "nsflow")
 

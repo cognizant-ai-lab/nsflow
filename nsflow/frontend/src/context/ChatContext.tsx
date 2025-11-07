@@ -19,8 +19,20 @@ import { createContext, useContext, useState, ReactNode, useRef } from "react";
 import { getWandName } from "../utils/config";
 
 // Generate a unique session ID for this browser session
+// const generateSessionId = (): string => {
+//   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+// };
+
 const generateSessionId = (): string => {
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  const prefix = "session_";                 // 8
+  const ts = Date.now().toString();          // 13
+  const randomLen = 36 - (prefix.length + 1 + ts.length); // -> 14
+  const bytes = new Uint8Array(Math.ceil(randomLen / 2));
+  crypto.getRandomValues(bytes);
+  const randHex = Array.from(bytes, b => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, randomLen);
+  return `${prefix}${ts}_${randHex}`;
 };
 
 type Message = {
