@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,11 @@
 #
 # END COPYRIGHT
 
-from typing import Dict, Any
 import json
 import socket
-import httpx
+from typing import Any, Dict
 
+import httpx
 from fastapi import HTTPException
 from neuro_san.interfaces.concierge_session import ConciergeSession
 from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
@@ -32,10 +31,10 @@ class NsConciergeUtils:
     """
     Encapsulates concierge session management and interactions for a client.
     """
+
     DEFAULT_FORWARDED_REQUEST_METADATA: str = "request_id user_id"
-    def __init__(self,
-                 agent_name: str=None,
-                 forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA):
+
+    def __init__(self, agent_name: str = None, forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA):
         """
         Initialize the gRPC service API wrapper.
         :param agent_name: This is just for keeping consistency with the logs.
@@ -43,8 +42,10 @@ class NsConciergeUtils:
         try:
             config = NsConfigsRegistry.get_current()
         except RuntimeError as e:
-            raise RuntimeError("No active NsConfigStore. \
-                               Please set it via /set_config before using gRPC endpoints.") from e
+            raise RuntimeError(
+                "No active NsConfigStore. \
+                               Please set it via /set_config before using gRPC endpoints."
+            ) from e
 
         self.server_host = config.host
         self.server_port = config.port
@@ -74,11 +75,9 @@ class NsConciergeUtils:
         Build gRPC session to talk to "concierge" service
         :return: ConciergeSession to use
         """
-        grpc_session: ConciergeSession = \
-            GrpcConciergeSession(
-                host=self.server_host,
-                port=self.server_port,
-                metadata=metadata)
+        grpc_session: ConciergeSession = GrpcConciergeSession(
+            host=self.server_host, port=self.server_port, metadata=metadata
+        )
         return grpc_session
 
     async def list_concierge(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -92,8 +91,7 @@ class NsConciergeUtils:
         # This might not be always true when using a http sidecar for example
         if self.server_host == "localhost" and not self.is_port_open(self.server_host, self.server_port, timeout=5.0):
             raise HTTPException(
-                status_code=503,
-                detail=f"NeuroSan server at {self.server_host}:{self.server_port} is not reachable"
+                status_code=503, detail=f"NeuroSan server at {self.server_host}:{self.server_port} is not reachable"
             )
 
         if self.connection == "grpc":
@@ -115,18 +113,21 @@ class NsConciergeUtils:
             try:
                 # consider verify=True in prod
                 async with httpx.AsyncClient(verify=True, headers={"host": self.server_host}) as client:
-                    response = await client.get(url, headers={
-                        "User-Agent": "curl/8.7.1",
-                        "Accept": "*/*",
-                        "Host": self.server_host  # important for SNI + proxying
-                        })
+                    response = await client.get(
+                        url,
+                        headers={
+                            "User-Agent": "curl/8.7.1",
+                            "Accept": "*/*",
+                            "Host": self.server_host,  # important for SNI + proxying
+                        },
+                    )
                     try:
                         json_data = response.json()
                     except (httpx.HTTPError, json.JSONDecodeError):
                         json_data = {
                             "error": "The NeuroSan Server did not return valid JSON",
                             "status_code": response.status_code,
-                            "text": response.text.strip()
+                            "text": response.text.strip(),
                         }
                     return json_data
             except httpx.RequestError as exc:

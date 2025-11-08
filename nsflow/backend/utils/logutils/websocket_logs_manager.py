@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,11 +23,12 @@ Instances are typically scoped per agent (e.g. "hello_world", "airline_policy") 
 throughout the application via a shared registry.
 """
 
-import json
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
 from fastapi import WebSocket, WebSocketDisconnect
 
 # Logging setup
@@ -41,20 +41,24 @@ class WebsocketLogsManager:
     Enables sending structured logs and internal chat messages over WebSocket connections.
     Each instance manages a list of connected WebSocket clients and can broadcast messages
     to clients in real-time. Supports both general logs and internal chat streams.
+    Scoped per agent and session to ensure multi-user isolation.
     """
+
     LOG_BUFFER_SIZE = 100
 
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, session_id: str = "global"):
         """
-        Initialize a logs manager scoped to a specific agent.
+        Initialize a logs manager scoped to a specific agent and session.
         :param agent_name: The name of the agent (e.g. "coach", "refiner", or "global").
+        :param session_id: The unique session identifier for this user connection.
         """
         self.agent_name = agent_name
+        self.session_id = session_id
         self.active_log_connections: List[WebSocket] = []
         self.active_internal_chat_connections: List[WebSocket] = []
         self.active_sly_data_connections: List[WebSocket] = []
         self.active_progress_connections: List[WebSocket] = []
-        self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}")
+        self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}:{self.session_id}")
         self.log_buffer: List[Dict] = []
 
     def get_timestamp(self):
@@ -70,10 +74,7 @@ class WebsocketLogsManager:
         :param message: The log message to send.
         :param source: The origin of the log (e.g. "FastAPI", "NeuroSan").
         """
-        log_entry = {"timestamp": self.get_timestamp(),
-                     "message": message,
-                     "source": source,
-                     "agent": self.agent_name}
+        log_entry = {"timestamp": self.get_timestamp(), "message": message, "source": source, "agent": self.agent_name}
         # Check if this is a duplicate of the most recent log message (ignoring timestamp)
         if self.log_buffer:
             last_entry = self.log_buffer[-1]
@@ -81,7 +82,7 @@ class WebsocketLogsManager:
                 # Skip duplicate log
                 return
         # Log the message
-        self.logger.info("%s: %s", source, message)
+        # self.logger.info("%s: %s", source, message)
         self.log_buffer.append(log_entry)
         if len(self.log_buffer) > self.LOG_BUFFER_SIZE:
             self.log_buffer.pop(0)
@@ -112,9 +113,7 @@ class WebsocketLogsManager:
         entry = {"message": message}
         await self.broadcast_to_websocket(entry, self.active_sly_data_connections)
 
-    async def broadcast_to_websocket(self,
-                                     entry: Dict[str, Any],
-                                     connections_list: List[WebSocket]):
+    async def broadcast_to_websocket(self, entry: Dict[str, Any], connections_list: List[WebSocket]):
         """
         Broadcast a message to a list of WebSocket clients, removing any disconnected ones.
         :param entry: The dictionary message to send (will be JSON serialized).
@@ -182,13 +181,13 @@ class WebsocketLogsManager:
         await websocket.accept()
         self.active_progress_connections.append(websocket)
         await self.progress_event(
-            {"text": json.dumps({"event": "progress_client_connected",
-                                 "agent": self.agent_name})})
+            {"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})}
+        )
         try:
             while True:
                 await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
         except WebSocketDisconnect:
             self.active_progress_connections.remove(websocket)
             await self.progress_event(
-                {"text": json.dumps({"event": "progress_client_connected",
-                                     "agent": self.agent_name})})
+                {"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})}
+            )

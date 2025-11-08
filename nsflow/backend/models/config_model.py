@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +24,7 @@ class ConfigRequest(BaseModel):
         NS_SERVER_HOST (IPvAnyAddress): The host address of the NeuroSan server.
         NS_SERVER_PORT (int): The port number of the NeuroSan server.
     """
+
     NEURO_SAN_CONNECTION_TYPE: str = Field(..., description="Connectivity type")
     NEURO_SAN_SERVER_HOST: str = Field(..., description="Host address of the NeuroSan server")
     NEURO_SAN_SERVER_PORT: int = Field(..., ge=0, le=65535)

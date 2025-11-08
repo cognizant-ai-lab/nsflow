@@ -34,7 +34,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "config">("chat");
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
-  const { activeNetwork, targetNetwork, isEditorMode: contextIsEditorMode, setIsEditorMode,
+  const { sessionId, activeNetwork, targetNetwork, isEditorMode: contextIsEditorMode, setIsEditorMode,
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
     setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs, chatWs, internalChatWs,
     slyDataWs, progressWs, setNewSlyData, setNewProgress } = useChatContext();
@@ -80,7 +80,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     }
 
     // Setup WebSocket for Chat Panel
-    const chatWsUrl = `${wsUrl}/api/v1/ws/chat/${targetNetwork}`;
+    const chatWsUrl = `${wsUrl}/api/v1/ws/chat/${targetNetwork}/${sessionId}`;
     console.log("Connecting Chat WebSocket:", chatWsUrl);
     const newChatWs = new WebSocket(chatWsUrl);
 
@@ -101,7 +101,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
 
     // Setup WebSocket for Internal Chat Panel (skip in editor mode)
     if (!isEditorMode) {
-      const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${targetNetwork}`;
+      const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${targetNetwork}/${sessionId}`;
       console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
       const newInternalWs = new WebSocket(internalWsUrl);
 
@@ -130,7 +130,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     }
 
     // Setup WebSocket for Sly Data Panel
-    const slyDataWsUrl = `${wsUrl}/api/v1/ws/slydata/${targetNetwork}`;
+    const slyDataWsUrl = `${wsUrl}/api/v1/ws/slydata/${targetNetwork}/${sessionId}`;
     console.log("Connecting Sly Data WebSocket:", slyDataWsUrl);
     const newSlyDataWs = new WebSocket(slyDataWsUrl);
 
@@ -170,7 +170,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     setSlyDataWs(newSlyDataWs);
 
     // Setup WebSocket for Progress
-    const progressWsUrl = `${wsUrl}/api/v1/ws/progress/${targetNetwork}`;
+    const progressWsUrl = `${wsUrl}/api/v1/ws/progress/${targetNetwork}/${sessionId}`;
     console.log("Connecting Progress WebSocket:", progressWsUrl);
     const newProgressWs = new WebSocket(progressWsUrl);
 
@@ -214,7 +214,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     return () => {
       console.log("WebSockets for old network are closed.");
     };
-   }, [targetNetwork, wsUrl]);
+  }, [targetNetwork, wsUrl, sessionId]);
 
   const tabConfig = [
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },

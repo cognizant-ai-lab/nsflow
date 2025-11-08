@@ -31,10 +31,15 @@ import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
 
-// const nodeTypes = { agent: EditableAgentNode };
-// const edgeTypes = { floating: FloatingEdge };
-export const NODE_TYPES = Object.freeze({ agent: EditableAgentNode, editable_agent: EditableAgentNode, undefined_agent: EditableAgentNode });
-export const EDGE_TYPES = Object.freeze({ floating: FloatingEdge });
+export const nodeTypes = Object.freeze({
+  agent: EditableAgentNode,
+  editable_agent: EditableAgentNode,
+  undefined_agent: EditableAgentNode,
+});
+
+export const edgeTypes = Object.freeze({
+  floating: FloatingEdge,
+});
 
 interface StateConnectivityResponse {
   nodes: Node[];
@@ -564,8 +569,8 @@ const EditorAgentFlow = ({
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
-        nodeTypes={NODE_TYPES}
-        edgeTypes={EDGE_TYPES}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultEdgeOptions={{
           type: "floating",
           markerEnd: "arrowclosed" as EdgeMarkerType,

@@ -47,7 +47,7 @@ const LogsPanel = () => {
     { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "System initialized." },
     { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "Frontend app loaded successfully." },
   ]);
-  const { targetNetwork} = useChatContext();
+  const { sessionId, targetNetwork } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
 
@@ -65,7 +65,7 @@ const LogsPanel = () => {
     ]);
 
     // WebSocket for real-time logs
-    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${targetNetwork}`);
+    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${targetNetwork}/${sessionId}`);
     
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event) => {
@@ -84,7 +84,7 @@ const LogsPanel = () => {
     return () => {
       ws.close();
     };
-  }, [targetNetwork, wsUrl]);
+  }, [targetNetwork, wsUrl, sessionId]);
 
   const downloadLogs = () => {
     const logText = logs

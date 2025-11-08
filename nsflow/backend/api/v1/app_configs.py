@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,15 +15,13 @@
 # END COPYRIGHT
 import logging
 import os
-from importlib.metadata import version
-from importlib.metadata import PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
-from fastapi import HTTPException
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.models.config_model import ConfigRequest
+from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +30,7 @@ router = APIRouter(prefix="/api/v1")
 
 
 TRUTH_VALUES = ["1", "true", "yes", "on"]
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)
@@ -44,17 +42,20 @@ def _env_bool(name: str, default: bool = False) -> bool:
 @router.get("/vite_config.json")
 def get_runtime_config():
     """Router to enable variables for react app"""
-    return JSONResponse(content={
-        "NSFLOW_HOST": os.getenv("NSFLOW_HOST", "localhost"),
-        "NSFLOW_PORT": os.getenv("NSFLOW_PORT", "4173"),
-        "VITE_API_PROTOCOL": os.getenv("VITE_API_PROTOCOL", "http"),
-        "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
-        "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
-        # NEW: feature flags (booleans)
-        "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
-        "NSFLOW_PLUGIN_MANUAL_EDITOR": _env_bool("NSFLOW_PLUGIN_MANUAL_EDITOR", False),
-        "NSFLOW_PLUGIN_VQA_ENDPOINT": _env_bool("NSFLOW_PLUGIN_VQA_ENDPOINT", False),
-    })
+    return JSONResponse(
+        content={
+            "NSFLOW_HOST": os.getenv("NSFLOW_HOST", "localhost"),
+            "NSFLOW_PORT": os.getenv("NSFLOW_PORT", "4173"),
+            "VITE_API_PROTOCOL": os.getenv("VITE_API_PROTOCOL", "http"),
+            "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
+            "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),
+            "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
+            # NEW: feature flags (booleans)
+            "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
+            "NSFLOW_PLUGIN_MANUAL_EDITOR": _env_bool("NSFLOW_PLUGIN_MANUAL_EDITOR", False),
+            "NSFLOW_PLUGIN_VQA_ENDPOINT": _env_bool("NSFLOW_PLUGIN_VQA_ENDPOINT", False),
+        }
+    )
 
 
 @router.post("/set_ns_config")
@@ -73,7 +74,7 @@ async def set_config(config_req: ConfigRequest, _=Depends(AuthUtils.allow_all)):
             content={
                 "message": "Config updated successfully",
                 "config": updated_config.to_dict(),
-                "config_id": updated_config.config_id
+                "config_id": updated_config.config_id,
             }
         )
 
@@ -91,7 +92,7 @@ async def get_config(_=Depends(AuthUtils.allow_all)):
             content={
                 "message": "Config retrieved successfully",
                 "config": current_config.to_dict(),
-                "config_id": current_config.config_id
+                "config_id": current_config.config_id,
             }
         )
 

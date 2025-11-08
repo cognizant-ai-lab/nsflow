@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,13 @@
 #
 # END COPYRIGHT
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
 class AgentData:
     """Dataclass to encapsulate intermediate agent processing results."""
+
     nodes: List[Dict]
     edges: List[Dict]
 
@@ -31,6 +31,7 @@ class NsGrpcNetworkUtils:
     Utility class to handle network-related operations for Neuro-San agents.
     This includes building nodes and edges for visualization.
     """
+
     # pylint: disable=too-many-locals
     @staticmethod
     def build_nodes_and_edges(connectivity_response: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict]]:
@@ -69,32 +70,26 @@ class NsGrpcNetworkUtils:
         # Step 3: Build node dicts
         for node in all_nodes:
             children = origin_to_tools.get(node, [])
-            nodes.append({
-                "id": node,
-                "type": "agent",
-                "data": {
-                    "label": node,
-                    "depth": depth_map.get(node, 0),
-                    "parent": parent_map.get(node),
-                    "children": children,
-                    "dropdown_tools": [],
-                    "sub_networks": []
-                },
-                "position": {
-                    "x": 100,
-                    "y": 100
+            nodes.append(
+                {
+                    "id": node,
+                    "type": "agent",
+                    "data": {
+                        "label": node,
+                        "depth": depth_map.get(node, 0),
+                        "parent": parent_map.get(node),
+                        "children": children,
+                        "dropdown_tools": [],
+                        "sub_networks": [],
+                    },
+                    "position": {"x": 100, "y": 100},
                 }
-            })
+            )
 
         # Step 4: Build edge dicts
         for origin, tools in origin_to_tools.items():
             for tool in tools:
-                edges.append({
-                    "id": f"{origin}-{tool}",
-                    "source": origin,
-                    "target": tool,
-                    "animated": True
-                })
+                edges.append({"id": f"{origin}-{tool}", "source": origin, "target": tool, "animated": True})
 
         return {"nodes": nodes, "edges": edges}
 
@@ -161,7 +156,7 @@ class NsGrpcNetworkUtils:
 
             # Add children to queue
             if current_node in agent_definition:
-                down_chains =  NsGrpcNetworkUtils.get_children(agent_definition[current_node])
+                down_chains = NsGrpcNetworkUtils.get_children(agent_definition[current_node])
                 for child in down_chains:
                     if child not in visited:
                         queue.append((child, depth + 1))
@@ -178,7 +173,7 @@ class NsGrpcNetworkUtils:
         for agent_name in all_agent_names:
             agent_data = agent_definition.get(agent_name, {})
             # more details could be added here, but as of now, we are only using down_chains and instructions
-            down_chains =  NsGrpcNetworkUtils.get_children(agent_data)
+            down_chains = NsGrpcNetworkUtils.get_children(agent_data)
             instructions = agent_data.get("instructions", "")
 
             # Determine node type
@@ -198,9 +193,9 @@ class NsGrpcNetworkUtils:
                     "dropdown_tools": [],
                     "sub_networks": [],
                     "network_name": network_name,
-                    "is_defined": agent_name in agent_definition
+                    "is_defined": agent_name in agent_definition,
                 },
-                "position": positions.get(agent_name, {"x": 100, "y": 100})
+                "position": positions.get(agent_name, {"x": 100, "y": 100}),
             }
             nodes.append(node)
 
@@ -213,7 +208,7 @@ class NsGrpcNetworkUtils:
                     "source": agent_name,
                     "target": target,
                     "animated": False,
-                    "type": "default"
+                    "type": "default",
                 }
                 edges.append(edge)
 
@@ -239,9 +234,9 @@ class NsGrpcNetworkUtils:
         return list(data.get("tools") or data.get("down_chains") or [])
 
     @staticmethod
-    def _calculate_positions(agent_names: set,
-                             depth_map: Dict[str, int],
-                             parent_map: Dict[str, str]) -> Dict[str, Dict[str, int]]:
+    def _calculate_positions(
+        agent_names: set, depth_map: Dict[str, int], parent_map: Dict[str, str]
+    ) -> Dict[str, Dict[str, int]]:
         """
         Calculate optimal positions for nodes to create a nice layout.
         Handles disconnected components and orphaned nodes.
@@ -283,8 +278,10 @@ class NsGrpcNetworkUtils:
 
             # Calculate width of this component for next component offset
             if component:
-                component_width = max(len([n for n in component if depth_map.get(n, 0) == d])
-                                    for d in range(max_depth + 1)) * horizontal_spacing
+                component_width = (
+                    max(len([n for n in component if depth_map.get(n, 0) == d]) for d in range(max_depth + 1))
+                    * horizontal_spacing
+                )
                 current_x_offset += component_width + component_spacing
 
         return positions

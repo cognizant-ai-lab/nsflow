@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,14 +17,16 @@ import os
 
 from fastapi import APIRouter
 
-from .v1 import agent_flows
-from .v1 import app_configs
-from .v1 import audio_endpoints
-from .v1 import export_endpoints
-from .v1 import fast_websocket
-from .v1 import fastapi_grpc_endpoints
-from .v1 import vqa_endpoints
-from .v1 import editor_endpoints
+from .v1 import (
+    agent_flows,
+    app_configs,
+    audio_endpoints,
+    editor_endpoints,
+    export_endpoints,
+    fast_websocket,
+    fastapi_grpc_endpoints,
+    vqa_endpoints,
+)
 
 NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
 

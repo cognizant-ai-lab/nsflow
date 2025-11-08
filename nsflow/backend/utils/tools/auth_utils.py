@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,8 @@
 # limitations under the License.
 #
 # END COPYRIGHT
-from fastapi import Header, HTTPException, status
 import jwt
+from fastapi import Header, HTTPException, status
 
 
 class AuthUtils:

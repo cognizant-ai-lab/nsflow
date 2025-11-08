@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +13,18 @@
 # limitations under the License.
 #
 # END COPYRIGHT
+import logging
 import os
 import re
-import logging
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
 import urllib.parse
-from fastapi import HTTPException
-from pyhocon import ConfigFactory
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
+from fastapi import HTTPException
+from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
 from neuro_san.internals.graph.registry.agent_network import AgentNetwork
 from neuro_san.session.missing_agent_check import MissingAgentCheck
-from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
+from pyhocon import ConfigFactory
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,6 +45,7 @@ TEST_NETWORK = os.path.join(FIXTURES_DIR, "test_network.hocon")
 @dataclass
 class AgentData:
     """Dataclass to encapsulate agent processing parameters."""
+
     agent: Dict
     nodes: List[Dict]
     edges: List[Dict]
@@ -79,9 +79,11 @@ class AgentNetworkUtils:
         sanitized_name = os.path.basename(network_name)
 
         # Step 2: Ensure only safe characters are used (alphanumeric, _, -)
-        if not re.match(r'^[\w\-]+$', sanitized_name):
-            raise HTTPException(status_code=400,
-                                detail="Invalid network name. Only alphanumeric, underscores, and hyphens are allowed.")
+        if not re.match(r"^[\w\-]+$", sanitized_name):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid network name. Only alphanumeric, underscores, and hyphens are allowed.",
+            )
 
         # Step 3: Build full path inside safe REGISTRY_DIR
         raw_path = os.path.join(REGISTRY_DIR, f"{sanitized_name}.hocon")
@@ -122,7 +124,7 @@ class AgentNetworkUtils:
         if agent_network_name is None or len(agent_network_name) == 0:
             return None
 
-        if not(agent_network_name.endswith(".hocon") or agent_network_name.endswith(".json")):
+        if not (agent_network_name.endswith(".hocon") or agent_network_name.endswith(".json")):
             agent_network_name = agent_network_name + ".hocon"
 
         agent_network = self.agent_network_restorer.restore(agent_network_name)
@@ -170,7 +172,7 @@ class AgentNetworkUtils:
         """Simple check to see if a string is URL-like."""
         try:
             result = urllib.parse.urlparse(s)
-            return bool(result.netloc) or (result.path and '/' in result.path)
+            return bool(result.netloc) or (result.path and "/" in result.path)
         except Exception:
             return False
 
@@ -193,19 +195,21 @@ class AgentNetworkUtils:
                     dropdown_tools.append(tool_name)
 
         # Add the agent node
-        data.nodes.append({
-            "id": agent_id,
-            "type": "agent",
-            "data": {
-                "label": agent_id,
-                "depth": data.depth,
-                "parent": data.parent,
-                "children": child_nodes,
-                "dropdown_tools": dropdown_tools,
-                "sub_networks": sub_networks,  # Store sub-networks separately
-            },
-            "position": {"x": 100, "y": 100},
-        })
+        data.nodes.append(
+            {
+                "id": agent_id,
+                "type": "agent",
+                "data": {
+                    "label": agent_id,
+                    "depth": data.depth,
+                    "parent": data.parent,
+                    "children": child_nodes,
+                    "dropdown_tools": dropdown_tools,
+                    "sub_networks": sub_networks,  # Store sub-networks separately
+                },
+                "position": {"x": 100, "y": 100},
+            }
+        )
 
         data.agent_details[agent_id] = {
             "instructions": data.agent.get("instructions", "No instructions"),
@@ -218,12 +222,14 @@ class AgentNetworkUtils:
 
         # Add edges and recursively process normal child nodes
         for child_id in child_nodes:
-            data.edges.append({
-                "id": f"{agent_id}-{child_id}",
-                "source": agent_id,
-                "target": child_id,
-                "animated": True,
-            })
+            data.edges.append(
+                {
+                    "id": f"{agent_id}-{child_id}",
+                    "source": agent_id,
+                    "target": child_id,
+                    "animated": True,
+                }
+            )
 
             child_agent_data = AgentData(
                 agent=data.node_lookup[child_id],
@@ -232,32 +238,36 @@ class AgentNetworkUtils:
                 agent_details=data.agent_details,
                 node_lookup=data.node_lookup,
                 parent=agent_id,
-                depth=data.depth + 1
+                depth=data.depth + 1,
             )
             self.process_agent(child_agent_data)
 
         # Process sub-network tools as separate green nodes
         for sub_network in sub_networks:
-            data.nodes.append({
-                "id": sub_network,
-                "type": "sub-network",  # Differentiate node type
-                "data": {
-                    "label": sub_network,
-                    "depth": data.depth + 1,
-                    "parent": agent_id,
-                    "color": "green",  # Mark sub-network nodes as green
-                },
-                "position": {"x": 200, "y": 200},
-            })
+            data.nodes.append(
+                {
+                    "id": sub_network,
+                    "type": "sub-network",  # Differentiate node type
+                    "data": {
+                        "label": sub_network,
+                        "depth": data.depth + 1,
+                        "parent": agent_id,
+                        "color": "green",  # Mark sub-network nodes as green
+                    },
+                    "position": {"x": 200, "y": 200},
+                }
+            )
 
             # Connect sub-network tool to its parent agent
-            data.edges.append({
-                "id": f"{agent_id}-{sub_network}",
-                "source": agent_id,
-                "target": sub_network,
-                "animated": True,
-                "color": "green",  # Mark sub-network edges as green
-            })
+            data.edges.append(
+                {
+                    "id": f"{agent_id}-{sub_network}",
+                    "source": agent_id,
+                    "target": sub_network,
+                    "animated": True,
+                    "color": "green",  # Mark sub-network edges as green
+                }
+            )
 
     def extract_connectivity_info(self, network_name: str):
         """Extracts connectivity details from an HOCON network configuration file."""

@@ -46,6 +46,7 @@ import {
 import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import { useApiPort } from "../context/ApiPortContext";
+import { useChatContext } from "../context/ChatContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
 
 const nodeTypes = { agent: AgentNode };
@@ -53,6 +54,7 @@ const edgeTypes = { floating: FloatingEdge };
 
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl, wsUrl } = useApiPort();
+  const { sessionId } = useChatContext();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
   const { fitView, setViewport } = useReactFlow();
@@ -132,8 +134,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // WebSocket highlighting (unchanged)
   useEffect(() => {
     if (!selectedNetwork) return;
-    
-    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${selectedNetwork}`);
+
+    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${selectedNetwork}/${sessionId}`);
 
     ws.onopen = () => console.log("Logs WebSocket Connected.");
     ws.onmessage = (event: MessageEvent) => {
@@ -169,7 +171,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     ws.onclose = () => console.log("Logs WebSocket Disconnected");
 
     return () => ws.close();
-  }, [selectedNetwork, wsUrl]);
+  }, [selectedNetwork, wsUrl, sessionId]);
 
   // Save cached positions after drag-end (debounced), like editor
   const handleNodesChange = useCallback((changes: any[]) => {

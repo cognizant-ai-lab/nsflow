@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,14 @@
 # limitations under the License.
 #
 # END COPYRIGHT
-import os
 import logging
+import os
 from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from nsflow.backend.api.router import router
@@ -65,6 +65,7 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         logging.info("FastAPI is shutting down...")
+
 
 # Initialize FastAPI app with lifespan event
 app = FastAPI(lifespan=lifespan)

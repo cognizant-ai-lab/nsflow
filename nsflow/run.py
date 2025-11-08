@@ -10,7 +10,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-l# imitations under the License.
+# imitations under the License.
 #
 # END COPYRIGHT
 import argparse
@@ -20,11 +20,36 @@ import signal
 import socket
 import subprocess
 import sys
-import threading
 import time
 from typing import Any, Dict
+
 # Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
+
+from nsflow.backend.utils.logutils.process_log_bridge import ProcessLogBridge
+
+log_cfg = {
+    # Refer rich guidelines for more options:
+    # https://rich.readthedocs.io/en/latest/index.html
+    "theme": {
+        # Change timestamp color
+        "logging.time": "bright_cyan",
+        # Add more named styles from Rich for your own use
+        "logging.level.error": "bold red",
+    },
+    # which theme key to use for the timestamp
+    "time_style_key": "logging.time",
+    "rich": {
+        # you can also inject RichHandler flags here later without code changes
+        "show_time": True,
+        "show_path": False,
+    },
+    "file": {
+        "when": "midnight",
+        "backupCount": 10,
+        "fmt": "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
+    },
+}
 
 
 # pylint: disable=too-many-instance-attributes
@@ -76,14 +101,11 @@ class NsFlowRunner:
         # Set up logging
         os.makedirs(logs_dir_path, exist_ok=True)
         os.makedirs(thinking_dir_path, exist_ok=True)
-        
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(os.path.join(self.config["nsflow_log_dir"], "runner.log"), mode="a"),
-            ],
+
+        self.log_bridge = ProcessLogBridge(
+            level=self.config.get("nsflow_log_level", "info"),
+            runner_log_file=os.path.join(self.config["nsflow_log_dir"], "runner.log"),
+            config=log_cfg,
         )
 
         # Parse CLI args
@@ -141,10 +163,13 @@ The type of connection to initiate. Choices are to connect to:
             "Requires your agent server to be set up with certificates that are well known. "
             "This is not something that our basic server setup supports out-of-the-box.",
         )
-        parser.add_argument("--default-sly-data", type=str,
-                            default=self.config["default_sly_data"],
-                            help="JSON string containing data that is out-of-band to the chat stream, "
-                                "but is still essential to agent function")
+        parser.add_argument(
+            "--default-sly-data",
+            type=str,
+            default=self.config["default_sly_data"],
+            help="JSON string containing data that is out-of-band to the chat stream, "
+            "but is still essential to agent function",
+        )
         parser.add_argument(
             "--nsflow-host",
             type=str,
@@ -222,7 +247,7 @@ The type of connection to initiate. Choices are to connect to:
             "NEURO_SAN_SERVER_HTTP_PORT": "server_http_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",
-            "DEFAULT_SLY_DATA": "default_sly_data"
+            "DEFAULT_SLY_DATA": "default_sly_data",
         }
 
         self.logger.info("\n" + "=" * 50)
@@ -259,38 +284,25 @@ The type of connection to initiate. Choices are to connect to:
                 self.logger.warning("Config key '%s' not found for env var '%s'", config_key, env_var)
 
     def start_process(self, command, process_name, log_file):
-        """Start a subprocess and capture logs."""
+        """Start a subprocess and hook our log bridge (no run.py streaming)."""
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if self.is_windows else 0
 
-        with open(log_file, "w", encoding="utf-8") as log:  # noqa: F841
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-                preexec_fn=None if self.is_windows else os.setpgrp,
-                creationflags=creation_flags,
-            )
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+            preexec_fn=None if self.is_windows else os.setpgrp,
+            creationflags=creation_flags,
+        )
 
-        self.logger.info("Started %s with PID %s", process_name, process.pid)
+        self.logger.info("Started %s with PID %s (tee -> %s)", process_name, process.pid, log_file)
 
-        # Start log streaming in a thread
-        threading.Thread(target=self.stream_output, args=(process.stdout, log_file, process_name)).start()
-        threading.Thread(target=self.stream_output, args=(process.stderr, log_file, process_name)).start()
-
+        # Let log_bridge own reading/parsing/printing/writing
+        self.log_bridge.attach_process_logger(process, process_name, log_file)
         return process
-
-    def stream_output(self, pipe, log_file, prefix):
-        """Stream process output to console and log file."""
-        with open(log_file, "a", encoding="utf-8") as log:
-            for line in iter(pipe.readline, ""):
-                formatted_line = f"{prefix}: {line.strip()}"
-                print(formatted_line)
-                log.write(formatted_line + "\n")
-            # log.flush()
-        pipe.close()
 
     def start_neuro_san(self):
         """Start the Neuro SAN server."""
@@ -366,7 +378,7 @@ The type of connection to initiate. Choices are to connect to:
                 return True
             except Exception:
                 return False
-    
+
     def conditional_start_servers(self):
         """Start both neuro-san and nsflow basis given conditions"""
         # Handle mutually exclusive modes
@@ -434,6 +446,5 @@ The type of connection to initiate. Choices are to connect to:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     runner = NsFlowRunner()
     runner.run()

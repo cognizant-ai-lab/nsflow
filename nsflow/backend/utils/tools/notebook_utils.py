@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 # END COPYRIGHT
 
 from collections import deque
+
 from graphviz import Graph
 
 
@@ -44,6 +44,7 @@ class NotebookUtils:
         - coded_tool_classes: List of prefix strings to exclude from graph (e.g., ["extract_docs", "url_provider"])
         - render_png: Whether to render the output as PNG (True) or leave as raw DOT (False)
     """
+
     def __init__(self, graph_config=None):
         """
         Initialize the NotebookUtils with optional visual customization.
@@ -86,8 +87,7 @@ class NotebookUtils:
         coded_prefixes = self.config["coded_tool_classes"]
         graph_map = {
             item["origin"]: [
-                tool for tool in item.get("tools", [])
-                if not any(tool.startswith(prefix) for prefix in coded_prefixes)
+                tool for tool in item.get("tools", []) if not any(tool.startswith(prefix) for prefix in coded_prefixes)
             ]
             for item in network_data["connectivity"]
             if not any(item["origin"].startswith(prefix) for prefix in coded_prefixes)
@@ -116,7 +116,7 @@ class NotebookUtils:
             splines=self.config["splines"],
             nodesep=str(self.config["nodesep"]),
             ranksep=str(self.config["ranksep"]),
-            overlap="false"
+            overlap="false",
         )
         dot.attr(
             "node",
@@ -125,7 +125,7 @@ class NotebookUtils:
             fontsize=self.config["fontsize"],
             fixedsize="false",
             width=self.config["node_width"],
-            height=self.config["node_height"]
+            height=self.config["node_height"],
         )
 
         # Add nodes with level-specific colors

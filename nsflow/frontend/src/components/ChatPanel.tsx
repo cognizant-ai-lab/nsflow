@@ -38,6 +38,7 @@ import {
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
+import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import { Mp3Encoder } from "@breezystack/lamejs";
@@ -46,9 +47,12 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
-  const useSpeech = import.meta.env.VITE_USE_SPEECH === "true";
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
+  const { viteUseSpeech } = getFeatureFlags();
+  const useSpeech = !!viteUseSpeech 
+  // Use for Dev:
+  // import.meta.env.VITE_USE_SPEECH === "true";
 
   const {
     activeNetwork,
@@ -570,7 +574,78 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   },
                 }}
               />
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {/* Right column: mic (top, small) + Send (bottom) */}
+              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+                {useSpeech && (
+                  <Tooltip
+                    title={
+                      loading
+                        ? "Converting speech to text..."
+                        : isRecording
+                        ? "Recording... Release to stop"
+                        : "Hold to record audio"
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        size="small"
+                        aria-label="Record voice"
+                        aria-pressed={isRecording ? "true" : "false"}
+                        onMouseDown={startRecording}
+                        onMouseUp={stopRecording}
+                        onMouseLeave={stopRecording}
+                        onTouchStart={startRecording}
+                        onTouchEnd={stopRecording}
+                        disabled={loading}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          color: loading
+                            ? theme.palette.info.main
+                            : isRecording
+                            ? theme.palette.error.main
+                            : theme.palette.primary.main,
+                          borderRadius: 999,
+                          // match Clear/Stop style: subtle alpha hover, no solid fill
+                          "&:hover": {
+                            backgroundColor: alpha(
+                              loading
+                                ? theme.palette.info.main
+                                : isRecording
+                                ? theme.palette.error.main
+                                : theme.palette.primary.main,
+                              0.1
+                            ),
+                          },
+                          "&.Mui-disabled": {
+                            color: theme.palette.action.disabled,
+                          },
+                        }}
+                      >
+                        <MicIcon
+                          sx={{
+                            fontSize: 18,
+                            transition: "transform .15s ease, opacity .15s ease",
+                            animation: loading
+                              ? "spin 1s linear infinite"
+                              : isRecording
+                              ? "pulse 1s ease-in-out infinite"
+                              : "none",
+                            "@keyframes spin": {
+                              "0%": { transform: "rotate(0deg)" },
+                              "100%": { transform: "rotate(360deg)" },
+                            },
+                            "@keyframes pulse": {
+                              "0%, 100%": { opacity: 1 },
+                              "50%": { opacity: 0.55 },
+                            },
+                          }}
+                        />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
+
                 <Button
                   variant="contained"
                   onClick={sendMessage}
@@ -583,63 +658,6 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                 >
                   Send
                 </Button>
-                {useSpeech && (
-                  <Tooltip
-                    title={
-                      loading
-                        ? "Converting speech to text..."
-                        : isRecording
-                        ? "Recording... Release to stop"
-                        : "Hold to record audio"
-                    }
-                  >
-                    <IconButton
-                      onMouseDown={startRecording}
-                      onMouseUp={stopRecording}
-                      onMouseLeave={stopRecording}
-                      onTouchStart={startRecording}
-                      onTouchEnd={stopRecording}
-                      disabled={loading}
-                      sx={{
-                        backgroundColor: loading
-                          ? theme.palette.info.main
-                          : isRecording
-                          ? theme.palette.error.main
-                          : theme.palette.primary.main,
-                        color: "white",
-                        "&:hover": {
-                          backgroundColor: loading
-                            ? theme.palette.info.dark
-                            : isRecording
-                            ? theme.palette.error.dark
-                            : theme.palette.primary.dark,
-                        },
-                        "&.Mui-disabled": {
-                          backgroundColor: theme.palette.action.disabled,
-                          color: theme.palette.action.disabled,
-                        },
-                      }}
-                    >
-                      <MicIcon
-                        sx={{
-                          animation: loading
-                            ? "spin 1s linear infinite"
-                            : isRecording
-                            ? "pulse 1s ease-in-out infinite"
-                            : "none",
-                          "@keyframes spin": {
-                            "0%": { transform: "rotate(0deg)" },
-                            "100%": { transform: "rotate(360deg)" },
-                          },
-                          "@keyframes pulse": {
-                            "0%, 100%": { opacity: 1 },
-                            "50%": { opacity: 0.5 },
-                          },
-                        }}
-                      />
-                    </IconButton>
-                  </Tooltip>
-                )}
               </Box>
             </Box>
 

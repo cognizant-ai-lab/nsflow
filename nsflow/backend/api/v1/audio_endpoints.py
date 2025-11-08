@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,12 +19,8 @@ import tempfile
 from io import BytesIO
 
 import speech_recognition as sr
-from fastapi import APIRouter
-from fastapi import File
-from fastapi import HTTPException
-from fastapi import UploadFile
-from fastapi.responses import JSONResponse
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 from gtts import gTTS
 from pydantic import BaseModel
 

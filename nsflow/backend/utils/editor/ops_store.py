@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,14 @@
 # END COPYRIGHT
 
 from __future__ import annotations
-import os, json, copy, logging
+
+import copy
+import json
+import logging
+import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
 from werkzeug.utils import secure_filename
 
 from nsflow.backend.utils.agentutils.agent_network_utils import ROOT_DIR
@@ -29,6 +33,7 @@ if not log.handlers:
     h.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     log.addHandler(h)
     log.setLevel(logging.INFO)
+
 
 class OperationStore:
     """
@@ -51,15 +56,15 @@ class OperationStore:
         # Create draft state directory with path sanitization
         draft_root = os.path.join(ROOT_DIR, "draft_states")
         os.makedirs(draft_root, exist_ok=True)
-        
+
         # Sanitize design_id for filesystem safety
         safe_design_id = secure_filename(design_id)
         self.root = os.path.join(draft_root, safe_design_id)
-        
+
         self.design_id = design_id
         self.manager = manager
         os.makedirs(self.root, exist_ok=True)
-        
+
         self.base_file = os.path.join(self.root, "base_state.json")
         self.hist_file = os.path.join(self.root, "history.jsonl")
         self.redo_file = os.path.join(self.root, "redo_stack.jsonl")
@@ -73,12 +78,10 @@ class OperationStore:
         if not os.path.exists(self.redo_file):
             open(self.redo_file, "w").close()
         if not os.path.exists(self.meta_file):
-            self._write_json(self.meta_file, {
-                "design_id": design_id,
-                "created_at": self._now(),
-                "last_saved": self._now(),
-                "version": "1.0"
-            })
+            self._write_json(
+                self.meta_file,
+                {"design_id": design_id, "created_at": self._now(), "last_saved": self._now(), "version": "1.0"},
+            )
 
     # ----------------- Public API -----------------
 
@@ -91,7 +94,7 @@ class OperationStore:
           - set_network_name(name)
           - update_network_state(network_name, state_dict, source)
           - update_top_level_config(updates)
-          
+
           Agent-level:
           - add_agent(name, parent=None, agent_data=None)
           - create_agent_with_parent(name, parent, agent_data=None)  # Atomic: add_agent + add_edge
@@ -100,7 +103,7 @@ class OperationStore:
           - delete_agent(name)
           - update_agent(name, updates)
           - duplicate_agent(agent_name, new_name)
-          
+
           Edge-level:
           - add_edge(src, dst)
           - remove_edge(src, dst)
@@ -184,7 +187,7 @@ class OperationStore:
             ok = self.manager.update_top_level_config(updates)
             if not ok:
                 raise RuntimeError("update_top_level_config failed")
-            
+
             # Create inverse: restore the complete previous top-level config
             return {"op": "restore_top_level_config", "args": {"config": current_top_level}}
 
@@ -205,19 +208,19 @@ class OperationStore:
             name = args["name"]
             parent = args["parent"]
             agent_data = args.get("agent_data")
-            
+
             # First add the agent without parent
             ok = self.manager.add_agent(name, None, agent_data)
             if not ok:
                 raise RuntimeError("create_agent_with_parent: add_agent failed")
-            
+
             # Then add the edge to parent
             ok = self.manager.add_edge(parent, name)
             if not ok:
                 # Rollback: remove the agent we just added
                 self.manager.delete_agent(name)
                 raise RuntimeError("create_agent_with_parent: add_edge failed")
-            
+
             # inverse: delete_agent (which will also remove the edge)
             return {"op": "delete_agent", "args": {"name": name}}
 
@@ -226,15 +229,15 @@ class OperationStore:
             name = args["name"]
             toolbox = args["toolbox"]
             parent = args.get("parent")
-            
+
             # Create agent data for toolbox agent
             agent_data = {
                 "name": name,
                 "toolbox": toolbox,
                 "agent_type": "toolbox",
-                "instructions": f"Toolbox agent using {toolbox}"
+                "instructions": f"Toolbox agent using {toolbox}",
             }
-            
+
             ok = self.manager.add_agent(name, parent, agent_data)
             if not ok:
                 raise RuntimeError("add_toolbox_agent failed")
@@ -246,27 +249,27 @@ class OperationStore:
             name = args["name"]
             toolbox = args["toolbox"]
             parent = args["parent"]
-            
+
             # Create agent data for toolbox agent
             agent_data = {
                 "name": name,
                 "toolbox": toolbox,
                 "agent_type": "toolbox",
-                "instructions": f"Toolbox agent using {toolbox}"
+                "instructions": f"Toolbox agent using {toolbox}",
             }
-            
+
             # First add the agent without parent
             ok = self.manager.add_agent(name, None, agent_data)
             if not ok:
                 raise RuntimeError("create_toolbox_agent_with_parent: add_agent failed")
-            
+
             # Then add the edge to parent
             ok = self.manager.add_edge(parent, name)
             if not ok:
                 # Rollback: remove the agent we just added
                 self.manager.delete_agent(name)
                 raise RuntimeError("create_toolbox_agent_with_parent: add_edge failed")
-            
+
             # inverse: delete_agent (which will also remove the edge)
             return {"op": "delete_agent", "args": {"name": name}}
 
@@ -287,11 +290,7 @@ class OperationStore:
             # inverse: restore the agent and reattach to parent and children
             return {
                 "op": "restore_agent",
-                "args": {
-                    "agent_def": deleted_agent,
-                    "parent": parent,
-                    "children": children
-                }
+                "args": {"agent_def": deleted_agent, "parent": parent, "children": children},
             }
 
         if op == "update_agent":
@@ -309,14 +308,18 @@ class OperationStore:
             return {"op": "update_agent", "args": {"name": name, "updates": prev}}
 
         if op == "add_edge":
-            src = args["src"]; dst = args["dst"]
-            ok = self.manager.add_edge(src, dst)  # sets parent; prevents cycles internally :contentReference[oaicite:6]{index=6}
+            src = args["src"]
+            dst = args["dst"]
+            ok = self.manager.add_edge(
+                src, dst
+            )  # sets parent; prevents cycles internally :contentReference[oaicite:6]{index=6}
             if not ok:
                 raise RuntimeError("add_edge failed")
             return {"op": "remove_edge", "args": {"src": src, "dst": dst}}
 
         if op == "remove_edge":
-            src = args["src"]; dst = args["dst"]
+            src = args["src"]
+            dst = args["dst"]
             ok = self.manager.remove_edge(src, dst)  # clears parent if needed :contentReference[oaicite:7]{index=7}
             if not ok:
                 raise RuntimeError("remove_edge failed")
@@ -324,7 +327,8 @@ class OperationStore:
 
         if op == "duplicate_agent":
             # optional, if UI exposes duplicate
-            orig = args["agent_name"]; new = args["new_name"]
+            orig = args["agent_name"]
+            new = args["new_name"]
             ok = self.manager.duplicate_agent(orig, new)  # :contentReference[oaicite:8]{index=8}
             if not ok:
                 raise RuntimeError("duplicate_agent failed")
@@ -361,17 +365,22 @@ class OperationStore:
         # Network-level operations
         if op == "set_network_name":
             ok = self.manager.set_network_name(args["name"])
-            if not ok: raise RuntimeError("set_network_name failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("set_network_name failed (undo/redo)")
             return
 
         if op == "update_network_state":
-            ok = self.manager.update_network_state(args["network_name"], args["state_dict"], args.get("source", "ops_store"))
-            if not ok: raise RuntimeError("update_network_state failed (undo/redo)")
+            ok = self.manager.update_network_state(
+                args["network_name"], args["state_dict"], args.get("source", "ops_store")
+            )
+            if not ok:
+                raise RuntimeError("update_network_state failed (undo/redo)")
             return
 
         if op == "update_top_level_config":
             ok = self.manager.update_top_level_config(args["updates"])
-            if not ok: raise RuntimeError("update_top_level_config failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("update_top_level_config failed (undo/redo)")
             return
 
         if op == "restore_full_state":
@@ -380,30 +389,33 @@ class OperationStore:
 
         if op == "restore_top_level_config":
             ok = self.manager.restore_top_level_config(args["config"])
-            if not ok: raise RuntimeError("restore_top_level_config failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("restore_top_level_config failed (undo/redo)")
             return
 
         # Agent-level operations
         if op == "add_agent":
             ok = self.manager.add_agent(args["name"], args.get("parent"), args.get("agent_data"))
-            if not ok: raise RuntimeError("add_agent failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("add_agent failed (undo/redo)")
             return
 
         if op == "add_toolbox_agent":
             name = args["name"]
             toolbox = args["toolbox"]
             parent = args.get("parent")
-            
+
             # Create agent data for toolbox agent
             agent_data = {
                 "name": name,
                 "toolbox": toolbox,
                 "agent_type": "toolbox",
-                "instructions": f"Toolbox agent using {toolbox}"
+                "instructions": f"Toolbox agent using {toolbox}",
             }
-            
+
             ok = self.manager.add_agent(name, parent, agent_data)
-            if not ok: raise RuntimeError("add_toolbox_agent failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("add_toolbox_agent failed (undo/redo)")
             return
 
         if op == "create_agent_with_parent":
@@ -411,11 +423,12 @@ class OperationStore:
             name = args["name"]
             parent = args["parent"]
             agent_data = args.get("agent_data")
-            
+
             # First add the agent without parent
             ok = self.manager.add_agent(name, None, agent_data)
-            if not ok: raise RuntimeError("create_agent_with_parent: add_agent failed (undo/redo)")
-            
+            if not ok:
+                raise RuntimeError("create_agent_with_parent: add_agent failed (undo/redo)")
+
             # Then add the edge to parent
             ok = self.manager.add_edge(parent, name)
             if not ok:
@@ -429,19 +442,20 @@ class OperationStore:
             name = args["name"]
             toolbox = args["toolbox"]
             parent = args["parent"]
-            
+
             # Create agent data for toolbox agent
             agent_data = {
                 "name": name,
                 "toolbox": toolbox,
                 "agent_type": "toolbox",
-                "instructions": f"Toolbox agent using {toolbox}"
+                "instructions": f"Toolbox agent using {toolbox}",
             }
-            
+
             # First add the agent without parent
             ok = self.manager.add_agent(name, None, agent_data)
-            if not ok: raise RuntimeError("create_toolbox_agent_with_parent: add_agent failed (undo/redo)")
-            
+            if not ok:
+                raise RuntimeError("create_toolbox_agent_with_parent: add_agent failed (undo/redo)")
+
             # Then add the edge to parent
             ok = self.manager.add_edge(parent, name)
             if not ok:
@@ -452,22 +466,26 @@ class OperationStore:
 
         if op == "delete_agent":
             ok = self.manager.delete_agent(args["name"])
-            if not ok: raise RuntimeError("delete_agent failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("delete_agent failed (undo/redo)")
             return
 
         if op == "update_agent":
             ok = self.manager.update_agent(args["name"], args["updates"])
-            if not ok: raise RuntimeError("update_agent failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("update_agent failed (undo/redo)")
             return
 
         if op == "add_edge":
             ok = self.manager.add_edge(args["src"], args["dst"])
-            if not ok: raise RuntimeError("add_edge failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("add_edge failed (undo/redo)")
             return
 
         if op == "remove_edge":
             ok = self.manager.remove_edge(args["src"], args["dst"])
-            if not ok: raise RuntimeError("remove_edge failed (undo/redo)")
+            if not ok:
+                raise RuntimeError("remove_edge failed (undo/redo)")
             return
 
         if op == "duplicate_agent":
@@ -475,24 +493,25 @@ class OperationStore:
             # but we need to get the original agent's data and parent first
             original_name = args["agent_name"]
             new_name = args["new_name"]
-            
+
             # Get the original agent's data from current state
             current_state = self.manager.get_state()
             original_agent = current_state["agents"].get(original_name)
             if not original_agent:
                 raise RuntimeError(f"duplicate_agent: original agent '{original_name}' not found")
-            
+
             # Get the parent of the original agent
             parent = original_agent.get("_parent")
-            
+
             # Create agent data for the duplicate (copy all fields except name)
             agent_data = copy.deepcopy(original_agent)
             agent_data["name"] = new_name  # Update the name
-            
+
             # Use create_agent_with_parent logic
             ok = self.manager.add_agent(new_name, None, agent_data)
-            if not ok: raise RuntimeError("duplicate_agent: add_agent failed (undo/redo)")
-            
+            if not ok:
+                raise RuntimeError("duplicate_agent: add_agent failed (undo/redo)")
+
             # Add edge to parent if original had a parent
             if parent:
                 ok = self.manager.add_edge(parent, new_name)
@@ -512,7 +531,8 @@ class OperationStore:
             name = agent_def["name"]
             # Use add_agent(..., agent_data=agent_def) to preserve fields (instructions, tools, class, _parent, etc.)
             ok = self.manager.add_agent(name, parent, agent_data=agent_def)
-            if not ok: raise RuntimeError("restore_agent: add_agent failed")
+            if not ok:
+                raise RuntimeError("restore_agent: add_agent failed")
 
             # ensure parent linkage (add_agent handled it, but idempotent)
             if parent:
@@ -539,13 +559,13 @@ class OperationStore:
                 "version": "1.0",
                 "network_name": self.manager.get_state().get("network_name", ""),
                 "agent_count": len(self.manager.get_state().get("agents", {})),
-                "operation_count": len(self._read_jsonl(self.hist_file))
+                "operation_count": len(self._read_jsonl(self.hist_file)),
             }
             self._write_json(self.meta_file, meta)
-            
+
             # Update base state to current state
             self._write_json(self.base_file, copy.deepcopy(self.manager.get_state()))
-            
+
             log.info(f"Draft saved for design_id: {self.design_id}")
             return True
         except Exception as e:
@@ -558,7 +578,7 @@ class OperationStore:
             meta = self._read_json(self.meta_file)
             history = self._read_jsonl(self.hist_file)
             redo_stack = self._read_jsonl(self.redo_file)
-            
+
             return {
                 "design_id": self.design_id,
                 "network_name": meta.get("network_name", ""),
@@ -568,7 +588,7 @@ class OperationStore:
                 "operation_count": len(history),
                 "can_undo": len(history) > 0,
                 "can_redo": len(redo_stack) > 0,
-                "draft_path": self.root
+                "draft_path": self.root,
             }
         except Exception as e:
             log.error(f"Failed to get draft info: {e}")
@@ -580,7 +600,7 @@ class OperationStore:
         draft_root = os.path.join(ROOT_DIR, "draft_states")
         if not os.path.exists(draft_root):
             return []
-        
+
         drafts = []
         try:
             for design_dir in os.listdir(draft_root):
@@ -594,41 +614,43 @@ class OperationStore:
                             history = OperationStore._read_jsonl(history_file)
                             redo_file = os.path.join(design_path, "redo_stack.jsonl")
                             redo_stack = OperationStore._read_jsonl(redo_file)
-                            
-                            drafts.append({
-                                "design_id": meta.get("design_id", design_dir),
-                                "network_name": meta.get("network_name", ""),
-                                "created_at": meta.get("created_at"),
-                                "last_saved": meta.get("last_saved"),
-                                "agent_count": meta.get("agent_count", 0),
-                                "operation_count": len(history),
-                                "can_undo": len(history) > 0,
-                                "can_redo": len(redo_stack) > 0,
-                                "source": "draft",
-                                "draft_path": design_path
-                            })
+
+                            drafts.append(
+                                {
+                                    "design_id": meta.get("design_id", design_dir),
+                                    "network_name": meta.get("network_name", ""),
+                                    "created_at": meta.get("created_at"),
+                                    "last_saved": meta.get("last_saved"),
+                                    "agent_count": meta.get("agent_count", 0),
+                                    "operation_count": len(history),
+                                    "can_undo": len(history) > 0,
+                                    "can_redo": len(redo_stack) > 0,
+                                    "source": "draft",
+                                    "draft_path": design_path,
+                                }
+                            )
                         except Exception as e:
                             log.warning(f"Failed to read draft metadata from {design_path}: {e}")
         except Exception as e:
             log.error(f"Failed to list drafts: {e}")
-        
+
         return drafts
 
     @staticmethod
-    def load_draft(design_id: str, manager: Any) -> Optional['OperationStore']:
+    def load_draft(design_id: str, manager: Any) -> Optional["OperationStore"]:
         """Load an existing draft and return the OperationStore"""
         try:
             store = OperationStore(design_id, manager)
             # Load the base state into the manager
             base_state = store._read_json(store.base_file)
             manager.current_state = copy.deepcopy(base_state)
-            
+
             # Replay all operations to get to current state
             history = store._read_jsonl(store.hist_file)
             for entry in history:
                 forward = entry["forward"]
                 store._execute(forward["op"], forward.get("args", {}))
-            
+
             log.info(f"Loaded draft for design_id: {design_id}")
             return store
         except Exception as e:
@@ -654,7 +676,8 @@ class OperationStore:
 
     @staticmethod
     def read_jsonl(path: str) -> List[Dict[str, Any]]:
-        if not os.path.exists(path): return []
+        if not os.path.exists(path):
+            return []
         out = []
         with open(path, "r", encoding="utf-8") as f:
             for line in f:

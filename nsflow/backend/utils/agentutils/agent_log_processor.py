@@ -1,4 +1,3 @@
-
 # Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,17 +15,16 @@
 # END COPYRIGHT
 
 import json
-import os
-from typing import Any
-from typing import Dict
-from typing import Optional
 import logging
+import os
+from typing import Any, Dict, Optional
 
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
-from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+
 from nsflow.backend.trust.rai_service import RaiService
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
+from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 EDITOR_TOOLS = {
     "create_new_network",
@@ -42,15 +40,23 @@ class AgentLogProcessor(MessageProcessor):
     """
     Tells the UI there's an agent message to process.
     """
+
     AGENT_NETWORK_DESIGNER_NAME = os.getenv("NSFLOW_WAND_NAME", "agent_network_designer")
     NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", None)
 
-    def __init__(self, agent_name: str, sid: str):
+    def __init__(self, agent_name: str, session_id: str = None):
         """
         Constructor
+
+        Args:
+            agent_name: The name of the agent
+            sid: The connection session identifier (includes host, port, uuid)
+            session_id: The user session identifier from the frontend (simpler, user-level)
         """
-        self.logs_manager = LogsRegistry.register(agent_name)
-        self.sid: str = sid
+        # Extract session_id from sid if not provided (backward compatibility)
+        # sid format: "agent_name:host:port:uuid"
+        self.session_id = session_id if session_id else "default_session"
+        self.logs_manager = LogsRegistry.register(agent_name, self.session_id)
         self.agent_name = agent_name
 
     async def async_process_message(self, chat_message_dict: Dict[str, Any], message_type: ChatMessageType):
@@ -75,10 +81,12 @@ class AgentLogProcessor(MessageProcessor):
         # logging.info(chat_message_dict)
         # logging.info("\n"+"x"*30 + "End of chat_message_dict" + "x"*30+"\n")
 
-        if message_type not in (ChatMessageType.AGENT,
-                                ChatMessageType.AI,
-                                ChatMessageType.AGENT_TOOL_RESULT,
-                                ChatMessageType.AGENT_PROGRESS):
+        if message_type not in (
+            ChatMessageType.AGENT,
+            ChatMessageType.AI,
+            ChatMessageType.AGENT_TOOL_RESULT,
+            ChatMessageType.AGENT_PROGRESS,
+        ):
             # These are framework messages that contain chat context, system prompts or consolidated messages etc.
             # Don't log them. And there's no agent to highlight in the network diagram.
             # ChatMessageType.AGENT_FRAMEWORK
@@ -129,7 +137,9 @@ class AgentLogProcessor(MessageProcessor):
 
         if token_accounting:
             await self.logs_manager.log_event(f"{token_accounting_str}", "NeuroSan")
-            await RaiService.get_instance().update_metrics_from_token_accounting(token_accounting, self.agent_name)
+            await RaiService.get_instance().update_metrics_from_token_accounting(
+                token_accounting, self.agent_name, self.session_id
+            )
 
     def _last_origin_tool(self, msg: Dict[str, Any]) -> Optional[str]:
         """Return the last tool in origin list"""
@@ -197,20 +207,18 @@ class AgentLogProcessor(MessageProcessor):
                     if state_dict:
                         success = manager.update_network_state(network_name, state_dict, source="copilot_logs")
                         if success:
-                            logging.info("Updated existing session for network '%s' (design_id: %s)",
-                                         network_name, design_id)
+                            logging.info(
+                                "Updated existing session for network '%s' (design_id: %s)", network_name, design_id
+                            )
                         else:
                             logging.warning("Failed to update existing session for network '%s'", network_name)
                 else:
                     # New session - create from copilot state
                     # design_id, state_manager = registry.load_from_copilot_state(
-                    # copilot_state=progress, session_id=self.sid)
-                    design_id, _ = registry.load_from_copilot_state(
-                        copilot_state=progress,
-                        session_id=self.sid
-                    )
+                    # copilot_state=progress, session_id=self.session_id)
+                    design_id, _ = registry.load_from_copilot_state(copilot_state=progress, session_id=self.session_id)
                     logging.info("Created new session for network '%s' (design_id: %s)", network_name, design_id)
 
             except Exception as e:
                 logging.error("Error processing copilot state with SimpleStateRegistry: %s", e)
-                logging.error("Unable to process agent network designer state update for session %s", self.sid)
+                logging.error("Unable to process agent network designer state update for session %s", self.session_id)
