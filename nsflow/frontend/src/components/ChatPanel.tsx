@@ -29,6 +29,7 @@ import {
   FormControlLabel,
   Chip,
   Stack,
+  Collapse,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -36,6 +37,8 @@ import {
   Delete as DeleteIcon,
   Mic as MicIcon,
   Send as SendIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -70,6 +73,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [sampleQueries, setSampleQueries] = useState<string[]>([]);
+  const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
@@ -244,6 +248,9 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       })
     );
     setNewMessage("");
+
+    // Collapse sample queries section after sending message
+    setSampleQueriesExpanded(false);
   };
 
   const handleSampleQueryClick = (query: string) => {
@@ -583,12 +590,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               height: "100%",
               overflowY: "auto",
               overflowX: "hidden",
-              pt: 1,
+              pt: 0.5,
               px: 2,
               pb: 2,
               display: "flex",
               flexDirection: "column",
-              gap: 1,
+              gap: 0.5,
               // subtle scrollbar styling
               "&::-webkit-scrollbar": { width: 8 },
               "&::-webkit-scrollbar-thumb": {
@@ -603,72 +610,99 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             {/* Sample Queries Section */}
             {sampleQueries.length > 0 && (
               <Box sx={{ position: 'relative' }}>
-                <Typography
-                  variant="caption"
+                <Box
+                  onClick={() => setSampleQueriesExpanded(!sampleQueriesExpanded)}
                   sx={{
-                    position: 'absolute',
-                    top: -6,
-                    left: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    mb: 0,
+                    cursor: 'pointer',
+                    borderRadius: 1,
                     px: 0.5,
-                    backgroundColor: theme.palette.background.paper,
-                    color: theme.palette.text.secondary,
-                    fontSize: '0.5rem',
-                    zIndex: 1
+                    py: 0.2,
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                    },
                   }}
                 >
-                  Sample Queries
-                </Typography>
-                <Paper
-                  elevation={1}
-                  sx={{
-                    p: 0.8,
-                    backgroundColor: alpha(theme.palette.primary.main, 0.04),
-                    border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                    borderRadius: 1
-                  }}
-                >
-                  {/* Scrollable queries area */}
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: theme.palette.text.secondary,
+                      fontSize: '0.6rem',
+                      fontWeight: 500,
+                      userSelect: 'none',
+                    }}
+                  >
+                    Sample Queries
+                  </Typography>
                   <Box
                     sx={{
-                      maxHeight: 48,
-                      overflowY: "auto",
-                      pr: 0.5,
-                    // subtle scrollbar styling
-                    "&::-webkit-scrollbar": { width: 8, height: 8 },
-                    "&::-webkit-scrollbar-thumb": {
-                      backgroundColor: alpha(theme.palette.text.primary, 0.2),
-                      borderRadius: 8
-                    },
-                    "&::-webkit-scrollbar-track": {
-                      backgroundColor: alpha(theme.palette.background.default, 0.4)
-                    }
-                  }}
-                >
-                  <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
-                    {sampleQueries.map((query, index) => (
-                      <Chip
-                        key={`${query}-${index}`}
-                        size="small"
-                        variant="outlined"
-                        label={query}
-                        onClick={() => handleSampleQueryClick(query)}
-                        sx={{
-                          height: 20,
-                          borderRadius: "16px",
-                          cursor: "pointer",
-                          "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
-                          "&:hover": {
-                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                            borderColor: theme.palette.primary.main,
-                          },
-                          transition: "background-color 120ms ease, border-color 120ms ease"
-                        }}
-                        title={`Click to send: "${query}"`}
-                      />
-                    ))}
-                  </Stack>
+                      width: 20,
+                      height: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: theme.palette.text.secondary,
+                    }}
+                  >
+                    {sampleQueriesExpanded ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                  </Box>
                 </Box>
-              </Paper>
+                <Collapse in={sampleQueriesExpanded}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 0.8,
+                      backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                      borderRadius: 1
+                    }}
+                  >
+                    {/* Scrollable queries area */}
+                    <Box
+                      sx={{
+                        maxHeight: 48,
+                        overflowY: "auto",
+                        pr: 0.5,
+                      // subtle scrollbar styling
+                      "&::-webkit-scrollbar": { width: 8, height: 8 },
+                      "&::-webkit-scrollbar-thumb": {
+                        backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                        borderRadius: 8
+                      },
+                      "&::-webkit-scrollbar-track": {
+                        backgroundColor: alpha(theme.palette.background.default, 0.4)
+                      }
+                    }}
+                  >
+                    <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+                      {sampleQueries.map((query, index) => (
+                        <Chip
+                          key={`${query}-${index}`}
+                          size="small"
+                          variant="outlined"
+                          label={query}
+                          onClick={() => handleSampleQueryClick(query)}
+                          sx={{
+                            height: 20,
+                            borderRadius: "16px",
+                            cursor: "pointer",
+                            "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
+                            "&:hover": {
+                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              borderColor: theme.palette.primary.main,
+                            },
+                            transition: "background-color 120ms ease, border-color 120ms ease"
+                          }}
+                          title={`Click to send: "${query}"`}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                  </Paper>
+                </Collapse>
               </Box>
             )}
 
