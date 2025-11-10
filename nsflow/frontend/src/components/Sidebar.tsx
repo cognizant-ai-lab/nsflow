@@ -466,88 +466,105 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
 
       {/* Compact Tags Section */}
       {sortedTags.length > 0 && (
-        <Paper
-          elevation={1}
-          sx={{
-            mt: 0.1,
-            p: 0.5,
-            backgroundColor: alpha(theme.palette.background.default, 0.5),
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 1
-          }}
-        >
-          {/* Scrollable chips area */}
-          <Box
+        <Box sx={{ position: 'relative' }}>
+          <Typography
+            variant="caption"
             sx={{
-              maxHeight: 48,            // ~24px = 1 row of small chips; tweak as needed
-              overflowY: "auto",
-              pr: 0.5,                  // little room so the scrollbar doesn't overlap chips
-              // subtle scrollbar styling
-              "&::-webkit-scrollbar": { width: 8, height: 8 },
-              "&::-webkit-scrollbar-thumb": {
-                backgroundColor: alpha(theme.palette.text.primary, 0.2),
-                borderRadius: 8
-              },
-              "&::-webkit-scrollbar-track": {
-                backgroundColor: alpha(theme.palette.background.default, 0.4)
-              }
+              position: 'absolute',
+              top: -6,
+              left: 8,
+              px: 0.5,
+              backgroundColor: theme.palette.background.paper,
+              color: theme.palette.text.secondary,
+              fontSize: '0.5rem',
+              zIndex: 1
             }}
           >
-            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
-              {/* Clear-all chip shows only when at least one tag is selected */}
-              {selectedTags.size > 0 && (
-                <Tooltip title="Clear all selected tags" placement="bottom" arrow enterDelay={400} >
-                  {/* Box span wrapper ensures tooltip works even if the chip is ever disabled */}
-                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", lineHeight: 0 }} >
+            Tags
+          </Typography>
+          <Paper
+            elevation={1}
+            sx={{
+              mt: 0.1,
+              p: 0.8,
+              backgroundColor: alpha(theme.palette.background.default, 0.5),
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: 1
+            }}
+          >
+            {/* Scrollable chips area */}
+            <Box
+              sx={{
+                maxHeight: 48,            // ~24px = 1 row of small chips; tweak as needed
+                overflowY: "auto",
+                pr: 0.5,                  // little room so the scrollbar doesn't overlap chips
+                // subtle scrollbar styling
+                "&::-webkit-scrollbar": { width: 8, height: 8 },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                  borderRadius: 8
+                },
+                "&::-webkit-scrollbar-track": {
+                  backgroundColor: alpha(theme.palette.background.default, 0.4)
+                }
+              }}
+            >
+              <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+                {/* Clear-all chip shows only when at least one tag is selected */}
+                {selectedTags.size > 0 && (
+                  <Tooltip title="Clear all selected tags" placement="bottom" arrow enterDelay={400} >
+                    {/* Box span wrapper ensures tooltip works even if the chip is ever disabled */}
+                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", lineHeight: 0 }} >
+                      <Chip
+                        key="__clear_all__"
+                        size="small"
+                        variant="outlined"
+                        label="x"
+                        onClick={clearAllTags}
+                        title="Clear all tag filters"
+                        sx={{
+                          height: 18,
+                          width:32,
+                          borderRadius: "16px",
+                          // subtle green outline to match selected glow family but lighter
+                          backgroundColor: alpha(theme.palette.warning.main, 0.8),
+                          boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.4)} inset`,
+                          "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem", fontWeight: 700 },
+                          "&:hover": {
+                            backgroundColor: alpha(theme.palette.warning.main, 0.7),
+                            boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.3)} inset`,
+                          },
+                          transition: "box-shadow 120ms ease, border-color 120ms ease"
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                )}
+                {sortedTags.map(([tag, count]) => {
+                  const isSelected = selectedTags.has(tag);
+                  const isAvailable = count > 0; // available within current search result
+                  return (
                     <Chip
-                      key="__clear_all__"
+                      key={tag}
                       size="small"
                       variant="outlined"
-                      label="x"
-                      onClick={clearAllTags}
-                      title="Clear all tag filters"
-                      sx={{
-                        height: 18,
-                        width:32,
-                        borderRadius: "16px",
-                        // subtle green outline to match selected glow family but lighter
-                        backgroundColor: alpha(theme.palette.warning.main, 0.8),
-                        boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.4)} inset`,
-                        "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem", fontWeight: 700 },
-                        "&:hover": {
-                          backgroundColor: alpha(theme.palette.warning.main, 0.7),
-                          boxShadow: `0 0 0 1px ${alpha(theme.palette.warning.main, 0.3)} inset`,
-                        },
-                        transition: "box-shadow 120ms ease, border-color 120ms ease"
-                      }}
+                      label={`${count} ${tag}`}
+                      onClick={() => toggleTag(tag, isAvailable)}
+                      sx={chipSx(isSelected, isAvailable)}
+                      title={
+                        isSelected
+                          ? `Selected: ${count} agents currently match "${tag}"`
+                          : isAvailable
+                            ? `${count} agents currently match "${tag}"`
+                            : `No agents match "${tag}" in the current search`
+                      }
                     />
-                  </Box>
-                </Tooltip>
-              )}
-              {sortedTags.map(([tag, count]) => {
-                const isSelected = selectedTags.has(tag);
-                const isAvailable = count > 0; // available within current search result
-                return (
-                  <Chip
-                    key={tag}
-                    size="small"
-                    variant="outlined"
-                    label={`${count} ${tag}`}
-                    onClick={() => toggleTag(tag, isAvailable)}
-                    sx={chipSx(isSelected, isAvailable)}
-                    title={
-                      isSelected
-                        ? `Selected: ${count} agents currently match "${tag}"`
-                        : isAvailable
-                          ? `${count} agents currently match "${tag}"`
-                          : `No agents match "${tag}" in the current search`
-                    }
-                  />
-                );
-              })}
-            </Stack>
-          </Box>
-        </Paper>
+                  );
+                })}
+              </Stack>
+            </Box>
+          </Paper>
+        </Box>
       )}
 
       {/* Compact Networks Display */}
