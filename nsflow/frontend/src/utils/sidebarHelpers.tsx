@@ -139,7 +139,9 @@ export const renderTree = (
                     fontSize: 12,
                     color: isActive
                       ? theme.palette.primary.main
-                      : theme.palette.text.secondary,
+                      : theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.info.light, 0.7)
+                        : alpha(theme.palette.info.main, 0.6),
                     flexShrink: 0,
                   }}
                 />
@@ -150,7 +152,9 @@ export const renderTree = (
                       fontSize: "0.7rem",
                       color: isActive
                         ? theme.palette.primary.main
-                        : theme.palette.text.primary,
+                        : theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.info.light, 0.8)
+                          : alpha(theme.palette.info.dark, 0.7),
                       fontWeight: isActive ? 600 : 400,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -185,7 +189,9 @@ export const renderTree = (
               variant="caption"
               sx={{
                 fontSize: "0.7rem",
-                color: theme.palette.text.secondary,
+                color: theme.palette.mode === 'dark'
+                  ? alpha(theme.palette.warning.light, 0.8)
+                  : alpha(theme.palette.warning.dark, 0.8),
                 fontWeight: 600,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -206,6 +212,13 @@ export const renderTree = (
               backgroundColor: alpha(theme.palette.primary.main, 0.03),
               borderRadius: 1,
             },
+          },
+          // Color the folder icons with a subtle amber/orange tint
+          [`& .${treeItemClasses.iconContainer} svg`]: {
+            color: theme.palette.mode === 'dark'
+              ? alpha(theme.palette.warning.light, 0.7)
+              : alpha(theme.palette.warning.main, 0.6),
+            fontSize: 18,
           },
           // IMPORTANT: indent ONLY this folder's children (tiny px values)
           [`& > .${treeItemClasses.groupTransition}`]: {
