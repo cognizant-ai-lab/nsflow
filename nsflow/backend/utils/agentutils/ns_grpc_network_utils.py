@@ -47,6 +47,8 @@ class NsGrpcNetworkUtils:
         depth_map: Dict[str, int] = {}
         edges: List[Dict] = []
         nodes: List[Dict] = []
+        # Get metadata as is
+        metadata: Dict[str, Any] = connectivity_response.get("metadata", {})
 
         # Step 1: Map each origin to its tools
         for entry in connectivity_response.get("connectivity_info", []):
@@ -91,7 +93,7 @@ class NsGrpcNetworkUtils:
             for tool in tools:
                 edges.append({"id": f"{origin}-{tool}", "source": origin, "target": tool, "animated": True})
 
-        return {"nodes": nodes, "edges": edges}
+        return {"nodes": nodes, "edges": edges, "metadata": metadata}
 
     # pylint: disable=too-many-branches
     @staticmethod
