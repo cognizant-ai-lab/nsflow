@@ -140,8 +140,8 @@ export const renderTree = (
                     color: isActive
                       ? theme.palette.primary.main
                       : theme.palette.mode === 'dark'
-                        ? alpha(theme.palette.info.light, 0.7)
-                        : alpha(theme.palette.info.main, 0.6),
+                        ? alpha(theme.palette.text.primary, 0.7)
+                        : alpha(theme.palette.text.secondary, 0.6),
                     flexShrink: 0,
                   }}
                 />
@@ -153,8 +153,8 @@ export const renderTree = (
                       color: isActive
                         ? theme.palette.primary.main
                         : theme.palette.mode === 'dark'
-                          ? alpha(theme.palette.info.light, 0.8)
-                          : alpha(theme.palette.info.dark, 0.7),
+                          ? alpha(theme.palette.text.primary, 0.8)
+                          : alpha(theme.palette.text.secondary, 0.7),
                       fontWeight: isActive ? 600 : 400,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -223,8 +223,12 @@ export const renderTree = (
           // IMPORTANT: indent ONLY this folder's children (tiny px values)
           [`& > .${treeItemClasses.groupTransition}`]: {
             marginLeft: "2px",
-            paddingLeft: "4px",
-            borderLeft: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+            paddingLeft: "1px",
+            borderLeft: `1px dashed ${
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.warning.light, 0.5)
+                : alpha(theme.palette.warning.main, 0.5)
+            }`,
           },
         }}
       >
