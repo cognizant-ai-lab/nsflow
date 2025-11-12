@@ -27,6 +27,9 @@ import {
   alpha,
   Checkbox,
   FormControlLabel,
+  Chip,
+  Stack,
+  Collapse,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -34,6 +37,8 @@ import {
   Delete as DeleteIcon,
   Mic as MicIcon,
   Send as SendIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -67,6 +72,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sampleQueries, setSampleQueries] = useState<string[]>([]);
+  const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
@@ -114,6 +121,37 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  // Fetch connectivity info and extract sample queries when activeNetwork changes
+  useEffect(() => {
+    const fetchSampleQueries = async () => {
+      if (!activeNetwork || !apiUrl) {
+        setSampleQueries([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/connectivity/${activeNetwork}`);
+        if (!response.ok) {
+          console.error("Failed to fetch connectivity info:", response.statusText);
+          setSampleQueries(["What all can you help us with?"]);
+          return;
+        }
+
+        const data = await response.json();
+        const queries = data?.metadata?.sample_queries || [];
+
+        // Always append the default query
+        const allQueries = [...queries, "What all can you help us with?"];
+        setSampleQueries(allQueries);
+      } catch (error) {
+        console.error("Error fetching sample queries:", error);
+        setSampleQueries(["What all can you help us with?"]);
+      }
+    };
+
+    fetchSampleQueries();
+  }, [activeNetwork, apiUrl]);
 
   // Load persisted toggle when network changes (or first mount)
   useEffect(() => {
@@ -210,6 +248,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       })
     );
     setNewMessage("");
+
+    // Collapse sample queries section after sending message
+    setSampleQueriesExpanded(false);
+  };
+
+  const handleSampleQueryClick = (query: string) => {
+    // Reset auto-play flag for sample query clicks
+    setShouldAutoPlayNextAgent(false);
+    sendMessageWithText(query);
   };
 
   const copyToClipboard = (text: string, index: number) => {
@@ -427,13 +474,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     >
       <PanelGroup direction="vertical">
         {/* Panel 1: Header + Message List */}
-        <Panel ref={messagePanelRef} defaultSize={75} minSize={30}>
+        <Panel ref={messagePanelRef} defaultSize={72} minSize={30}>
           <Box
             sx={{
               display: "flex",
               flexDirection: "column",
               height: "100%",
-              p: 2,
+              pt: 2,
+              px: 2,
+              pb: 0.5,
               overflow: "hidden",
             }}
           >
@@ -481,35 +530,20 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               useSpeech={useSpeech}
             />
 
-            {/* Audio element for playback */}
+            {/* Audio element for playback with controls */}
             <Box
               sx={{
-                mt: 0.5,
+                mt: 0,
                 pb: 0,
                 pt: 0.5,
                 borderTop: (t) => `1px solid ${t.palette.divider}`,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
               }}
             >
-              <audio ref={audioRef} controls style={{ width: "100%", height: "28px" }} />
-            </Box>
-          </Box>
-        </Panel>
+              <audio ref={audioRef} controls style={{ flexGrow: 1, height: "24px" }} />
 
-        {/* Resize Handle */}
-        <PanelResizeHandle
-          style={{
-            height: "4px",
-            backgroundColor: theme.palette.divider,
-            cursor: "row-resize",
-            transition: "background-color 0.2s ease",
-          }}
-        />
-
-        {/* Panel 2: Inputs (chat) */}
-        <Panel ref={inputPanelRef} defaultSize={25} minSize={15}>
-          <div className="p-2 space-y-2 bg-[var(--chat-bg)]">
-            {/* Chat controls */}
-            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1 }}>
               <Tooltip title="Clear Chat">
                 <IconButton
                   size="small"
@@ -536,13 +570,147 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                 </IconButton>
               </Tooltip>
             </Box>
+          </Box>
+        </Panel>
+
+        {/* Resize Handle */}
+        <PanelResizeHandle
+          style={{
+            height: "2px",
+            backgroundColor: theme.palette.divider,
+            cursor: "row-resize",
+            transition: "background-color 0.2s ease",
+          }}
+        />
+
+        {/* Panel 2: Inputs (chat) */}
+        <Panel ref={inputPanelRef} defaultSize={28} minSize={15}>
+          <Box
+            sx={{
+              height: "100%",
+              overflowY: "auto",
+              overflowX: "hidden",
+              pt: 0.5,
+              px: 2,
+              pb: 2,
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.5,
+              // subtle scrollbar styling
+              "&::-webkit-scrollbar": { width: 8 },
+              "&::-webkit-scrollbar-thumb": {
+                backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                borderRadius: 8
+              },
+              "&::-webkit-scrollbar-track": {
+                backgroundColor: alpha(theme.palette.background.default, 0.4)
+              }
+            }}
+          >
+            {/* Sample Queries Section */}
+            {sampleQueries.length > 0 && (
+              <Box sx={{ position: 'relative' }}>
+                <Box
+                  onClick={() => setSampleQueriesExpanded(!sampleQueriesExpanded)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    mb: 0,
+                    cursor: 'pointer',
+                    borderRadius: 1,
+                    px: 0.5,
+                    py: 0.2,
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: theme.palette.text.secondary,
+                      fontSize: '0.6rem',
+                      fontWeight: 500,
+                      userSelect: 'none',
+                    }}
+                  >
+                    Sample Queries
+                  </Typography>
+                  <Box
+                    sx={{
+                      width: 20,
+                      height: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: theme.palette.text.secondary,
+                    }}
+                  >
+                    {sampleQueriesExpanded ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                  </Box>
+                </Box>
+                <Collapse in={sampleQueriesExpanded}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 0.8,
+                      backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                      borderRadius: 1
+                    }}
+                  >
+                    {/* Scrollable queries area */}
+                    <Box
+                      sx={{
+                        maxHeight: 48,
+                        overflowY: "auto",
+                        pr: 0.5,
+                      // subtle scrollbar styling
+                      "&::-webkit-scrollbar": { width: 8, height: 8 },
+                      "&::-webkit-scrollbar-thumb": {
+                        backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                        borderRadius: 8
+                      },
+                      "&::-webkit-scrollbar-track": {
+                        backgroundColor: alpha(theme.palette.background.default, 0.4)
+                      }
+                    }}
+                  >
+                    <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+                      {sampleQueries.map((query, index) => (
+                        <Chip
+                          key={`${query}-${index}`}
+                          size="small"
+                          variant="outlined"
+                          label={query}
+                          onClick={() => handleSampleQueryClick(query)}
+                          sx={{
+                            height: 20,
+                            borderRadius: "16px",
+                            cursor: "pointer",
+                            "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
+                            "&:hover": {
+                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              borderColor: theme.palette.primary.main,
+                            },
+                            transition: "background-color 120ms ease, border-color 120ms ease"
+                          }}
+                          title={`Click to send: "${query}"`}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                  </Paper>
+                </Collapse>
+              </Box>
+            )}
 
             {/* Message input */}
-            <Box sx={{ mt: 2, display: "flex", gap: 2, alignItems: "flex-end" }}>
+            <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
               <TextField
                 multiline
                 minRows={2}
-                maxRows={6}
                 placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
@@ -557,6 +725,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   "& .MuiOutlinedInput-root": {
                     backgroundColor: theme.palette.background.paper,
                     color: theme.palette.text.primary,
+                    padding: "8px 8px",
                     "&:hover": {
                       "& .MuiOutlinedInput-notchedOutline": {
                         borderColor: theme.palette.primary.main,
@@ -571,6 +740,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   },
                   "& .MuiOutlinedInput-notchedOutline": {
                     borderColor: theme.palette.divider,
+                  },
+                  "& .MuiInputBase-input": {
+                    padding: "0 !important",
+                  },
+                  "& textarea": {
+                    resize: "vertical",
+                    padding: "0 !important",
                   },
                 }}
               />
@@ -662,7 +838,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             </Box>
 
             {/* NEW: Always-visible "Use Sly Data" toggle below the message box */}
-            <Box sx={{ mt: 1 }}>
+            <Box>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -691,7 +867,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                 (Current sly data from SlyData tab or {`{}`} if empty).
               </Typography>
             </Box>
-          </div>
+          </Box>
         </Panel>
       </PanelGroup>
     </Paper>
