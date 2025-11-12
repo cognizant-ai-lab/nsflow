@@ -63,7 +63,7 @@ cd nsflow
     python -m venv .venv
     source .venv/bin/activate
     pip install -r requirements.txt
-    pip install -r requirements-dev.txt
+    pip install -r requirements-build.txt
     ```
 
 #### **Step 3: Start the Backend in dev mode & Frontend separately**

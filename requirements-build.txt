@@ -19,3 +19,9 @@ pytest-timer==1.0.0
 timeout-decorator==0.5.0
 coverage==7.6.1
 pytest-cov==5.0.0
+
+# Public repos
+neuro-san>=0.6.0,<0.7
+
+# jupyterlab to test run a genetrated notebook
+jupyterlab>=4.4.8
