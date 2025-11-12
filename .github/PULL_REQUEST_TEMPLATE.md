@@ -14,18 +14,18 @@ Fixes #
 
 ## Type of Change
 
-- [] Bug fix
-- [] New feature
-- [] Dependency upgrade
-- [] Refactoring / Improvement
-- [] Documentation
-- [] New agent / tool
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Dependency upgrade
+- [ ] Refactoring / Improvement
+- [ ] Documentation
+- [ ] New agent / tool
 
 ## Checklist
 
-- [] Tested locally
-- [] Added/updated tests
-- [] Updated relevant documentation
-- [] Added dependencies to appropriate `requirements.txt` (tool-specific preferred; main only for core functionality)
+- [ ] Tested locally
+- [ ] Added/updated tests
+- [ ] Updated relevant documentation
+- [ ] Added dependencies to appropriate `requirements.txt` (tool-specific preferred; main only for core functionality)
 
 ---
