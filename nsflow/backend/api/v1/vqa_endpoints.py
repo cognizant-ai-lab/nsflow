@@ -24,8 +24,6 @@ from fastapi.responses import JSONResponse
 from pydantic import StringConstraints
 from werkzeug.utils import secure_filename
 
-logging.basicConfig(level=logging.INFO)
-
 # Adjust these to your repo/paths
 working_directory = os.getcwd()
 REPO_DIR = os.path.join(working_directory, "..", "ml-fastvlm")

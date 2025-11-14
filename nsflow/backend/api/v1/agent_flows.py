@@ -24,8 +24,6 @@ from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtil
 from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 
-logging.basicConfig(level=logging.INFO)
-
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
 
@@ -164,7 +162,7 @@ async def get_agent_details_from_json(agent_name: str, request: Request):
 
 
 @router.get(
-    "/slydata/{network_name}",
+    "/slydata/{network_name:path}",
     responses={200: {"description": "Latest SlyData found"}, 404: {"description": "No SlyData available"}},
 )
 def get_latest_sly_data(network_name: str):
@@ -184,7 +182,7 @@ def get_latest_sly_data(network_name: str):
 
 
 @router.get(
-    "/compact_connectivity/{network_name}",
+    "/compact_connectivity/{network_name:path}",
     responses={200: {"description": "Connectivity Info"}, 404: {"description": "HOCON file not found"}},
 )
 def get_connectivity_info(network_name: str):
@@ -207,7 +205,7 @@ def get_networkconfig(network_name: str):
 
 
 @router.get(
-    "/networkconfig/{network_name}/agent/{agent_name}",
+    "/networkconfig/{network_name:path}/agent/{agent_name}",
     responses={200: {"description": "Agent Info found"}, 404: {"description": "Info not found"}},
 )
 def fetch_agent_info(network_name: str, agent_name: str):

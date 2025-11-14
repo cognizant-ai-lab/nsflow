@@ -176,10 +176,6 @@ class RaiService:
             session_metrics = self.session_metrics.get(session_id)
             if session_metrics and isinstance(session_metrics, dict):
                 await websocket.send_text(json.dumps(session_metrics))
-            else:
-                # Send default metrics
-                default_data = self._get_default_metrics(agent_name)
-                await websocket.send_text(json.dumps(default_data))
         except Exception as e:
             self.logger.error(f"Error sending initial metrics: {e}")
 

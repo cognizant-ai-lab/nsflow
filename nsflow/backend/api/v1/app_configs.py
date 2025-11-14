@@ -24,8 +24,6 @@ from nsflow.backend.models.config_model import ConfigRequest
 from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
-logging.basicConfig(level=logging.INFO)
-
 router = APIRouter(prefix="/api/v1")
 
 

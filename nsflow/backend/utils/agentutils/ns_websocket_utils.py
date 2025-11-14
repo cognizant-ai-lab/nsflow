@@ -30,9 +30,6 @@ from nsflow.backend.utils.agentutils.async_streaming_input_processor import Asyn
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
-# Logging setup
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 # Initialize a lock
 user_sessions_lock = asyncio.Lock()
 user_sessions = {}

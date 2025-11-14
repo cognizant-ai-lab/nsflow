@@ -26,9 +26,6 @@ from neuro_san.internals.graph.registry.agent_network import AgentNetwork
 from neuro_san.session.missing_agent_check import MissingAgentCheck
 from pyhocon import ConfigFactory
 
-logging.basicConfig(level=logging.INFO)
-
-
 AGENT_MANIFEST_FILE = os.getenv("AGENT_MANIFEST_FILE")
 if not AGENT_MANIFEST_FILE:
     THIS_DIR = os.path.dirname(os.path.abspath(__file__))
