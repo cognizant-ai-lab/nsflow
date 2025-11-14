@@ -24,8 +24,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from gtts import gTTS
 from pydantic import BaseModel
 
-logging.basicConfig(level=logging.INFO)
-
 router = APIRouter(prefix="/api/v1")
 
 

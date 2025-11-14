@@ -26,13 +26,13 @@ throughout the application via a shared registry.
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-# Logging setup
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Configuration
 ASYNCIO_SLEEP_INTERVAL = 0.5
 
 
@@ -58,7 +58,7 @@ class WebsocketLogsManager:
         self.active_internal_chat_connections: List[WebSocket] = []
         self.active_sly_data_connections: List[WebSocket] = []
         self.active_progress_connections: List[WebSocket] = []
-        self.logger = logging.getLogger(f"{self.__class__.__name__}.{self.agent_name}:{self.session_id}")
+        self.logger = logging.getLogger(f"{self.agent_name}")
         self.log_buffer: List[Dict] = []
 
     def get_timestamp(self):
@@ -82,7 +82,8 @@ class WebsocketLogsManager:
                 # Skip duplicate log
                 return
         # Log the message
-        # self.logger.info("%s: %s", source, message)
+        if "token_accounting" not in message:
+            self.logger.debug(message)
         self.log_buffer.append(log_entry)
         if len(self.log_buffer) > self.LOG_BUFFER_SIZE:
             self.log_buffer.pop(0)
@@ -95,6 +96,7 @@ class WebsocketLogsManager:
         :param message: A dictionary representing the chat message and metadata.
         """
         entry = {"message": message}
+        self.logger.debug(message)
         await self.broadcast_to_websocket(entry, self.active_progress_connections)
 
     async def internal_chat_event(self, message: Dict[str, Any]):
@@ -103,6 +105,7 @@ class WebsocketLogsManager:
         :param message: A dictionary representing the chat message and metadata.
         """
         entry = {"message": message}
+        self.logger.info(message)
         await self.broadcast_to_websocket(entry, self.active_internal_chat_connections)
 
     async def sly_data_event(self, message: Dict[str, Any]):
@@ -111,6 +114,7 @@ class WebsocketLogsManager:
         :param message: A dictionary representing the chat message and metadata.
         """
         entry = {"message": message}
+        self.logger.debug(message)
         await self.broadcast_to_websocket(entry, self.active_sly_data_connections)
 
     async def broadcast_to_websocket(self, entry: Dict[str, Any], connections_list: List[WebSocket]):

@@ -58,6 +58,7 @@ class AgentLogProcessor(MessageProcessor):
         self.session_id = session_id if session_id else "default_session"
         self.logs_manager = LogsRegistry.register(agent_name, self.session_id)
         self.agent_name = agent_name
+        self.logger = logging.getLogger(f"{self.agent_name}")
 
     async def async_process_message(self, chat_message_dict: Dict[str, Any], message_type: ChatMessageType):
         """
@@ -78,7 +79,9 @@ class AgentLogProcessor(MessageProcessor):
         # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}")
         # To just print on terminal, uncomment the below 3 lines
         # logging.info("\n"+"="*30 + "chat_message_dict incoming" + "="*30+"\n")
-        # logging.info(chat_message_dict)
+        # if self.logger.isEnabledFor(logging.DEBUG):
+        #     await self.logs_manager.log_event(chat_message_dict)
+        self.logger.debug(chat_message_dict)
         # logging.info("\n"+"x"*30 + "End of chat_message_dict" + "x"*30+"\n")
 
         if message_type not in (
@@ -207,18 +210,18 @@ class AgentLogProcessor(MessageProcessor):
                     if state_dict:
                         success = manager.update_network_state(network_name, state_dict, source="copilot_logs")
                         if success:
-                            logging.info(
+                            self.logger.info(
                                 "Updated existing session for network '%s' (design_id: %s)", network_name, design_id
                             )
                         else:
-                            logging.warning("Failed to update existing session for network '%s'", network_name)
+                            self.logger.warning("Failed to update existing session for network '%s'", network_name)
                 else:
                     # New session - create from copilot state
                     # design_id, state_manager = registry.load_from_copilot_state(
                     # copilot_state=progress, session_id=self.session_id)
                     design_id, _ = registry.load_from_copilot_state(copilot_state=progress, session_id=self.session_id)
-                    logging.info("Created new session for network '%s' (design_id: %s)", network_name, design_id)
+                    self.logger.info("Created new session for network '%s' (design_id: %s)", network_name, design_id)
 
             except Exception as e:
-                logging.error("Error processing copilot state with SimpleStateRegistry: %s", e)
-                logging.error("Unable to process agent network designer state update for session %s", self.session_id)
+                self.logger.error("Error processing copilot state with SimpleStateRegistry: %s", e)
+                self.logger.error("Unable to process agent network designer state update for session %s", self.session_id)

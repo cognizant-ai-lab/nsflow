@@ -85,7 +85,7 @@ class NsFlowRunner:
             "default_sly_data": str(os.getenv("DEFAULT_SLY_DATA", "")),
             "nsflow_host": os.getenv("NSFLOW_HOST", "localhost"),
             "nsflow_port": int(os.getenv("NSFLOW_PORT", "4173")),
-            "nsflow_log_level": os.getenv("NSFLOW_LOG_LEVEL", "info"),
+            "nsflow_log_level": os.getenv("LOG_LEVEL", "info"),
             "vite_api_protocol": os.getenv("VITE_API_PROTOCOL", "http"),
             "vite_ws_protocol": os.getenv("VITE_WS_PROTOCOL", "ws"),
             "thinking_file": os.getenv("THINKING_FILE", thinking_file_path),
@@ -234,7 +234,7 @@ The type of connection to initiate. Choices are to connect to:
         client_env = {
             "NSFLOW_HOST": "nsflow_host",
             "NSFLOW_PORT": "nsflow_port",
-            "NSFLOW_LOG_LEVEL": "nsflow_log_level",
+            "LOG_LEVEL": "nsflow_log_level",
             "NSFLOW_DEV_MODE": "dev",
             "NSFLOW_CLIENT_ONLY": "client_only",
             "VITE_API_PROTOCOL": "vite_api_protocol",

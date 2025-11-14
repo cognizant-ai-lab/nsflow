@@ -30,7 +30,6 @@ class NotebookGenerator:
         self.registry_dir = self.root_dir / "registries"
         self.notebook_dir = self.root_dir / "generated_notebooks"
         self.notebook_dir.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(level=logging.INFO)
 
     def generate_notebook(self, agent_network: str) -> Path:
         """Generates a Jupyter Notebook (.ipynb) with HOCON parsing and Graphviz-based visualization."""
