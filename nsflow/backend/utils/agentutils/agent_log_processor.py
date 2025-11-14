@@ -76,13 +76,7 @@ class AgentLogProcessor(MessageProcessor):
         progress = None
 
         # Log the original chat_message_dict in full only for debugging on client interface
-        # await self.logs_manager.log_event(f"{'='*50}\n{chat_message_dict}")
-        # To just print on terminal, uncomment the below 3 lines
-        # logging.info("\n"+"="*30 + "chat_message_dict incoming" + "="*30+"\n")
-        # if self.logger.isEnabledFor(logging.DEBUG):
-        #     await self.logs_manager.log_event(chat_message_dict)
         self.logger.debug(chat_message_dict)
-        # logging.info("\n"+"x"*30 + "End of chat_message_dict" + "x"*30+"\n")
 
         if message_type not in (
             ChatMessageType.AGENT,
@@ -109,10 +103,6 @@ class AgentLogProcessor(MessageProcessor):
                 await self.logs_manager.progress_event({"text": progress})
 
         if message_type == ChatMessageType.AGENT_PROGRESS:
-            # logging.info("\n"+"="*30 + "progress message START " + "="*30+"\n")
-            # logging.info(chat_message_dict.get("structure", progress))
-            # logging.info("\n"+"x"*30 + "progress message END " + "x"*30+"\n")
-
             # log progress messages if any
             progress = chat_message_dict.get("structure", progress)
             if progress:
@@ -217,8 +207,6 @@ class AgentLogProcessor(MessageProcessor):
                             self.logger.warning("Failed to update existing session for network '%s'", network_name)
                 else:
                     # New session - create from copilot state
-                    # design_id, state_manager = registry.load_from_copilot_state(
-                    # copilot_state=progress, session_id=self.session_id)
                     design_id, _ = registry.load_from_copilot_state(copilot_state=progress, session_id=self.session_id)
                     self.logger.info("Created new session for network '%s' (design_id: %s)", network_name, design_id)
 
