@@ -224,4 +224,6 @@ class AgentLogProcessor(MessageProcessor):
 
             except Exception as e:
                 self.logger.error("Error processing copilot state with SimpleStateRegistry: %s", e)
-                self.logger.error("Unable to process agent network designer state update for session %s", self.session_id)
+                self.logger.error(
+                    "Unable to process agent network designer state update for session %s", self.session_id
+                )

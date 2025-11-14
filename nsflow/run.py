@@ -21,7 +21,8 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Any, Dict
+from typing import Any
+from typing import Dict
 
 # Note: Do not use dotenv in a production setup
 from dotenv import load_dotenv
