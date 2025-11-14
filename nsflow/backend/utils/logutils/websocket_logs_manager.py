@@ -83,7 +83,7 @@ class WebsocketLogsManager:
                 return
         # Log the message
         if "token_accounting" not in message:
-            self.logger.debug(message)
+            self.logger.info(message)
         self.log_buffer.append(log_entry)
         if len(self.log_buffer) > self.LOG_BUFFER_SIZE:
             self.log_buffer.pop(0)
