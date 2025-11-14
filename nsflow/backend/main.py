@@ -26,12 +26,21 @@ from fastapi.staticfiles import StaticFiles
 from nsflow.backend.api.router import router
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
-logging.basicConfig(level=logging.INFO)
-
 # Get configurations from the environment
 NSFLOW_HOST = os.getenv("NSFLOW_HOST", "127.0.0.1")
 NSFLOW_DEV_MODE = os.getenv("NSFLOW_DEV_MODE", "False").strip().lower() == "true"
-NSFLOW_LOG_LEVEL = os.getenv("NSFLOW_LOG_LEVEL", "info")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# Convert string log level to logging constant
+NUMERIC_LOG_LEVEL = getattr(logging, LOG_LEVEL, logging.INFO)
+
+# Configure root logger once at application startup
+# All module loggers will inherit this configuration
+logging.basicConfig(
+    level=NUMERIC_LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 if NSFLOW_DEV_MODE:
     logging.info("DEV_MODE: %s", NSFLOW_DEV_MODE)
@@ -125,7 +134,7 @@ if __name__ == "__main__":
         host=NSFLOW_HOST,
         port=NSFLOW_PORT,
         workers=os.cpu_count(),
-        log_level=NSFLOW_LOG_LEVEL,
+        log_level=LOG_LEVEL.lower(),
         reload=True,
         loop="asyncio",
     )
