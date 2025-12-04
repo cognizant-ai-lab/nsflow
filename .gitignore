@@ -30,6 +30,10 @@ draft_states/
 # env variables
 .env
 
+# local database files
+*.sqlite3
+*.db
+
 # logs
 logs
 tree.txt
