@@ -15,52 +15,38 @@
 # END COPYRIGHT
 
 from datetime import datetime
+from datetime import timezone
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, JSON, String, Text
 
-from .database import Base
+from nsflow.backend.db.database import Base
 
-
-class Session(Base):
-    __tablename__ = "sessions"
-    id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String, unique=True, index=True)
-    start_time = Column(DateTime, default=datetime.now(datetime.timezone.utc))
-    end_time = Column(DateTime, nullable=True)
-    system_message = Column(Text)
-    agent_name = Column(String)
-
-
-class Interaction(Base):
-    __tablename__ = "interactions"
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String, ForeignKey("sessions.session_id"))
-    interaction_index = Column(Integer)
-    human_input = Column(Text)
-    final_ai_output = Column(Text)
-    interaction_summary = Column(Text)
-    timestamp = Column(DateTime, default=datetime.now(datetime.timezone.utc))
+# CRUSE (Chat-based Runtime UI Schema Engine) Models
+class Thread(Base):
+    """
+    Represents a chat thread/conversation in the system.
+    Each thread contains multiple messages and is associated with an agent.
+    """
+    __tablename__ = "threads"
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    agent_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
 
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String)
-    interaction_id = Column(Integer, nullable=True)
-    type = Column(String)
-    text = Column(Text)
-    origin_tool = Column(String)
-    instantiation_index = Column(Integer)
-    timestamp = Column(DateTime, default=datetime.now(datetime.timezone.utc))
+class Message(Base):
+    """
+    Represents a message within a thread.
+    Messages can contain optional widget definitions (as JSON) for dynamic UI rendering.
+    """
+    __tablename__ = "messages"
+    id = Column(String, primary_key=True)
+    thread_id = Column(String, ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender = Column(String, nullable=False)  # this means type: 'human', 'ai', or 'system'
+    origin = Column(Text, nullable=False)
+    text = Column(Text, nullable=False)
+    widget_json = Column(JSON, nullable=True)  # JSON string containing widget schema
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
 
-
-class UsageMetrics(Base):
-    __tablename__ = "usage_metrics"
-    id = Column(Integer, primary_key=True)
-    interaction_id = Column(Integer, ForeignKey("interactions.id"))
-    time_taken_in_seconds = Column(Float)
-    total_cost = Column(Float)
-    prompt_tokens = Column(Float)
-    completion_tokens = Column(Float)
-    total_tokens = Column(Float)
-    successful_requests = Column(Float)
+Index("idx_messages_thread_created", Message.thread_id, Message.created_at)

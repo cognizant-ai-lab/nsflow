@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from nsflow.backend.api.router import router
+from nsflow.backend.db.database import init_threads_db
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 # Get configurations from the environment
@@ -70,6 +71,9 @@ async def lifespan(_app: FastAPI):
     logging.info("FastAPI is starting up...")
     logging.info("Initializing NeuroSan config from environment variables...")
     initialize_ns_config_from_env()
+    logging.info("Initializing threads database...")
+    init_threads_db()
+    logging.info("Threads database initialized successfully")
     try:
         yield
     finally:
