@@ -15,39 +15,21 @@ limitations under the License.
 */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Drawer, Typography, IconButton } from '@mui/material';
+import { Box, AppBar, Toolbar, Drawer, Typography, IconButton, CircularProgress } from '@mui/material';
 import { Menu as MenuIcon } from '@mui/icons-material';
 import { ThreadList } from './ThreadList';
 import { ChatArea } from './ChatArea';
 import { AgentSelector, Agent } from './AgentSelector';
 import { useCrusePersistence } from '../../hooks/useCrusePersistence';
 import { useCruseTheme } from '../../hooks/useCruseTheme';
+import { useCruseWebSocket } from '../../hooks/useCruseWebSocket';
 import { generateThreadTitle } from '../../utils/cruse/persistence';
+import { useApiPort } from '../../context/ApiPortContext';
+import { useChatContext } from '../../context/ChatContext';
+import { useNeuroSan } from '../../context/NeuroSanContext';
 import type { MessageOrigin } from '../../types/cruse';
 
 const DRAWER_WIDTH = 280;
-
-// Example agents - replace with actual agent data from your system
-const EXAMPLE_AGENTS: Agent[] = [
-  {
-    id: 'sentiment_agent',
-    name: 'Sentiment Analyzer',
-    description: 'Analyzes sentiment in text and data',
-    status: 'online',
-  },
-  {
-    id: 'data_agent',
-    name: 'Data Processor',
-    description: 'Processes and transforms data',
-    status: 'online',
-  },
-  {
-    id: 'generic_agent',
-    name: 'Generic Assistant',
-    description: 'General purpose AI assistant',
-    status: 'online',
-  },
-];
 
 /**
  * CruseInterface Component
@@ -58,13 +40,20 @@ const EXAMPLE_AGENTS: Agent[] = [
  * - Left drawer with ThreadList
  * - Central ChatArea with dynamic theme
  * - Thread and message persistence
- * - Theme agent integration
+ * - WebSocket integration with main agent and widget agent
  *
  * This is the top-level component for the CRUSE system.
  */
 export function CruseInterface() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>(EXAMPLE_AGENTS[0].id);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [sampleQueries, setSampleQueries] = useState<string[]>([]);
+
+  // Context hooks
+  const { apiUrl } = useApiPort();
+  const { activeNetwork, setActiveNetwork } = useChatContext();
+  const { host, port, connectionType, isNsReady } = useNeuroSan();
 
   // Persistence hook
   const {
@@ -80,16 +69,128 @@ export function CruseInterface() {
   } = useCrusePersistence();
 
   // Theme hook
-  const { theme, isLoadingTheme, refreshTheme } = useCruseTheme(selectedAgentId);
+  const { theme, isLoadingTheme, refreshTheme } = useCruseTheme(activeNetwork);
+
+  // Callback for handling WebSocket messages (with widget support)
+  const handleMessageReceived = useCallback(
+    async (threadId: string, sender: 'AI' | 'HUMAN', text: string, origin: MessageOrigin[], widget?: any) => {
+      try {
+        await addMessageToThread(threadId, {
+          sender,
+          origin,
+          text,
+          widget, // Include widget if available
+        });
+      } catch (err) {
+        console.error('[CRUSE] Failed to add message to thread:', err);
+      }
+    },
+    [addMessageToThread]
+  );
+
+  // WebSocket hook - connects to main agent and widget agent (with messages context)
+  const { sendMessage } = useCruseWebSocket({
+    currentThread,
+    messages, // Pass messages for widget agent context
+    onMessageReceived: handleMessageReceived,
+  });
+  // TODO: Use isConnecting, isConnected, error for UI feedback
+
+  // Fetch agents from backend (similar to Sidebar.tsx pattern)
+  useEffect(() => {
+    const fetchAgents = async () => {
+      if (!apiUrl || !host || !port || !isNsReady) {
+        console.log('[CRUSE] Skipping agent fetch: missing requirements', {
+          apiUrl: !!apiUrl,
+          host: !!host,
+          port: !!port,
+          isNsReady,
+        });
+        return;
+      }
+
+      setIsLoadingAgents(true);
+      try {
+        const connectionToUse = connectionType || 'direct';
+        const response = await fetch(
+          `${apiUrl}/api/v1/list?connection_type=${connectionToUse}&host=${encodeURIComponent(
+            host
+          )}&port=${port}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch agents: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('[CRUSE] Fetched agents:', data);
+
+        // Map backend agents to Agent type
+        const agentList: Agent[] = (data.agents || []).map((a: any) => ({
+          id: a.agent_name,
+          name: a.agent_name,
+          description: a.tags?.join(', ') || 'No description',
+          status: 'online' as const,
+        }));
+
+        setAgents(agentList);
+
+        // Set first agent as active if no active network
+        if (agentList.length > 0 && !activeNetwork) {
+          setActiveNetwork(agentList[0].id);
+        }
+      } catch (err) {
+        console.error('[CRUSE] Failed to fetch agents:', err);
+        setAgents([]);
+      } finally {
+        setIsLoadingAgents(false);
+      }
+    };
+
+    fetchAgents();
+  }, [apiUrl, host, port, connectionType, isNsReady, activeNetwork, setActiveNetwork]);
+
+  // Fetch sample queries when activeNetwork changes
+  useEffect(() => {
+    const fetchSampleQueries = async () => {
+      if (!activeNetwork || !apiUrl) {
+        setSampleQueries([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/connectivity/${activeNetwork}`);
+        if (!response.ok) {
+          console.log('[CRUSE] Failed to fetch connectivity info:', response.statusText);
+          setSampleQueries(['What can you help me with?']);
+          return;
+        }
+
+        const data = await response.json();
+        const queries = data?.metadata?.sample_queries || [];
+
+        // Always append a default query
+        const allQueries = [...queries, 'What can you help me with?'];
+        setSampleQueries(allQueries);
+        console.log('[CRUSE] Sample queries loaded:', allQueries);
+      } catch (error) {
+        console.log('[CRUSE] Error fetching sample queries:', error);
+        setSampleQueries(['What can you help me with?']);
+      }
+    };
+
+    fetchSampleQueries();
+  }, [activeNetwork, apiUrl]);
 
   // Handle drawer toggle (mobile)
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
-  // Handle agent selection
+  // Handle agent selection - updates activeNetwork in ChatContext
   const handleAgentChange = (agentId: string) => {
-    setSelectedAgentId(agentId);
+    console.log('[CRUSE] Agent changed to:', agentId);
+    setActiveNetwork(agentId);
   };
 
   // Handle thread selection
@@ -106,7 +207,7 @@ export function CruseInterface() {
   // Handle new thread creation
   const handleNewThread = useCallback(async () => {
     try {
-      const selectedAgent = EXAMPLE_AGENTS.find((a) => a.id === selectedAgentId);
+      const selectedAgent = agents.find((a) => a.id === activeNetwork);
       const title = `New Chat - ${new Date().toLocaleString()}`;
       const newThread = await createNewThread(title, selectedAgent?.name);
 
@@ -115,9 +216,9 @@ export function CruseInterface() {
         loadThread(newThread.id);
       }
     } catch (err) {
-      console.error('Failed to create new thread:', err);
+      console.error('[CRUSE] Failed to create new thread:', err);
     }
-  }, [createNewThread, loadThread, selectedAgentId]);
+  }, [createNewThread, loadThread, activeNetwork, agents]);
 
   // Handle thread deletion
   const handleDeleteThread = useCallback(
@@ -133,11 +234,16 @@ export function CruseInterface() {
     [deleteThread]
   );
 
-  // Handle sending a message
+  // Handle sending a message - uses WebSocket to communicate with main agent
   const handleSendMessage = useCallback(
     async (text: string) => {
       if (!currentThread) {
-        console.warn('No active thread');
+        console.warn('[CRUSE] No active thread');
+        return;
+      }
+
+      if (!activeNetwork) {
+        console.warn('[CRUSE] No active network selected');
         return;
       }
 
@@ -145,65 +251,79 @@ export function CruseInterface() {
         // Create message origin
         const origin: MessageOrigin[] = [
           {
-            tool: selectedAgentId,
+            tool: activeNetwork,
             instantiation_index: 1,
           },
         ];
 
-        // Add message to thread
+        // Add user message to thread (optimistic UI update)
         await addMessageToThread(currentThread.id, {
           sender: 'HUMAN',
           origin,
           text,
         });
 
-        // TODO: In Phase 4, send to activeNetwork via WebSocket
-        // TODO: In Phase 5, call cruse_widget_agent if needed
-        // For now, just add the user message to the UI
+        // Send to main agent via WebSocket
+        const success = sendMessage(text);
 
-        // Placeholder: Simulate agent response (remove in Phase 4)
-        setTimeout(async () => {
-          await addMessageToThread(currentThread.id, {
-            sender: 'AI',
-            origin,
-            text: `I received your message: "${text}". (Agent integration coming in Phase 4)`,
-          });
-        }, 1000);
+        if (!success) {
+          console.error('[CRUSE] Failed to send message via WebSocket');
+          // TODO: Show error to user
+        }
+
+        // Agent response will come via WebSocket onmessage handler
+        // Widget generation will happen in useCruseWebSocket
       } catch (err) {
-        console.error('Failed to send message:', err);
+        console.error('[CRUSE] Failed to send message:', err);
       }
     },
-    [currentThread, selectedAgentId, addMessageToThread]
+    [currentThread, activeNetwork, addMessageToThread, sendMessage]
   );
 
-  // Handle widget submission
+  // Handle widget submission - sends form data to main agent via WebSocket
   const handleWidgetSubmit = useCallback(
     async (data: Record<string, unknown>) => {
-      if (!currentThread) return;
+      if (!currentThread) {
+        console.warn('[CRUSE] No active thread');
+        return;
+      }
+
+      if (!activeNetwork) {
+        console.warn('[CRUSE] No active network selected');
+        return;
+      }
 
       try {
         const origin: MessageOrigin[] = [
           {
-            tool: selectedAgentId,
+            tool: activeNetwork,
             instantiation_index: 1,
           },
         ];
 
         // Format widget data as message text
         const formattedData = JSON.stringify(data, null, 2);
+        const messageText = `Form submitted:\n\`\`\`json\n${formattedData}\n\`\`\``;
 
+        // Add user message to thread (optimistic UI update)
         await addMessageToThread(currentThread.id, {
           sender: 'HUMAN',
           origin,
-          text: `Form submitted:\n\`\`\`json\n${formattedData}\n\`\`\``,
+          text: messageText,
         });
 
-        // TODO: In Phase 4, send to activeNetwork via WebSocket
+        // Send to main agent via WebSocket
+        const success = sendMessage(messageText);
+
+        if (!success) {
+          console.error('[CRUSE] Failed to send widget data via WebSocket');
+          // TODO: Show error to user
+        }
       } catch (err) {
-        console.error('Failed to submit widget:', err);
+        console.error('[CRUSE] Failed to submit widget:', err);
       }
     },
-    [currentThread, selectedAgentId, addMessageToThread]
+    [currentThread, activeNetwork, addMessageToThread, sendMessage]
   );
 
   // Auto-generate thread title from first message
@@ -253,11 +373,15 @@ export function CruseInterface() {
             CRUSE - Chat Runtime UI Schema Engine
           </Typography>
 
-          <AgentSelector
-            agents={EXAMPLE_AGENTS}
-            selectedAgentId={selectedAgentId}
-            onAgentChange={handleAgentChange}
-          />
+          {isLoadingAgents ? (
+            <CircularProgress size={24} color="inherit" />
+          ) : (
+            <AgentSelector
+              agents={agents}
+              selectedAgentId={activeNetwork || ''}
+              onAgentChange={handleAgentChange}
+            />
+          )}
         </Toolbar>
       </AppBar>
 
@@ -315,6 +439,7 @@ export function CruseInterface() {
             isLoading={isLoadingMessages}
             theme={theme}
             isLoadingTheme={isLoadingTheme}
+            sampleQueries={sampleQueries}
             onSendMessage={handleSendMessage}
             onWidgetSubmit={handleWidgetSubmit}
             onThemeRefresh={refreshTheme}

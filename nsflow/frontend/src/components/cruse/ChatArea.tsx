@@ -23,6 +23,8 @@ import {
   CircularProgress,
   Fab,
   Tooltip,
+  Chip,
+  Stack,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -44,6 +46,8 @@ export interface ChatAreaProps {
   theme?: ThemeConfig;
   /** Loading state for theme */
   isLoadingTheme?: boolean;
+  /** Sample queries from agent metadata */
+  sampleQueries?: string[];
   /** Callback when user sends a message */
   onSendMessage: (text: string) => void;
   /** Callback when widget is submitted */
@@ -69,12 +73,18 @@ export function ChatArea({
   isLoading = false,
   theme,
   isLoadingTheme = false,
+  sampleQueries = [],
   onSendMessage,
   onWidgetSubmit,
   onThemeRefresh,
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState('');
-  const { scrollRef, scrollToBottom, isNearBottom } = useSmartAutoScroll([messages]);
+  const { scrollRef, scrollToBottom, isNearBottom} = useSmartAutoScroll([messages]);
+
+  // Handle sample query click
+  const handleSampleQueryClick = (query: string) => {
+    onSendMessage(query);
+  };
 
   // Handle send message
   const handleSend = () => {
@@ -90,6 +100,19 @@ export function ChatArea({
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Handle widget submission with combined text input
+  // When user submits a widget form, combine form data with any text in input box
+  const handleWidgetSubmitWithText = (widgetData: Record<string, unknown>) => {
+    // Combine widget data with text input
+    const combinedData = {
+      ...widgetData,
+      ...(inputText.trim() && { additionalText: inputText.trim() }),
+    };
+
+    onWidgetSubmit(combinedData);
+    setInputText(''); // Clear input after submission
   };
 
   // Apply theme styles
@@ -174,22 +197,52 @@ export function ChatArea({
           <Box
             sx={{
               display: 'flex',
+              flexDirection: 'column',
               justifyContent: 'center',
               alignItems: 'center',
               height: '100%',
               textAlign: 'center',
+              gap: 3,
+              p: 4,
             }}
           >
-            <Typography variant="body1" color="text.secondary">
-              No messages yet. Start a conversation!
+            <Typography variant="h6" color="text.primary" fontWeight={600}>
+              Start a conversation
             </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Select a sample query below or type your own message
+            </Typography>
+
+            {/* Sample Queries */}
+            {sampleQueries.length > 0 && (
+              <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" sx={{ maxWidth: 600 }}>
+                {sampleQueries.map((query, index) => (
+                  <Chip
+                    key={`${query}-${index}`}
+                    label={query}
+                    onClick={() => handleSampleQueryClick(query)}
+                    variant="outlined"
+                    size="small"
+                    sx={{
+                      m: 0.5,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: theme?.primaryColor || 'primary.main',
+                        color: 'white',
+                        borderColor: theme?.primaryColor || 'primary.main',
+                      },
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
           </Box>
         ) : (
           messages.map((message) => (
             <DynamicMessageRenderer
               key={message.id}
               message={message}
-              onWidgetSubmit={onWidgetSubmit}
+              onWidgetSubmit={handleWidgetSubmitWithText}
             />
           ))
         )}
