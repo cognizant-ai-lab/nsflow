@@ -116,13 +116,17 @@ export interface ThemeAgentResponse {
 // Widget field types for form rendering
 export type WidgetFieldType =
   | 'text'
+  | 'textarea'
   | 'number'
   | 'boolean'
+  | 'checkbox'
   | 'select'
-  | 'date'
+  | 'radio'
   | 'multiselect'
-  | 'file'
-  | 'slider';
+  | 'date'
+  | 'slider'
+  | 'rating'
+  | 'file';
 
 export interface WidgetFieldProps {
   name: string;
@@ -134,3 +138,9 @@ export interface WidgetFieldProps {
   error?: string;
   schema: JSONSchema7;
 }
+
+// Widget registry type
+export type WidgetRegistry = Record<
+  WidgetFieldType,
+  React.FC<WidgetFieldProps>
+>;

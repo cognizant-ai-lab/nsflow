@@ -32,7 +32,17 @@ export type WidgetRegistry = Record<WidgetFieldType, FC<WidgetFieldProps>>;
 export function getWidgetType(schema: JSONSchema7): WidgetFieldType {
   const type = schema.type as JSONSchema7TypeName | undefined;
 
-  // Handle enum as select
+  // Check for x-ui widget hint (highest priority)
+  const xUi = (schema as Record<string, unknown>)['x-ui'] as Record<string, unknown> | undefined;
+  if (xUi?.widget) {
+    const widgetHint = xUi.widget as string;
+    // Map known widget hints to WidgetFieldType
+    if (['text', 'textarea', 'number', 'boolean', 'select', 'radio', 'checkbox', 'multiselect', 'date', 'slider', 'rating', 'file'].includes(widgetHint)) {
+      return widgetHint as WidgetFieldType;
+    }
+  }
+
+  // Handle enum as select (or radio if specified in x-ui)
   if (schema.enum && schema.enum.length > 0) {
     return 'select';
   }
