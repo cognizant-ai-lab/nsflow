@@ -24,6 +24,18 @@ export type { DynamicWidgetCardProps } from './DynamicWidgetCard';
 export { DynamicMessageRenderer } from './DynamicMessageRenderer';
 export type { DynamicMessageRendererProps } from './DynamicMessageRenderer';
 
+// Layout & Navigation components
+export { CruseInterface } from './CruseInterface';
+
+export { ThreadList } from './ThreadList';
+export type { ThreadListProps } from './ThreadList';
+
+export { ChatArea } from './ChatArea';
+export type { ChatAreaProps } from './ChatArea';
+
+export { AgentSelector } from './AgentSelector';
+export type { AgentSelectorProps, Agent } from './AgentSelector';
+
 // Widget components
 export { widgetRegistry } from './widgets';
 export * from './widgets';
