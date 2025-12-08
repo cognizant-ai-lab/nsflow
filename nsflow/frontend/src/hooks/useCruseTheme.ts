@@ -27,7 +27,7 @@ interface ThemeAgentResponse {
 /**
  * Helper function to request theme from cruse_theme_agent.
  *
- * Phase 6: Theme Agent Integration
+ * Theme Agent Integration
  * - Sends agent metadata to cruse_theme_agent
  * - Waits for theme response
  * - Parses with failsafe logic
@@ -116,7 +116,7 @@ async function requestThemeFromAgent(
 /**
  * Custom hook for CRUSE dynamic theme management.
  *
- * Phase 6: Integrates with cruse_theme_agent to provide context-aware themes
+ * Integrates with cruse_theme_agent to provide context-aware themes
  * based on selected agent metadata. Fetches agent metadata and sends to theme agent
  * for dynamic theme generation. Supports manual theme refresh and graceful fallback.
  *
@@ -149,7 +149,7 @@ export function useCruseTheme(agentName?: string, autoFetchOnMount = true) {
     setThemeError(null);
 
     try {
-      // Phase 6: Fetch agent metadata from connectivity endpoint
+      // Fetch agent metadata from connectivity endpoint
       console.log('[CRUSE] Fetching agent metadata for theme generation');
       const response = await fetch(`${apiUrl}/api/v1/connectivity/${agentName}`);
 
@@ -172,7 +172,7 @@ export function useCruseTheme(agentName?: string, autoFetchOnMount = true) {
         console.warn('[CRUSE] Failed to fetch agent metadata, using minimal data');
       }
 
-      // Phase 6: Request theme from cruse_theme_agent
+      // Request theme from cruse_theme_agent
       const themeConfig = await requestThemeFromAgent(wsUrl, sessionId, agentMetadata);
       setTheme(themeConfig);
       console.log('[CRUSE] Theme applied:', themeConfig);

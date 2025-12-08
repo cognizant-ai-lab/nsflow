@@ -25,6 +25,7 @@ import { MultiSelectField } from './MultiSelectField';
 import { DateField } from './DateField';
 import { SliderField } from './SliderField';
 import { RatingField } from './RatingField';
+import { FileUploadField } from './FileUploadField';
 import { WidgetRegistry } from '../../../types/cruse';
 
 /**
@@ -34,25 +35,25 @@ import { WidgetRegistry } from '../../../types/cruse';
  * Used by WidgetFormRenderer to dynamically render form fields.
  */
 export const widgetRegistry: WidgetRegistry = {
-  // Phase 2 - Basic Widgets
+  // Basic Widgets
   text: TextField,
   number: NumberField,
   boolean: BooleanField,
   select: SelectField,
 
-  // Phase 2B - Essential Extensions
+  // Essential Extensions
   textarea: TextareaField,
   radio: RadioGroupField,
   checkbox: CheckboxField,
   multiselect: MultiSelectField,
 
-  // Phase 2C - Advanced Input Widgets
+  // Advanced Input Widgets
   date: DateField,
   slider: SliderField,
   rating: RatingField,
 
-  // Placeholders for future phases
-  file: TextField, // TODO: Implement FileUploadField in later phase
+  // File Upload
+  file: FileUploadField,
 };
 
 // Export individual widgets
@@ -67,3 +68,4 @@ export { MultiSelectField } from './MultiSelectField';
 export { DateField } from './DateField';
 export { SliderField } from './SliderField';
 export { RatingField } from './RatingField';
+export { FileUploadField } from './FileUploadField';
