@@ -19,6 +19,7 @@ import {
   createThread,
   listThreads,
   getThread,
+  updateThread as updateThreadAPI,
   deleteThread as deleteThreadAPI,
   addMessage,
   getMessages,
@@ -153,6 +154,32 @@ export function useCrusePersistence() {
     [fetchThreads]
   );
 
+  // Update thread title
+  const updateThreadTitle = useCallback(
+    async (threadId: string, newTitle: string) => {
+      setError(null);
+
+      try {
+        const updatedThread = await updateThreadAPI(threadId, { title: newTitle });
+
+        // Update local state
+        if (currentThread?.id === threadId) {
+          setCurrentThread({ ...currentThread, title: newTitle });
+        }
+
+        await fetchThreads(); // Refresh thread list to update sidebar
+
+        return updatedThread;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to update thread title';
+        setError(message);
+        console.error('Error updating thread title:', err);
+        throw err;
+      }
+    },
+    [currentThread, fetchThreads]
+  );
+
   // Delete a thread
   const deleteThread = useCallback(
     async (threadId: string) => {
@@ -221,6 +248,7 @@ export function useCrusePersistence() {
     fetchMessages,
     loadThread,
     createNewThread,
+    updateThreadTitle,
     deleteThread,
     addMessageToThread,
     setMessages, // Allow manual message updates for optimistic updates

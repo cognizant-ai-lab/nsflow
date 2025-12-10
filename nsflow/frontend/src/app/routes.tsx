@@ -18,6 +18,7 @@ limitations under the License.
 import { Routes, Route } from 'react-router-dom';
 import Home from '../pages/Home/Home';
 import Editor from '../pages/Editor/Editor';
+import Cruse from '../pages/Cruse/Cruse';
 import Observability from '../pages/Observability/Observability';
 
 export default function AppRoutes() {
@@ -26,6 +27,7 @@ export default function AppRoutes() {
       <Route path="/" element={<Home />} /> {/* Serve Home directly at "/" */}
       <Route path="/home" element={<Home />} /> {/* Explicit home route */}
       <Route path="/editor" element={<Editor />} /> {/* Editor page */}
+      <Route path="/cruse" element={<Cruse />} /> {/* CRUSE chat interface */}
       <Route path="/observability" element={<Observability />} />
       <Route path="*" element={<Home />} /> {/* Optional fallback */}
     </Routes>

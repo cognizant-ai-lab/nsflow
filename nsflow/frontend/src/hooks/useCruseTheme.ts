@@ -61,13 +61,31 @@ async function requestThemeFromAgent(
       const handleMessage = (event: MessageEvent) => {
         try {
           clearTimeout(timeout);
-          const data = JSON.parse(event.data) as ThemeAgentResponse;
+          const data = JSON.parse(event.data);
           console.log('[CRUSE] Theme agent response:', data);
 
-          if (data.theme) {
+          // Parse standard agent response format: { message: { type: "AI", text: ... } }
+          let themeResponse: ThemeAgentResponse | undefined;
+
+          if (data.message && typeof data.message === 'object') {
+            const responseText = data.message.text;
+
+            // Parse theme JSON from text field
+            if (typeof responseText === 'string') {
+              try {
+                themeResponse = JSON.parse(responseText);
+              } catch (e) {
+                console.warn('[CRUSE] Theme response text is not JSON:', responseText);
+              }
+            } else if (typeof responseText === 'object') {
+              themeResponse = responseText;
+            }
+          }
+
+          if (themeResponse && themeResponse.theme) {
             console.log('[CRUSE] Theme received, applying');
             ws.close();
-            resolve(data.theme);
+            resolve(themeResponse.theme);
           } else {
             console.log('[CRUSE] No theme in response, using default');
             ws.close();
@@ -85,12 +103,17 @@ async function requestThemeFromAgent(
         console.log('[CRUSE] Theme agent connected');
 
         // Prepare request matching the agent's expected format
-        const request = {
+        // IMPORTANT: Match TabbedChatPanel format: { message: text }
+        const requestData = {
           agent: agentMetadata,
           request: 'generate_theme',
         };
 
-        console.log('[CRUSE] Sending theme request:', request);
+        const request = {
+          message: JSON.stringify(requestData),  // Match TabbedChatPanel/ChatPanel format
+        };
+
+        console.log('[CRUSE] Sending theme request for agent:', agentMetadata.name);
         ws.send(JSON.stringify(request));
       };
 

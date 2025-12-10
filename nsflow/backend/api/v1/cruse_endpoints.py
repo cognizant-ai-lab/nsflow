@@ -14,8 +14,10 @@
 #
 # END COPYRIGHT
 
+import json
 import logging
 from datetime import datetime
+from datetime import timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,8 +42,14 @@ class WidgetDefinition(BaseModel):
     schema: dict  # JSON Schema
 
 
+class MessageOrigin(BaseModel):
+    tool: str
+    instantiation_index: int
+
+
 class MessageCreate(BaseModel):
-    sender: str  # 'user', 'agent', or 'system'
+    sender: str  # 'HUMAN', 'AI', or 'SYSTEM'
+    origin: List[MessageOrigin]  # Origin information (tool + instantiation_index)
     text: str
     widget: Optional[WidgetDefinition] = None
 
@@ -144,6 +152,7 @@ async def get_thread(thread_id: str, db: Session = Depends(get_threads_db)):
                 id=msg.id,
                 thread_id=msg.thread_id,
                 sender=msg.sender,
+                origin=msg.origin,  # Already a JSON string from DB
                 text=msg.text,
                 widget=widget_data,
                 created_at=msg.created_at,
@@ -158,6 +167,33 @@ async def get_thread(thread_id: str, db: Session = Depends(get_threads_db)):
         updated_at=thread.updated_at,
         messages=message_responses,
     )
+
+
+@router.patch("/threads/{thread_id}", response_model=ThreadResponse)
+async def update_thread(
+    thread_id: str, thread_update: ThreadCreate, db: Session = Depends(get_threads_db)
+):
+    """
+    Update a thread's title and/or agent_name.
+    """
+    thread = db.query(Thread).filter(Thread.id == thread_id).first()
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    # Update fields
+    if thread_update.title is not None:
+        thread.title = thread_update.title
+    if thread_update.agent_name is not None:
+        thread.agent_name = thread_update.agent_name
+
+    # Update timestamp
+    thread.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(thread)
+
+    logger.info(f"Updated thread: {thread_id} - {thread.title}")
+    return thread
 
 
 @router.delete("/threads/{thread_id}")
@@ -195,20 +231,24 @@ async def add_message(
     # Convert widget to JSON string if present
     widget_json = None
     if message.widget:
-        widget_json = json.dumps(message.widget.dict())
+        widget_json = json.dumps(message.widget.model_dump())
+
+    # Convert origin to JSON string (required field)
+    origin_json = json.dumps([origin.model_dump() for origin in message.origin])
 
     message_id = str(uuid.uuid4())
     db_message = Message(
         id=message_id,
         thread_id=thread_id,
         sender=message.sender,
+        origin=origin_json,
         text=message.text,
         widget_json=widget_json,
     )
     db.add(db_message)
 
     # Update thread's updated_at timestamp
-    thread.updated_at = datetime.now(datetime.timezone.utc)
+    thread.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(db_message)
@@ -224,6 +264,7 @@ async def add_message(
         id=db_message.id,
         thread_id=db_message.thread_id,
         sender=db_message.sender,
+        origin=db_message.origin,  # Already a JSON string from DB
         text=db_message.text,
         widget=widget_data,
         created_at=db_message.created_at,
@@ -270,6 +311,7 @@ async def get_messages(
                 id=msg.id,
                 thread_id=msg.thread_id,
                 sender=msg.sender,
+                origin=msg.origin,  # Already a JSON string from DB
                 text=msg.text,
                 widget=widget_data,
                 created_at=msg.created_at,

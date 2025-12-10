@@ -32,21 +32,30 @@ import {
   Chat as ChatIcon,
 } from '@mui/icons-material';
 import { formatMessageTime } from '../../utils/cruse';
+import { AgentSelector, Agent } from './AgentSelector';
 import type { CruseThread } from '../../types/cruse';
 
 export interface ThreadListProps {
-  /** Array of threads to display */
+  /** Array of all threads */
   threads: CruseThread[];
   /** Currently selected thread ID */
   activeThreadId?: string;
   /** Loading state */
   isLoading?: boolean;
+  /** Available agents */
+  agents?: Agent[];
+  /** Selected agent ID */
+  selectedAgentId?: string;
+  /** Loading state for agents */
+  isLoadingAgents?: boolean;
   /** Callback when a thread is selected */
   onThreadSelect: (threadId: string) => void;
   /** Callback when new thread button is clicked */
   onNewThread: () => void;
   /** Callback when delete button is clicked */
   onDeleteThread: (threadId: string) => void;
+  /** Callback when agent is changed */
+  onAgentChange?: (agentId: string) => void;
 }
 
 /**
@@ -64,10 +73,22 @@ export function ThreadList({
   threads,
   activeThreadId,
   isLoading = false,
+  agents = [],
+  selectedAgentId = '',
+  isLoadingAgents = false,
   onThreadSelect,
   onNewThread,
   onDeleteThread,
+  onAgentChange,
 }: ThreadListProps) {
+  // Filter threads by selected agent
+  const agentThreads = selectedAgentId
+    ? threads.filter((t) => t.agent_name === selectedAgentId)
+    : [];
+
+  // Show "+ New Thread" button only when agent is selected AND there are existing threads
+  const showNewThreadButton = selectedAgentId && agentThreads.length > 0;
+
   return (
     <Box
       sx={{
@@ -75,15 +96,35 @@ export function ThreadList({
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'background.paper',
-        borderRight: 1,
-        borderColor: 'divider',
       }}
     >
-      {/* Header with New Thread button */}
-      <Box sx={{ p: 2 }}>
-        <ListItemButton
-          onClick={onNewThread}
-          sx={{
+      {/* Agent Selector at Top */}
+      <Box
+        sx={{
+          p: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        {isLoadingAgents ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : (
+          <AgentSelector
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            onAgentChange={onAgentChange || (() => {})}
+          />
+        )}
+      </Box>
+
+      {/* Show "+ New Thread" button only when agent is selected and has threads */}
+      {showNewThreadButton && (
+        <Box sx={{ p: 2 }}>
+          <ListItemButton
+            onClick={onNewThread}
+            sx={{
             borderRadius: 1,
             border: 1,
             borderColor: 'primary.main',
@@ -104,13 +145,20 @@ export function ThreadList({
             primaryTypographyProps={{ fontWeight: 600 }}
           />
         </ListItemButton>
-      </Box>
+        </Box>
+      )}
 
-      <Divider />
+      {showNewThreadButton && <Divider />}
 
-      {/* Thread List */}
+      {/* Thread List - Only show for selected agent */}
       <Box sx={{ flex: 1, overflow: 'auto' }}>
-        {isLoading ? (
+        {!selectedAgentId ? (
+          <Box sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Select an agent to view threads
+            </Typography>
+          </Box>
+        ) : isLoading ? (
           <Box
             sx={{
               display: 'flex',
@@ -121,15 +169,15 @@ export function ThreadList({
           >
             <CircularProgress size={32} />
           </Box>
-        ) : threads.length === 0 ? (
+        ) : agentThreads.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              No threads yet. Create one to get started!
+              No threads for this agent yet
             </Typography>
           </Box>
         ) : (
           <List sx={{ pt: 0 }}>
-            {threads.map((thread) => {
+            {agentThreads.map((thread) => {
               const isActive = thread.id === activeThreadId;
               const timeString = formatMessageTime(thread.updated_at);
 

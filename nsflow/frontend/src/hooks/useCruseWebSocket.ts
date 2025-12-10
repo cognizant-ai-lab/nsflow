@@ -80,34 +80,51 @@ async function requestWidgetFromAgent(
     const handleMessage = (event: MessageEvent) => {
       try {
         clearTimeout(timeout);
-        const data = JSON.parse(event.data) as WidgetAgentResponse;
+        const data = JSON.parse(event.data);
         console.log('[CRUSE] Widget agent raw response:', data);
+
+        // Parse standard agent response format: { message: { type: "AI", text: ... } }
+        let widgetResponse: WidgetAgentResponse | undefined;
+
+        if (data.message && typeof data.message === 'object') {
+          const responseText = data.message.text;
+
+          // Parse widget JSON from text field
+          if (typeof responseText === 'string') {
+            try {
+              widgetResponse = JSON.parse(responseText);
+            } catch (e) {
+              console.warn('[CRUSE] Widget response text is not JSON:', responseText);
+            }
+          } else if (typeof responseText === 'object') {
+            widgetResponse = responseText;
+          }
+        }
+
+        widgetWs.removeEventListener('message', handleMessage);
 
         // Failsafe logic:
         // 1. If display is explicitly false, don't show widget
-        if (data.display === false) {
+        if (widgetResponse && widgetResponse.display === false) {
           console.log('[CRUSE] Widget display=false, skipping');
-          widgetWs.removeEventListener('message', handleMessage);
           resolve(undefined);
           return;
         }
 
         // 2. If widget schema exists, default to showing it (display defaults to true)
-        if (data.widget && data.widget.schema) {
+        if (widgetResponse && widgetResponse.widget && widgetResponse.widget.schema) {
           console.log('[CRUSE] Widget schema found, display defaulting to true');
-          widgetWs.removeEventListener('message', handleMessage);
 
           // Cache the widget for future iterations
           const cacheKey = `${activeNetwork}:${sessionId}`;
-          widgetCache.set(cacheKey, JSON.stringify(data.widget));
+          widgetCache.set(cacheKey, JSON.stringify(widgetResponse.widget));
 
-          resolve(data.widget);
+          resolve(widgetResponse.widget);
           return;
         }
 
         // 3. No valid widget schema
         console.log('[CRUSE] No valid widget schema found');
-        widgetWs.removeEventListener('message', handleMessage);
         resolve(undefined);
       } catch (err) {
         console.error('[CRUSE] Error parsing widget agent response (failsafe):', err);
@@ -140,10 +157,15 @@ async function requestWidgetFromAgent(
     const previousWidget = widgetCache.get(cacheKey);
 
     // Prepare request matching the agent's expected format
-    const request = {
+    // IMPORTANT: Match TabbedChatPanel format: { message: text }
+    const requestData = {
       conversation_context: conversationContext,
       user_intent: userIntent,
       ...(previousWidget && { previous_widget: previousWidget }),
+    };
+
+    const request = {
+      message: JSON.stringify(requestData),  // Match TabbedChatPanel/ChatPanel format
     };
 
     console.log('[CRUSE] Sending widget request:', {
@@ -172,7 +194,7 @@ async function requestWidgetFromAgent(
  */
 export function useCruseWebSocket({ currentThread, messages, onMessageReceived }: UseCruseWebSocketProps) {
   const { wsUrl } = useApiPort();
-  const { sessionId, activeNetwork } = useChatContext();
+  const { sessionId, activeNetwork, setChatWs } = useChatContext();
 
   const [mainWs, setMainWs] = useState<WebSocket | null>(null);
   const [widgetWs, setWidgetWs] = useState<WebSocket | null>(null);
@@ -180,6 +202,18 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
   const [error, setError] = useState<string | null>(null);
 
   const lastNetworkRef = useRef<string | null>(null);
+
+  // Use refs to avoid reconnections when these change (following TabbedChatPanel pattern)
+  const currentThreadRef = useRef(currentThread);
+  const messagesRef = useRef(messages);
+  const onMessageReceivedRef = useRef(onMessageReceived);
+
+  // Update refs when values change
+  useEffect(() => {
+    currentThreadRef.current = currentThread;
+    messagesRef.current = messages;
+    onMessageReceivedRef.current = onMessageReceived;
+  }, [currentThread, messages, onMessageReceived]);
 
   // Setup WebSocket connections when activeNetwork changes
   useEffect(() => {
@@ -228,13 +262,37 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
     newMainWs.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('[CRUSE] Main agent message:', data);
+        console.log('[CRUSE] Main agent raw message:', data);
 
-        // Expected format from TabbedChatPanel: { message: { type: "AI", text: "..." } }
-        if (data.message && typeof data.message === 'object' && data.message.type === 'AI') {
-          const messageText = data.message.text;
+        // Handle different message formats from agents
+        let messageText: string | undefined;
+        let messageType: string | undefined;
 
-          if (currentThread) {
+        // Format 1: { message: { type: "AI", text: "..." } }
+        if (data.message && typeof data.message === 'object') {
+          messageType = data.message.type;
+          messageText = data.message.text;
+        }
+        // Format 2: { type: "AI", text: "..." }
+        else if (data.type && data.text) {
+          messageType = data.type;
+          messageText = data.text;
+        }
+        // Format 3: Direct text
+        else if (typeof data === 'string') {
+          messageType = 'AI';
+          messageText = data;
+        }
+
+        console.log('[CRUSE] Parsed message:', { messageType, messageText: messageText?.substring(0, 100) });
+
+        if (messageType === 'AI' && messageText) {
+          // Use ref to access latest currentThread value
+          const thread = currentThreadRef.current;
+          const msgs = messagesRef.current;
+          const callback = onMessageReceivedRef.current;
+
+          if (thread) {
             const origin: MessageOrigin[] = [
               {
                 tool: activeNetwork,
@@ -249,7 +307,7 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
               try {
                 widgetData = await requestWidgetFromAgent(
                   newWidgetWs,
-                  messages,
+                  msgs,
                   messageText,
                   activeNetwork,
                   sessionId
@@ -264,7 +322,7 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
             }
 
             // Add agent message to thread (with optional widget)
-            await onMessageReceived(currentThread.id, 'AI', messageText, origin, widgetData);
+            await callback(thread.id, 'AI', messageText, origin, widgetData);
           }
         }
       } catch (err) {
@@ -288,6 +346,7 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
     };
 
     setMainWs(newMainWs);
+    setChatWs(newMainWs); // Store in ChatContext for consistency with existing chat system
 
     // ==========================================
     // 2. Widget Agent WebSocket Connection
@@ -324,7 +383,7 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
         newWidgetWs.close();
       }
     };
-  }, [activeNetwork, wsUrl, sessionId, currentThread, messages, onMessageReceived]);
+  }, [activeNetwork, wsUrl, sessionId]); // Only stable dependencies - following TabbedChatPanel pattern
 
   /**
    * Send message to main agent.
@@ -345,10 +404,9 @@ export function useCruseWebSocket({ currentThread, messages, onMessageReceived }
       }
 
       try {
-        // Message format from TabbedChatPanel.tsx
+        // Message format MUST match working chat (ChatPanel.tsx line 230-234)
         const message = {
-          type: 'HUMAN',
-          text,
+          message: text,  // Changed from { type: 'HUMAN', text } to match working format
         };
 
         mainWs.send(JSON.stringify(message));

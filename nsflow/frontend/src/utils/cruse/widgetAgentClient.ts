@@ -116,13 +116,15 @@ export async function requestWidgetFromAgent(
     ws.addEventListener('message', handleMessage);
 
     // Send request with last N messages
+    // IMPORTANT: Match TabbedChatPanel format: { message: text }
     const simplifiedMessages = prepareMessagesForAgent(messages);
+    const messageText = JSON.stringify({
+      messages: simplifiedMessages,
+      request: 'generate_widget',
+    });
+
     const request = {
-      type: 'HUMAN',
-      text: JSON.stringify({
-        messages: simplifiedMessages,
-        request: 'generate_widget',
-      }),
+      message: messageText,  // Match TabbedChatPanel/ChatPanel format
     };
 
     try {

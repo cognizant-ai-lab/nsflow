@@ -22,19 +22,22 @@ import { ApiPortProvider } from "../context/ApiPortContext";
 import { NeuroSanProvider } from "../context/NeuroSanContext";
 import { ChatProvider } from "../context/ChatContext";
 import { ThemeProvider } from "../context/ThemeContext";
+import { SnackbarProvider } from "../context/SnackbarContext";
 
 const App: React.FC = () => {
   return (
     <ThemeProvider>
-      <ChatProvider>
-        <ApiPortProvider>
-          <NeuroSanProvider>
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
-          </NeuroSanProvider>
-        </ApiPortProvider>
-      </ChatProvider>
+      <SnackbarProvider>
+        <ChatProvider>
+          <ApiPortProvider>
+            <NeuroSanProvider>
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </NeuroSanProvider>
+          </ApiPortProvider>
+        </ChatProvider>
+      </SnackbarProvider>
     </ThemeProvider>
   );
 };

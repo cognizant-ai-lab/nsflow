@@ -25,11 +25,16 @@ import {
   Tooltip,
   Chip,
   Stack,
+  Paper,
+  Collapse,
+  alpha,
 } from '@mui/material';
 import {
   Send as SendIcon,
   Refresh as RefreshIcon,
   KeyboardArrowDown as ScrollDownIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { DynamicMessageRenderer } from './DynamicMessageRenderer';
 import { useSmartAutoScroll } from '../../hooks/useSmartAutoScroll';
@@ -79,6 +84,7 @@ export function ChatArea({
   onThemeRefresh,
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState('');
+  const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
   const { scrollRef, scrollToBottom, isNearBottom} = useSmartAutoScroll([messages]);
 
   // Handle sample query click
@@ -210,32 +216,10 @@ export function ChatArea({
               Start a conversation
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Select a sample query below or type your own message
+              {sampleQueries.length > 0
+                ? 'Select a sample query below or type your own message'
+                : 'Type your message below to get started'}
             </Typography>
-
-            {/* Sample Queries */}
-            {sampleQueries.length > 0 && (
-              <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" sx={{ maxWidth: 600 }}>
-                {sampleQueries.map((query, index) => (
-                  <Chip
-                    key={`${query}-${index}`}
-                    label={query}
-                    onClick={() => handleSampleQueryClick(query)}
-                    variant="outlined"
-                    size="small"
-                    sx={{
-                      m: 0.5,
-                      cursor: 'pointer',
-                      '&:hover': {
-                        backgroundColor: theme?.primaryColor || 'primary.main',
-                        color: 'white',
-                        borderColor: theme?.primaryColor || 'primary.main',
-                      },
-                    }}
-                  />
-                ))}
-              </Stack>
-            )}
           </Box>
         ) : (
           messages.map((message) => (
@@ -273,37 +257,139 @@ export function ChatArea({
           borderTop: 1,
           borderColor: 'divider',
           display: 'flex',
+          flexDirection: 'column',
           gap: 1,
         }}
       >
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
-          placeholder="Type your message..."
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          variant="outlined"
-          size="small"
-        />
-        <IconButton
-          color="primary"
-          onClick={handleSend}
-          disabled={!inputText.trim()}
-          sx={{
-            bgcolor: 'primary.main',
-            color: 'white',
-            '&:hover': {
-              bgcolor: 'primary.dark',
-            },
-            '&:disabled': {
-              bgcolor: 'action.disabledBackground',
-            },
-          }}
-        >
-          <SendIcon />
-        </IconButton>
+        {/* Sample Queries Section - Collapsible (like ChatPanel) */}
+        {sampleQueries.length > 0 && (
+          <Box sx={{ position: 'relative' }}>
+            <Box
+              onClick={() => setSampleQueriesExpanded(!sampleQueriesExpanded)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                mb: 0,
+                cursor: 'pointer',
+                borderRadius: 1,
+                px: 0.5,
+                py: 0.2,
+                '&:hover': {
+                  backgroundColor: alpha(theme?.primaryColor || '#1976d2', 0.05),
+                },
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  color: theme?.secondaryColor || 'text.secondary',
+                  fontSize: '0.6rem',
+                  fontWeight: 500,
+                  userSelect: 'none',
+                }}
+              >
+                Sample Queries
+              </Typography>
+              <Box
+                sx={{
+                  width: 20,
+                  height: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: theme?.secondaryColor || 'text.secondary',
+                }}
+              >
+                {sampleQueriesExpanded ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+              </Box>
+            </Box>
+            <Collapse in={sampleQueriesExpanded}>
+              <Paper
+                elevation={1}
+                sx={{
+                  p: 0.8,
+                  backgroundColor: alpha(theme?.primaryColor || '#1976d2', 0.04),
+                  border: `1px solid ${alpha(theme?.primaryColor || '#1976d2', 0.2)}`,
+                  borderRadius: 1,
+                  mb: 0.5
+                }}
+              >
+                <Box
+                  sx={{
+                    maxHeight: 48,
+                    overflowY: "auto",
+                    pr: 0.5,
+                    "&::-webkit-scrollbar": { width: 8, height: 8 },
+                    "&::-webkit-scrollbar-thumb": {
+                      backgroundColor: alpha(theme?.secondaryColor || '#666', 0.2),
+                      borderRadius: 8
+                    },
+                    "&::-webkit-scrollbar-track": {
+                      backgroundColor: alpha(theme?.backgroundColor || '#f5f5f5', 0.4)
+                    }
+                  }}
+                >
+                  <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+                    {sampleQueries.map((query, index) => (
+                      <Chip
+                        key={`${query}-${index}`}
+                        size="small"
+                        variant="outlined"
+                        label={query}
+                        onClick={() => handleSampleQueryClick(query)}
+                        sx={{
+                          height: 20,
+                          borderRadius: "16px",
+                          cursor: "pointer",
+                          "& .MuiChip-label": { px: 0.75, fontSize: "0.65rem" },
+                          "&:hover": {
+                            backgroundColor: alpha(theme?.primaryColor || '#1976d2', 0.1),
+                            borderColor: theme?.primaryColor || '#1976d2',
+                          },
+                          transition: "background-color 120ms ease, border-color 120ms ease"
+                        }}
+                        title={`Click to send: "${query}"`}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              </Paper>
+            </Collapse>
+          </Box>
+        )}
+
+        {/* Message Input */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            placeholder="Type your message..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            variant="outlined"
+            size="small"
+          />
+          <IconButton
+            color="primary"
+            onClick={handleSend}
+            disabled={!inputText.trim()}
+            sx={{
+              bgcolor: 'primary.main',
+              color: 'white',
+              '&:hover': {
+                bgcolor: 'primary.dark',
+              },
+              '&:disabled': {
+                bgcolor: 'action.disabledBackground',
+              },
+            }}
+          >
+            <SendIcon />
+          </IconButton>
+        </Box>
       </Box>
     </Box>
   );

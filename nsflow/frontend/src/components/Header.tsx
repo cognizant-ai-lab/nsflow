@@ -21,10 +21,10 @@ import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
-  MenuItem,  Box, useTheme as useMuiTheme, alpha } from "@mui/material";
+  MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon
+  KeyboardArrowDown as ArrowDownIcon, Chat as ChatIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
@@ -33,9 +33,10 @@ import { useTheme } from "../context/ThemeContext";
 interface HeaderProps {
   selectedNetwork: string;
   isEditorPage?: boolean;
+  isCrusePage?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }) => {
+const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, isCrusePage = false }) => {
   const { apiUrl } = useApiPort();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
@@ -44,6 +45,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
+
+  // Determine if we're on CRUSE page based on location or prop
+  const isOnCrusePage = isCrusePage || location.pathname.includes('/cruse');
 
   const handleExportNotebook = async () => {
     if (!selectedNetwork) return alert("Please select an agent network first.");
@@ -77,6 +81,10 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
   const handleNavigateToEditor = () => {
     window.open('/editor', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleNavigateToCruse = () => {
+    window.open('/cruse', '_blank', 'noopener,noreferrer');
   };
 
   const handleNavigateToHome = () => {
@@ -221,6 +229,31 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
           >
             Editor
           </Button>
+
+          {/* CRUSE Button */}
+          <Tooltip title="Context-Reactive User Experience" arrow>
+            <Button
+              variant={isOnCrusePage ? "contained" : "outlined"}
+              startIcon={<ChatIcon />}
+              onClick={handleNavigateToCruse}
+              sx={{
+                color: muiTheme.palette.text.primary,
+                borderColor: muiTheme.palette.primary.main,
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                  borderColor: muiTheme.palette.primary.main,
+                },
+                ...(isOnCrusePage && {
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
+                }),
+                ...(!isOnCrusePage && {
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                })
+              }}
+            >
+              CRUSE
+            </Button>
+          </Tooltip>
 
           {/* Export Dropdown */}
           {!isOnEditorPage && (

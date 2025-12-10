@@ -125,12 +125,14 @@ export async function requestThemeFromAgent(
     ws.addEventListener('message', handleMessage);
 
     // Send request with agent metadata
+    // IMPORTANT: Match TabbedChatPanel format: { message: text }
+    const messageText = JSON.stringify({
+      agent: agentMetadata,
+      request: 'generate_theme',
+    });
+
     const request = {
-      type: 'HUMAN',
-      text: JSON.stringify({
-        agent: agentMetadata,
-        request: 'generate_theme',
-      }),
+      message: messageText,  // Match TabbedChatPanel/ChatPanel format
     };
 
     try {

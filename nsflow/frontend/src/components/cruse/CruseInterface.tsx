@@ -14,19 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState, useCallback, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Drawer, Typography, IconButton, CircularProgress } from '@mui/material';
-import { Menu as MenuIcon } from '@mui/icons-material';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Box, Drawer, Typography } from '@mui/material';
 import { ThreadList } from './ThreadList';
-import { ChatArea } from './ChatArea';
-import { AgentSelector, Agent } from './AgentSelector';
+import CruseTabbedChatPanel from './CruseTabbedChatPanel';
+import { Agent } from './AgentSelector';
 import { useCrusePersistence } from '../../hooks/useCrusePersistence';
-import { useCruseTheme } from '../../hooks/useCruseTheme';
-import { useCruseWebSocket } from '../../hooks/useCruseWebSocket';
 import { generateThreadTitle } from '../../utils/cruse/persistence';
 import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { useNeuroSan } from '../../context/NeuroSanContext';
+import { useSnackbar } from '../../context/SnackbarContext';
+import { SNACKBAR_DURATION, NOTIFICATION_TEXT_TRUNCATE_LENGTH } from '../../constants/notifications';
 import type { MessageOrigin } from '../../types/cruse';
 
 const DRAWER_WIDTH = 280;
@@ -48,12 +47,15 @@ export function CruseInterface() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
-  const [sampleQueries, setSampleQueries] = useState<string[]>([]);
 
   // Context hooks
   const { apiUrl } = useApiPort();
-  const { activeNetwork, setActiveNetwork } = useChatContext();
+  const { activeNetwork, setActiveNetwork, chatMessages, setChatMessages } = useChatContext();
   const { host, port, connectionType, isNsReady } = useNeuroSan();
+  const { showSnackbar } = useSnackbar();
+
+  // Track which message texts have been persisted to avoid infinite loop
+  const persistedMessageKeys = useRef<Set<string>>(new Set());
 
   // Persistence hook
   const {
@@ -61,40 +63,12 @@ export function CruseInterface() {
     currentThread,
     messages,
     isLoadingThreads,
-    isLoadingMessages,
     loadThread,
     createNewThread,
+    updateThreadTitle,
     deleteThread,
     addMessageToThread,
   } = useCrusePersistence();
-
-  // Theme hook
-  const { theme, isLoadingTheme, refreshTheme } = useCruseTheme(activeNetwork);
-
-  // Callback for handling WebSocket messages (with widget support)
-  const handleMessageReceived = useCallback(
-    async (threadId: string, sender: 'AI' | 'HUMAN', text: string, origin: MessageOrigin[], widget?: any) => {
-      try {
-        await addMessageToThread(threadId, {
-          sender,
-          origin,
-          text,
-          widget, // Include widget if available
-        });
-      } catch (err) {
-        console.error('[CRUSE] Failed to add message to thread:', err);
-      }
-    },
-    [addMessageToThread]
-  );
-
-  // WebSocket hook - connects to main agent and widget agent (with messages context)
-  const { sendMessage } = useCruseWebSocket({
-    currentThread,
-    messages, // Pass messages for widget agent context
-    onMessageReceived: handleMessageReceived,
-  });
-  // TODO: Use isConnecting, isConnected, error for UI feedback
 
   // Fetch agents from backend (similar to Sidebar.tsx pattern)
   useEffect(() => {
@@ -133,12 +107,11 @@ export function CruseInterface() {
           status: 'online' as const,
         }));
 
-        setAgents(agentList);
+        // Sort agents alphabetically by name
+        const sortedAgents = agentList.sort((a, b) => a.name.localeCompare(b.name));
+        setAgents(sortedAgents);
 
-        // Set first agent as active if no active network
-        if (agentList.length > 0 && !activeNetwork) {
-          setActiveNetwork(agentList[0].id);
-        }
+        // DO NOT set agent by default - let user select
       } catch (err) {
         console.error('[CRUSE] Failed to fetch agents:', err);
         setAgents([]);
@@ -150,66 +123,109 @@ export function CruseInterface() {
     fetchAgents();
   }, [apiUrl, host, port, connectionType, isNsReady, activeNetwork, setActiveNetwork]);
 
-  // Fetch sample queries when activeNetwork changes
+  // Sync DB messages to ChatContext when thread is loaded
   useEffect(() => {
-    const fetchSampleQueries = async () => {
-      if (!activeNetwork || !apiUrl) {
-        setSampleQueries([]);
-        return;
-      }
+    if (!currentThread) {
+      // Clear chat when no thread is selected
+      setChatMessages([]);
+      persistedMessageKeys.current.clear();
+      return;
+    }
 
-      try {
-        const response = await fetch(`${apiUrl}/api/v1/connectivity/${activeNetwork}`);
-        if (!response.ok) {
-          console.log('[CRUSE] Failed to fetch connectivity info:', response.statusText);
-          setSampleQueries(['What can you help me with?']);
-          return;
-        }
+    // Convert DB messages to ChatContext message format (including widgets!)
+    const chatContextMessages = messages.map((msg) => ({
+      sender: msg.sender === 'HUMAN' ? 'user' as const : msg.sender === 'AI' ? 'agent' as const : 'system' as const,
+      text: msg.text,
+      network: msg.origin[0]?.tool || activeNetwork || 'unknown',
+      widget: msg.widget, // Include widget for display
+    }));
 
-        const data = await response.json();
-        const queries = data?.metadata?.sample_queries || [];
+    // Update ChatContext with DB messages
+    setChatMessages(chatContextMessages);
 
-        // Always append a default query
-        const allQueries = [...queries, 'What can you help me with?'];
-        setSampleQueries(allQueries);
-        console.log('[CRUSE] Sample queries loaded:', allQueries);
-      } catch (error) {
-        console.log('[CRUSE] Error fetching sample queries:', error);
-        setSampleQueries(['What can you help me with?']);
-      }
-    };
+    // Mark all loaded messages as persisted
+    persistedMessageKeys.current.clear();
+    messages.forEach((msg) => {
+      const sender = msg.sender === 'HUMAN' ? 'user' : msg.sender === 'AI' ? 'agent' : 'system';
+      const network = msg.origin[0]?.tool || activeNetwork || 'unknown';
+      const messageKey = `${sender}:${msg.text}:${network}`;
+      persistedMessageKeys.current.add(messageKey);
+    });
 
-    fetchSampleQueries();
-  }, [activeNetwork, apiUrl]);
+    console.log('[CRUSE] Synced', messages.length, 'messages from DB to ChatContext');
+  }, [currentThread?.id, messages.length]); // Only trigger when thread changes or message count changes
+
+  // Intercept new chat messages from ChatContext and save to DB
+  // Only save USER messages immediately; AI messages will be saved by CruseChatPanel after widget processing
+  // SYSTEM messages (like "Connected to Agent") are NOT persisted to DB
+  useEffect(() => {
+    if (!currentThread || chatMessages.length === 0) return;
+
+    // Get the last message
+    const lastMessage = chatMessages[chatMessages.length - 1];
+
+    // Skip AI messages - they will be saved by CruseChatPanel with widget data
+    if (lastMessage.sender === 'agent') {
+      return;
+    }
+
+    // Skip SYSTEM messages - they are transient UI messages, not conversation history
+    if (lastMessage.sender === 'system') {
+      return;
+    }
+
+    // Only save USER messages at this point
+    if (lastMessage.sender !== 'user') {
+      return;
+    }
+
+    // Create a unique key for this message (sender + text + network)
+    const messageKey = `${lastMessage.sender}:${lastMessage.text}:${lastMessage.network || activeNetwork}`;
+
+    // Skip if we've already persisted this message
+    if (persistedMessageKeys.current.has(messageKey)) {
+      return;
+    }
+
+    // Mark as persisted
+    persistedMessageKeys.current.add(messageKey);
+
+    // Save USER message to DB
+    const origin: MessageOrigin[] = [
+      {
+        tool: activeNetwork || 'unknown',
+        instantiation_index: 1,
+      },
+    ];
+
+    addMessageToThread(currentThread.id, {
+      sender: 'HUMAN',
+      origin,
+      text: typeof lastMessage.text === 'string' ? lastMessage.text : JSON.stringify(lastMessage.text),
+    });
+  }, [chatMessages.length]); // Only trigger when message count changes
 
   // Handle drawer toggle (mobile)
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
-  // Handle agent selection - updates activeNetwork in ChatContext
-  const handleAgentChange = (agentId: string) => {
-    console.log('[CRUSE] Agent changed to:', agentId);
-    setActiveNetwork(agentId);
-  };
-
-  // Handle thread selection
-  const handleThreadSelect = useCallback(
-    (threadId: string) => {
-      loadThread(threadId);
-      if (mobileOpen) {
-        setMobileOpen(false);
-      }
-    },
-    [loadThread, mobileOpen]
-  );
-
   // Handle new thread creation
-  const handleNewThread = useCallback(async () => {
+  const handleNewThread = useCallback(async (agentId?: string) => {
     try {
-      const selectedAgent = agents.find((a) => a.id === activeNetwork);
+      // Use provided agentId or fall back to activeNetwork
+      const agentIdToUse = agentId || activeNetwork;
+      const selectedAgent = agents.find((a) => a.id === agentIdToUse);
+
+      if (!selectedAgent) {
+        console.error('[CRUSE] Agent not found:', agentIdToUse, 'Available agents:', agents.map(a => a.id));
+        return;
+      }
+
       const title = `New Chat - ${new Date().toLocaleString()}`;
-      const newThread = await createNewThread(title, selectedAgent?.name);
+      const newThread = await createNewThread(title, selectedAgent.name);
+
+      console.log('[CRUSE] Created thread with agent_name:', selectedAgent.name);
 
       // Load the newly created thread
       if (newThread) {
@@ -220,110 +236,97 @@ export function CruseInterface() {
     }
   }, [createNewThread, loadThread, activeNetwork, agents]);
 
+  // Handle agent selection - updates activeNetwork in ChatContext
+  const handleAgentChange = useCallback(
+    async (agentId: string) => {
+      console.log('[CRUSE] Agent changed to:', agentId);
+
+      // Clear messages immediately to prevent cross-agent message visibility
+      setChatMessages([]);
+      persistedMessageKeys.current.clear();
+
+      // Update active network
+      setActiveNetwork(agentId);
+
+      // Check if agent has any threads
+      const agentThreads = threads.filter((t) => t.agent_name === agentId);
+
+      if (agentThreads.length === 0) {
+        // Auto-create first thread for this agent
+        console.log('[CRUSE] No threads for agent, creating new thread');
+        await handleNewThread(agentId); // Pass agentId directly since state hasn't updated yet
+      } else {
+        // Load the most recent thread
+        await loadThread(agentThreads[0].id);
+      }
+    },
+    [setActiveNetwork, threads, loadThread, handleNewThread, setChatMessages]
+  );
+
+  // Handle thread selection
+  const handleThreadSelect = useCallback(
+    (threadId: string) => {
+      // If clicking the same thread that's already active, do nothing
+      if (currentThread?.id === threadId) {
+        console.log('[CRUSE] Thread already active, skipping reload');
+        if (mobileOpen) {
+          setMobileOpen(false);
+        }
+        return;
+      }
+
+      // Clear messages before loading new thread for clean transition
+      setChatMessages([]);
+      persistedMessageKeys.current.clear();
+
+      loadThread(threadId);
+      if (mobileOpen) {
+        setMobileOpen(false);
+      }
+    },
+    [loadThread, mobileOpen, setChatMessages, currentThread]
+  );
+
   // Handle thread deletion
   const handleDeleteThread = useCallback(
     async (threadId: string) => {
-      if (window.confirm('Are you sure you want to delete this thread?')) {
-        try {
-          await deleteThread(threadId);
-        } catch (err) {
-          console.error('Failed to delete thread:', err);
-        }
-      }
-    },
-    [deleteThread]
-  );
-
-  // Handle sending a message - uses WebSocket to communicate with main agent
-  const handleSendMessage = useCallback(
-    async (text: string) => {
-      if (!currentThread) {
-        console.warn('[CRUSE] No active thread');
-        return;
-      }
-
-      if (!activeNetwork) {
-        console.warn('[CRUSE] No active network selected');
-        return;
-      }
-
       try {
-        // Create message origin
-        const origin: MessageOrigin[] = [
-          {
-            tool: activeNetwork,
-            instantiation_index: 1,
-          },
-        ];
+        // Find the thread to get its details for the notification
+        const thread = threads.find((t) => t.id === threadId);
+        const threadTitle = thread?.title || 'Unknown';
+        const agentName = thread?.agent_name || 'Unknown';
 
-        // Add user message to thread (optimistic UI update)
-        await addMessageToThread(currentThread.id, {
-          sender: 'HUMAN',
-          origin,
-          text,
+        // Delete the thread
+        await deleteThread(threadId);
+
+        // Truncate strings using constant
+        const truncatedTitle =
+          threadTitle.length > NOTIFICATION_TEXT_TRUNCATE_LENGTH
+            ? threadTitle.slice(0, NOTIFICATION_TEXT_TRUNCATE_LENGTH) + '...'
+            : threadTitle;
+        const truncatedAgent =
+          agentName.length > NOTIFICATION_TEXT_TRUNCATE_LENGTH
+            ? agentName.slice(0, NOTIFICATION_TEXT_TRUNCATE_LENGTH) + '...'
+            : agentName;
+
+        // Show success notification
+        showSnackbar({
+          message: `Thread: ${truncatedTitle} deleted for agent: ${truncatedAgent}`,
+          severity: 'success',
+          duration: SNACKBAR_DURATION,
         });
-
-        // Send to main agent via WebSocket
-        const success = sendMessage(text);
-
-        if (!success) {
-          console.error('[CRUSE] Failed to send message via WebSocket');
-          // TODO: Show error to user
-        }
-
-        // Agent response will come via WebSocket onmessage handler
-        // Widget generation will happen in useCruseWebSocket
       } catch (err) {
-        console.error('[CRUSE] Failed to send message:', err);
+        console.error('Failed to delete thread:', err);
+
+        // Show error notification
+        showSnackbar({
+          message: 'Failed to delete thread',
+          severity: 'error',
+          duration: SNACKBAR_DURATION,
+        });
       }
     },
-    [currentThread, activeNetwork, addMessageToThread, sendMessage]
-  );
-
-  // Handle widget submission - sends form data to main agent via WebSocket
-  const handleWidgetSubmit = useCallback(
-    async (data: Record<string, unknown>) => {
-      if (!currentThread) {
-        console.warn('[CRUSE] No active thread');
-        return;
-      }
-
-      if (!activeNetwork) {
-        console.warn('[CRUSE] No active network selected');
-        return;
-      }
-
-      try {
-        const origin: MessageOrigin[] = [
-          {
-            tool: activeNetwork,
-            instantiation_index: 1,
-          },
-        ];
-
-        // Format widget data as message text
-        const formattedData = JSON.stringify(data, null, 2);
-        const messageText = `Form submitted:\n\`\`\`json\n${formattedData}\n\`\`\``;
-
-        // Add user message to thread (optimistic UI update)
-        await addMessageToThread(currentThread.id, {
-          sender: 'HUMAN',
-          origin,
-          text: messageText,
-        });
-
-        // Send to main agent via WebSocket
-        const success = sendMessage(messageText);
-
-        if (!success) {
-          console.error('[CRUSE] Failed to send widget data via WebSocket');
-          // TODO: Show error to user
-        }
-      } catch (err) {
-        console.error('[CRUSE] Failed to submit widget:', err);
-      }
-    },
-    [currentThread, activeNetwork, addMessageToThread, sendMessage]
+    [deleteThread, threads, showSnackbar]
   );
 
   // Auto-generate thread title from first message
@@ -332,11 +335,15 @@ export function CruseInterface() {
       const firstMessage = messages[0];
       if (firstMessage.sender === 'HUMAN') {
         const newTitle = generateThreadTitle(firstMessage.text);
-        // TODO: Update thread title via API
-        console.log('Generated title:', newTitle);
+        console.log('[CRUSE] Auto-updating thread title to:', newTitle);
+
+        // Update thread title via API
+        updateThreadTitle(currentThread.id, newTitle).catch((err) => {
+          console.error('[CRUSE] Failed to update thread title:', err);
+        });
       }
     }
-  }, [currentThread, messages]);
+  }, [currentThread, messages, updateThreadTitle]);
 
   // Drawer content
   const drawer = (
@@ -344,47 +351,18 @@ export function CruseInterface() {
       threads={threads}
       activeThreadId={currentThread?.id}
       isLoading={isLoadingThreads}
+      agents={agents}
+      selectedAgentId={activeNetwork || ''}
+      isLoadingAgents={isLoadingAgents}
       onThreadSelect={handleThreadSelect}
-      onNewThread={handleNewThread}
+      onNewThread={() => handleNewThread(activeNetwork || undefined)}
       onDeleteThread={handleDeleteThread}
+      onAgentChange={handleAgentChange}
     />
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      {/* AppBar */}
-      <AppBar
-        position="fixed"
-        sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-        }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
-          >
-            <MenuIcon />
-          </IconButton>
-
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            CRUSE - Chat Runtime UI Schema Engine
-          </Typography>
-
-          {isLoadingAgents ? (
-            <CircularProgress size={24} color="inherit" />
-          ) : (
-            <AgentSelector
-              agents={agents}
-              selectedAgentId={activeNetwork || ''}
-              onAgentChange={handleAgentChange}
-            />
-          )}
-        </Toolbar>
-      </AppBar>
-
+    <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
       {/* Drawer - Desktop */}
       <Drawer
         variant="permanent"
@@ -395,7 +373,7 @@ export function CruseInterface() {
           '& .MuiDrawer-paper': {
             width: DRAWER_WIDTH,
             boxSizing: 'border-box',
-            mt: 8, // AppBar height
+            position: 'relative',
           },
         }}
       >
@@ -415,7 +393,6 @@ export function CruseInterface() {
           '& .MuiDrawer-paper': {
             width: DRAWER_WIDTH,
             boxSizing: 'border-box',
-            mt: 8,
           },
         }}
       >
@@ -427,22 +404,33 @@ export function CruseInterface() {
         component="main"
         sx={{
           flexGrow: 1,
-          height: '100vh',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
           overflow: 'hidden',
-          mt: 8, // AppBar height
         }}
       >
-        {currentThread ? (
-          <ChatArea
-            messages={messages}
-            threadTitle={currentThread.title}
-            isLoading={isLoadingMessages}
-            theme={theme}
-            isLoadingTheme={isLoadingTheme}
-            sampleQueries={sampleQueries}
-            onSendMessage={handleSendMessage}
-            onWidgetSubmit={handleWidgetSubmit}
-            onThemeRefresh={refreshTheme}
+        {!activeNetwork ? (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+            }}
+          >
+            <Typography variant="h6" color="text.secondary">
+              Select an agent to get started
+            </Typography>
+          </Box>
+        ) : currentThread ? (
+          <CruseTabbedChatPanel
+            currentThread={currentThread}
+            onSaveMessage={async (messageRequest) => {
+              if (currentThread) {
+                await addMessageToThread(currentThread.id, messageRequest);
+              }
+            }}
           />
         ) : (
           <Box
@@ -454,7 +442,7 @@ export function CruseInterface() {
             }}
           >
             <Typography variant="h6" color="text.secondary">
-              Select a thread or create a new one to get started
+              Creating new thread...
             </Typography>
           </Box>
         )}

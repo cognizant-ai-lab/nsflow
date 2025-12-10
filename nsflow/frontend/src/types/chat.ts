@@ -23,5 +23,6 @@ export type Message = {
     // Optional to define keys
     id?: string;
     ts?: number;
+    widget?: any; // For CRUSE dynamic widgets
   };
   

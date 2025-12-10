@@ -35,6 +35,7 @@ import {
 
 import { Message } from "../types/chat";
 import { useTheme } from "../context/ThemeContext";
+import { DynamicWidgetCard } from "./cruse/DynamicWidgetCard";
 
 // type Message = {
 //   sender: "user" | "agent" | "system";
@@ -380,6 +381,20 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                   {messageText}
                 </ReactMarkdown>
               </Box>
+
+              {/* Widget Rendering (CRUSE) */}
+              {msg.widget && msg.widget.schema && (
+                <Box sx={{ mt: 1.5, mb: 0.5 }}>
+                  <DynamicWidgetCard
+                    widget={msg.widget}
+                    onSubmit={(data) => {
+                      console.log('[CRUSE] Widget form submitted:', data);
+                      // TODO: Handle widget submission
+                    }}
+                    defaultExpanded={true}
+                  />
+                </Box>
+              )}
 
               {/* Copied notification */}
               {copiedMessage === index && (

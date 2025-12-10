@@ -101,6 +101,25 @@ export async function getThread(threadId: string): Promise<ThreadWithMessages> {
 }
 
 /**
+ * Updates a thread's title and/or agent_name.
+ *
+ * @param threadId - Thread ID
+ * @param request - Thread update request (partial)
+ * @returns Updated thread
+ */
+export async function updateThread(
+  threadId: string,
+  request: Partial<CreateThreadRequest>
+): Promise<ThreadResponse> {
+  const response = await fetchWithTimeout(`${CRUSE_API_BASE}/threads/${threadId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<ThreadResponse>(response);
+}
+
+/**
  * Deletes a thread and all its messages.
  *
  * @param threadId - Thread ID

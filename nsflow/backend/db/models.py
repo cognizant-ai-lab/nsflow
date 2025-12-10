@@ -21,6 +21,12 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, JSON, String, Text
 
 from nsflow.backend.db.database import Base
 
+
+def _get_utc_now():
+    """Helper function to get current UTC time for SQLAlchemy defaults."""
+    return datetime.now(timezone.utc)
+
+
 # CRUSE (Chat-based Runtime UI Schema Engine) Models
 class Thread(Base):
     """
@@ -31,8 +37,8 @@ class Thread(Base):
     id = Column(String, primary_key=True, index=True)
     title = Column(String, nullable=False)
     agent_name = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=_get_utc_now)
+    updated_at = Column(DateTime, default=_get_utc_now, onupdate=_get_utc_now)
 
 
 class Message(Base):
@@ -47,6 +53,6 @@ class Message(Base):
     origin = Column(Text, nullable=False)
     text = Column(Text, nullable=False)
     widget_json = Column(JSON, nullable=True)  # JSON string containing widget schema
-    created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=_get_utc_now, index=True)
 
 Index("idx_messages_thread_created", Message.thread_id, Message.created_at)
