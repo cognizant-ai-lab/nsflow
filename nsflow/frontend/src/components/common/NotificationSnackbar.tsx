@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { useEffect, useState, useRef } from 'react';
-import { Snackbar, Alert, AlertColor, Box, LinearProgress } from '@mui/material';
+import { Snackbar, Alert, AlertColor, Box, LinearProgress, alpha } from '@mui/material';
 import { styled, keyframes } from '@mui/material/styles';
 import {
   SNACKBAR_DURATION,
@@ -80,11 +80,12 @@ const GlowingProgress = styled(LinearProgress)<{ severity: AlertColor }>(({ them
   overflow: 'hidden',
   '& .MuiLinearProgress-bar': {
     backgroundColor:
-      severity === 'success' ? theme.palette.success.light :
-      severity === 'error' ? theme.palette.error.light :
-      severity === 'warning' ? theme.palette.warning.light :
-      theme.palette.info.light,
+      severity === 'success' ? alpha(theme.palette.success.light, 0.9) :
+      severity === 'error' ? alpha(theme.palette.error.light, 0.9) :
+      severity === 'warning' ? alpha(theme.palette.warning.light, 0.9) :
+      alpha(theme.palette.info.light, 0.6),
     animation: `${getGlowAnimation(severity)} 1.5s ease-in-out infinite`,
+    borderRadius: '0 0 12px 12px', // Also round the progress bar itself
   },
 }));
 
@@ -186,16 +187,27 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       sx={{ mb: 2, mr: 2 }}
     >
-      <Box sx={{ position: 'relative', minWidth: 320, maxWidth: 500 }}>
+      <Box sx={{
+        position: 'relative',
+        minWidth: 320,
+        maxWidth: 500,
+        borderRadius: 3, // Match Alert border radius
+        overflow: 'hidden', // Clip progress bar to rounded corners
+      }}>
         <Alert
           onClose={onClose}
           severity={severity}
           variant="filled"
-          sx={{
+          sx={(theme) => ({
             width: '100%',
             borderRadius: 3, // 12px rounded corners
             boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1)',
             paddingBottom: autoHide ? '16px' : '12px', // Extra space for progress bar
+            backgroundColor:
+              severity === 'success' ? alpha(theme.palette.success.main, 0.4) :
+              severity === 'error' ? alpha(theme.palette.error.main, 0.4) :
+              severity === 'warning' ? alpha(theme.palette.warning.main, 0.4) :
+              alpha(theme.palette.info.main, 0.9),
             '& .MuiAlert-message': {
               width: '100%',
               wordBreak: 'break-word',
@@ -210,7 +222,7 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
               alignItems: 'flex-start',
             },
             transition: 'all 0.3s ease-in-out',
-          }}
+          })}
         >
           {notification.message}
         </Alert>

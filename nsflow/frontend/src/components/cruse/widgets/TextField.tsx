@@ -62,8 +62,20 @@ export function TextField({
         pattern,
       }}
       variant="outlined"
-      size="small"
-      sx={{ mb: 2 }}
+      size="medium"
+      sx={{
+        mb: 2,
+        '& .MuiOutlinedInput-root': {
+          borderRadius: 2,
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+          },
+          '&.Mui-focused': {
+            boxShadow: '0 4px 12px rgba(25, 118, 210, 0.15)',
+          },
+        },
+      }}
     />
   );
 }

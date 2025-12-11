@@ -162,15 +162,75 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
       console.log('[CRUSE] Message sent to main agent:', newMessage);
 
       setNewMessage("");
+
+      // Collapse sample queries section after sending message
+      setSampleQueriesExpanded(false);
     } catch (error) {
       console.error('[CRUSE] Error sending message:', error);
     }
   }, [newMessage, chatWs, addChatMessage, activeNetwork]);
 
   const handleSampleQueryClick = (query: string) => {
-    setNewMessage(query);
-    // Auto-send the query
-    setTimeout(() => sendMessage(), 100);
+    // Send the query directly without setting it in the input field
+    if (!chatWs) return;
+
+    try {
+      // Add user message to UI
+      addChatMessage({
+        sender: "user",
+        text: query,
+        network: activeNetwork,
+      });
+
+      // Send to WebSocket (main agent only)
+      const message = { message: query };
+      chatWs.send(JSON.stringify(message));
+      console.log('[CRUSE] Sample query sent to main agent:', query);
+
+      // Collapse sample queries section after sending
+      setSampleQueriesExpanded(false);
+    } catch (error) {
+      console.error('[CRUSE] Error sending sample query:', error);
+    }
+  };
+
+  const handleWidgetSubmit = (data: Record<string, unknown>) => {
+    if (!chatWs) return;
+
+    try {
+      // Format widget data as a readable message
+      const formattedMessage = Object.entries(data)
+        .map(([key, value]) => {
+          // Format dates nicely
+          if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+            const date = new Date(value);
+            return `${key}: ${date.toLocaleDateString()}`;
+          }
+          // Format arrays
+          if (Array.isArray(value)) {
+            return `${key}: ${value.join(', ')}`;
+          }
+          return `${key}: ${value}`;
+        })
+        .join('\n');
+
+      // Add user message to UI
+      addChatMessage({
+        sender: "user",
+        text: formattedMessage,
+        network: activeNetwork,
+      });
+
+      // Send to WebSocket (main agent only)
+      const message = { message: formattedMessage };
+      chatWs.send(JSON.stringify(message));
+      console.log('[CRUSE] Widget submission sent to main agent:', data);
+
+      // Collapse sample queries section after sending message
+      setSampleQueriesExpanded(false);
+    } catch (error) {
+      console.error('[CRUSE] Error sending widget submission:', error);
+    }
   };
 
   // Track the last processed AI message count to avoid reprocessing DB-loaded messages
@@ -365,6 +425,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
               setCopiedMessage(index);
               setTimeout(() => setCopiedMessage(null), 2000);
             }}
+            onWidgetSubmit={handleWidgetSubmit}
           />
           <div ref={messagesEndRef} />
         </Box>

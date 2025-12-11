@@ -36,15 +36,18 @@ export function resolveIcon(iconName?: string): SvgIconComponent | undefined {
 
   // Try direct match first
   const icon = (MuiIcons as Record<string, unknown>)[iconName];
-  if (icon && typeof icon === 'function') {
+  if (icon) {
     return icon as SvgIconComponent;
   }
 
   // Try with "Outlined" suffix
   const outlinedIcon = (MuiIcons as Record<string, unknown>)[`${iconName}Outlined`];
-  if (outlinedIcon && typeof outlinedIcon === 'function') {
+  if (outlinedIcon) {
     return outlinedIcon as SvgIconComponent;
   }
+
+  // Log when icon is not found to help with debugging
+  console.warn(`Icon "${iconName}" not found in @mui/icons-material. Using fallback HelpOutline.`);
 
   // Default icon if not found
   return MuiIcons.HelpOutline;

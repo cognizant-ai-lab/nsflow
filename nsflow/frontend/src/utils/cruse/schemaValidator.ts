@@ -42,6 +42,41 @@ export interface ValidationResult {
 }
 
 /**
+ * Preprocesses date fields to convert ISO datetime strings to YYYY-MM-DD format.
+ * AJV's "date" format expects YYYY-MM-DD, but DatePicker provides full ISO strings.
+ *
+ * @param schema - JSON Schema
+ * @param data - Data to preprocess
+ * @returns Processed data with date fields converted
+ */
+function preprocessDateFields(schema: JSONSchema7, data: unknown): unknown {
+  if (!data || typeof data !== 'object' || !schema.properties) {
+    return data;
+  }
+
+  const processed = { ...data } as Record<string, unknown>;
+
+  Object.entries(schema.properties).forEach(([key, propSchema]) => {
+    if (typeof propSchema === 'object' && propSchema.format === 'date') {
+      const value = processed[key];
+      if (typeof value === 'string' && value) {
+        try {
+          // Convert ISO datetime string to YYYY-MM-DD
+          const date = new Date(value);
+          if (!isNaN(date.getTime())) {
+            processed[key] = date.toISOString().split('T')[0];
+          }
+        } catch {
+          // Keep original value if conversion fails
+        }
+      }
+    }
+  });
+
+  return processed;
+}
+
+/**
  * Validates data against a JSON Schema.
  *
  * @param schema - JSON Schema to validate against
@@ -56,6 +91,9 @@ export interface ValidationResult {
  */
 export function validateSchema(schema: JSONSchema7, data: unknown): ValidationResult {
   try {
+    // Preprocess data to convert date-time ISO strings to date format for AJV
+    const processedData = preprocessDateFields(schema, data);
+
     // Get or create validator
     const schemaKey = JSON.stringify(schema);
     let validate = validatorCache.get(schemaKey);
@@ -65,7 +103,7 @@ export function validateSchema(schema: JSONSchema7, data: unknown): ValidationRe
       validatorCache.set(schemaKey, validate);
     }
 
-    const valid = validate(data);
+    const valid = validate(processedData);
 
     if (!valid && validate.errors) {
       return {
@@ -141,6 +179,9 @@ export function validateField(
   }
 
   const fieldSchema = schema.properties[fieldName];
+  if (typeof fieldSchema === 'boolean') {
+    return { valid: true };
+  }
 
   // Check if required
   const isRequired = Array.isArray(schema.required) && schema.required.includes(fieldName);
@@ -150,6 +191,35 @@ export function validateField(
       valid: false,
       errorMessage: `${fieldName} is required`,
     };
+  }
+
+  // Skip validation for empty non-required fields
+  if (!isRequired && (value === null || value === undefined || value === '')) {
+    return { valid: true };
+  }
+
+  // Special handling for date/date-time fields to avoid format validation issues during input
+  if (fieldSchema.format === 'date' || fieldSchema.format === 'date-time') {
+    // Allow valid ISO strings or Date objects
+    if (typeof value === 'string') {
+      try {
+        const date = new Date(value);
+        if (isNaN(date.getTime())) {
+          return {
+            valid: false,
+            errorMessage: `${fieldName} must be a valid date`,
+          };
+        }
+        return { valid: true };
+      } catch {
+        return {
+          valid: false,
+          errorMessage: `${fieldName} must be a valid date`,
+        };
+      }
+    }
+    // Value is being processed, skip validation
+    return { valid: true };
   }
 
   // Validate against field schema

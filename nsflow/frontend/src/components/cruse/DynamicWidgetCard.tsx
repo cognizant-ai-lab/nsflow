@@ -24,12 +24,14 @@ import {
   Collapse,
   IconButton,
   alpha,
+  useTheme,
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { WidgetCardDefinition } from '../../types/cruse';
 import { WidgetFormRenderer } from './WidgetFormRenderer';
 import { resolveIcon } from '../../utils/cruse';
 import { validateSchema } from '../../utils/cruse';
+import { useSnackbar } from '../../context/SnackbarContext';
 
 export interface DynamicWidgetCardProps {
   /** Widget definition from agent */
@@ -57,17 +59,45 @@ export function DynamicWidgetCard({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const theme = useTheme();
+  const { showSnackbar } = useSnackbar();
 
   const { title, description, icon, color = '#9c27b0', schema } = widget;
   const IconComponent = resolveIcon(icon);
 
+  // Create theme-aware gradient background
+  const isDarkMode = theme.palette.mode === 'dark';
+  const gradientStart = alpha(color, isDarkMode ? 0.2 : 0.15);
+  const gradientEnd = isDarkMode
+    ? alpha(theme.palette.background.paper, 0.6)
+    : alpha('#ffffff', 0.8);
+
   const handleSubmit = async () => {
+    // Check if form is completely empty
+    const hasAnyData = Object.keys(formData).length > 0 &&
+      Object.values(formData).some(value => {
+        if (value === null || value === undefined || value === '') return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      });
+
+    if (!hasAnyData) {
+      showSnackbar({
+        message: 'Please fill out at least one field before submitting',
+        severity: 'warning',
+      });
+      return;
+    }
+
     // Validate before submitting
     const validation = validateSchema(schema, formData);
 
     if (!validation.valid) {
       console.error('Validation failed:', validation.errorMessage);
-      alert(`Please fix the following errors:\n${validation.errorMessage}`);
+      showSnackbar({
+        message: `Validation failed: ${validation.errorMessage}`,
+        severity: 'error',
+      });
       return;
     }
 
@@ -82,19 +112,24 @@ export function DynamicWidgetCard({
   return (
     <Card
       sx={{
-        maxWidth: 500,
-        borderRadius: 2,
-        borderTop: `4px solid ${color}`,
-        boxShadow: 3,
+        maxWidth: 600,
+        borderRadius: 3,
+        borderLeft: `6px solid ${color}`,
+        boxShadow: isDarkMode
+          ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+          : '0 4px 12px rgba(0, 0, 0, 0.1)',
         transition: 'all 0.3s ease',
         '&:hover': {
-          transform: 'translateY(-2px)',
-          boxShadow: 6,
+          transform: 'translateY(-4px)',
+          boxShadow: isDarkMode
+            ? '0 8px 24px rgba(0, 0, 0, 0.6)'
+            : '0 8px 24px rgba(0, 0, 0, 0.15)',
         },
         mb: 2,
+        background: `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`,
       }}
     >
-      <CardContent>
+      <CardContent sx={{ p: 3 }}>
         {/* Header */}
         <Box
           display="flex"
@@ -104,19 +139,47 @@ export function DynamicWidgetCard({
           sx={{ cursor: 'pointer' }}
           onClick={() => setExpanded(!expanded)}
         >
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box display="flex" alignItems="center" gap={1.5}>
             {IconComponent && (
-              <IconComponent sx={{ color, fontSize: 28 }} />
+              <Box
+                sx={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: alpha(color, 0.4),
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    backgroundColor: alpha(color, 0.2),
+                    transform: 'scale(1.05)',
+                  },
+                }}
+              >
+                <IconComponent sx={{ color, fontSize: 28 }} />
+              </Box>
             )}
-            <Typography variant="h6" fontWeight="bold">
-              {title}
-            </Typography>
+            <Box>
+              <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.2 }}>
+                {title}
+              </Typography>
+              {description && !expanded && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                  Click to expand
+                </Typography>
+              )}
+            </Box>
           </Box>
           <IconButton
             size="small"
             sx={{
               transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
               transition: 'transform 0.3s',
+              backgroundColor: alpha(color, 0.2),
+              '&:hover': {
+                backgroundColor: alpha(color, 0.15),
+              },
             }}
           >
             <ExpandMoreIcon />
@@ -124,13 +187,23 @@ export function DynamicWidgetCard({
         </Box>
 
         {description && expanded && (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mb: 2 }}
+          <Box
+            sx={{
+              backgroundColor: alpha(color, 0.05),
+              borderRadius: 1.5,
+              p: 1.5,
+              mb: 2,
+              borderLeft: `3px solid ${color}`,
+            }}
           >
-            {description}
-          </Typography>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontStyle: 'italic' }}
+            >
+              {description}
+            </Typography>
+          </Box>
         )}
 
         {/* Form Content */}
@@ -147,10 +220,22 @@ export function DynamicWidgetCard({
               onClick={handleSubmit}
               disabled={isSubmitting}
               sx={{
-                mt: 2,
+                mt: 3,
+                py: 1.5,
+                borderRadius: 2,
                 backgroundColor: color,
+                fontSize: '1rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                boxShadow: `0 4px 12px ${alpha(color, 0.3)}`,
+                transition: 'all 0.3s ease',
                 '&:hover': {
-                  backgroundColor: alpha(color, 0.8),
+                  backgroundColor: alpha(color, 0.9),
+                  boxShadow: `0 6px 16px ${alpha(color, 0.4)}`,
+                  transform: 'translateY(-2px)',
+                },
+                '&:disabled': {
+                  backgroundColor: alpha(color, 0.4),
                 },
               }}
             >

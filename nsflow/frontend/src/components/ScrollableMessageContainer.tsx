@@ -51,6 +51,7 @@ type Props = {
   renderSenderLabel?: (msg: Message) => string;
   getMessageClass?: (msg: Message) => string;
   useSpeech?: boolean;
+  onWidgetSubmit?: (data: Record<string, unknown>) => void;
 };
 
 const ScrollableMessageContainer: React.FC<Props> = ({
@@ -59,6 +60,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   onCopy,
   onTextToSpeech,
   useSpeech,
+  onWidgetSubmit,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
       ? "User"
@@ -389,7 +391,9 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                     widget={msg.widget}
                     onSubmit={(data) => {
                       console.log('[CRUSE] Widget form submitted:', data);
-                      // TODO: Handle widget submission
+                      if (onWidgetSubmit) {
+                        onWidgetSubmit(data);
+                      }
                     }}
                     defaultExpanded={true}
                   />
