@@ -42,6 +42,8 @@ export interface DynamicWidgetCardProps {
   submitText?: string;
   /** Whether the card is initially expanded */
   defaultExpanded?: boolean;
+  /** Whether the submit button should be disabled (for old widgets) */
+  disabled?: boolean;
 }
 
 /**
@@ -55,6 +57,7 @@ export function DynamicWidgetCard({
   onSubmit,
   submitText = 'Submit',
   defaultExpanded = true,
+  disabled = false,
 }: DynamicWidgetCardProps) {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -73,6 +76,11 @@ export function DynamicWidgetCard({
     : alpha('#ffffff', 0.8);
 
   const handleSubmit = async () => {
+    // Don't submit if widget is disabled
+    if (disabled) {
+      return;
+    }
+
     // Check if form is completely empty
     const hasAnyData = Object.keys(formData).length > 0 &&
       Object.values(formData).some(value => {
@@ -218,7 +226,7 @@ export function DynamicWidgetCard({
               variant="contained"
               fullWidth
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || disabled}
               sx={{
                 mt: 3,
                 py: 1.5,
@@ -235,11 +243,13 @@ export function DynamicWidgetCard({
                   transform: 'translateY(-2px)',
                 },
                 '&:disabled': {
-                  backgroundColor: alpha(color, 0.4),
+                  backgroundColor: alpha(color, 0.3),
+                  color: alpha(theme.palette.getContrastText(color), 0.5),
+                  cursor: 'not-allowed',
                 },
               }}
             >
-              {isSubmitting ? 'Submitting...' : submitText}
+              {isSubmitting ? 'Submitting...' : disabled ? 'Submit' : submitText}
             </Button>
           </Box>
         </Collapse>

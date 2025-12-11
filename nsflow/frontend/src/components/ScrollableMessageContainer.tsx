@@ -120,18 +120,25 @@ const ScrollableMessageContainer: React.FC<Props> = ({
       pr: 0.5,
       backgroundColor: theme.palette.background.default
     }}>
-      <Box sx={{ 
+      <Box sx={{
         p: 0.5,
         display: 'flex',
         flexDirection: 'column',
         gap: 1
       }}>
-        {messages.map((msg, index) => {
-          const colors = getMessageColors(msg.sender);
-          const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
-          const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
-          
-          return (
+        {(() => {
+          // Find the index of the last agent message once for all messages
+          const lastAgentMessageIndex = messages.map((m, i) => m.sender === 'agent' ? i : -1)
+            .filter(i => i !== -1)
+            .pop() ?? -1;
+
+          return messages.map((msg, index) => {
+            const colors = getMessageColors(msg.sender);
+            const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+            const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
+            const isLatestAgentMessage = msg.sender === 'agent' && index === lastAgentMessageIndex;
+
+            return (
             <Paper
               key={key}
               elevation={1}
@@ -396,6 +403,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                       }
                     }}
                     defaultExpanded={true}
+                    disabled={!isLatestAgentMessage}
                   />
                 </Box>
               )}
@@ -421,8 +429,9 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                 </Paper>
               )}
             </Paper>
-          );
-        })}
+            );
+          });
+        })()}
         <Box ref={messagesEndRef} />
       </Box>
     </Box>
