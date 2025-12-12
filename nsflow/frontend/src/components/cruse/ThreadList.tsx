@@ -121,37 +121,78 @@ export function ThreadList({
 
       {/* Show "+ New Thread" button only when agent is selected and has threads */}
       {showNewThreadButton && (
-        <Box sx={{ p: 2 }}>
+        <Box sx={{ px: 1.5, pt: 1.5, pb: 0.5 }}>
           <ListItemButton
             onClick={onNewThread}
             sx={{
-            borderRadius: 1,
-            border: 1,
-            borderColor: 'primary.main',
-            '&:hover': {
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              '& .MuiListItemIcon-root': {
+              borderRadius: 3,
+              border: 1,
+              borderColor: 'primary.main',
+              py: 0.4,
+              px: 1,
+              minHeight: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 0.5,
+              '&:hover': {
+                bgcolor: 'primary.main',
                 color: 'primary.contrastText',
+                '& .MuiSvgIcon-root': {
+                  color: 'primary.contrastText',
+                },
               },
-            },
-          }}
-        >
-          <ListItemIcon>
-            <AddIcon color="primary" />
-          </ListItemIcon>
-          <ListItemText
-            primary="New Thread"
-            primaryTypographyProps={{ fontWeight: 600 }}
-          />
-        </ListItemButton>
+            }}
+          >
+            <AddIcon sx={{ fontSize: '1rem' }} color="primary" />
+            <Typography
+              sx={{
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                color: 'primary.main',
+                '.MuiListItemButton-root:hover &': {
+                  color: 'inherit',
+                },
+              }}
+            >
+              New Thread
+            </Typography>
+          </ListItemButton>
         </Box>
       )}
 
-      {showNewThreadButton && <Divider />}
+      {showNewThreadButton && <Divider sx={{ mt: 0.5 }} />}
 
       {/* Thread List - Only show for selected agent */}
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box
+        sx={{
+          flex: 1,
+          overflow: 'auto',
+          '&::-webkit-scrollbar': {
+            width: 6,
+          },
+          '&::-webkit-scrollbar-track': {
+            bgcolor: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            bgcolor: (theme) => theme.palette.mode === 'dark'
+              ? 'rgba(255, 255, 255, 0.1)'
+              : 'rgba(0, 0, 0, 0.1)',
+            borderRadius: 3,
+            transition: 'background-color 0.2s',
+            '&:hover': {
+              bgcolor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.2)'
+                : 'rgba(0, 0, 0, 0.2)',
+            },
+          },
+          '&:hover::-webkit-scrollbar-thumb': {
+            bgcolor: (theme) => theme.palette.mode === 'dark'
+              ? 'rgba(255, 255, 255, 0.15)'
+              : 'rgba(0, 0, 0, 0.15)',
+          },
+        }}
+      >
         {!selectedAgentId ? (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
@@ -176,7 +217,7 @@ export function ThreadList({
             </Typography>
           </Box>
         ) : (
-          <List sx={{ pt: 0 }}>
+          <List sx={{ pt: 1, px: 1.5, pb: 1 }}>
             {agentThreads.map((thread) => {
               const isActive = thread.id === activeThreadId;
               const timeString = formatMessageTime(thread.updated_at);
@@ -199,12 +240,16 @@ export function ThreadList({
                         '.MuiListItem-root:hover &': {
                           opacity: 1,
                         },
+                        mr: 0.5,
                       }}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   }
                   sx={{
+                    mb: 0.5,
+                    borderRadius: 2,
+                    overflow: 'hidden',
                     '&:hover': {
                       bgcolor: 'action.hover',
                     },
@@ -214,44 +259,47 @@ export function ThreadList({
                     selected={isActive}
                     onClick={() => onThreadSelect(thread.id)}
                     sx={{
-                      py: 1.5,
-                      px: 2,
+                      py: 0.5,
+                      px: 1.5,
+                      borderRadius: 2,
+                      minHeight: 0,
                       ...(isActive && {
-                        borderLeft: 4,
-                        borderColor: 'primary.main',
                         bgcolor: 'action.selected',
+                        '&:hover': {
+                          bgcolor: 'action.selected',
+                        },
                       }),
                     }}
                   >
-                    <ListItemIcon sx={{ minWidth: 40 }}>
-                      <ChatIcon color={isActive ? 'primary' : 'action'} />
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <ChatIcon
+                        sx={{ fontSize: '1rem' }}
+                        color={isActive ? 'primary' : 'action'}
+                      />
                     </ListItemIcon>
                     <ListItemText
                       primary={thread.title}
                       secondary={
-                        <>
-                          {thread.agent_name && (
-                            <Typography
-                              component="span"
-                              variant="caption"
-                              color="primary"
-                              sx={{ mr: 1 }}
-                            >
-                              {thread.agent_name}
-                            </Typography>
-                          )}
-                          <Typography component="span" variant="caption" color="text.secondary">
-                            {timeString}
-                          </Typography>
-                        </>
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontSize: '0.65rem' }}
+                        >
+                          {timeString}
+                        </Typography>
                       }
-                      primaryTypographyProps={{
-                        fontWeight: isActive ? 600 : 400,
-                        noWrap: true,
-                      }}
-                      secondaryTypographyProps={{
-                        component: 'div',
-                        noWrap: true,
+                      slotProps={{
+                        primary: {
+                          fontWeight: isActive ? 600 : 400,
+                          noWrap: true,
+                          fontSize: '0.8rem',
+                          lineHeight: 1.0,
+                        },
+                        secondary: {
+                          component: 'div',
+                          noWrap: true,
+                        },
                       }}
                     />
                   </ListItemButton>

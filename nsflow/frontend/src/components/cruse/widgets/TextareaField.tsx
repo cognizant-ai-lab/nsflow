@@ -43,13 +43,18 @@ export function TextareaField({
 
   // Support x-ui extensions for rows configuration
   const xUi = (schema as Record<string, unknown>)['x-ui'] as Record<string, unknown> | undefined;
-  const rows = (xUi?.rows as number | undefined) || 4;
-  const minRows = (xUi?.minRows as number | undefined) || rows;
+  const rows = xUi?.rows as number | undefined;
+  const minRows = xUi?.minRows as number | undefined;
   const maxRows = xUi?.maxRows as number | undefined;
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value);
   };
+
+  // MUI TextField: Use either 'rows' OR 'minRows/maxRows', not both
+  const rowsProps = rows
+    ? { rows } // Fixed rows
+    : { minRows: minRows || 4, maxRows }; // Dynamic rows with min/max
 
   return (
     <MuiTextField
@@ -64,9 +69,7 @@ export function TextareaField({
       error={!!error}
       helperText={error || description}
       placeholder={placeholder}
-      rows={rows}
-      minRows={minRows}
-      maxRows={maxRows}
+      {...rowsProps}
       inputProps={{
         minLength,
         maxLength,

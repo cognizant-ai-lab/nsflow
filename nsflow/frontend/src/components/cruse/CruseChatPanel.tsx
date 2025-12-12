@@ -26,6 +26,7 @@ import {
   Stack,
   Collapse,
   alpha,
+  CircularProgress,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -108,6 +109,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false); // Thinking spinner state
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -209,6 +211,9 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
       console.log('[CRUSE] Payload string:', payloadString);
       chatWs.send(payloadString);
 
+      // Show "Thinking..." spinner while waiting for AI response
+      setIsWaitingForResponse(true);
+
       // Collapse sample queries section after sending message
       setSampleQueriesExpanded(false);
     } catch (error) {
@@ -248,12 +253,20 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
     sendMessageWithText(formattedMessage);
   };
 
+  const copyToClipboard = (text: string, index: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedMessage(index);
+      setTimeout(() => setCopiedMessage(null), 2000);
+    });
+  };
+
   // Track the last processed AI message count to avoid reprocessing DB-loaded messages
   const lastProcessedCountRef = useRef<number>(0);
 
   // Reset when thread changes
   useEffect(() => {
     lastProcessedCountRef.current = 0;
+    setIsWaitingForResponse(false); // Clear thinking spinner when thread changes
   }, [currentThread?.id]);
 
   useEffect(() => {
@@ -272,10 +285,18 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
 
     // If we just loaded a thread (lastProcessed is 0 but we have messages), initialize the counter
     // This happens when DB messages are synced to ChatContext
+    // BUT: Don't do this if the only message is a new user message (first message in thread)
     if (lastProcessedCountRef.current === 0 && chatMessages.length > 0) {
-      console.log('[CRUSE] Initializing counter for DB-loaded messages:', chatMessages.length);
-      lastProcessedCountRef.current = chatMessages.length;
-      return;
+      // Check if this is just the first user message (not DB-loaded)
+      const isFirstUserMessage = chatMessages.length === 1 && chatMessages[0].sender === 'user';
+
+      if (!isFirstUserMessage) {
+        console.log('[CRUSE] Initializing counter for DB-loaded messages:', chatMessages.length);
+        lastProcessedCountRef.current = chatMessages.length;
+        setIsWaitingForResponse(false); // Clear thinking spinner for DB-loaded messages
+        return;
+      }
+      // If it's the first user message, let it continue to process normally (keep spinner)
     }
 
     // Only process if we have NEW messages (not DB-loaded ones)
@@ -295,6 +316,9 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
     }
 
     console.log('[CRUSE] ✓ New AI message detected, will process widget and save to DB');
+
+    // Hide "Thinking..." spinner when AI message arrives
+    setIsWaitingForResponse(false);
 
     // Request widget and save to DB
     const requestWidgetAndSave = async () => {
@@ -437,12 +461,42 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
           <ScrollableMessageContainer
             messages={chatMessages}
             copiedMessage={copiedMessage}
-            onCopy={(_text, index) => {
-              setCopiedMessage(index);
-              setTimeout(() => setCopiedMessage(null), 2000);
-            }}
+            onCopy={copyToClipboard}
             onWidgetSubmit={handleWidgetSubmit}
           />
+
+          {/* Thinking spinner while waiting for AI response */}
+          {isWaitingForResponse && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                py: 2,
+                px: 3,
+                mb: 2,
+                bgcolor: alpha(theme.palette.primary.main, 0.05),
+                borderRadius: 2,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+              }}
+            >
+              <CircularProgress
+                size={20}
+                thickness={5}
+                sx={{ color: theme.palette.primary.main }}
+              />
+              <Typography
+                variant="body2"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  fontStyle: 'italic',
+                }}
+              >
+                Thinking...
+              </Typography>
+            </Box>
+          )}
+
           <div ref={messagesEndRef} />
         </Box>
       </Panel>

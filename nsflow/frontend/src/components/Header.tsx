@@ -24,7 +24,7 @@ import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon, Chat as ChatIcon
+  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
@@ -153,7 +153,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
               display: { xs: 'none', sm: 'block' }
             }}
           >
-            {isOnEditorPage ? 'Workflow Agent Network Designer' : 'Neuro AI - Multi-Agent Accelerator Client'}
+            {isOnEditorPage ? 'Workflow Agent Network Designer' : isOnCrusePage? 'Context Reactive User Experience' : 'Neuro AI - Multi-Agent Accelerator Client'}
           </Typography>
         </Box>
 
@@ -256,7 +256,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           </Tooltip>
 
           {/* Export Dropdown */}
-          {!isOnEditorPage && (
+          {!isOnEditorPage && !isCrusePage && (
             <>
               <Button
                 variant="outlined"

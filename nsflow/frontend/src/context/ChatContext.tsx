@@ -51,6 +51,7 @@ export type Message = {
 
 type ChatContextType = {
   sessionId: string; // Unique session identifier for WebSocket connections
+  regenerateSessionId: () => void; // Function to regenerate sessionId for new threads
   chatMessages: Message[];
   internalChatMessages: Message[];
   slyDataMessages: Message[];
@@ -111,8 +112,15 @@ type ChatContextType = {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
-  // Generate a unique session ID once when the context is created
-  const [sessionId] = useState<string>(() => generateSessionId());
+  // Generate a unique session ID - can be regenerated for new threads/conversations
+  const [sessionId, setSessionId] = useState<string>(() => generateSessionId());
+
+  // Function to regenerate session ID (for new threads/conversations)
+  const regenerateSessionId = () => {
+    const newSessionId = generateSessionId();
+    console.log('[ChatContext] Regenerating sessionId:', newSessionId);
+    setSessionId(newSessionId);
+  };
 
   const [chatMessages, setChatMessages] = useState<Message[]>([
     { sender: "system", text: "Welcome to the chat!" },
@@ -224,6 +232,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ChatContext.Provider value={{
       sessionId, // Unique session ID for WebSocket connections
+      regenerateSessionId, // Function to regenerate sessionId for new threads
       chatMessages, internalChatMessages, slyDataMessages, logMessages, progressMessages,
 
       addChatMessage, addInternalChatMessage, addSlyDataMessage, addLogMessage, addProgressMessage,

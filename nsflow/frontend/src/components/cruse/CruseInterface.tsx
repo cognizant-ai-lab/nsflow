@@ -15,7 +15,8 @@ limitations under the License.
 */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, Drawer, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { ThreadList } from './ThreadList';
 import CruseTabbedChatPanel from './CruseTabbedChatPanel';
 import { Agent } from './AgentSelector';
@@ -25,10 +26,9 @@ import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { useNeuroSan } from '../../context/NeuroSanContext';
 import { useSnackbar } from '../../context/SnackbarContext';
+import { useTheme } from '../../context/ThemeContext';
 import { SNACKBAR_DURATION, NOTIFICATION_TEXT_TRUNCATE_LENGTH } from '../../constants/notifications';
 import type { MessageOrigin } from '../../types/cruse';
-
-const DRAWER_WIDTH = 280;
 
 /**
  * CruseInterface Component
@@ -51,9 +51,10 @@ export function CruseInterface() {
 
   // Context hooks
   const { apiUrl } = useApiPort();
-  const { activeNetwork, setActiveNetwork, chatMessages, setChatMessages } = useChatContext();
+  const { activeNetwork, setActiveNetwork, chatMessages, setChatMessages, regenerateSessionId } = useChatContext();
   const { host, port, connectionType, isNsReady } = useNeuroSan();
   const { showSnackbar } = useSnackbar();
+  const { theme } = useTheme();
 
   // Track which message IDs have been persisted to avoid infinite loop
   // Using a Set of message IDs instead of content-based keys to allow duplicate content
@@ -123,7 +124,7 @@ export function CruseInterface() {
     };
 
     fetchAgents();
-  }, [apiUrl, host, port, connectionType, isNsReady, activeNetwork, setActiveNetwork]);
+  }, [apiUrl, host, port, connectionType, isNsReady]);
 
   // Fetch root tool name from connectivity when activeNetwork changes
   useEffect(() => {
@@ -266,6 +267,9 @@ export function CruseInterface() {
   // Handle new thread creation
   const handleNewThread = useCallback(async (agentId?: string) => {
     try {
+      // Generate a new session_id for the new thread to prevent message mix-up
+      regenerateSessionId();
+
       // Use provided agentId or fall back to activeNetwork
       const agentIdToUse = agentId || activeNetwork;
       const selectedAgent = agents.find((a) => a.id === agentIdToUse);
@@ -287,7 +291,7 @@ export function CruseInterface() {
     } catch (err) {
       console.error('[CRUSE] Failed to create new thread:', err);
     }
-  }, [createNewThread, loadThread, activeNetwork, agents]);
+  }, [createNewThread, loadThread, activeNetwork, agents, regenerateSessionId]);
 
   // Handle agent selection - updates activeNetwork in ChatContext
   const handleAgentChange = useCallback(
@@ -307,13 +311,15 @@ export function CruseInterface() {
       if (agentThreads.length === 0) {
         // Auto-create first thread for this agent
         console.log('[CRUSE] No threads for agent, creating new thread');
-        await handleNewThread(agentId); // Pass agentId directly since state hasn't updated yet
+        await handleNewThread(agentId); // Pass agentId directly since state hasn't updated yet (regenerates sessionId)
       } else {
+        // Generate new session_id when loading existing thread for different agent
+        regenerateSessionId();
         // Load the most recent thread
         await loadThread(agentThreads[0].id);
       }
     },
-    [setActiveNetwork, threads, loadThread, handleNewThread, setChatMessages]
+    [setActiveNetwork, threads, loadThread, handleNewThread, setChatMessages, regenerateSessionId]
   );
 
   // Handle thread selection
@@ -328,6 +334,9 @@ export function CruseInterface() {
         return;
       }
 
+      // Generate a new session_id when switching threads to prevent message mix-up
+      regenerateSessionId();
+
       // Clear messages before loading new thread for clean transition
       setChatMessages([]);
       persistedMessageIds.current.clear();
@@ -337,7 +346,7 @@ export function CruseInterface() {
         setMobileOpen(false);
       }
     },
-    [loadThread, mobileOpen, setChatMessages, currentThread]
+    [loadThread, mobileOpen, setChatMessages, currentThread, regenerateSessionId]
   );
 
   // Handle thread deletion
@@ -398,71 +407,53 @@ export function CruseInterface() {
     }
   }, [currentThread, messages, updateThreadTitle]);
 
-  // Drawer content
-  const drawer = (
-    <ThreadList
-      threads={threads}
-      activeThreadId={currentThread?.id}
-      isLoading={isLoadingThreads}
-      agents={agents}
-      selectedAgentId={activeNetwork || ''}
-      isLoadingAgents={isLoadingAgents}
-      onThreadSelect={handleThreadSelect}
-      onNewThread={() => handleNewThread(activeNetwork || undefined)}
-      onDeleteThread={handleDeleteThread}
-      onAgentChange={handleAgentChange}
-    />
-  );
-
   return (
-    <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
-      {/* Drawer - Desktop */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', sm: 'block' },
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-            position: 'relative',
-          },
-        }}
-      >
-        {drawer}
-      </Drawer>
+    <PanelGroup direction="horizontal" style={{ height: '100%', width: '100%' }}>
+      {/* Left Panel - Thread List (Resizable) */}
+      <Panel defaultSize={20} minSize={15} maxSize={35}>
+        <Box
+          sx={{
+            height: '100%',
+            backgroundColor: theme.palette.background.paper,
+            borderRight: `1px solid ${theme.palette.divider}`,
+            overflow: 'hidden',
+          }}
+        >
+          <ThreadList
+            threads={threads}
+            activeThreadId={currentThread?.id}
+            isLoading={isLoadingThreads}
+            agents={agents}
+            selectedAgentId={activeNetwork || ''}
+            isLoadingAgents={isLoadingAgents}
+            onThreadSelect={handleThreadSelect}
+            onNewThread={() => handleNewThread(activeNetwork || undefined)}
+            onDeleteThread={handleDeleteThread}
+            onAgentChange={handleAgentChange}
+          />
+        </Box>
+      </Panel>
 
-      {/* Drawer - Mobile */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={handleDrawerToggle}
-        ModalProps={{
-          keepMounted: true, // Better mobile performance
+      {/* Resize Handle */}
+      <PanelResizeHandle
+        style={{
+          width: '4px',
+          backgroundColor: theme.palette.divider,
+          cursor: 'col-resize',
+          transition: 'background-color 0.2s',
         }}
-        sx={{
-          display: { xs: 'block', sm: 'none' },
-          '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-          },
-        }}
-      >
-        {drawer}
-      </Drawer>
+      />
 
-      {/* Main Content */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      {/* Right Panel - Main Content */}
+      <Panel minSize={50}>
+        <Box
+          sx={{
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
         {!activeNetwork ? (
           <Box
             sx={{
@@ -499,7 +490,8 @@ export function CruseInterface() {
             </Typography>
           </Box>
         )}
-      </Box>
-    </Box>
+        </Box>
+      </Panel>
+    </PanelGroup>
   );
 }

@@ -16,7 +16,7 @@
 
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -44,6 +44,15 @@ else:
 if THREADS_DB_URL:
     threads_engine_args = {"connect_args": {"check_same_thread": False}} if THREADS_DB_TYPE == "sqlite" else {}
     threads_engine = create_engine(THREADS_DB_URL, **threads_engine_args)
+
+    # Enable foreign key constraints for SQLite (required for CASCADE DELETE)
+    if THREADS_DB_TYPE == "sqlite":
+        @event.listens_for(threads_engine, "connect")
+        def set_sqlite_pragma(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
     ThreadsSessionLocal = sessionmaker(bind=threads_engine, autocommit=False, autoflush=False)
 else:
     threads_engine = None

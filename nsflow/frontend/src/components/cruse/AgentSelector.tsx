@@ -85,6 +85,23 @@ export function AgentSelector({
         minWidth: 220,
         bgcolor: 'background.paper',
         borderRadius: 1,
+        '& .MuiInputLabel-root': {
+          color: 'text.secondary',
+          '&.Mui-focused': {
+            color: 'primary.main',
+          },
+        },
+        '& .MuiOutlinedInput-root': {
+          '& fieldset': {
+            borderColor: 'divider',
+          },
+          '&:hover fieldset': {
+            borderColor: 'text.secondary',
+          },
+          '&.Mui-focused fieldset': {
+            borderColor: 'primary.main',
+          },
+        },
       }}
     >
       <InputLabel id="agent-selector-label">{label}</InputLabel>
@@ -97,6 +114,30 @@ export function AgentSelector({
         open={open}
         onOpen={() => setOpen(true)}
         onClose={() => setOpen(false)}
+        sx={{
+          '& .MuiSelect-select': {
+            color: 'text.primary',
+          },
+        }}
+        MenuProps={{
+          PaperProps: {
+            sx: {
+              bgcolor: 'background.paper',
+              '& .MuiMenuItem-root': {
+                color: 'text.primary',
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                },
+                '&.Mui-selected': {
+                  bgcolor: 'action.selected',
+                  '&:hover': {
+                    bgcolor: 'action.selected',
+                  },
+                },
+              },
+            },
+          },
+        }}
         renderValue={(value) => {
           const agent = agents.find((a) => a.id === value);
           if (!agent) return '';
@@ -104,7 +145,7 @@ export function AgentSelector({
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <AgentIcon fontSize="small" color="primary" />
-              <Typography variant="body2">{agent.name}</Typography>
+              <Typography variant="body2" color="text.primary">{agent.name}</Typography>
               {agent.status && (
                 <Chip
                   label={agent.status}
@@ -129,7 +170,7 @@ export function AgentSelector({
               <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                   <AgentIcon fontSize="small" color="primary" />
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography variant="body2" fontWeight={400} color="secondary.light">
                     {agent.name}
                   </Typography>
                   {agent.status && (

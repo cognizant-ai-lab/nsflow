@@ -89,32 +89,39 @@ export function getToolName(origin: MessageOrigin[]): string {
 }
 
 /**
- * Formats message timestamp for display.
+ * Formats message timestamp for display in local timezone.
+ * Format: "08:34 AM 12-Dec-2025"
  *
- * @param timestamp - Date or date string
- * @returns Formatted time string (e.g., "2:30 PM" or "Yesterday")
+ * @param timestamp - Date or date string (UTC from DB)
+ * @returns Formatted time string in local timezone
  */
 export function formatMessageTime(timestamp: Date | string): string {
-  const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) {
-    return 'Just now';
-  } else if (diffMins < 60) {
-    return `${diffMins}m ago`;
-  } else if (diffHours < 24) {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return `${diffDays}d ago`;
+  // Parse UTC timestamp from DB
+  // If it's a string without timezone info, assume UTC
+  let date: Date;
+  if (typeof timestamp === 'string') {
+    // If the string doesn't end with 'Z' or have timezone info, append 'Z' to indicate UTC
+    const utcString = timestamp.endsWith('Z') || timestamp.includes('+') || timestamp.includes('T') && timestamp.split('T')[1].includes('-')
+      ? timestamp
+      : timestamp.replace(' ', 'T') + 'Z';
+    date = new Date(utcString);
   } else {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    date = timestamp;
   }
+
+  // Format: "08:34 AM" - toLocaleTimeString automatically converts to local timezone
+  const time = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  // Format: "12-Dec-2025" - date methods automatically use local timezone
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = date.toLocaleString('en-US', { month: 'short' });
+  const year = date.getFullYear();
+
+  return `${time} ${day}-${month}-${year}`;
 }
 
 /**
