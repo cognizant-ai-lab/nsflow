@@ -234,6 +234,12 @@ export function useCrusePersistence() {
     fetchThreads();
   }, [fetchThreads]);
 
+  // Clear current thread (useful when all threads are deleted)
+  const clearCurrentThread = useCallback(() => {
+    setCurrentThread(null);
+    setMessages([]);
+  }, []);
+
   return {
     // State
     threads,
@@ -251,6 +257,7 @@ export function useCrusePersistence() {
     updateThreadTitle,
     deleteThread,
     addMessageToThread,
+    clearCurrentThread,
     setMessages, // Allow manual message updates for optimistic updates
   };
 }

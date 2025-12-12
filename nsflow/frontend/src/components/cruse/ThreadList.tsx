@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import { useState } from 'react';
 import {
   Box,
   List,
@@ -25,11 +26,17 @@ import {
   Divider,
   Typography,
   CircularProgress,
+  Menu,
+  MenuItem,
+  Switch,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Chat as ChatIcon,
+  SettingsTwoTone as SettingsIcon,
+  DeleteSweep as DeleteSweepIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { formatMessageTime } from '../../utils/cruse';
 import { AgentSelector, Agent } from './AgentSelector';
@@ -56,6 +63,12 @@ export interface ThreadListProps {
   onDeleteThread: (threadId: string) => void;
   /** Callback when agent is changed */
   onAgentChange?: (agentId: string) => void;
+  /** Callback when delete all threads is clicked */
+  onDeleteAllThreads?: () => void;
+  /** Show logs state */
+  showLogs?: boolean;
+  /** Callback when toggle logs is clicked */
+  onToggleLogs?: () => void;
 }
 
 /**
@@ -80,14 +93,44 @@ export function ThreadList({
   onNewThread,
   onDeleteThread,
   onAgentChange,
+  onDeleteAllThreads,
+  showLogs = true,
+  onToggleLogs,
 }: ThreadListProps) {
+  const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
+  const settingsOpen = Boolean(settingsAnchorEl);
+
   // Filter threads by selected agent
   const agentThreads = selectedAgentId
     ? threads.filter((t) => t.agent_name === selectedAgentId)
     : [];
 
-  // Show "+ New Thread" button only when agent is selected AND there are existing threads
-  const showNewThreadButton = selectedAgentId && agentThreads.length > 0;
+  // Show "+ New Thread" button when agent is selected
+  const showNewThreadButton = !!selectedAgentId;
+
+  const handleSettingsClick = (event: React.MouseEvent<HTMLElement>) => {
+    setSettingsAnchorEl(event.currentTarget);
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsAnchorEl(null);
+  };
+
+  const handleDeleteAllThreads = () => {
+    handleSettingsClose();
+    // Small delay to allow menu to close and focus to be removed before opening dialog
+    setTimeout(() => {
+      if (onDeleteAllThreads) {
+        onDeleteAllThreads();
+      }
+    }, 150);
+  };
+
+  const handleToggleLogs = () => {
+    if (onToggleLogs) {
+      onToggleLogs();
+    }
+  };
 
   return (
     <Box
@@ -119,7 +162,7 @@ export function ThreadList({
         )}
       </Box>
 
-      {/* Show "+ New Thread" button only when agent is selected and has threads */}
+      {/* Show "+ New Thread" button when agent is selected */}
       {showNewThreadButton && (
         <Box sx={{ px: 1.5, pt: 1.5, pb: 0.5 }}>
           <ListItemButton
@@ -308,6 +351,110 @@ export function ThreadList({
             })}
           </List>
         )}
+      </Box>
+
+      {/* Settings Section at Bottom */}
+      <Box
+        sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          p: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: 'background.paper',
+        }}
+      >
+        <IconButton
+          onClick={handleSettingsClick}
+          sx={{
+            color: 'text.secondary',
+            '&:hover': {
+              color: 'primary.main',
+              bgcolor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.05)'
+                : 'rgba(0, 0, 0, 0.04)',
+            },
+          }}
+        >
+          <SettingsIcon />
+        </IconButton>
+
+        <Menu
+          anchorEl={settingsAnchorEl}
+          open={settingsOpen}
+          onClose={handleSettingsClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'center',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'center',
+          }}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: -1,
+                minWidth: 220,
+                borderRadius: 2,
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 4px 20px rgba(0, 0, 0, 0.5)'
+                  : '0 4px 20px rgba(0, 0, 0, 0.15)',
+              },
+            },
+          }}
+        >
+          <MenuItem
+            onClick={handleDeleteAllThreads}
+            disabled={!selectedAgentId || agentThreads.length === 0}
+            sx={{
+              py: 1.5,
+              px: 2,
+              gap: 1.5,
+              '&:hover': {
+                bgcolor: 'error.main',
+                color: 'error.contrastText',
+                '& .MuiSvgIcon-root': {
+                  color: 'error.contrastText',
+                },
+              },
+            }}
+          >
+            <DeleteSweepIcon fontSize="small" sx={{ color: 'error.main' }} />
+            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
+              Delete All Threads
+            </Typography>
+          </MenuItem>
+
+          <Divider sx={{ my: 0.5 }} />
+
+          <MenuItem
+            onClick={handleToggleLogs}
+            sx={{
+              py: 1.5,
+              px: 2,
+              gap: 1.5,
+            }}
+          >
+            <VisibilityIcon fontSize="small" sx={{ color: 'primary.main' }} />
+            <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
+              Show Logs
+            </Typography>
+            <Switch
+              checked={showLogs}
+              size="small"
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: 'success.main',
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: 'success.main',
+                },
+              }}
+            />
+          </MenuItem>
+        </Menu>
       </Box>
     </Box>
   );

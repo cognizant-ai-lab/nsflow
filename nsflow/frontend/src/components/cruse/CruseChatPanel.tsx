@@ -625,7 +625,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
             <TextField
               multiline
               minRows={2}
-              placeholder="Type a message..."
+              placeholder={currentThread ? "Type a message..." : "Select or create a thread to start chatting"}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => {
@@ -634,6 +634,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
                   sendMessage();
                 }
               }}
+              disabled={!currentThread}
               sx={{
                 flexGrow: 1,
                 "& .MuiOutlinedInput-root": {
@@ -646,7 +647,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
               variant="contained"
               endIcon={<SendIcon />}
               onClick={sendMessage}
-              disabled={!newMessage.trim()}
+              disabled={!currentThread || !newMessage.trim()}
               sx={{
                 minHeight: 40,
                 px: 2,

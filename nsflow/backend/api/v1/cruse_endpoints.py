@@ -213,6 +213,28 @@ async def delete_thread(thread_id: str, db: Session = Depends(get_threads_db)):
     return {"message": "Thread deleted successfully", "thread_id": thread_id}
 
 
+@router.delete("/threads/agent/{agent_name:path}")
+async def delete_all_threads_for_agent(agent_name: str, db: Session = Depends(get_threads_db)):
+    """
+    Delete all threads for a specific agent.
+    """
+    threads = db.query(Thread).filter(Thread.agent_name == agent_name).all()
+
+    if not threads:
+        logger.info(f"No threads found for agent: {agent_name}")
+        return {"message": "No threads found for this agent", "agent_name": agent_name, "deleted_count": 0}
+
+    deleted_count = len(threads)
+
+    for thread in threads:
+        db.delete(thread)
+
+    db.commit()
+
+    logger.info(f"Deleted {deleted_count} threads for agent: {agent_name}")
+    return {"message": f"Deleted {deleted_count} threads successfully", "agent_name": agent_name, "deleted_count": deleted_count}
+
+
 # Message endpoints
 @router.post("/threads/{thread_id}/messages", response_model=MessageResponse)
 async def add_message(

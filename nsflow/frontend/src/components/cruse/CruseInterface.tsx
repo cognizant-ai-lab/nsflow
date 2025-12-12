@@ -15,13 +15,13 @@ limitations under the License.
 */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from '@mui/material';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { ThreadList } from './ThreadList';
 import CruseTabbedChatPanel from './CruseTabbedChatPanel';
 import { Agent } from './AgentSelector';
 import { useCrusePersistence } from '../../hooks/useCrusePersistence';
-import { generateThreadTitle } from '../../utils/cruse/persistence';
+import { generateThreadTitle, deleteAllThreadsForAgent, listThreads } from '../../utils/cruse/persistence';
 import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { useNeuroSan } from '../../context/NeuroSanContext';
@@ -29,6 +29,11 @@ import { useSnackbar } from '../../context/SnackbarContext';
 import { useTheme } from '../../context/ThemeContext';
 import { SNACKBAR_DURATION, NOTIFICATION_TEXT_TRUNCATE_LENGTH } from '../../constants/notifications';
 import type { MessageOrigin } from '../../types/cruse';
+
+export interface CruseInterfaceProps {
+  showLogs?: boolean;
+  onToggleLogs?: () => void;
+}
 
 /**
  * CruseInterface Component
@@ -43,11 +48,12 @@ import type { MessageOrigin } from '../../types/cruse';
  *
  * This is the top-level component for the CRUSE system.
  */
-export function CruseInterface() {
+export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterfaceProps = {}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Context hooks
   const { apiUrl } = useApiPort();
@@ -71,6 +77,8 @@ export function CruseInterface() {
     updateThreadTitle,
     deleteThread,
     addMessageToThread,
+    fetchThreads,
+    clearCurrentThread,
   } = useCrusePersistence();
 
   // Track if URL parameter has been processed
@@ -426,6 +434,82 @@ export function CruseInterface() {
     [deleteThread, threads, showSnackbar]
   );
 
+  // Handle delete all threads for agent
+  const handleDeleteAllThreads = useCallback(() => {
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const handleConfirmDeleteAll = useCallback(async () => {
+    setDeleteConfirmOpen(false);
+
+    if (!activeNetwork) {
+      showSnackbar({
+        message: 'No agent selected',
+        severity: 'error',
+        duration: SNACKBAR_DURATION,
+      });
+      return;
+    }
+
+    try {
+      const agentThreads = threads.filter((t) => t.agent_name === activeNetwork);
+      const threadCount = agentThreads.length;
+
+      if (threadCount === 0) {
+        showSnackbar({
+          message: 'No threads to delete',
+          severity: 'info',
+          duration: SNACKBAR_DURATION,
+        });
+        return;
+      }
+
+      // Call backend API to delete all threads for this agent
+      const data = await deleteAllThreadsForAgent(activeNetwork);
+      console.log('[CRUSE] Deleted all threads:', data);
+
+      // Clear current thread state if it belonged to this agent
+      if (currentThread && currentThread.agent_name === activeNetwork) {
+        // Clear messages in ChatContext
+        setChatMessages([]);
+        persistedMessageIds.current.clear();
+      }
+
+      // Refresh thread list from database
+      await fetchThreads();
+
+      // Re-fetch the updated threads list to check if any threads remain for this agent
+      const updatedThreads = await listThreads();
+      const remainingAgentThreads = updatedThreads.filter((t) => t.agent_name === activeNetwork);
+
+      if (remainingAgentThreads.length > 0) {
+        // Load the first remaining thread for this agent
+        await loadThread(remainingAgentThreads[0].id);
+      } else {
+        // No remaining threads - clear current thread to show "Continue from a thread or create a new thread..."
+        clearCurrentThread();
+      }
+
+      // Show success notification
+      showSnackbar({
+        message: `Deleted ${data.deleted_count} thread${data.deleted_count > 1 ? 's' : ''} for ${activeNetwork}`,
+        severity: 'success',
+        duration: SNACKBAR_DURATION,
+      });
+    } catch (err) {
+      console.error('[CRUSE] Failed to delete all threads:', err);
+      showSnackbar({
+        message: 'Failed to delete threads',
+        severity: 'error',
+        duration: SNACKBAR_DURATION,
+      });
+    }
+  }, [activeNetwork, threads, currentThread, setChatMessages, showSnackbar, fetchThreads, loadThread, clearCurrentThread]);
+
+  const handleCancelDeleteAll = useCallback(() => {
+    setDeleteConfirmOpen(false);
+  }, []);
+
   // Auto-generate thread title from first message
   useEffect(() => {
     if (currentThread && messages.length === 1 && currentThread.title.startsWith('New Chat')) {
@@ -465,6 +549,9 @@ export function CruseInterface() {
             onNewThread={() => handleNewThread(activeNetwork || undefined)}
             onDeleteThread={handleDeleteThread}
             onAgentChange={handleAgentChange}
+            onDeleteAllThreads={handleDeleteAllThreads}
+            showLogs={showLogs}
+            onToggleLogs={onToggleLogs}
           />
         </Box>
       </Panel>
@@ -527,6 +614,47 @@ export function CruseInterface() {
         )}
         </Box>
       </Panel>
+
+      {/* Confirmation Dialog for Delete All Threads */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={handleCancelDeleteAll}
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 3,
+              minWidth: 400,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600}}>
+          Delete All Threads?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete all threads for <strong>{activeNetwork}</strong>?
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={handleCancelDeleteAll}
+            variant="outlined"
+            sx={{ borderRadius: 2 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDeleteAll}
+            variant="contained"
+            color="error"
+            sx={{ borderRadius: 2 }}
+          >
+            Delete All
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PanelGroup>
   );
 }

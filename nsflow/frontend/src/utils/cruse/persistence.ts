@@ -132,6 +132,19 @@ export async function deleteThread(threadId: string): Promise<{ message: string;
   return handleResponse<{ message: string; thread_id: string }>(response);
 }
 
+/**
+ * Deletes all threads for a specific agent.
+ *
+ * @param agentName - Agent name
+ * @returns Success message with deleted count
+ */
+export async function deleteAllThreadsForAgent(agentName: string): Promise<{ message: string; agent_name: string; deleted_count: number }> {
+  const response = await fetchWithTimeout(`${CRUSE_API_BASE}/threads/agent/${encodeURIComponent(agentName)}`, {
+    method: 'DELETE',
+  });
+  return handleResponse<{ message: string; agent_name: string; deleted_count: number }>(response);
+}
+
 // ==================== Message API ====================
 
 /**
