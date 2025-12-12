@@ -186,22 +186,16 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
 
           {/* Home Button */}
           <Button
-            variant={!isOnEditorPage ? "contained" : "outlined"}
+            variant="outlined"
             startIcon={<HomeIcon />}
             onClick={handleNavigateToHome}
             sx={{
-              color: muiTheme.palette.text.primary,
-              borderColor: muiTheme.palette.primary.main,
+              ...((!isOnEditorPage && !isOnCrusePage) ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+              borderColor: muiTheme.palette.secondary.main,
               '&:hover': {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                borderColor: muiTheme.palette.primary.main,
+                backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                borderColor: muiTheme.palette.secondary.main,
               },
-              ...(isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-              }),
-              ...(!isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
-              })
             }}
           >
             Home
@@ -209,22 +203,16 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
 
           {/* Editor Button */}
           <Button
-            variant={isOnEditorPage ? "contained" : "outlined"}
+            variant="outlined"
             startIcon={<CodeIcon />}
             onClick={handleNavigateToEditor}
             sx={{
-              color: muiTheme.palette.text.primary,
-              borderColor: muiTheme.palette.primary.main,
+              ...(isOnEditorPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+              borderColor: muiTheme.palette.secondary.main,
               '&:hover': {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                borderColor: muiTheme.palette.primary.main,
+                backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                borderColor: muiTheme.palette.secondary.main,
               },
-              ...(isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
-              }),
-              ...(!isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-              })
             }}
           >
             Editor
@@ -233,22 +221,16 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           {/* CRUSE Button */}
           <Tooltip title="Context-Reactive User Experience" arrow>
             <Button
-              variant={isOnCrusePage ? "contained" : "outlined"}
+              variant="outlined"
               startIcon={<ChatIcon />}
               onClick={handleNavigateToCruse}
               sx={{
-                color: muiTheme.palette.text.primary,
-                borderColor: muiTheme.palette.primary.main,
+                ...(isOnCrusePage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+                borderColor: muiTheme.palette.secondary.main,
                 '&:hover': {
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                  borderColor: muiTheme.palette.primary.main,
+                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                  borderColor: muiTheme.palette.secondary.main,
                 },
-                ...(isOnCrusePage && {
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
-                }),
-                ...(!isOnCrusePage && {
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                })
               }}
             >
               CRUSE
@@ -317,7 +299,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
                   }}
                 >
                   <EditIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
                     Export as Notebook
                   </Typography>
                 </MenuItem>
@@ -332,7 +314,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
                   }}
                 >
                   <NetworkIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
                     Export as HOCON
                   </Typography>
                 </MenuItem>

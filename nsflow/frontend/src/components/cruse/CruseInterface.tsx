@@ -259,11 +259,6 @@ export function CruseInterface() {
     });
   }, [chatMessages.length]); // Only trigger when message count changes
 
-  // Handle drawer toggle (mobile)
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
-
   // Handle new thread creation
   const handleNewThread = useCallback(async (agentId?: string) => {
     try {

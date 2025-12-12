@@ -110,6 +110,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false); // Thinking spinner state
+  const [previousWidget, setPreviousWidget] = useState<any>(null); // Track last widget for cruse_widget_agent
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -207,8 +208,8 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
       }
 
       const payloadString = JSON.stringify(messagePayload);
-      console.log('[CRUSE] Sending WebSocket message:', messagePayload);
-      console.log('[CRUSE] Payload string:', payloadString);
+      // console.log('[CRUSE] Sending WebSocket message:', messagePayload);
+      // console.log('[CRUSE] Payload string:', payloadString);
       chatWs.send(payloadString);
 
       // Show "Thinking..." spinner while waiting for AI response
@@ -267,6 +268,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
   useEffect(() => {
     lastProcessedCountRef.current = 0;
     setIsWaitingForResponse(false); // Clear thinking spinner when thread changes
+    setPreviousWidget(null); // Clear previous widget for new thread
   }, [currentThread?.id]);
 
   useEffect(() => {
@@ -329,22 +331,26 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
         const MAX_MESSAGES = 5;
         const recentMessages = chatMessages.slice(-MAX_MESSAGES);
 
-        // Format messages for widget agent
-        const formattedMessages = recentMessages.map(msg => ({
+        // Format messages for widget agent (no origin field)
+        const conversation_context = recentMessages.map(msg => ({
           sender: msg.sender === 'user' ? 'HUMAN' : msg.sender === 'agent' ? 'AI' : 'SYSTEM',
           text: typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text),
-          origin: [{ tool: msg.network || activeNetwork || 'unknown', instantiation_index: 1 }],
         }));
 
-        console.log('[CRUSE] Sending last', formattedMessages.length, 'messages to widget agent:', formattedMessages);
+        // Find the last human message for user_intent
+        const lastHumanMessage = [...recentMessages].reverse().find(msg => msg.sender === 'user');
+        const user_intent = lastHumanMessage
+          ? (typeof lastHumanMessage.text === 'string' ? lastHumanMessage.text : JSON.stringify(lastHumanMessage.text))
+          : '';
 
-        // Use oneshot endpoint instead of WebSocket
+        // Build payload with new format
         const payload = JSON.stringify({
-          messages: formattedMessages,
-          request: 'generate_widget',
+          conversation_context,
+          user_intent,
+          previous_widget: previousWidget || null,
         });
 
-        console.log('[CRUSE] Sending widget request to oneshot endpoint');
+        console.log('[CRUSE] cruse_widget_agent Payload:', payload);
 
         const response = await fetch(`${apiUrl}/api/v1/oneshot/chat`, {
           method: 'POST',
@@ -424,6 +430,9 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
             return msg;
           });
           setChatMessages(updatedMessages);
+
+          // Store this widget as previous widget for next request
+          setPreviousWidget(widgetData);
         }
 
         // Mark this message count as processed
