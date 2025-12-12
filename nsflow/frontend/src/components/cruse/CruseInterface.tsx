@@ -47,6 +47,7 @@ export function CruseInterface() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
 
   // Context hooks
   const { apiUrl } = useApiPort();
@@ -54,8 +55,9 @@ export function CruseInterface() {
   const { host, port, connectionType, isNsReady } = useNeuroSan();
   const { showSnackbar } = useSnackbar();
 
-  // Track which message texts have been persisted to avoid infinite loop
-  const persistedMessageKeys = useRef<Set<string>>(new Set());
+  // Track which message IDs have been persisted to avoid infinite loop
+  // Using a Set of message IDs instead of content-based keys to allow duplicate content
+  const persistedMessageIds = useRef<Set<string>>(new Set());
 
   // Persistence hook
   const {
@@ -123,33 +125,64 @@ export function CruseInterface() {
     fetchAgents();
   }, [apiUrl, host, port, connectionType, isNsReady, activeNetwork, setActiveNetwork]);
 
+  // Fetch root tool name from connectivity when activeNetwork changes
+  useEffect(() => {
+    const fetchRootToolName = async () => {
+      if (!activeNetwork || !apiUrl) {
+        setRootToolName('');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/connectivity/${activeNetwork}`);
+        if (!response.ok) {
+          console.log('[CRUSE] Failed to fetch connectivity info for root tool name');
+          setRootToolName(activeNetwork); // Fallback to activeNetwork
+          return;
+        }
+
+        const data = await response.json();
+
+        // Extract root tool name (node with parent === null)
+        const rootNode = data?.nodes?.find((node: any) => node.data?.parent === null);
+        const toolName = rootNode?.id || rootNode?.data?.label || activeNetwork;
+        setRootToolName(toolName);
+        console.log('[CRUSE] Root tool name for origin:', toolName);
+      } catch (error) {
+        console.log('[CRUSE] Error fetching connectivity for root tool name:', error);
+        setRootToolName(activeNetwork); // Fallback to activeNetwork
+      }
+    };
+
+    fetchRootToolName();
+  }, [activeNetwork, apiUrl]);
+
   // Sync DB messages to ChatContext when thread is loaded
   useEffect(() => {
     if (!currentThread) {
       // Clear chat when no thread is selected
       setChatMessages([]);
-      persistedMessageKeys.current.clear();
+      persistedMessageIds.current.clear();
       return;
     }
 
     // Convert DB messages to ChatContext message format (including widgets!)
     const chatContextMessages = messages.map((msg) => ({
+      id: msg.id, // Include ID for tracking
       sender: msg.sender === 'HUMAN' ? 'user' as const : msg.sender === 'AI' ? 'agent' as const : 'system' as const,
       text: msg.text,
       network: msg.origin[0]?.tool || activeNetwork || 'unknown',
+      origin: msg.origin, // Preserve origin from DB
       widget: msg.widget, // Include widget for display
     }));
 
     // Update ChatContext with DB messages
     setChatMessages(chatContextMessages);
 
-    // Mark all loaded messages as persisted
-    persistedMessageKeys.current.clear();
+    // Mark all loaded messages as persisted by their IDs
+    persistedMessageIds.current.clear();
     messages.forEach((msg) => {
-      const sender = msg.sender === 'HUMAN' ? 'user' : msg.sender === 'AI' ? 'agent' : 'system';
-      const network = msg.origin[0]?.tool || activeNetwork || 'unknown';
-      const messageKey = `${sender}:${msg.text}:${network}`;
-      persistedMessageKeys.current.add(messageKey);
+      persistedMessageIds.current.add(msg.id);
     });
 
     console.log('[CRUSE] Synced', messages.length, 'messages from DB to ChatContext');
@@ -179,21 +212,31 @@ export function CruseInterface() {
       return;
     }
 
-    // Create a unique key for this message (sender + text + network)
-    const messageKey = `${lastMessage.sender}:${lastMessage.text}:${lastMessage.network || activeNetwork}`;
-
-    // Skip if we've already persisted this message
-    if (persistedMessageKeys.current.has(messageKey)) {
+    // Check if message has an ID (from DB) - if so, it's already persisted
+    if (lastMessage.id && persistedMessageIds.current.has(lastMessage.id)) {
       return;
     }
 
-    // Mark as persisted
-    persistedMessageKeys.current.add(messageKey);
+    // For new messages without IDs, create a temporary unique key with timestamp
+    // This allows duplicate content but prevents double-saves in the same render cycle
+    const textPreview = typeof lastMessage.text === 'string'
+      ? lastMessage.text.substring(0, 50)
+      : JSON.stringify(lastMessage.text).substring(0, 50);
+    const messageId = lastMessage.id || `temp-${Date.now()}-${textPreview}`;
+
+    // Skip if we've already started persisting this message
+    if (persistedMessageIds.current.has(messageId)) {
+      return;
+    }
+
+    // Mark as persisting
+    persistedMessageIds.current.add(messageId);
 
     // Save USER message to DB
+    // Construct origin using root tool name from connectivity response
     const origin: MessageOrigin[] = [
       {
-        tool: activeNetwork || 'unknown',
+        tool: rootToolName || activeNetwork || 'unknown',
         instantiation_index: 1,
       },
     ];
@@ -202,6 +245,16 @@ export function CruseInterface() {
       sender: 'HUMAN',
       origin,
       text: typeof lastMessage.text === 'string' ? lastMessage.text : JSON.stringify(lastMessage.text),
+    }).then((savedMessage) => {
+      // Once saved, replace temp ID with real ID
+      if (savedMessage?.id) {
+        persistedMessageIds.current.delete(messageId);
+        persistedMessageIds.current.add(savedMessage.id);
+      }
+    }).catch((error) => {
+      console.error('[CRUSE] Failed to save message:', error);
+      // Remove temp ID on failure so it can be retried
+      persistedMessageIds.current.delete(messageId);
     });
   }, [chatMessages.length]); // Only trigger when message count changes
 
@@ -243,7 +296,7 @@ export function CruseInterface() {
 
       // Clear messages immediately to prevent cross-agent message visibility
       setChatMessages([]);
-      persistedMessageKeys.current.clear();
+      persistedMessageIds.current.clear();
 
       // Update active network
       setActiveNetwork(agentId);
@@ -277,7 +330,7 @@ export function CruseInterface() {
 
       // Clear messages before loading new thread for clean transition
       setChatMessages([]);
-      persistedMessageKeys.current.clear();
+      persistedMessageIds.current.clear();
 
       loadThread(threadId);
       if (mobileOpen) {

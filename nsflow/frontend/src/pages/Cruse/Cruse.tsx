@@ -19,6 +19,7 @@ import { useEffect } from "react";
 import { Box } from "@mui/material";
 import Header from "../../components/Header";
 import { CruseInterface } from "../../components/cruse/CruseInterface";
+import EditorLogsPanel from "../../components/EditorLogsPanel";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
 import { ChatProvider, useChatContext } from "../../context/ChatContext";
@@ -50,8 +51,11 @@ const CruseContent: React.FC = () => {
         >
           <Header selectedNetwork="" isCrusePage={true} />
 
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             <CruseInterface />
+
+            {/* Expandable Logs Panel in bottom center-left */}
+            <EditorLogsPanel />
           </Box>
         </Box>
       </NeuroSanProvider>

@@ -113,16 +113,22 @@ class NsWebsocketUtils:
                 message_data = json.loads(websocket_data)
                 user_input = message_data.get("message", "")
                 sly_data = message_data.get("sly_data", {})
+                chat_context = message_data.get("chat_context", {})
+                # log the chat_context message
+                await self.logs_manager.log_event(f"chat_context received: {chat_context}", "nsflow")
 
                 input_processor = user_session["input_processor"]
-                state = user_session["state"]
+                state = user_session.get("state")
                 # Update user input in state
                 state["user_input"] = user_input
                 # Update sly_data in state based on user input
                 state["sly_data"].update(sly_data)
-
+                # Update chat context in state based on user input
+                if bool(chat_context):
+                    state["chat_context"].update(chat_context)
                 # Update the state
                 state = await input_processor.async_process_once(state)
+                await self.logs_manager.log_event(f"state after process_once: {state}", "nsflow")
                 user_session["state"] = state
                 last_chat_response = state.get("last_chat_response")
 
@@ -168,6 +174,7 @@ class NsWebsocketUtils:
             "num_input": 0,
             "chat_filter": chat_filter,
             "sly_data": {},
+            "chat_context": {}
         }
 
         input_processor = AsyncStreamingInputProcessor(

@@ -107,14 +107,16 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
   const [sampleQueries, setSampleQueries] = useState<string[]>([]);
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
+  const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch sample queries when activeNetwork changes
+  // Fetch sample queries and root tool name when activeNetwork changes
   useEffect(() => {
-    const fetchSampleQueries = async () => {
+    const fetchConnectivityInfo = async () => {
       if (!activeNetwork || !apiUrl) {
         setSampleQueries([]);
+        setRootToolName('');
         return;
       }
 
@@ -123,20 +125,30 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
         if (!response.ok) {
           console.log('[CRUSE] Failed to fetch connectivity info');
           setSampleQueries(['What can you help me with?']);
+          setRootToolName(activeNetwork); // Fallback to activeNetwork
           return;
         }
 
         const data = await response.json();
+
+        // Extract sample queries
         const queries = data?.metadata?.sample_queries || [];
         const allQueries = [...queries, 'What can you help me with?'];
         setSampleQueries(allQueries);
+
+        // Extract root tool name (node with parent === null)
+        const rootNode = data?.nodes?.find((node: any) => node.data?.parent === null);
+        const toolName = rootNode?.id || rootNode?.data?.label || activeNetwork;
+        setRootToolName(toolName);
+        console.log('[CRUSE] Root tool name for origin:', toolName);
       } catch (error) {
-        console.log('[CRUSE] Error fetching sample queries:', error);
+        console.log('[CRUSE] Error fetching connectivity info:', error);
         setSampleQueries(['What can you help me with?']);
+        setRootToolName(activeNetwork); // Fallback to activeNetwork
       }
     };
 
-    fetchSampleQueries();
+    fetchConnectivityInfo();
   }, [activeNetwork, apiUrl]);
 
   // Auto-scroll to bottom when messages change
@@ -144,93 +156,96 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Send message function
-  const sendMessage = useCallback(() => {
-    if (!newMessage.trim() || !chatWs) return;
+  // Fetch chat_context from backend
+  const getChatContextForSend = useCallback(async () => {
+    if (!currentThread?.id || !apiUrl) {
+      return null;
+    }
+
+    // Only send chat_context if there are existing messages in the thread
+    if (chatMessages.length === 0) {
+      console.log('[CRUSE] No existing messages, skipping chat_context');
+      return null;
+    }
 
     try {
+      const response = await fetch(`${apiUrl}/api/v1/cruse/threads/${currentThread.id}/chat_context`);
+      if (!response.ok) {
+        console.error('[CRUSE] Failed to fetch chat_context:', response.statusText);
+        return null;
+      }
+      const data = await response.json();
+      console.log('[CRUSE] Fetched chat_context:', data);
+      return data.chat_context; // Return just the chat_context part
+    } catch (error) {
+      console.error('[CRUSE] Error fetching chat_context:', error);
+      return null;
+    }
+  }, [currentThread?.id, apiUrl, chatMessages.length]);
+
+  // Send message with text and chat_context
+  const sendMessageWithText = useCallback(async (messageText: string) => {
+    if (!messageText.trim() || !chatWs) return;
+
+    try {
+      // Fetch chat_context before sending
+      const chatContextToSend = await getChatContextForSend();
+
       // Add user message to UI
       addChatMessage({
         sender: "user",
-        text: newMessage,
+        text: messageText,
         network: activeNetwork,
       });
 
-      // Send to WebSocket (main agent only)
-      const message = { message: newMessage };
-      chatWs.send(JSON.stringify(message));
-      console.log('[CRUSE] Message sent to main agent:', newMessage);
+      // Send to WebSocket with chat_context if available
+      const messagePayload: any = { message: messageText };
+      if (chatContextToSend) {
+        messagePayload.chat_context = chatContextToSend;
+      }
 
-      setNewMessage("");
+      const payloadString = JSON.stringify(messagePayload);
+      console.log('[CRUSE] Sending WebSocket message:', messagePayload);
+      console.log('[CRUSE] Payload string:', payloadString);
+      chatWs.send(payloadString);
 
       // Collapse sample queries section after sending message
       setSampleQueriesExpanded(false);
     } catch (error) {
       console.error('[CRUSE] Error sending message:', error);
     }
-  }, [newMessage, chatWs, addChatMessage, activeNetwork]);
+  }, [chatWs, addChatMessage, activeNetwork, getChatContextForSend]);
+
+  // Send message function
+  const sendMessage = useCallback(() => {
+    if (!newMessage.trim()) return;
+    sendMessageWithText(newMessage);
+    setNewMessage("");
+  }, [newMessage, sendMessageWithText]);
 
   const handleSampleQueryClick = (query: string) => {
-    // Send the query directly without setting it in the input field
-    if (!chatWs) return;
-
-    try {
-      // Add user message to UI
-      addChatMessage({
-        sender: "user",
-        text: query,
-        network: activeNetwork,
-      });
-
-      // Send to WebSocket (main agent only)
-      const message = { message: query };
-      chatWs.send(JSON.stringify(message));
-      console.log('[CRUSE] Sample query sent to main agent:', query);
-
-      // Collapse sample queries section after sending
-      setSampleQueriesExpanded(false);
-    } catch (error) {
-      console.error('[CRUSE] Error sending sample query:', error);
-    }
+    sendMessageWithText(query);
   };
 
   const handleWidgetSubmit = (data: Record<string, unknown>) => {
-    if (!chatWs) return;
+    // Format widget data as a readable message
+    const formattedMessage = Object.entries(data)
+      .map(([key, value]) => {
+        // Format dates nicely
+        if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+          const date = new Date(value);
+          return `${key}: ${date.toLocaleDateString()}`;
+        }
+        // Format arrays
+        if (Array.isArray(value)) {
+          return `${key}: ${value.join(', ')}`;
+        }
+        return `${key}: ${value}`;
+      })
+      .join('\n');
 
-    try {
-      // Format widget data as a readable message
-      const formattedMessage = Object.entries(data)
-        .map(([key, value]) => {
-          // Format dates nicely
-          if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
-            const date = new Date(value);
-            return `${key}: ${date.toLocaleDateString()}`;
-          }
-          // Format arrays
-          if (Array.isArray(value)) {
-            return `${key}: ${value.join(', ')}`;
-          }
-          return `${key}: ${value}`;
-        })
-        .join('\n');
-
-      // Add user message to UI
-      addChatMessage({
-        sender: "user",
-        text: formattedMessage,
-        network: activeNetwork,
-      });
-
-      // Send to WebSocket (main agent only)
-      const message = { message: formattedMessage };
-      chatWs.send(JSON.stringify(message));
-      console.log('[CRUSE] Widget submission sent to main agent:', data);
-
-      // Collapse sample queries section after sending message
-      setSampleQueriesExpanded(false);
-    } catch (error) {
-      console.error('[CRUSE] Error sending widget submission:', error);
-    }
+    console.log('[CRUSE] Widget submission:', data);
+    sendMessageWithText(formattedMessage);
   };
 
   // Track the last processed AI message count to avoid reprocessing DB-loaded messages
@@ -351,9 +366,10 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
 
       // ALWAYS save the complete AI message to DB (with or without widget)
       try {
+        // Construct origin using root tool name from connectivity response
         const origin: MessageOrigin[] = [
           {
-            tool: activeNetwork || 'unknown',
+            tool: rootToolName || activeNetwork || 'unknown',
             instantiation_index: 1,
           },
         ];

@@ -33,7 +33,7 @@ import {
   VolumeUp as VolumeIcon
 } from "@mui/icons-material";
 
-import { Message } from "../types/chat";
+import { Message } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
 import { DynamicWidgetCard } from "./cruse/DynamicWidgetCard";
 

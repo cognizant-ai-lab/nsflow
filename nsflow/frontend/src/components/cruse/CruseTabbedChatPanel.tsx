@@ -122,6 +122,7 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
             sender: "agent",
             text: data.message.text,
             network: activeNetwork
+            // Note: origin will be constructed from connectivity response when saving to DB
           });
         }
       } catch (err) {

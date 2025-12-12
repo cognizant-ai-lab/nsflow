@@ -16,6 +16,7 @@
 
 import json
 import logging
+import os
 from datetime import datetime
 from datetime import timezone
 from typing import List, Optional
@@ -320,3 +321,95 @@ async def get_messages(
 
     logger.info(f"Retrieved {len(message_responses)} messages for thread {thread_id}")
     return message_responses
+
+
+@router.get("/threads/{thread_id}/chat_context")
+async def get_chat_context(
+    thread_id: str,
+    max_history: Optional[int] = None,
+    db: Session = Depends(get_threads_db)):
+    """
+    Build chat_context from the last N messages in a thread.
+
+    Args:
+        thread_id: The thread ID
+        max_history: Maximum number of messages to include (defaults to MAX_MESSAGE_HISTORY env var or 10)
+
+    Returns:
+        A chat_context dictionary with chat_histories containing recent messages
+    """
+    # Get max history from env variable or default to 10
+    if max_history is None:
+        max_history = int(os.getenv('MAX_MESSAGE_HISTORY', '10'))
+
+    # Verify thread exists
+    thread = db.query(Thread).filter(Thread.id == thread_id).first()
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    # Get the last N messages for the thread
+    messages = (
+        db.query(Message)
+        .filter(Message.thread_id == thread_id)
+        .order_by(Message.created_at.desc())
+        .limit(max_history)
+        .all()
+    )
+
+    # Reverse to get chronological order (oldest to newest)
+    messages = list(reversed(messages))
+
+    # If no messages, return empty chat_context
+    if not messages:
+        return {"chat_context": {"chat_histories": []}}
+
+    # Parse origin from the first message to use as chat_history origin
+    first_origin = []
+    if messages[0].origin:
+        try:
+            origin_data = json.loads(messages[0].origin) if isinstance(messages[0].origin, str) else messages[0].origin
+            if isinstance(origin_data, list):
+                first_origin = origin_data
+            elif isinstance(origin_data, dict):
+                first_origin = [origin_data]
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(f"Could not parse origin for message {messages[0].id}")
+            first_origin = []
+
+    # Build messages array
+    chat_messages = []
+    for msg in messages:
+        # Parse origin for this message
+        msg_origin = []
+        if msg.origin:
+            try:
+                origin_data = json.loads(msg.origin) if isinstance(msg.origin, str) else msg.origin
+                if isinstance(origin_data, list):
+                    msg_origin = origin_data
+                elif isinstance(origin_data, dict):
+                    msg_origin = [origin_data]
+            except (json.JSONDecodeError, ValueError):
+                logger.warning(f"Could not parse origin for message {msg.id}")
+                msg_origin = []
+
+        # Map sender to type (HUMAN or AI)
+        message_type = "HUMAN" if msg.sender in ["user", "HUMAN"] else "AI"
+
+        chat_messages.append({
+            "type": message_type,
+            "origin": msg_origin,
+            "text": msg.text
+        })
+
+    # Build the chat_context structure (note: no outer wrapper, this IS the chat_context)
+    chat_context = {
+        "chat_histories": [
+            {
+                "origin": first_origin,
+                "messages": chat_messages
+            }
+        ]
+    }
+
+    logger.info(f"Built chat_context for thread {thread_id} with {len(chat_messages)} messages")
+    return {"chat_context": chat_context}

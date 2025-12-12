@@ -24,5 +24,6 @@ export type Message = {
     id?: string;
     ts?: number;
     widget?: any; // For CRUSE dynamic widgets
+    origin?: Array<{ tool: string; instantiation_index: number }>; // Origin from AI messages
   };
   

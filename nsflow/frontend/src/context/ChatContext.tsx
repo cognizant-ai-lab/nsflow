@@ -35,12 +35,18 @@ const generateSessionId = (): string => {
   return `${prefix}${ts}_${randHex}`;
 };
 
-type Message = {
+export type Message = {
   sender: "system" | "internal" | "user" | "agent" | string;
   text: string | object; // Allow objects for SlyData messages;
   network?: string;
   otrace?: string[];
   connectionId?: string;
+
+  // Optional fields for CRUSE and message tracking
+  id?: string; // Message ID from database
+  ts?: number; // Timestamp
+  widget?: any; // For CRUSE dynamic widgets
+  origin?: Array<{ tool: string; instantiation_index: number }>; // Origin from AI messages
 };
 
 type ChatContextType = {
