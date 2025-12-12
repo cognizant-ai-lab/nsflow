@@ -23,7 +23,6 @@ import {
   SelectChangeEvent,
   Box,
   Typography,
-  Chip,
 } from '@mui/material';
 import { SmartToy as AgentIcon } from '@mui/icons-material';
 
@@ -80,9 +79,9 @@ export function AgentSelector({
 
   return (
     <FormControl
+      fullWidth
       size={size}
       sx={{
-        minWidth: 220,
         bgcolor: 'background.paper',
         borderRadius: 1,
         '& .MuiInputLabel-root': {
@@ -123,6 +122,7 @@ export function AgentSelector({
           PaperProps: {
             sx: {
               bgcolor: 'background.paper',
+              maxWidth: '100%',
               '& .MuiMenuItem-root': {
                 color: 'text.primary',
                 '&:hover': {
@@ -137,21 +137,43 @@ export function AgentSelector({
               },
             },
           },
+          anchorOrigin: {
+            vertical: 'bottom',
+            horizontal: 'left',
+          },
+          transformOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
         }}
         renderValue={(value) => {
           const agent = agents.find((a) => a.id === value);
           if (!agent) return '';
 
           return (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AgentIcon fontSize="small" color="primary" />
-              <Typography variant="body2" color="text.primary">{agent.name}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden' }}>
+              <AgentIcon fontSize="small" color="primary" sx={{ flexShrink: 0 }} />
+              <Typography
+                variant="body2"
+                color="text.primary"
+                sx={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  flex: 1,
+                }}
+              >
+                {agent.name}
+              </Typography>
               {agent.status && (
-                <Chip
-                  label={agent.status}
-                  size="small"
-                  color={agent.status === 'online' ? 'success' : 'default'}
-                  sx={{ height: 20, fontSize: '0.7rem' }}
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: agent.status === 'online' ? 'success.main' : 'grey.500',
+                    flexShrink: 0,
+                  }}
                 />
               )}
             </Box>
@@ -167,18 +189,31 @@ export function AgentSelector({
         ) : (
           agents.map((agent) => (
             <MenuItem key={agent.id} value={agent.id}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', overflow: 'hidden' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                  <AgentIcon fontSize="small" color="primary" />
-                  <Typography variant="body2" fontWeight={400} color="secondary.light">
+                  <AgentIcon fontSize="small" color="primary" sx={{ flexShrink: 0 }} />
+                  <Typography
+                    variant="body2"
+                    fontWeight={600}
+                    color="success.light"
+                    sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flex: 1,
+                    }}
+                  >
                     {agent.name}
                   </Typography>
                   {agent.status && (
-                    <Chip
-                      label={agent.status}
-                      size="small"
-                      color={agent.status === 'online' ? 'success' : 'default'}
-                      sx={{ height: 18, fontSize: '0.65rem', ml: 'auto' }}
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: agent.status === 'online' ? 'success.main' : 'grey.500',
+                        flexShrink: 0,
+                      }}
                     />
                   )}
                 </Box>
@@ -186,7 +221,12 @@ export function AgentSelector({
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ pl: 3 }}
+                    sx={{
+                      pl: 3,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
                   >
                     {agent.description}
                   </Typography>
