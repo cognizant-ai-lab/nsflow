@@ -49,6 +49,20 @@ const HomeContent: React.FC = () => {
     }
   }, [setActiveNetwork]);
 
+  // Update URL when selectedNetwork changes (user selects from sidebar)
+  useEffect(() => {
+    if (selectedNetwork) {
+      const currentUrl = new URL(window.location.href);
+      const currentNetworkParam = currentUrl.searchParams.get('network');
+
+      // Only update URL if the network parameter is different
+      if (currentNetworkParam !== selectedNetwork) {
+        currentUrl.searchParams.set('network', selectedNetwork);
+        window.history.replaceState({}, '', currentUrl.toString());
+      }
+    }
+  }, [selectedNetwork]);
+
   return (
     <ReactFlowProvider>
       <ApiPortProvider>

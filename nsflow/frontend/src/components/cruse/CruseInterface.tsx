@@ -73,6 +73,9 @@ export function CruseInterface() {
     addMessageToThread,
   } = useCrusePersistence();
 
+  // Track if URL parameter has been processed
+  const urlParamProcessed = useRef(false);
+
   // Fetch agents from backend (similar to Sidebar.tsx pattern)
   useEffect(() => {
     const fetchAgents = async () => {
@@ -114,7 +117,7 @@ export function CruseInterface() {
         const sortedAgents = agentList.sort((a, b) => a.name.localeCompare(b.name));
         setAgents(sortedAgents);
 
-        // DO NOT set agent by default - let user select
+        // DO NOT set agent by default - let user select or use URL parameter
       } catch (err) {
         console.error('[CRUSE] Failed to fetch agents:', err);
         setAgents([]);
@@ -317,6 +320,43 @@ export function CruseInterface() {
     [setActiveNetwork, threads, loadThread, handleNewThread, setChatMessages, regenerateSessionId]
   );
 
+  // Handle URL parameters to set the active network on page load
+  useEffect(() => {
+    if (urlParamProcessed.current || agents.length === 0 || isLoadingAgents) {
+      return;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const networkParam = urlParams.get('network');
+
+    if (networkParam) {
+      // Check if the agent from URL exists in the available agents
+      const agentExists = agents.some((a) => a.id === networkParam);
+      if (agentExists && networkParam !== activeNetwork) {
+        console.log('[CRUSE] Setting agent from URL parameter:', networkParam);
+        urlParamProcessed.current = true;
+        handleAgentChange(networkParam);
+      } else if (!agentExists) {
+        console.warn('[CRUSE] Agent from URL parameter not found:', networkParam);
+      }
+    }
+  }, [agents, isLoadingAgents, activeNetwork, handleAgentChange]); // Run when agents are loaded
+
+  // Update URL when activeNetwork changes (user selects agent from dropdown)
+  useEffect(() => {
+    if (activeNetwork) {
+      const currentUrl = new URL(window.location.href);
+      const currentNetworkParam = currentUrl.searchParams.get('network');
+
+      // Only update URL if the network parameter is different
+      if (currentNetworkParam !== activeNetwork) {
+        currentUrl.searchParams.set('network', activeNetwork);
+        window.history.replaceState({}, '', currentUrl.toString());
+        console.log('[CRUSE] Updated URL with network parameter:', activeNetwork);
+      }
+    }
+  }, [activeNetwork]);
+
   // Handle thread selection
   const handleThreadSelect = useCallback(
     (threadId: string) => {
@@ -481,7 +521,7 @@ export function CruseInterface() {
             }}
           >
             <Typography variant="h6" color="text.secondary">
-              Creating new thread...
+              Continue from a thread or create a new thread...
             </Typography>
           </Box>
         )}
