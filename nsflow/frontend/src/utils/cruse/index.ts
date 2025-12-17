@@ -63,21 +63,6 @@ export {
   retryWithBackoff,
 } from './persistence';
 
-// Widget agent client
-export {
-  createWidgetAgentConnection,
-  requestWidgetFromAgent,
-  getWidgetAgentMessageCount,
-} from './widgetAgentClient';
-
-// Theme agent client
-export {
-  createThemeAgentConnection,
-  requestThemeFromAgent,
-  validateThemeConfig,
-  DEFAULT_THEME,
-} from './themeAgentClient';
-
 // Re-export types for convenience
 export type {
   ValidationResult,

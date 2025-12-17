@@ -15,9 +15,7 @@ limitations under the License.
 */
 
 // CRUSE hooks
-export { useSmartAutoScroll } from './useSmartAutoScroll';
 export { useCrusePersistence } from './useCrusePersistence';
-export { useCruseTheme } from './useCruseTheme';
 
 // Existing hooks
 export { useChatControls } from './useChatControls';

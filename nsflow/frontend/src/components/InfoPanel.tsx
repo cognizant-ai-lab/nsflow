@@ -151,7 +151,7 @@ const InfoPanel = () => {
               }}
             >
               <GitHubIcon sx={{ fontSize: 18 }} />
-              <Typography variant="body2">
+              <Typography variant="body2" color="inherit">
                 neuro-san v. {versions.neuroSan}
               </Typography>
             </Link>
@@ -175,7 +175,7 @@ const InfoPanel = () => {
               }}
             >
               <GitHubIcon sx={{ fontSize: 18 }} />
-              <Typography variant="body2">
+              <Typography variant="body2" color="inherit">
                 nsflow v. {versions.nsflow}
               </Typography>
             </Link>
@@ -199,7 +199,7 @@ const InfoPanel = () => {
             }}
           >
             <GitHubIcon sx={{ fontSize: 18 }} />
-            <Typography variant="body2">
+            <Typography variant="body2" color="inherit">
               neuro-san-studio
             </Typography>
           </Link>
@@ -222,7 +222,7 @@ const InfoPanel = () => {
             }}
           >
             <ApiIcon sx={{ fontSize: 18 }} />
-            <Typography variant="body2">
+            <Typography variant="body2" color="inherit">
               FastAPI Specs
             </Typography>
           </Link>
@@ -245,7 +245,7 @@ const InfoPanel = () => {
             }}
           >
             <BookIcon sx={{ fontSize: 18 }} />
-            <Typography variant="body2">
+            <Typography variant="body2" color="inherit">
               Examples and User Guide
             </Typography>
           </Link>

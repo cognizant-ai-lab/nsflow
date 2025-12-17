@@ -30,9 +30,6 @@ export { CruseInterface } from './CruseInterface';
 export { ThreadList } from './ThreadList';
 export type { ThreadListProps } from './ThreadList';
 
-export { ChatArea } from './ChatArea';
-export type { ChatAreaProps } from './ChatArea';
-
 export { AgentSelector } from './AgentSelector';
 export type { AgentSelectorProps, Agent } from './AgentSelector';
 

@@ -225,7 +225,7 @@ const CruseContent: React.FC = () => {
     <ApiPortProvider>
       <NeuroSanProvider>
         <GlassEffectProvider>
-          {/* Background Canvas - Vanta needs container to be relative */}
+          {/* Background Canvas - needs container to be relative */}
           {cruseThemeEnabled && backgroundSchema && (
             <Box
               sx={{

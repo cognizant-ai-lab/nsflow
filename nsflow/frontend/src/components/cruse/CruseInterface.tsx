@@ -46,7 +46,7 @@ export interface CruseInterfaceProps {
  * Integrates all components:
  * - AppBar with AgentSelector
  * - Left drawer with ThreadList
- * - Central ChatArea with dynamic theme
+ * - Central CruseChatPanel with dynamic theme
  * - Thread and message persistence
  * - WebSocket integration with main agent and widget agent
  *
