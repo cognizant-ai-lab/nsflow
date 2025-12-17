@@ -25,6 +25,7 @@ import {
   Typography,
   TextField,
   InputAdornment,
+  Tooltip,
 } from '@mui/material';
 import { SmartToy as AgentIcon, Search as SearchIcon } from '@mui/icons-material';
 import { useGlassEffect } from '../../context/GlassEffectContext';
@@ -51,6 +52,14 @@ export interface AgentSelectorProps {
   size?: 'small' | 'medium';
   /** Custom label */
   label?: string;
+  /** External control of open state */
+  open?: boolean;
+  /** Callback when dropdown opens */
+  onOpen?: () => void;
+  /** Callback when dropdown closes */
+  onClose?: () => void;
+  /** Collapsed mode - shows only icon */
+  collapsed?: boolean;
 }
 
 /**
@@ -71,11 +80,31 @@ export function AgentSelector({
   onAgentChange,
   size = 'small',
   label = 'Select Agent',
+  open: externalOpen,
+  onOpen: externalOnOpen,
+  onClose: externalOnClose,
+  collapsed = false,
 }: AgentSelectorProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { getGlassStyles } = useGlassEffect();
+
+  // Use external open state if provided, otherwise use internal
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (externalOpen !== undefined) {
+      // External control
+      if (value && externalOnOpen) {
+        externalOnOpen();
+      } else if (!value && externalOnClose) {
+        externalOnClose();
+      }
+    } else {
+      // Internal control
+      setInternalOpen(value);
+    }
+  };
 
   // Auto-focus search input when dropdown opens
   useEffect(() => {
@@ -184,6 +213,21 @@ export function AgentSelector({
           },
         }}
         renderValue={(value) => {
+          // In collapsed mode, show only search icon
+          if (collapsed) {
+            return (
+              <Tooltip title={selectedAgentId ? agents.find(a => a.id === selectedAgentId)?.name || 'Select Agent' : 'Select Agent'} placement="right">
+                <SearchIcon
+                  sx={{
+                    color: selectedAgentId ? 'primary.main' : 'text.secondary',
+                    fontSize: '1.25rem',
+                  }}
+                />
+              </Tooltip>
+            );
+          }
+
+          // Normal mode - show agent name
           const agent = agents.find((a) => a.id === value);
           if (!agent) return '';
 

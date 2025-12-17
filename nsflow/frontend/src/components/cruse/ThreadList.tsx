@@ -139,6 +139,8 @@ export function ThreadList({
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const settingsOpen = Boolean(settingsAnchorEl);
 
+  const [agentSelectorOpen, setAgentSelectorOpen] = useState(false);
+
   // Filter threads by selected agent
   const agentThreads = selectedAgentId
     ? threads.filter((t) => t.agent_name === selectedAgentId)
@@ -464,7 +466,7 @@ export function ThreadList({
     return (
       <Box
         sx={{
-          height: '100%',
+          height: 'calc(100% - 48px)',
           width: '60px',
           display: 'flex',
           flexDirection: 'column',
@@ -480,6 +482,8 @@ export function ThreadList({
             onClick={handleToggleCollapse}
             sx={{
               m: 1,
+              width: 40,
+              height: 40,
               color: 'text.secondary',
               '&:hover': {
                 color: 'primary.main',
@@ -493,21 +497,77 @@ export function ThreadList({
 
         <Divider sx={{ mx: 1 }} />
 
-        {/* Agent Search Icon */}
-        <Tooltip title="Select Agent" placement="right">
-          <IconButton
-            sx={{
-              m: 1,
-              color: selectedAgentId ? 'primary.main' : 'text.secondary',
-              '&:hover': {
+        {/* Agent Selector - Shows as Search Icon in collapsed mode */}
+        {isLoadingAgents ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : (
+          <>
+            {/* Hidden AgentSelector - controlled externally */}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: -9999,
+                opacity: 0,
+                pointerEvents: agentSelectorOpen ? 'auto' : 'none',
+              }}
+            >
+              <AgentSelector
+                agents={agents}
+                selectedAgentId={selectedAgentId}
+                onAgentChange={(agentId) => {
+                  if (onAgentChange) {
+                    onAgentChange(agentId);
+                  }
+                }}
+                open={agentSelectorOpen}
+                onOpen={() => setAgentSelectorOpen(true)}
+                onClose={() => setAgentSelectorOpen(false)}
+              />
+            </Box>
+
+            {/* Visible Search Icon Button */}
+            <Tooltip title="Select Agent" placement="right">
+              <IconButton
+                onClick={() => setAgentSelectorOpen(true)}
+                sx={{
+                  m: 1,
+                  width: 40,
+                  height: 40,
+                  color: selectedAgentId ? 'primary.main' : 'text.secondary',
+                  '&:hover': {
+                    color: 'primary.main',
+                    bgcolor: 'action.hover',
+                  },
+                }}
+              >
+                <SearchIcon />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
+
+        {/* Add New Thread Icon */}
+        {showNewThreadButton && (
+          <Tooltip title="New Thread" placement="right">
+            <IconButton
+              onClick={onNewThread}
+              sx={{
+                m: 1,
+                mt: 0,
+                width: 40,
+                height: 40,
                 color: 'primary.main',
-                bgcolor: 'action.hover',
-              },
-            }}
-          >
-            <SearchIcon />
-          </IconButton>
-        </Tooltip>
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                },
+              }}
+            >
+              <AddIcon />
+            </IconButton>
+          </Tooltip>
+        )}
 
         <Divider sx={{ mx: 1 }} />
 
@@ -558,6 +618,8 @@ export function ThreadList({
             onClick={handleSettingsClick}
             sx={{
               m: 1,
+              width: 40,
+              height: 40,
               color: 'text.secondary',
               '&:hover': {
                 color: 'primary.main',
@@ -616,7 +678,7 @@ export function ThreadList({
       {/* Collapse Button + Agent Selector */}
       <Box
         sx={{
-          p: 2,
+          p: 1,
           borderBottom: 1,
           borderColor: 'divider',
           display: 'flex',
@@ -627,8 +689,9 @@ export function ThreadList({
         <Tooltip title="Collapse" placement="right">
           <IconButton
             onClick={handleToggleCollapse}
-            size="small"
             sx={{
+              width: 40,
+              height: 40,
               color: 'text.secondary',
               '&:hover': {
                 color: 'primary.main',
@@ -861,6 +924,8 @@ export function ThreadList({
         <IconButton
           onClick={handleSettingsClick}
           sx={{
+            width: 40,
+            height: 40,
             color: 'text.secondary',
             '&:hover': {
               color: 'primary.main',
