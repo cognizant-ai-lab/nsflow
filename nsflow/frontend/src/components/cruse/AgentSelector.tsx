@@ -25,6 +25,7 @@ import {
   Typography,
 } from '@mui/material';
 import { SmartToy as AgentIcon } from '@mui/icons-material';
+import { useGlassEffect } from '../../context/GlassEffectContext';
 
 export interface Agent {
   /** Unique agent identifier */
@@ -70,6 +71,7 @@ export function AgentSelector({
   label = 'Select Agent',
 }: AgentSelectorProps) {
   const [open, setOpen] = useState(false);
+  const { getGlassStyles } = useGlassEffect();
 
   const handleChange = (event: SelectChangeEvent<string>) => {
     const agentId = event.target.value;
@@ -77,12 +79,14 @@ export function AgentSelector({
     setOpen(false);
   };
 
+  const glassStyles = getGlassStyles();
+
   return (
     <FormControl
       fullWidth
       size={size}
       sx={{
-        bgcolor: 'background.paper',
+        ...glassStyles,
         borderRadius: 1,
         '& .MuiInputLabel-root': {
           color: 'text.secondary',

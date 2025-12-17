@@ -36,11 +36,13 @@ import {
 import { useApiPort } from "../../context/ApiPortContext";
 import { useChatContext } from "../../context/ChatContext";
 import { useTheme } from "../../context/ThemeContext";
+import { useGlassEffect } from "../../context/GlassEffectContext";
 import ScrollableMessageContainer from "../ScrollableMessageContainer";
 import type { MessageOrigin, CruseThread } from "../../types/cruse";
 
 interface CruseChatPanelProps {
   currentThread: CruseThread | null;
+  cruseThemeEnabled?: boolean;
   onSaveMessage: (messageRequest: any) => Promise<void>;
 }
 
@@ -82,9 +84,10 @@ function parseWidgetResponse(response: any): any {
   return response;
 }
 
-const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMessage }) => {
+const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage }) => {
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
+  const { getGlassStyles } = useGlassEffect();
   const {
     activeNetwork,
     chatMessages,
@@ -449,6 +452,8 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
 
   // TODO: Add one-time theme agent call on agent selection
 
+  const glassStyles = cruseThemeEnabled ? getGlassStyles() : {};
+
   return (
     <PanelGroup direction="vertical">
       {/* Panel 1: Messages */}
@@ -459,7 +464,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
             overflowY: "auto",
             px: 2,
             py: 1,
-            backgroundColor: theme.palette.background.default,
+            ...(cruseThemeEnabled ? glassStyles : { backgroundColor: theme.palette.background.default }),
             "&::-webkit-scrollbar": { width: 8 },
             "&::-webkit-scrollbar-thumb": {
               backgroundColor: alpha(theme.palette.text.primary, 0.2),
@@ -472,6 +477,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
             copiedMessage={copiedMessage}
             onCopy={copyToClipboard}
             onWidgetSubmit={handleWidgetSubmit}
+            isCrusePage={cruseThemeEnabled}
           />
 
           {/* Thinking spinner while waiting for AI response */}
@@ -530,6 +536,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
             display: "flex",
             flexDirection: "column",
             gap: 0.5,
+            ...(cruseThemeEnabled ? glassStyles : { backgroundColor: theme.palette.background.default }),
           }}
         >
           {/* Sample Queries Section */}
@@ -638,7 +645,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
               sx={{
                 flexGrow: 1,
                 "& .MuiOutlinedInput-root": {
-                  backgroundColor: theme.palette.background.paper,
+                  ...(cruseThemeEnabled ? glassStyles : { backgroundColor: theme.palette.background.paper }),
                   color: theme.palette.text.primary,
                 },
               }}

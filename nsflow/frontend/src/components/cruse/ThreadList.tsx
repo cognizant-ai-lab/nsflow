@@ -30,6 +30,7 @@ import {
   MenuItem,
   Switch,
   Tooltip,
+  Slider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -49,6 +50,7 @@ import {
 import { formatMessageTime } from '../../utils/cruse';
 import { AgentSelector, Agent } from './AgentSelector';
 import type { CruseThread } from '../../types/cruse';
+import { useGlassEffect } from '../../context/GlassEffectContext';
 
 const THREAD_LIST_COLLAPSED_KEY = 'cruse_thread_list_collapsed';
 
@@ -131,6 +133,9 @@ export function ThreadList({
     return stored === 'true';
   });
 
+  // Glass effect from context
+  const { opacity: glassOpacity, blur: glassBlur, setOpacity: setGlassOpacity, setBlur: setGlassBlur } = useGlassEffect();
+
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const settingsOpen = Boolean(settingsAnchorEl);
 
@@ -175,6 +180,8 @@ export function ThreadList({
     }
   };
 
+  const glassStyles = useGlassEffect().getGlassStyles();
+
   // Collapsed View - Icon only
   if (isCollapsed) {
     return (
@@ -184,8 +191,7 @@ export function ThreadList({
           width: '60px',
           display: 'flex',
           flexDirection: 'column',
-          bgcolor: 'rgba(0, 0, 0, 0.05)',
-          backdropFilter: 'blur(10px)',
+          ...glassStyles,
           borderRadius: '12px',
           margin: '24px',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
@@ -522,8 +528,7 @@ export function ThreadList({
         width: '280px',
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'rgba(255, 255, 255, 0.05)',
-        backdropFilter: 'blur(10px)',
+        ...glassStyles,
         borderRadius: '12px',
         margin: '24px',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
@@ -989,6 +994,83 @@ export function ThreadList({
                   <RefreshIcon sx={{ fontSize: '1rem' }} />
                 )}
               </IconButton>
+            </Box>
+
+            {/* Third Row: Opacity Slider */}
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.5,
+                ml: 4,
+                mt: 1,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                  Opacity
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500 }}>
+                  {glassOpacity}%
+                </Typography>
+              </Box>
+              <Slider
+                value={glassOpacity}
+                onChange={(_, value) => setGlassOpacity(value as number)}
+                min={0}
+                max={100}
+                step={5}
+                size="small"
+                sx={{
+                  '& .MuiSlider-thumb': {
+                    width: 12,
+                    height: 12,
+                  },
+                  '& .MuiSlider-track': {
+                    bgcolor: 'primary.main',
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+            </Box>
+
+            {/* Fourth Row: Blur Slider */}
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.5,
+                ml: 4,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                  Blur
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500 }}>
+                  {glassBlur.toFixed(1)}px
+                </Typography>
+              </Box>
+              <Slider
+                value={glassBlur}
+                onChange={(_, value) => setGlassBlur(value as number)}
+                min={0}
+                max={10}
+                step={0.1}
+                size="small"
+                sx={{
+                  '& .MuiSlider-thumb': {
+                    width: 12,
+                    height: 12,
+                  },
+                  '& .MuiSlider-track': {
+                    bgcolor: 'primary.main',
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
             </Box>
           </MenuItem>
 

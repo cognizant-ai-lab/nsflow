@@ -24,6 +24,7 @@ import { BackgroundEngine, type BackgroundSchema } from "../../components/cruse/
 import { ApiPortProvider, useApiPort } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
 import { ChatProvider, useChatContext } from "../../context/ChatContext";
+import { GlassEffectProvider } from "../../context/GlassEffectContext";
 import { getInitialTheme } from "../../utils/theme";
 import {
   getOrGenerateTheme,
@@ -223,59 +224,61 @@ const CruseContent: React.FC = () => {
   return (
     <ApiPortProvider>
       <NeuroSanProvider>
-        {/* Background Canvas - Vanta needs container to be relative */}
-        {cruseThemeEnabled && backgroundSchema && (
+        <GlassEffectProvider>
+          {/* Background Canvas - Vanta needs container to be relative */}
+          {cruseThemeEnabled && backgroundSchema && (
+            <Box
+              sx={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                zIndex: -1,
+                pointerEvents: 'none',
+              }}
+            >
+              <BackgroundEngine schema={backgroundSchema} enableTransition={false} />
+            </Box>
+          )}
+
           <Box
             sx={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              zIndex: -1,
-              pointerEvents: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100vh',
+              width: '100vw',
+              bgcolor: cruseThemeEnabled ? 'transparent' : 'background.default',
+              background: cruseThemeEnabled ? 'none' : undefined,
+              overflow: 'hidden',
+              position: 'relative',
+              zIndex: 0,
             }}
           >
-            <BackgroundEngine schema={backgroundSchema} enableTransition={false} />
+            <Header selectedNetwork="" isCrusePage={true} />
+
+            <Box sx={{
+              flex: 1,
+              overflow: 'hidden',
+              bgcolor: cruseThemeEnabled ? 'transparent' : undefined,
+              background: cruseThemeEnabled ? 'none' : undefined,
+            }}>
+              <CruseInterface
+                showLogs={showLogs}
+                onToggleLogs={handleToggleLogs}
+                cruseThemeEnabled={cruseThemeEnabled}
+                onCruseThemeToggle={handleCruseThemeToggle}
+                backgroundType={backgroundType}
+                onBackgroundTypeChange={handleBackgroundTypeChange}
+                onRefreshTheme={handleRefreshTheme}
+                isRefreshingTheme={isRefreshingTheme}
+              />
+
+              {/* Expandable Logs Panel in bottom center-left */}
+              {showLogs && <EditorLogsPanel />}
+            </Box>
           </Box>
-        )}
-
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100vh',
-            width: '100vw',
-            bgcolor: cruseThemeEnabled ? 'transparent' : 'background.default',
-            background: cruseThemeEnabled ? 'none' : undefined,
-            overflow: 'hidden',
-            position: 'relative',
-            zIndex: 0,
-          }}
-        >
-          <Header selectedNetwork="" isCrusePage={true} />
-
-          <Box sx={{
-            flex: 1,
-            overflow: 'hidden',
-            bgcolor: cruseThemeEnabled ? 'transparent' : undefined,
-            background: cruseThemeEnabled ? 'none' : undefined,
-          }}>
-            <CruseInterface
-              showLogs={showLogs}
-              onToggleLogs={handleToggleLogs}
-              cruseThemeEnabled={cruseThemeEnabled}
-              onCruseThemeToggle={handleCruseThemeToggle}
-              backgroundType={backgroundType}
-              onBackgroundTypeChange={handleBackgroundTypeChange}
-              onRefreshTheme={handleRefreshTheme}
-              isRefreshingTheme={isRefreshingTheme}
-            />
-
-            {/* Expandable Logs Panel in bottom center-left */}
-            {showLogs && <EditorLogsPanel />}
-          </Box>
-        </Box>
+        </GlassEffectProvider>
       </NeuroSanProvider>
     </ApiPortProvider>
   );

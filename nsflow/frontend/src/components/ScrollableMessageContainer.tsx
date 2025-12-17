@@ -36,6 +36,7 @@ import {
 import { Message } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
 import { DynamicWidgetCard } from "./cruse/DynamicWidgetCard";
+import { useGlassEffect } from "../context/GlassEffectContext";
 
 // type Message = {
 //   sender: "user" | "agent" | "system";
@@ -52,6 +53,7 @@ type Props = {
   getMessageClass?: (msg: Message) => string;
   useSpeech?: boolean;
   onWidgetSubmit?: (data: Record<string, unknown>) => void;
+  isCrusePage?: boolean;
 };
 
 const ScrollableMessageContainer: React.FC<Props> = ({
@@ -61,6 +63,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   onTextToSpeech,
   useSpeech,
   onWidgetSubmit,
+  isCrusePage = false,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
       ? "User"
@@ -78,6 +81,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
+  const { getGlassStyles } = useGlassEffect();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -114,11 +118,12 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   };
 
   return (
-    <Box sx={{ 
-      flexGrow: 1, 
-      overflow: 'auto', 
+    <Box sx={{
+      flexGrow: 1,
+      overflow: 'auto',
       pr: 0.5,
-      backgroundColor: theme.palette.background.default
+      // Only apply background when NOT on Cruse page (other pages need it)
+      ...(!isCrusePage && { backgroundColor: theme.palette.background.default }),
     }}>
       <Box sx={{
         p: 0.5,

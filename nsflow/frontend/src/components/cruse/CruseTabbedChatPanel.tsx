@@ -20,10 +20,12 @@ import CruseChatPanel from "./CruseChatPanel";
 import { useApiPort } from "../../context/ApiPortContext";
 import { useChatContext } from "../../context/ChatContext";
 import { useTheme } from '../../context/ThemeContext';
+import { useGlassEffect } from '../../context/GlassEffectContext';
 import type { CruseThread } from '../../types/cruse';
 
 interface CruseTabbedChatPanelProps {
   currentThread: CruseThread | null;
+  cruseThemeEnabled?: boolean;
   onSaveMessage: (messageRequest: any) => Promise<void>;
 }
 
@@ -36,9 +38,10 @@ interface CruseTabbedChatPanelProps {
  * - NO persistent connections to widget/theme agents
  * - CruseChatPanel handles one-time widget/theme calls
  */
-const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThread, onSaveMessage }) => {
+const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage }) => {
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
+  const { getGlassStyles } = useGlassEffect();
   const { sessionId, activeNetwork, addChatMessage, setChatWs, chatWs } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
 
@@ -100,6 +103,8 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
     };
   }, [activeNetwork, wsUrl, sessionId]);
 
+  const glassStyles = cruseThemeEnabled ? getGlassStyles() : {};
+
   return (
     <Paper
       elevation={1}
@@ -107,8 +112,7 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        backdropFilter: 'blur(10px)',
+        ...(cruseThemeEnabled ? glassStyles : { backgroundColor: theme.palette.background.paper }),
         borderRadius: '12px',
         margin: '24px',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
@@ -117,7 +121,7 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
       }}
     >
       {/* Only Chat Panel - no tabs needed */}
-      <CruseChatPanel currentThread={currentThread} onSaveMessage={onSaveMessage} />
+      <CruseChatPanel currentThread={currentThread} cruseThemeEnabled={cruseThemeEnabled} onSaveMessage={onSaveMessage} />
     </Paper>
   );
 };

@@ -599,6 +599,7 @@ export function CruseInterface({
         ) : currentThread ? (
           <CruseTabbedChatPanel
             currentThread={currentThread}
+            cruseThemeEnabled={cruseThemeEnabled}
             onSaveMessage={async (messageRequest) => {
               if (currentThread) {
                 await addMessageToThread(currentThread.id, messageRequest);
