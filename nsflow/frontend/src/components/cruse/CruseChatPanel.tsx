@@ -350,7 +350,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
           previous_widget: previousWidget || null,
         });
 
-        console.log('[CRUSE] cruse_widget_agent Payload:', payload);
+        // console.log('[CRUSE] cruse_widget_agent Payload:', payload);
 
         const response = await fetch(`${apiUrl}/api/v1/oneshot/chat`, {
           method: 'POST',
@@ -363,7 +363,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
 
         if (response.ok) {
           const data = await response.json();
-          console.log('[CRUSE] Widget agent raw response:', data);
+          // console.log('[CRUSE] Widget agent raw response:', data);
 
           // Parse the raw_response.message
           if (data.raw_response && data.raw_response.message) {
@@ -371,14 +371,14 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, onSaveMe
             const parsedWidget = parseWidgetResponse(data.raw_response.message);
 
             if (parsedWidget && parsedWidget.schema) {
-              console.log('[CRUSE] Widget received:', parsedWidget);
+              // console.log('[CRUSE] Widget received:', parsedWidget);
               widgetData = parsedWidget;
             } else if (parsedWidget && parsedWidget.display === false) {
               console.log('[CRUSE] Widget agent decided not to display widget');
               widgetData = { display: false };
             } else {
               console.log('[CRUSE] No widget schema in response');
-              console.log('[CRUSE] Raw message was:', data.raw_response.message);
+              // console.log('[CRUSE] Raw message was:', data.raw_response.message);
               widgetData = { display: false };
             }
           } else {

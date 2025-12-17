@@ -16,7 +16,6 @@ limitations under the License.
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Typography, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from '@mui/material';
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { ThreadList } from './ThreadList';
 import CruseTabbedChatPanel from './CruseTabbedChatPanel';
 import { Agent } from './AgentSelector';
@@ -26,13 +25,18 @@ import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { useNeuroSan } from '../../context/NeuroSanContext';
 import { useSnackbar } from '../../context/SnackbarContext';
-import { useTheme } from '../../context/ThemeContext';
 import { SNACKBAR_DURATION, NOTIFICATION_TEXT_TRUNCATE_LENGTH } from '../../constants/notifications';
 import type { MessageOrigin } from '../../types/cruse';
 
 export interface CruseInterfaceProps {
   showLogs?: boolean;
   onToggleLogs?: () => void;
+  cruseThemeEnabled?: boolean;
+  onCruseThemeToggle?: (enabled: boolean) => void;
+  backgroundType?: 'static' | 'dynamic';
+  onBackgroundTypeChange?: (type: 'static' | 'dynamic') => void;
+  onRefreshTheme?: () => void;
+  isRefreshingTheme?: boolean;
 }
 
 /**
@@ -48,7 +52,16 @@ export interface CruseInterfaceProps {
  *
  * This is the top-level component for the CRUSE system.
  */
-export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterfaceProps = {}) {
+export function CruseInterface({
+  showLogs = true,
+  onToggleLogs,
+  cruseThemeEnabled = false,
+  onCruseThemeToggle,
+  backgroundType = 'dynamic',
+  onBackgroundTypeChange,
+  onRefreshTheme,
+  isRefreshingTheme = false,
+}: CruseInterfaceProps = {}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
@@ -60,7 +73,6 @@ export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterface
   const { activeNetwork, setActiveNetwork, chatMessages, setChatMessages, regenerateSessionId } = useChatContext();
   const { host, port, connectionType, isNsReady } = useNeuroSan();
   const { showSnackbar } = useSnackbar();
-  const { theme } = useTheme();
 
   // Track which message IDs have been persisted to avoid infinite loop
   // Using a Set of message IDs instead of content-based keys to allow duplicate content
@@ -527,17 +539,19 @@ export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterface
   }, [currentThread, messages, updateThreadTitle]);
 
   return (
-    <PanelGroup direction="horizontal" style={{ height: '100%', width: '100%' }}>
-      {/* Left Panel - Thread List (Resizable) */}
-      <Panel defaultSize={20} minSize={15} maxSize={35}>
-        <Box
-          sx={{
-            height: '100%',
-            backgroundColor: theme.palette.background.paper,
-            borderRight: `1px solid ${theme.palette.divider}`,
-            overflow: 'hidden',
-          }}
-        >
+    <>
+      <Box
+        sx={{
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'row',
+          overflow: 'hidden',
+          position: 'relative',
+          zIndex: 0,
+        }}
+      >
+        {/* Thread List - Floating Panel */}
           <ThreadList
             threads={threads}
             activeThreadId={currentThread?.id}
@@ -552,30 +566,23 @@ export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterface
             onDeleteAllThreads={handleDeleteAllThreads}
             showLogs={showLogs}
             onToggleLogs={onToggleLogs}
+            cruseThemeEnabled={cruseThemeEnabled}
+            onCruseThemeToggle={onCruseThemeToggle}
+            backgroundType={backgroundType}
+            onBackgroundTypeChange={onBackgroundTypeChange}
+            onRefreshTheme={onRefreshTheme}
+            isRefreshingTheme={isRefreshingTheme}
           />
-        </Box>
-      </Panel>
 
-      {/* Resize Handle */}
-      <PanelResizeHandle
-        style={{
-          width: '4px',
-          backgroundColor: theme.palette.divider,
-          cursor: 'col-resize',
-          transition: 'background-color 0.2s',
+      {/* Chat Panel - Floating Panel */}
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
-      />
-
-      {/* Right Panel - Main Content */}
-      <Panel minSize={50}>
-        <Box
-          sx={{
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
+      >
         {!activeNetwork ? (
           <Box
             sx={{
@@ -612,8 +619,8 @@ export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterface
             </Typography>
           </Box>
         )}
-        </Box>
-      </Panel>
+      </Box>
+    </Box>
 
       {/* Confirmation Dialog for Delete All Threads */}
       <Dialog
@@ -655,6 +662,6 @@ export function CruseInterface({ showLogs = true, onToggleLogs }: CruseInterface
           </Button>
         </DialogActions>
       </Dialog>
-    </PanelGroup>
+    </>
   );
 }

@@ -27,7 +27,19 @@ def _get_utc_now():
     return datetime.now(timezone.utc)
 
 
-# CRUSE (Chat-based Runtime UI Schema Engine) Models
+# CRUSE (Context-Reactice User Experience) Models
+class Theme(Base):
+    """
+    Represents a UI theme in the system.
+    """
+    __tablename__ = "themes"
+    agent_name = Column(String, primary_key=True, index=True)
+    static_theme = Column(JSON, nullable=True)  # JSON string containing static theme definition
+    dynamic_theme = Column(JSON, nullable=True)  # JSON string containing dynamic theme definition
+    created_at = Column(DateTime, default=_get_utc_now)
+    updated_at = Column(DateTime, default=_get_utc_now, onupdate=_get_utc_now)
+
+
 class Thread(Base):
     """
     Represents a chat thread/conversation in the system.

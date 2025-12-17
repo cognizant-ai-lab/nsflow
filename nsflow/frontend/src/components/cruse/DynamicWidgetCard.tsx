@@ -169,7 +169,7 @@ export function DynamicWidgetCard({
               </Box>
             )}
             <Box>
-              <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.2 }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.2, color: 'text.secondary' }}>
                 {title}
               </Typography>
               {description && !expanded && (

@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from nsflow.backend.db.database import get_threads_db
-from nsflow.backend.db.models import Message, Thread
+from nsflow.backend.db.models import Message, Thread, Theme
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,28 @@ class ThreadResponse(BaseModel):
 
 class ThreadWithMessages(ThreadResponse):
     messages: List[MessageResponse] = []
+
+
+class ThemeCreate(BaseModel):
+    agent_name: str
+    theme_type: str  # 'static' or 'dynamic'
+    theme_json: dict  # The theme configuration as JSON
+
+
+class ThemeUpdate(BaseModel):
+    theme_type: str  # 'static' or 'dynamic'
+    theme_json: dict  # The theme configuration as JSON
+
+
+class ThemeResponse(BaseModel):
+    agent_name: str
+    static_theme: Optional[dict] = None
+    dynamic_theme: Optional[dict] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Thread endpoints
@@ -435,3 +457,110 @@ async def get_chat_context(
 
     logger.info(f"Built chat_context for thread {thread_id} with {len(chat_messages)} messages")
     return {"chat_context": chat_context}
+
+
+# ==================== Theme API ====================
+
+@router.post("/themes", response_model=ThemeResponse)
+async def create_or_add_theme(theme_request: ThemeCreate, db: Session = Depends(get_threads_db)):
+    """
+    Create or add a theme for an agent.
+    If the agent already has a theme entry, updates the specified theme_type (static or dynamic).
+    Otherwise, creates a new theme entry.
+
+    Args:
+        theme_request: Contains agent_name, theme_type ('static' or 'dynamic'), and theme_json
+
+    Returns:
+        ThemeResponse with both static and dynamic themes
+    """
+    if theme_request.theme_type not in ['static', 'dynamic']:
+        raise HTTPException(status_code=400, detail="theme_type must be 'static' or 'dynamic'")
+
+    # Check if theme already exists for this agent
+    existing_theme = db.query(Theme).filter(Theme.agent_name == theme_request.agent_name).first()
+
+    if existing_theme:
+        # Update the specified theme type
+        if theme_request.theme_type == 'static':
+            existing_theme.static_theme = theme_request.theme_json
+        else:  # dynamic
+            existing_theme.dynamic_theme = theme_request.theme_json
+
+        existing_theme.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(existing_theme)
+
+        logger.info(f"Updated {theme_request.theme_type} theme for agent: {theme_request.agent_name}")
+        return existing_theme
+    else:
+        # Create new theme entry
+        new_theme = Theme(
+            agent_name=theme_request.agent_name,
+            static_theme=theme_request.theme_json if theme_request.theme_type == 'static' else None,
+            dynamic_theme=theme_request.theme_json if theme_request.theme_type == 'dynamic' else None,
+        )
+        db.add(new_theme)
+        db.commit()
+        db.refresh(new_theme)
+
+        logger.info(f"Created {theme_request.theme_type} theme for agent: {theme_request.agent_name}")
+        return new_theme
+
+
+@router.get("/themes/{agent_name}", response_model=ThemeResponse)
+async def get_theme(agent_name: str, db: Session = Depends(get_threads_db)):
+    """
+    Get both static and dynamic themes for an agent.
+
+    Args:
+        agent_name: The agent name
+
+    Returns:
+        ThemeResponse containing both static_theme and dynamic_theme (null if not set)
+    """
+    theme = db.query(Theme).filter(Theme.agent_name == agent_name).first()
+
+    if not theme:
+        raise HTTPException(status_code=404, detail=f"No themes found for agent: {agent_name}")
+
+    logger.info(f"Retrieved themes for agent: {agent_name}")
+    return theme
+
+
+@router.patch("/themes/{agent_name}", response_model=ThemeResponse)
+async def update_theme(
+    agent_name: str,
+    theme_update: ThemeUpdate,
+    db: Session = Depends(get_threads_db)
+):
+    """
+    Update a specific theme type (static or dynamic) for an agent.
+
+    Args:
+        agent_name: The agent name
+        theme_update: Contains theme_type ('static' or 'dynamic') and theme_json
+
+    Returns:
+        ThemeResponse with both static and dynamic themes
+    """
+    if theme_update.theme_type not in ['static', 'dynamic']:
+        raise HTTPException(status_code=400, detail="theme_type must be 'static' or 'dynamic'")
+
+    theme = db.query(Theme).filter(Theme.agent_name == agent_name).first()
+
+    if not theme:
+        raise HTTPException(status_code=404, detail=f"No themes found for agent: {agent_name}")
+
+    # Update the specified theme type
+    if theme_update.theme_type == 'static':
+        theme.static_theme = theme_update.theme_json
+    else:  # dynamic
+        theme.dynamic_theme = theme_update.theme_json
+
+    theme.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(theme)
+
+    logger.info(f"Updated {theme_update.theme_type} theme for agent: {agent_name}")
+    return theme

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   List,
@@ -29,6 +29,7 @@ import {
   Menu,
   MenuItem,
   Switch,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -37,10 +38,19 @@ import {
   SettingsTwoTone as SettingsIcon,
   DeleteSweep as DeleteSweepIcon,
   Visibility as VisibilityIcon,
+  Palette as PaletteIcon,
+  Refresh as RefreshIcon,
+  FlashOn as DynamicIcon,
+  Image as StaticIcon,
+  ChevronLeft as CollapseIcon,
+  ChevronRight as ExpandIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { formatMessageTime } from '../../utils/cruse';
 import { AgentSelector, Agent } from './AgentSelector';
 import type { CruseThread } from '../../types/cruse';
+
+const THREAD_LIST_COLLAPSED_KEY = 'cruse_thread_list_collapsed';
 
 export interface ThreadListProps {
   /** Array of all threads */
@@ -69,6 +79,18 @@ export interface ThreadListProps {
   showLogs?: boolean;
   /** Callback when toggle logs is clicked */
   onToggleLogs?: () => void;
+  /** Cruse Theme enabled state */
+  cruseThemeEnabled?: boolean;
+  /** Callback when Cruse Theme is toggled */
+  onCruseThemeToggle?: (enabled: boolean) => void;
+  /** Background type (static or dynamic) */
+  backgroundType?: 'static' | 'dynamic';
+  /** Callback when background type is changed */
+  onBackgroundTypeChange?: (type: 'static' | 'dynamic') => void;
+  /** Callback when refresh theme button is clicked */
+  onRefreshTheme?: () => void;
+  /** Is theme refreshing */
+  isRefreshingTheme?: boolean;
 }
 
 /**
@@ -96,7 +118,19 @@ export function ThreadList({
   onDeleteAllThreads,
   showLogs = true,
   onToggleLogs,
+  cruseThemeEnabled = false,
+  onCruseThemeToggle,
+  backgroundType = 'dynamic',
+  onBackgroundTypeChange,
+  onRefreshTheme,
+  isRefreshingTheme = false,
 }: ThreadListProps) {
+  // Collapsed state from localStorage
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const stored = localStorage.getItem(THREAD_LIST_COLLAPSED_KEY);
+    return stored === 'true';
+  });
+
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const settingsOpen = Boolean(settingsAnchorEl);
 
@@ -107,6 +141,15 @@ export function ThreadList({
 
   // Show "+ New Thread" button when agent is selected
   const showNewThreadButton = !!selectedAgentId;
+
+  // Persist collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem(THREAD_LIST_COLLAPSED_KEY, String(isCollapsed));
+  }, [isCollapsed]);
+
+  const handleToggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+  };
 
   const handleSettingsClick = (event: React.MouseEvent<HTMLElement>) => {
     setSettingsAnchorEl(event.currentTarget);
@@ -132,34 +175,401 @@ export function ThreadList({
     }
   };
 
+  // Collapsed View - Icon only
+  if (isCollapsed) {
+    return (
+      <Box
+        sx={{
+          height: '100%',
+          width: '60px',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: 'rgba(0, 0, 0, 0.05)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '12px',
+          margin: '24px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        }}
+      >
+        {/* Expand Button at Top */}
+        <Tooltip title="Expand" placement="right">
+          <IconButton
+            onClick={handleToggleCollapse}
+            sx={{
+              m: 1,
+              color: 'text.secondary',
+              '&:hover': {
+                color: 'primary.main',
+                bgcolor: 'action.hover',
+              },
+            }}
+          >
+            <ExpandIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Divider sx={{ mx: 1 }} />
+
+        {/* Agent Search Icon */}
+        <Tooltip title="Select Agent" placement="right">
+          <IconButton
+            sx={{
+              m: 1,
+              color: selectedAgentId ? 'primary.main' : 'text.secondary',
+              '&:hover': {
+                color: 'primary.main',
+                bgcolor: 'action.hover',
+              },
+            }}
+          >
+            <SearchIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Divider sx={{ mx: 1 }} />
+
+        {/* Thread Icons */}
+        <Box
+          sx={{
+            flex: 1,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 0.5,
+            py: 1,
+            '&::-webkit-scrollbar': {
+              width: 4,
+            },
+            '&::-webkit-scrollbar-thumb': {
+              bgcolor: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: 2,
+            },
+          }}
+        >
+          {agentThreads.slice(0, 10).map((thread) => (
+            <Tooltip key={thread.id} title={thread.title} placement="right">
+              <IconButton
+                onClick={() => onThreadSelect(thread.id)}
+                sx={{
+                  width: 40,
+                  height: 40,
+                  color: thread.id === activeThreadId ? 'primary.main' : 'text.secondary',
+                  bgcolor: thread.id === activeThreadId ? 'action.selected' : 'transparent',
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
+                }}
+              >
+                <ChatIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ))}
+        </Box>
+
+        <Divider sx={{ mx: 1 }} />
+
+        {/* Settings Icon at Bottom */}
+        <Tooltip title="Settings" placement="right">
+          <IconButton
+            onClick={handleSettingsClick}
+            sx={{
+              m: 1,
+              color: 'text.secondary',
+              '&:hover': {
+                color: 'primary.main',
+                bgcolor: 'action.hover',
+              },
+            }}
+          >
+            <SettingsIcon />
+          </IconButton>
+        </Tooltip>
+
+        {/* Settings Menu (same as expanded view) */}
+        <Menu
+          anchorEl={settingsAnchorEl}
+          open={settingsOpen}
+          onClose={handleSettingsClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'left',
+          }}
+          slotProps={{
+            paper: {
+              sx: {
+                minWidth: 220,
+                borderRadius: 2,
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+              },
+            },
+          }}
+        >
+          <MenuItem
+            onClick={handleDeleteAllThreads}
+            disabled={!selectedAgentId || agentThreads.length === 0}
+            sx={{
+              py: 1.5,
+              px: 2,
+              gap: 1.5,
+              '&:hover': {
+                bgcolor: 'error.main',
+                color: 'error.contrastText',
+                '& .MuiSvgIcon-root': {
+                  color: 'error.contrastText',
+                },
+              },
+            }}
+          >
+            <DeleteSweepIcon fontSize="small" sx={{ color: 'error.main' }} />
+            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
+              Delete All Threads
+            </Typography>
+          </MenuItem>
+
+          <Divider sx={{ my: 0.5 }} />
+
+          {/* Cruse Theme Settings (same as expanded) */}
+          <MenuItem
+            sx={{
+              py: 1.5,
+              px: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 1,
+              '&:hover': {
+                bgcolor: 'action.hover',
+              },
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <PaletteIcon fontSize="small" sx={{ color: 'primary.main' }} />
+              <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
+                Cruse Theme
+              </Typography>
+              <Switch
+                checked={cruseThemeEnabled}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onCruseThemeToggle?.(e.target.checked);
+                }}
+                size="small"
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: 'success.main',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'success.main',
+                  },
+                }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                ml: 4,
+                opacity: cruseThemeEnabled ? 1 : 0.4,
+                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  flex: 1,
+                }}
+              >
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (cruseThemeEnabled) {
+                      onBackgroundTypeChange?.('static');
+                    }
+                  }}
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.5,
+                    py: 0.5,
+                    px: 1,
+                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
+                    bgcolor: backgroundType === 'static' ? 'primary.main' : 'transparent',
+                    color: backgroundType === 'static' ? 'primary.contrastText' : 'text.secondary',
+                    transition: 'all 0.2s',
+                    '&:hover': cruseThemeEnabled ? {
+                      bgcolor: backgroundType === 'static' ? 'primary.dark' : 'action.hover',
+                    } : {},
+                  }}
+                >
+                  <StaticIcon sx={{ fontSize: '0.9rem' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
+                    Static
+                  </Typography>
+                </Box>
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (cruseThemeEnabled) {
+                      onBackgroundTypeChange?.('dynamic');
+                    }
+                  }}
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.5,
+                    py: 0.5,
+                    px: 1,
+                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
+                    bgcolor: backgroundType === 'dynamic' ? 'primary.main' : 'transparent',
+                    color: backgroundType === 'dynamic' ? 'primary.contrastText' : 'text.secondary',
+                    transition: 'all 0.2s',
+                    '&:hover': cruseThemeEnabled ? {
+                      bgcolor: backgroundType === 'dynamic' ? 'primary.dark' : 'action.hover',
+                    } : {},
+                  }}
+                >
+                  <DynamicIcon sx={{ fontSize: '0.9rem' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
+                    Dynamic
+                  </Typography>
+                </Box>
+              </Box>
+
+              <IconButton
+                size="small"
+                disabled={!cruseThemeEnabled || isRefreshingTheme}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (cruseThemeEnabled && !isRefreshingTheme) {
+                    onRefreshTheme?.();
+                  }
+                }}
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 0.5,
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
+                  '&.Mui-disabled': {
+                    opacity: 0.4,
+                  },
+                }}
+              >
+                {isRefreshingTheme ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <RefreshIcon sx={{ fontSize: '1rem' }} />
+                )}
+              </IconButton>
+            </Box>
+          </MenuItem>
+
+          <Divider sx={{ my: 0.5 }} />
+
+          <MenuItem
+            onClick={handleToggleLogs}
+            sx={{
+              py: 1.5,
+              px: 2,
+              gap: 1.5,
+            }}
+          >
+            <VisibilityIcon fontSize="small" sx={{ color: 'primary.main' }} />
+            <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
+              Show Logs
+            </Typography>
+            <Switch
+              checked={showLogs}
+              size="small"
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: 'success.main',
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: 'success.main',
+                },
+              }}
+            />
+          </MenuItem>
+        </Menu>
+      </Box>
+    );
+  }
+
+  // Expanded View - Full ThreadList
   return (
     <Box
       sx={{
-        height: '100%',
+        height: 'calc(100% - 48px)',
+        width: '280px',
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'background.paper',
+        bgcolor: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        margin: '24px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden',
       }}
     >
-      {/* Agent Selector at Top */}
+      {/* Collapse Button + Agent Selector */}
       <Box
         sx={{
           p: 2,
           borderBottom: 1,
           borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
         }}
       >
-        {isLoadingAgents ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : (
-          <AgentSelector
-            agents={agents}
-            selectedAgentId={selectedAgentId}
-            onAgentChange={onAgentChange || (() => {})}
-          />
-        )}
+        <Tooltip title="Collapse" placement="right">
+          <IconButton
+            onClick={handleToggleCollapse}
+            size="small"
+            sx={{
+              color: 'text.secondary',
+              '&:hover': {
+                color: 'primary.main',
+                bgcolor: 'action.hover',
+              },
+            }}
+          >
+            <CollapseIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Box sx={{ flex: 1 }}>
+          {isLoadingAgents ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <AgentSelector
+              agents={agents}
+              selectedAgentId={selectedAgentId}
+              onAgentChange={onAgentChange || (() => {})}
+            />
+          )}
+        </Box>
       </Box>
 
       {/* Show "+ New Thread" button when agent is selected */}
@@ -336,8 +746,8 @@ export function ThreadList({
                         primary: {
                           fontWeight: isActive ? 600 : 400,
                           noWrap: true,
-                          fontSize: '0.8rem',
-                          lineHeight: 1.0,
+                          fontSize: '0.7rem',
+                          lineHeight: 1,
                         },
                         secondary: {
                           component: 'div',
@@ -425,6 +835,161 @@ export function ThreadList({
             <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
               Delete All Threads
             </Typography>
+          </MenuItem>
+
+          <Divider sx={{ my: 0.5 }} />
+
+          {/* Cruse Theme Settings */}
+          <MenuItem
+            sx={{
+              py: 1.5,
+              px: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 1,
+              '&:hover': {
+                bgcolor: 'action.hover',
+              },
+            }}
+            onClick={(e) => e.stopPropagation()} // Prevent menu from closing
+          >
+            {/* First Row: Cruse Theme Toggle */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <PaletteIcon fontSize="small" sx={{ color: 'primary.main' }} />
+              <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
+                Cruse Theme
+              </Typography>
+              <Switch
+                checked={cruseThemeEnabled}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onCruseThemeToggle?.(e.target.checked);
+                }}
+                size="small"
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: 'success.main',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'success.main',
+                  },
+                }}
+              />
+            </Box>
+
+            {/* Second Row: Type Toggle and Refresh Button */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                ml: 4, // Indent to align with content
+                opacity: cruseThemeEnabled ? 1 : 0.4,
+                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
+              }}
+            >
+              {/* Static/Dynamic Toggle Buttons */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  flex: 1,
+                }}
+              >
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (cruseThemeEnabled) {
+                      onBackgroundTypeChange?.('static');
+                    }
+                  }}
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.5,
+                    py: 0.5,
+                    px: 1,
+                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
+                    bgcolor: backgroundType === 'static' ? 'primary.main' : 'transparent',
+                    color: backgroundType === 'static' ? 'primary.contrastText' : 'text.secondary',
+                    transition: 'all 0.2s',
+                    '&:hover': cruseThemeEnabled ? {
+                      bgcolor: backgroundType === 'static' ? 'primary.dark' : 'action.hover',
+                    } : {},
+                  }}
+                >
+                  <StaticIcon sx={{ fontSize: '0.9rem' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
+                    Static
+                  </Typography>
+                </Box>
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (cruseThemeEnabled) {
+                      onBackgroundTypeChange?.('dynamic');
+                    }
+                  }}
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.5,
+                    py: 0.5,
+                    px: 1,
+                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
+                    bgcolor: backgroundType === 'dynamic' ? 'primary.main' : 'transparent',
+                    color: backgroundType === 'dynamic' ? 'primary.contrastText' : 'text.secondary',
+                    transition: 'all 0.2s',
+                    '&:hover': cruseThemeEnabled ? {
+                      bgcolor: backgroundType === 'dynamic' ? 'primary.dark' : 'action.hover',
+                    } : {},
+                  }}
+                >
+                  <DynamicIcon sx={{ fontSize: '0.9rem' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
+                    Dynamic
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Refresh Button */}
+              <IconButton
+                size="small"
+                disabled={!cruseThemeEnabled || isRefreshingTheme}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (cruseThemeEnabled && !isRefreshingTheme) {
+                    onRefreshTheme?.();
+                  }
+                }}
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 0.5,
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
+                  '&.Mui-disabled': {
+                    opacity: 0.4,
+                  },
+                }}
+              >
+                {isRefreshingTheme ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <RefreshIcon sx={{ fontSize: '1rem' }} />
+                )}
+              </IconButton>
+            </Box>
           </MenuItem>
 
           <Divider sx={{ my: 0.5 }} />

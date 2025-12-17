@@ -49,6 +49,7 @@ if THREADS_DB_URL:
     if THREADS_DB_TYPE == "sqlite":
         @event.listens_for(threads_engine, "connect")
         def set_sqlite_pragma(dbapi_conn, connection_record):
+            _ = connection_record  # Unused
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()

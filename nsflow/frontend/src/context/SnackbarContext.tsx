@@ -16,11 +16,6 @@ limitations under the License.
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { NotificationSnackbar, SnackbarNotification } from '../components/common/NotificationSnackbar';
-import {
-  SNACKBAR_DURATION,
-  SNACKBAR_DURATION_LONG,
-  SNACKBAR_DURATION_SHORT,
-} from '../constants/notifications';
 
 interface SnackbarContextType {
   showSnackbar: (notification: SnackbarNotification) => void;

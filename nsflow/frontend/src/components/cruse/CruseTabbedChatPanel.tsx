@@ -37,7 +37,7 @@ interface CruseTabbedChatPanelProps {
  * - CruseChatPanel handles one-time widget/theme calls
  */
 const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThread, onSaveMessage }) => {
-  const { apiUrl, wsUrl } = useApiPort();
+  const { wsUrl } = useApiPort();
   const { theme } = useTheme();
   const { sessionId, activeNetwork, addChatMessage, setChatWs, chatWs } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
@@ -61,52 +61,8 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
       });
       lastActiveNetworkRef.current = activeNetwork;
 
-      // One-time theme agent call for new agent using oneshot endpoint
-      const requestTheme = async () => {
-        try {
-          const payload = JSON.stringify({
-            agent_name: activeNetwork,
-            request: 'generate_theme',
-          });
-
-          console.log('[CRUSE] Sending theme request to oneshot endpoint for agent:', activeNetwork);
-
-          const response = await fetch(`${apiUrl}/api/v1/oneshot/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              agent_name: 'cruse_theme_agent',
-              message: payload,
-            }),
-          });
-
-          if (!response.ok) {
-            console.error('[CRUSE] Theme request failed:', response.statusText);
-            return;
-          }
-
-          const data = await response.json();
-          console.log('[CRUSE] Theme agent response:', data);
-
-          // Parse the raw_response.message
-          if (data.raw_response && data.raw_response.message) {
-            const themeResponse = data.raw_response.message;
-            if (themeResponse.theme) {
-              console.log('[CRUSE] Theme received:', themeResponse.theme);
-              // TODO: Apply theme to chat interface
-              // For now, just log it
-            } else {
-              console.log('[CRUSE] No theme to apply');
-            }
-          } else {
-            console.log('[CRUSE] No theme in response');
-          }
-        } catch (error) {
-          console.error('[CRUSE] Failed to request theme:', error);
-        }
-      };
-
-      requestTheme();
+      // NOTE: Theme generation is handled by Cruse.tsx via getOrGenerateTheme()
+      // which only calls cruse_theme_agent if theme doesn't exist in DB or on refresh
     }
 
     // Setup WebSocket for MAIN AGENT ONLY (no widget/theme connections here)
@@ -151,7 +107,11 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: theme.palette.background.paper,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        margin: '24px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
         border: `1px solid ${theme.palette.divider}`,
         overflow: 'hidden'
       }}

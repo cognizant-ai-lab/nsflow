@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { FormControl, InputAdornment } from '@mui/material';
+import { FormControl } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { CalendarToday as CalendarIcon } from '@mui/icons-material';
 import { WidgetFieldProps } from '../../../types/cruse';
 
 /**

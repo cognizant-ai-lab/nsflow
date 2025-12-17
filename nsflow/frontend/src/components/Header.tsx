@@ -324,9 +324,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
         </Box>
 
         {/* Right - Theme Toggle + Profile */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 1,
           flex: '0 0 auto'
         }}>
