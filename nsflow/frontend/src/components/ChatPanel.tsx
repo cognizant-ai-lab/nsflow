@@ -61,6 +61,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
   const {
     activeNetwork,
+    targetNetwork,
     chatMessages,
     addChatMessage,
     addSlyDataMessage,
@@ -83,10 +84,10 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { loadSlyDataFromCache } = useSlyDataCache();
 
   const slyToggleGlobalKey = 'nsflow-use-slydata';
-  const slyToggleNetworkKey = useMemo(
-    () => (activeNetwork ? `nsflow-use-slydata-${activeNetwork}` : null),
-    [activeNetwork]
-  );
+  const slyToggleNetworkKey = useMemo(() => {
+    const network = targetNetwork || activeNetwork;
+    return network ? `nsflow-use-slydata-${network}` : null;
+  }, [targetNetwork, activeNetwork]);
 
   // ADD audioRef here
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -114,24 +115,26 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     } catch {}
     return false;
   };
-  // NEW: “Use Sly Data” checkbox state
-  const [useSlyDataChecked, setUseSlyDataChecked] = useState<boolean>(() => readSlyToggle(activeNetwork));
+  // NEW: "Use Sly Data" checkbox state
+  const [useSlyDataChecked, setUseSlyDataChecked] = useState<boolean>(() => readSlyToggle(targetNetwork || activeNetwork));
 
   useEffect(() => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Fetch connectivity info and extract sample queries when activeNetwork changes
+  // Fetch connectivity info and extract sample queries when network changes
+  // Use targetNetwork (Editor page) or activeNetwork (Home page)
   useEffect(() => {
     const fetchSampleQueries = async () => {
-      if (!activeNetwork || !apiUrl) {
+      const network = targetNetwork || activeNetwork;
+      if (!network || !apiUrl) {
         setSampleQueries([]);
         return;
       }
 
       try {
-        const response = await fetch(`${apiUrl}/api/v1/connectivity/${activeNetwork}`);
+        const response = await fetch(`${apiUrl}/api/v1/connectivity/${network}`);
         if (!response.ok) {
           console.error("Failed to fetch connectivity info:", response.statusText);
           setSampleQueries(["What all can you help us with?"]);
@@ -151,14 +154,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     };
 
     fetchSampleQueries();
-  }, [activeNetwork, apiUrl]);
+  }, [targetNetwork, activeNetwork, apiUrl]);
 
   // Load persisted toggle when network changes (or first mount)
   useEffect(() => {
     // when network changes, prefer its stored setting if present
-    const stored = readSlyToggle(activeNetwork);
+    const network = targetNetwork || activeNetwork;
+    const stored = readSlyToggle(network);
     setUseSlyDataChecked(stored);
-  }, [activeNetwork]);
+  }, [targetNetwork, activeNetwork]);
 
   // Persist on change
   useEffect(() => {
@@ -201,7 +205,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   // NEW: Build sly_data to send from the editor cache (or {} if none)
   const getSlyDataForSend = useCallback((): Record<string, any> | undefined => {
     if (!useSlyDataChecked) return undefined; // not requested
-    const network = activeNetwork;
+    const network = targetNetwork || activeNetwork;
     if (!network) return {}; // no network context; still send {}
     const cached = loadSlyDataFromCache(network);
     console.log('Cached data:', cached);
@@ -209,7 +213,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       return cached.data; // cached data is already in JSON format
     }
     return {}; // if editor is blank, still send {}
-  }, [useSlyDataChecked, activeNetwork, loadSlyDataFromCache]);
+  }, [useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
@@ -226,18 +230,19 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
 
     const slyDataToSend = getSlyDataForSend();
+    const network = targetNetwork || activeNetwork;
 
     addChatMessage({
       sender: "user",
       text: messageText,
-      network: activeNetwork,
+      network: network,
     });
 
     if (slyDataToSend) {
       addSlyDataMessage({
         sender: "user",
         text: JSON.stringify(slyDataToSend, null, 2),
-        network: activeNetwork,
+        network: network,
       });
     }
 

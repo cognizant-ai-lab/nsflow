@@ -60,6 +60,8 @@ export interface AgentSelectorProps {
   onClose?: () => void;
   /** Collapsed mode - shows only icon */
   collapsed?: boolean;
+  /** Cruse Theme enabled state */
+  cruseThemeEnabled?: boolean;
 }
 
 /**
@@ -84,6 +86,7 @@ export function AgentSelector({
   onOpen: externalOnOpen,
   onClose: externalOnClose,
   collapsed = false,
+  cruseThemeEnabled = false,
 }: AgentSelectorProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -137,7 +140,7 @@ export function AgentSelector({
     return nameMatch || descriptionMatch;
   });
 
-  const glassStyles = getGlassStyles();
+  const glassStyles = cruseThemeEnabled ? getGlassStyles() : {};
 
   return (
     <FormControl

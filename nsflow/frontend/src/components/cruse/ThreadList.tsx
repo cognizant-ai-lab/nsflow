@@ -524,6 +524,7 @@ export function ThreadList({
                 open={agentSelectorOpen}
                 onOpen={() => setAgentSelectorOpen(true)}
                 onClose={() => setAgentSelectorOpen(false)}
+                cruseThemeEnabled={cruseThemeEnabled}
               />
             </Box>
 
@@ -713,6 +714,7 @@ export function ThreadList({
               agents={agents}
               selectedAgentId={selectedAgentId}
               onAgentChange={onAgentChange || (() => {})}
+              cruseThemeEnabled={cruseThemeEnabled}
             />
           )}
         </Box>
