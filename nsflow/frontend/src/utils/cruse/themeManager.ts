@@ -112,13 +112,19 @@ export async function fetchConnectivity(
 export async function generateTheme(
   apiUrl: string,
   agentDetails: AgentDetails,
-  backgroundType: 'static' | 'dynamic'
+  backgroundType: 'static' | 'dynamic',
+  userPrompt?: string
 ): Promise<BackgroundSchema | null> {
   try {
-    const payload = {
+    const payload: any = {
       agent_details: agentDetails,
       background_type: backgroundType,
     };
+
+    // Add user prompt if provided
+    if (userPrompt && userPrompt.trim()) {
+      payload.user_prompt = userPrompt.trim();
+    }
 
     console.log(`[ThemeManager] Generating ${backgroundType} theme via cruse_theme_agent`);
 
@@ -233,7 +239,8 @@ export async function getOrGenerateTheme(
 export async function refreshTheme(
   apiUrl: string,
   agentName: string,
-  backgroundType: 'static' | 'dynamic'
+  backgroundType: 'static' | 'dynamic',
+  userPrompt?: string
 ): Promise<BackgroundSchema | null> {
   try {
     console.log(`[ThemeManager] Refreshing ${backgroundType} theme for ${agentName}`);
@@ -249,7 +256,7 @@ export async function refreshTheme(
     const agentDetails = transformConnectivityToAgentDetails(connectivityData);
 
     // Generate theme via cruse_theme_agent
-    const generatedTheme = await generateTheme(apiUrl, agentDetails, backgroundType);
+    const generatedTheme = await generateTheme(apiUrl, agentDetails, backgroundType, userPrompt);
     if (!generatedTheme) {
       console.error(`[ThemeManager] Failed to generate theme`);
       return null;

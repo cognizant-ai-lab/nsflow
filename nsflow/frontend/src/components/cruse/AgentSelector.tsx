@@ -149,6 +149,8 @@ export function AgentSelector({
       sx={{
         ...glassStyles,
         borderRadius: 1,
+        minWidth: 0,
+        mt: 0.7,
         '& .MuiInputLabel-root': {
           color: 'text.secondary',
           '&.Mui-focused': {
@@ -181,13 +183,17 @@ export function AgentSelector({
         sx={{
           '& .MuiSelect-select': {
             color: 'text.primary',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           },
         }}
         MenuProps={{
           PaperProps: {
             sx: {
               bgcolor: 'background.paper',
-              maxWidth: '100%',
+              width: '100%',
+              maxWidth: '280px',
               maxHeight: 400,
               '& .MuiList-root': {
                 pt: 0, // Remove default padding to make search box flush
@@ -213,6 +219,13 @@ export function AgentSelector({
           transformOrigin: {
             vertical: 'top',
             horizontal: 'left',
+          },
+          slotProps: {
+            paper: {
+              style: {
+                maxWidth: '280px',
+              },
+            },
           },
         }}
         renderValue={(value) => {

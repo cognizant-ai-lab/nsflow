@@ -31,6 +31,7 @@ import {
   Switch,
   Tooltip,
   Slider,
+  TextField,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -51,6 +52,7 @@ import { formatMessageTime } from '../../utils/cruse';
 import { AgentSelector, Agent } from './AgentSelector';
 import type { CruseThread } from '../../types/cruse';
 import { useGlassEffect } from '../../context/GlassEffectContext';
+import { useChatContext } from '../../context/ChatContext';
 
 const THREAD_LIST_COLLAPSED_KEY = 'cruse_thread_list_collapsed';
 
@@ -90,7 +92,7 @@ export interface ThreadListProps {
   /** Callback when background type is changed */
   onBackgroundTypeChange?: (type: 'static' | 'dynamic') => void;
   /** Callback when refresh theme button is clicked */
-  onRefreshTheme?: () => void;
+  onRefreshTheme?: (userPrompt?: string) => void;
   /** Is theme refreshing */
   isRefreshingTheme?: boolean;
 }
@@ -136,10 +138,20 @@ export function ThreadList({
   // Glass effect from context
   const { opacity: glassOpacity, blur: glassBlur, setOpacity: setGlassOpacity, setBlur: setGlassBlur } = useGlassEffect();
 
+  // Get targetNetwork from ChatContext (the active network being chatted with)
+  const { targetNetwork } = useChatContext();
+
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const settingsOpen = Boolean(settingsAnchorEl);
 
   const [agentSelectorOpen, setAgentSelectorOpen] = useState(false);
+
+  // Theme refresh prompt state - stored per targetNetwork (not selectedAgentId)
+  const [themePrompt, setThemePrompt] = useState(() => {
+    if (!targetNetwork) return '';
+    const stored = localStorage.getItem(`cruse_theme_prompt_${targetNetwork}`);
+    return stored || '';
+  });
 
   // Filter threads by selected agent
   const agentThreads = selectedAgentId
@@ -153,6 +165,23 @@ export function ThreadList({
   useEffect(() => {
     localStorage.setItem(THREAD_LIST_COLLAPSED_KEY, String(isCollapsed));
   }, [isCollapsed]);
+
+  // Persist theme prompt to localStorage (per targetNetwork)
+  useEffect(() => {
+    if (targetNetwork) {
+      localStorage.setItem(`cruse_theme_prompt_${targetNetwork}`, themePrompt);
+    }
+  }, [themePrompt, targetNetwork]);
+
+  // Load theme prompt when targetNetwork changes
+  useEffect(() => {
+    if (targetNetwork) {
+      const stored = localStorage.getItem(`cruse_theme_prompt_${targetNetwork}`);
+      setThemePrompt(stored || '');
+    } else {
+      setThemePrompt('');
+    }
+  }, [targetNetwork]);
 
   const handleToggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
@@ -330,7 +359,7 @@ export function ThreadList({
             onClick={(e) => {
               e.stopPropagation();
               if (cruseThemeEnabled && !isRefreshingTheme) {
-                onRefreshTheme?.();
+                onRefreshTheme?.(themePrompt);
               }
             }}
             sx={{
@@ -354,6 +383,52 @@ export function ThreadList({
               <RefreshIcon sx={{ fontSize: '1.1rem' }} />
             )}
           </IconButton>
+        </Box>
+
+        {/* Row 1.5: User Prompt for Theme Refresh */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.5,
+            opacity: cruseThemeEnabled ? 1 : 0.4,
+            pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
+          }}
+        >
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+            User Prompt
+          </Typography>
+          <TextField
+            value={themePrompt}
+            onChange={(e) => setThemePrompt(e.target.value)}
+            placeholder="Optional: Customize theme generation..."
+            disabled={!cruseThemeEnabled}
+            multiline
+            maxRows={1}
+            minRows={1}
+            size="small"
+            fullWidth
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                fontSize: '0.75rem',
+                '& fieldset': {
+                  borderColor: 'divider',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'primary.main',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'primary.main',
+                },
+              },
+              '& .MuiInputBase-input': {
+                py: 0.5,
+              },
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
         </Box>
 
         {/* Row 2: Opacity Slider (horizontal layout) */}
@@ -468,12 +543,14 @@ export function ThreadList({
         sx={{
           height: 'calc(100% - 48px)',
           width: '60px',
+          maxWidth: '60px',
           display: 'flex',
           flexDirection: 'column',
           ...glassStyles,
           borderRadius: '12px',
           margin: '24px',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          overflow: 'hidden',
         }}
       >
         {/* Expand Button at Top */}
@@ -667,6 +744,7 @@ export function ThreadList({
       sx={{
         height: 'calc(100% - 48px)',
         width: '280px',
+        maxWidth: '280px',
         display: 'flex',
         flexDirection: 'column',
         ...glassStyles,
@@ -704,7 +782,7 @@ export function ThreadList({
           </IconButton>
         </Tooltip>
 
-        <Box sx={{ flex: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
           {isLoadingAgents ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
               <CircularProgress size={24} />

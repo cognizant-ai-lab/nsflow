@@ -198,7 +198,7 @@ const CruseContent: React.FC = () => {
   }, []);
 
   // Handle theme refresh
-  const handleRefreshTheme = useCallback(async () => {
+  const handleRefreshTheme = useCallback(async (userPrompt?: string) => {
     if (!activeNetwork || !apiUrl) {
       console.warn(`[Cruse] Cannot refresh theme: missing activeNetwork or apiUrl`);
       return;
@@ -207,7 +207,7 @@ const CruseContent: React.FC = () => {
     setIsRefreshingTheme(true);
 
     try {
-      const theme = await refreshTheme(apiUrl, activeNetwork, backgroundType);
+      const theme = await refreshTheme(apiUrl, activeNetwork, backgroundType, userPrompt);
 
       if (theme) {
         setBackgroundSchema(theme);
