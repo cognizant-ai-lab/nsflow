@@ -169,7 +169,7 @@ export function AgentSelector({
       <Select
         labelId="agent-selector-label"
         id="agent-selector"
-        value={selectedAgentId || ''}
+        value={agents.some((a) => a.id === selectedAgentId) ? selectedAgentId : ''}
         label={label}
         onChange={handleChange}
         open={open}

@@ -47,6 +47,8 @@ export function SelectField({
     }
   };
 
+  const validValue = options.some((opt) => opt.value === value) ? value : '';
+
   return (
     <MuiTextField
       fullWidth
@@ -55,7 +57,7 @@ export function SelectField({
       label={label}
       required={required}
       disabled={disabled}
-      value={value ?? ''}
+      value={validValue}
       onChange={handleChange}
       error={!!error}
       helperText={error || description}

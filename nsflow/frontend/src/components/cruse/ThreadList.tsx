@@ -738,7 +738,7 @@ export function ThreadList({
                 bgcolor: 'primary.main',
                 color: 'primary.contrastText',
                 '& .MuiSvgIcon-root': {
-                  color: 'primary.contrastText',
+                  color: 'text.primary',
                 },
               },
             }}
@@ -748,7 +748,7 @@ export function ThreadList({
               sx={{
                 fontWeight: 600,
                 fontSize: '0.85rem',
-                color: 'primary.main',
+                color: 'text.primary',
                 '.MuiListItemButton-root:hover &': {
                   color: 'inherit',
                 },

@@ -109,12 +109,11 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
     <Paper
       elevation={1}
       sx={{
-        height: '100%',
-        maxWidth: '1000px', // Limit chat panel width
-        marginLeft: 'auto', // Center horizontally
-        marginRight: 'auto', // Center horizontally
-        marginTop: '24px',
-        marginBottom: '24px',
+        height: 'calc(100% - 48px)',
+        maxWidth: '1400px',
+        ml: 10,
+        mr: 10,
+        my: 3,
         display: 'flex',
         flexDirection: 'column',
         ...(cruseThemeEnabled ? glassStyles : { backgroundColor: theme.palette.background.paper }),
