@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   FormControl,
   Select,
@@ -23,8 +23,10 @@ import {
   SelectChangeEvent,
   Box,
   Typography,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
-import { SmartToy as AgentIcon } from '@mui/icons-material';
+import { SmartToy as AgentIcon, Search as SearchIcon } from '@mui/icons-material';
 import { useGlassEffect } from '../../context/GlassEffectContext';
 
 export interface Agent {
@@ -71,13 +73,40 @@ export function AgentSelector({
   label = 'Select Agent',
 }: AgentSelectorProps) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { getGlassStyles } = useGlassEffect();
+
+  // Auto-focus search input when dropdown opens
+  useEffect(() => {
+    if (open && searchInputRef.current) {
+      // Delay to ensure the menu is fully rendered and visible
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    } else {
+      // Clear search when dropdown closes
+      setSearchQuery('');
+    }
+  }, [open]);
 
   const handleChange = (event: SelectChangeEvent<string>) => {
     const agentId = event.target.value;
     onAgentChange(agentId);
     setOpen(false);
   };
+
+  // Filter agents based on search query
+  const filteredAgents = agents.filter((agent) => {
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase();
+    const nameMatch = agent.name.toLowerCase().includes(query);
+    const descriptionMatch = agent.description?.toLowerCase().includes(query);
+
+    return nameMatch || descriptionMatch;
+  });
 
   const glassStyles = getGlassStyles();
 
@@ -127,6 +156,10 @@ export function AgentSelector({
             sx: {
               bgcolor: 'background.paper',
               maxWidth: '100%',
+              maxHeight: 400,
+              '& .MuiList-root': {
+                pt: 0, // Remove default padding to make search box flush
+              },
               '& .MuiMenuItem-root': {
                 color: 'text.primary',
                 '&:hover': {
@@ -184,14 +217,75 @@ export function AgentSelector({
           );
         }}
       >
+        {/* Search Box - Pinned at top */}
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            bgcolor: 'background.paper',
+            p: 1.5,
+            pb: 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+          onKeyDown={(e) => {
+            // Prevent Select from closing when typing in search box
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            // Prevent menu from closing when clicking search box
+            e.stopPropagation();
+          }}
+        >
+          <TextField
+            inputRef={searchInputRef}
+            autoFocus
+            placeholder="Search agents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            size="small"
+            fullWidth
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3,
+                bgcolor: 'action.hover',
+                '& fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'primary.main',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'primary.main',
+                },
+              },
+            }}
+          />
+        </Box>
+
+        {/* Agent List - Scrollable */}
         {agents.length === 0 ? (
           <MenuItem disabled>
             <Typography variant="body2" color="text.secondary">
               No agents available
             </Typography>
           </MenuItem>
+        ) : filteredAgents.length === 0 ? (
+          <MenuItem disabled>
+            <Typography variant="body2" color="text.secondary">
+              No agents match your search
+            </Typography>
+          </MenuItem>
         ) : (
-          agents.map((agent) => (
+          filteredAgents.map((agent) => (
             <MenuItem key={agent.id} value={agent.id}>
               <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', overflow: 'hidden' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
