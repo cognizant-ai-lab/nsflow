@@ -117,139 +117,139 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
     fitView({ padding: 0.2, duration: 800 });
   };
 
- // Custom styling for active/inactive states
- const getNodeStyle = (isActive: boolean) => ({
- boxShadow: isActive ? config.theme.activeAgentGlow : "none",
- borderColor: isActive ? config.theme.activeAgentBorder : undefined,
- transition: "box-shadow 0.3s ease, border-color 0.3s ease",
- });
+  // Custom styling for active/inactive states
+  const getNodeStyle = (isActive: boolean) => ({
+    boxShadow: isActive ? config.theme.activeAgentGlow : "none",
+    borderColor: isActive ? config.theme.activeAgentBorder : undefined,
+    transition: "box-shadow 0.3s ease, border-color 0.3s ease",
+  });
 
- return (
- <Box
- sx={{
- height: "100%",
- width: "100%",
- position: "relative",
- backgroundColor: config.features.showAgentFlowBackground
- ? theme.palette.background.default
- : "transparent",
- }}
- >
- {/* Top Controls (if enabled) */}
- {config.features.showAgentFlowControls && (
- <Box
- sx={{
- position: "absolute",
- top: 12,
- left: 12,
- zIndex: 20,
- display: "flex",
- gap: 1,
- }}
- >
- <Tooltip title="Auto arrange nodes">
- <Button
- size="small"
- variant="contained"
- startIcon={<AutoArrangeIcon />}
- onClick={handleAutoArrange}
- sx={{
- backgroundColor: alpha(theme.palette.primary.main, 0.9),
- backdropFilter: "blur(8px)",
- "&:hover": {
- backgroundColor: theme.palette.primary.main,
- },
- fontSize: "0.7rem",
- textTransform: "none",
- px: 1.5,
- }}
- >
- Arrange
- </Button>
- </Tooltip>
- </Box>
- )}
+  return (
+    <Box
+      sx={{
+        height: "100%",
+        width: "100%",
+        position: "relative",
+        backgroundColor: config.features.showAgentFlowBackground
+          ? theme.palette.background.default
+          : "transparent",
+      }}
+    >
+      {/* Top Controls (if enabled) */}
+      {config.features.showAgentFlowControls && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            zIndex: 20,
+            display: "flex",
+            gap: 1,
+          }}
+        >
+          <Tooltip title="Auto arrange nodes">
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AutoArrangeIcon />}
+              onClick={handleAutoArrange}
+              sx={{
+                backgroundColor: alpha(theme.palette.primary.main, 0.9),
+                backdropFilter: "blur(8px)",
+                "&:hover": {
+                  backgroundColor: theme.palette.primary.main,
+                },
+                fontSize: "0.7rem",
+                textTransform: "none",
+                px: 1.5,
+              }}
+            >
+              Arrange
+            </Button>
+          </Tooltip>
+        </Box>
+      )}
 
- {/* Active Agent Indicator */}
- {config.features.showActiveAgentIndicator && activeAgents.size > 0 && (
- <Paper
- elevation={0}
- sx={{
- position: "absolute",
- top: 12,
- right: 12,
- zIndex: 20,
- px: 2,
- py: 1,
- backgroundColor: alpha(theme.palette.background.paper, 0.85),
- backdropFilter: "blur(8px)",
- borderRadius: 2,
- border: `1px solid ${alpha(config.theme.activeAgentBorder, 0.3)}`,
- }}
- >
- <Typography
- variant="caption"
- sx={{
- color: theme.palette.text.secondary,
- display: "block",
- mb: 0.5,
- fontSize: "0.65rem",
- textTransform: "uppercase",
- letterSpacing: "0.5px",
- }}
- >
- Active Agents
- </Typography>
- <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
- {Array.from(activeAgents).map((agent) => (
- <Box
- key={agent}
- sx={{
- px: 1,
- py: 0.25,
- borderRadius: 1,
- backgroundColor: alpha(config.theme.activeAgentBorder, 0.2),
- border: `1px solid ${config.theme.activeAgentBorder}`,
- }}
- >
- <Typography
- variant="caption"
- sx={{
- color: config.theme.activeAgentBorder,
- fontWeight: 600,
- fontSize: "0.7rem",
- }}
- >
- {agent}
- </Typography>
- </Box>
- ))}
- </Box>
- </Paper>
- )}
+      {/* Active Agent Indicator */}
+      {config.features.showActiveAgentIndicator && activeAgents.size > 0 && (
+        <Paper
+          elevation={0}
+          sx={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            zIndex: 20,
+            px: 2,
+            py: 1,
+            backgroundColor: alpha(theme.palette.background.paper, 0.85),
+            backdropFilter: "blur(8px)",
+            borderRadius: 2,
+            border: `1px solid ${alpha(config.theme.activeAgentBorder, 0.3)}`,
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: theme.palette.text.secondary,
+              display: "block",
+              mb: 0.5,
+              fontSize: "0.65rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            Active Agents
+          </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+            {Array.from(activeAgents).map((agent) => (
+              <Box
+                key={agent}
+                sx={{
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 1,
+                  backgroundColor: alpha(config.theme.activeAgentBorder, 0.2),
+                  border: `1px solid ${config.theme.activeAgentBorder}`,
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: config.theme.activeAgentBorder,
+                    fontWeight: 600,
+                    fontSize: "0.7rem",
+                  }}
+                >
+                  {agent}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Paper>
+      )}
 
       {/* React Flow */}
       <ReactFlow
         nodes={nodes.map((node) => ({
- ...node,
- data: {
- ...node.data,
- isActive: activeAgents.has(node.id),
- selectedNetwork: activeNetwork,
- },
- style: getNodeStyle(activeAgents.has(node.id)),
- }))}
- edges={edges.map((edge) => ({
- ...edge,
- animated: activeEdges.has(`${edge.source}-${edge.target}`),
- style: {
- strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 4 : 1.5,
- stroke: activeEdges.has(`${edge.source}-${edge.target}`)
- ? config.theme.activeAgentBorder
- : alpha(theme.palette.text.secondary, 0.3),
- transition: "stroke-width 0.3s ease, stroke 0.3s ease",
- },
- }))}
+          ...node,
+          data: {
+            ...node.data,
+            isActive: activeAgents.has(node.id),
+            selectedNetwork: activeNetwork,
+          },
+          style: getNodeStyle(activeAgents.has(node.id)),
+        }))}
+        edges={edges.map((edge) => ({
+          ...edge,
+          animated: activeEdges.has(`${edge.source}-${edge.target}`),
+          style: {
+            strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 4 : 1.5,
+            stroke: activeEdges.has(`${edge.source}-${edge.target}`)
+              ? config.theme.activeAgentBorder
+              : alpha(theme.palette.text.secondary, 0.3),
+            transition: "stroke-width 0.3s ease, stroke 0.3s ease",
+          },
+        }))}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
@@ -260,72 +260,72 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
         nodesDraggable={config.features.enableNodeDragging}
         proOptions={{ hideAttribution: true }}
       >
- {/* Background */}
- {config.features.showAgentFlowBackground && (
- <Background
- color={alpha(theme.palette.primary.main, 0.1)}
- gap={20}
- size={1}
- />
- )}
+        {/* Background */}
+        {config.features.showAgentFlowBackground && (
+          <Background
+            color={alpha(theme.palette.primary.main, 0.1)}
+            gap={20}
+            size={1}
+          />
+        )}
 
- {/* Controls (if enabled) */}
- {config.features.showAgentFlowControls && (
- <Controls
- showZoom={true}
- showFitView={true}
- showInteractive={false}
- style={{
- background: alpha(theme.palette.background.paper, 0.8),
- backdropFilter: "blur(8px)",
- borderRadius: 8,
- border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
- }}
- />
- )}
+        {/* Controls (if enabled) */}
+        {config.features.showAgentFlowControls && (
+          <Controls
+            showZoom={true}
+            showFitView={true}
+            showInteractive={false}
+            style={{
+              background: alpha(theme.palette.background.paper, 0.8),
+              backdropFilter: "blur(8px)",
+              borderRadius: 8,
+              border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+            }}
+          />
+        )}
 
- {/* MiniMap (if enabled) */}
- {config.features.showMinimap && (
- <MiniMap
- nodeColor={(node) =>
- activeAgents.has(node.id)
- ? config.theme.activeAgentBorder
- : alpha(theme.palette.primary.main, 0.5)
- }
- maskColor={alpha(theme.palette.background.default, 0.8)}
- style={{
- background: alpha(theme.palette.background.paper, 0.9),
- border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
- borderRadius: 8,
- }}
- />
- )}
- </ReactFlow>
+        {/* MiniMap (if enabled) */}
+        {config.features.showMinimap && (
+          <MiniMap
+            nodeColor={(node) =>
+              activeAgents.has(node.id)
+                ? config.theme.activeAgentBorder
+                : alpha(theme.palette.primary.main, 0.5)
+            }
+            maskColor={alpha(theme.palette.background.default, 0.8)}
+            style={{
+              background: alpha(theme.palette.background.paper, 0.9),
+              border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+              borderRadius: 8,
+            }}
+          />
+        )}
+      </ReactFlow>
 
- {/* No Network Selected State */}
- {!activeNetwork && (
- <Box
- sx={{
- position: "absolute",
- top: "50%",
- left: "50%",
- transform: "translate(-50%, -50%)",
- textAlign: "center",
- }}
- >
- <Typography
- variant="h6"
- sx={{
- color: alpha(theme.palette.text.secondary, 0.6),
- fontWeight: 300,
- }}
- >
- Select an agent network to visualize
- </Typography>
- </Box>
- )}
- </Box>
- );
+      {/* No Network Selected State */}
+      {!activeNetwork && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            textAlign: "center",
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              color: alpha(theme.palette.text.secondary, 0.6),
+              fontWeight: 300,
+            }}
+          >
+            Select an agent network to visualize
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
 };
 
 export default ZenModeAgentFlow;

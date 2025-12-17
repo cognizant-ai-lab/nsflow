@@ -47,6 +47,7 @@ import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import { Mp3Encoder } from "@breezystack/lamejs";
+import { useSampleQueries } from "../hooks/useSampleQueries";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
@@ -72,8 +73,10 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sampleQueries, setSampleQueries] = useState<string[]>([]);
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
+  
+  // Use the shared hook for sample queries
+  const sampleQueries = useSampleQueries(activeNetwork);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
@@ -121,37 +124,6 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
-
-  // Fetch connectivity info and extract sample queries when activeNetwork changes
-  useEffect(() => {
-    const fetchSampleQueries = async () => {
-      if (!activeNetwork || !apiUrl) {
-        setSampleQueries([]);
-        return;
-      }
-
-      try {
-        const response = await fetch(`${apiUrl}/api/v1/connectivity/${activeNetwork}`);
-        if (!response.ok) {
-          console.error("Failed to fetch connectivity info:", response.statusText);
-          setSampleQueries(["What all can you help us with?"]);
-          return;
-        }
-
-        const data = await response.json();
-        const queries = data?.metadata?.sample_queries || [];
-
-        // Always append the default query
-        const allQueries = [...queries, "What all can you help us with?"];
-        setSampleQueries(allQueries);
-      } catch (error) {
-        console.error("Error fetching sample queries:", error);
-        setSampleQueries(["What all can you help us with?"]);
-      }
-    };
-
-    fetchSampleQueries();
-  }, [activeNetwork, apiUrl]);
 
   // Load persisted toggle when network changes (or first mount)
   useEffect(() => {
