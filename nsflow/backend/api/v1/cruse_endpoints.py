@@ -508,13 +508,13 @@ async def create_or_add_theme(theme_request: ThemeCreate, db: Session = Depends(
         return new_theme
 
 
-@router.get("/themes/{agent_name}", response_model=ThemeResponse)
+@router.get("/themes/{agent_name:path}", response_model=ThemeResponse)
 async def get_theme(agent_name: str, db: Session = Depends(get_threads_db)):
     """
     Get both static and dynamic themes for an agent.
 
     Args:
-        agent_name: The agent name
+        agent_name: The agent name (can contain slashes)
 
     Returns:
         ThemeResponse containing both static_theme and dynamic_theme (null if not set)
@@ -528,7 +528,7 @@ async def get_theme(agent_name: str, db: Session = Depends(get_threads_db)):
     return theme
 
 
-@router.patch("/themes/{agent_name}", response_model=ThemeResponse)
+@router.patch("/themes/{agent_name:path}", response_model=ThemeResponse)
 async def update_theme(
     agent_name: str,
     theme_update: ThemeUpdate,
