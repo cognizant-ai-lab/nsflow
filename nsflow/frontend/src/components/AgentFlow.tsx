@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -24,7 +24,6 @@ import ReactFlow, {
   useReactFlow,
   Node,
   Edge,
-  EdgeMarkerType,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { 
@@ -47,7 +46,9 @@ import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
-import { createLayoutManager } from "../utils/agentLayoutManager";
+import { useAgentLayoutManager } from "../hooks/useAgentLayoutManager";
+import { useAgentHighlighting } from "../hooks/useAgentHighlighting";
+import { useAgentFlowData } from "../hooks/useAgentFlowData";
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
@@ -59,10 +60,6 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
-
-  // ** State for highlighting active agents & edges **
-  const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
-  const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
 
   // ** State for actual values (used in API calls/layout) **
   const [baseRadius, setBaseRadius] = useState(30);
@@ -77,132 +74,46 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // ** Add a compact mode option for connectivity **
   const [useCompactMode, setUseCompactMode] = useState(true);
 
-  // ** Layout manager (same pattern as EditorAgentFlow) **
-  const layoutManager = selectedNetwork
-    ? createLayoutManager(selectedNetwork, { baseRadius, levelSpacing })
-    : null;
-
   const resetFlow = () => {
     setNodes([]);
     setEdges([]);
     setDiagramKey(prev => prev + 1); // This forces a full remount
   };
 
-  // Fetch and render network with cached layout (if present)
-  useEffect(() => {
-    if (!selectedNetwork) return;
+  // Use layout manager hook
+  const { applyLayout, forceLayout, handleNodesChange } = useAgentLayoutManager({
+    selectedNetwork,
+    baseRadius,
+    levelSpacing,
+    onNodesChange,
+    setNodes,
+    enableDragging: true,
+  });
 
-    const endpoint = useCompactMode ? "connectivity" : "compact_connectivity";
+  // Use agent highlighting hook
+  const { activeAgents, activeEdges } = useAgentHighlighting({
+    selectedNetwork,
+    wsUrl,
+    sessionId,
+  });
 
-    fetch(`${apiUrl}/api/v1/${endpoint}/${selectedNetwork}`)
-      .then((res) => res.json())
-      .then((data) => {
-        // Shape edges (preserve AgentFlow visuals)
-        const transformedEdges: Edge[] = (data.edges as Edge[]).map((edge) => ({
-          ...edge,
-          type: "floating",
-          animated: true,
-          markerEnd: "arrowclosed" as EdgeMarkerType,
-        }));
-
-        // Start with raw nodes from API
-        const rawNodes: Node[] = (data.nodes as Node[]);
-
-        // Apply intelligent layout w/ position cache (like EditorAgentFlow)
-        let finalNodes = rawNodes;
-        if (layoutManager && rawNodes.length > 0) {
-          try {
-            const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
-            finalNodes = layoutResult.nodes as Node[];
-          } catch (e) {
-            console.warn("[AgentFlow] layoutManager.applyLayout failed; using raw positions:", e);
-          }
-        }
-
-        setNodes(finalNodes);
-        setEdges(transformedEdges);
-
-        // Fit view/viewport exactly as before
-        fitView();
-        // console.log("received data", data);
-        // You can change zoom and center values as needed
-        setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 });
-      })
-      .catch((err) => console.error("Error loading network:", err));
-  }, [selectedNetwork, apiUrl, useCompactMode, baseRadius, levelSpacing]); // keep deps so sliders still reflow
-
-  // WebSocket highlighting (unchanged)
-  useEffect(() => {
-    if (!selectedNetwork) return;
-
-    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${selectedNetwork}/${sessionId}`);
-
-    ws.onopen = () => console.log("Logs WebSocket Connected.");
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        if (!isValidJson(event.data)) {
-          console.error("Invalid JSON received:", event.data);
-          return;
-        }
-
-        const data = JSON.parse(event.data);
-        if (data.message && isValidJson(data.message)) {
-          const logMessage = JSON.parse(data.message);
-          if (logMessage.otrace) {
-            // Ensure the otrace array is treated as an array of strings.
-            const newActiveAgents = new Set<string>(logMessage.otrace);
-            setActiveAgents(newActiveAgents);
-
-            // ** Generate active edges from the agent sequence **
-            if (logMessage.otrace.length > 1) {
-              const newActiveEdges = new Set<string>();
-              for (let i = 0; i < logMessage.otrace.length - 1; i++) {
-                newActiveEdges.add(`${logMessage.otrace[i]}-${logMessage.otrace[i + 1]}`);
-              }
-              setActiveEdges(newActiveEdges);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error parsing WebSocket log message:", error);
-      }
-    };
-
-    ws.onclose = () => console.log("Logs WebSocket Disconnected");
-
-    return () => ws.close();
-  }, [selectedNetwork, wsUrl, sessionId]);
-
-  // Save cached positions after drag-end (debounced), like editor
-  const handleNodesChange = useCallback((changes: any[]) => {
-    onNodesChange(changes);
-
-    const ended = changes.some(
-      (c: any) => c.type === "position" && c.dragging === false
-    );
-    if (ended && layoutManager) {
-      setTimeout(() => {
-        setNodes((curr) => {
-          try {
-            layoutManager.savePositions(curr);
-          } catch (e) {
-            console.warn("[AgentFlow] layoutManager.savePositions failed:", e);
-          }
-          return curr;
-        });
-      }, 400);
-    }
-  }, [onNodesChange, layoutManager, setNodes]);
-
-  // Utility function to validate JSON
-  const isValidJson = (str: string): boolean => {
-    try {
-      JSON.parse(str);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  };
+  // Use agent flow data hook
+  useAgentFlowData({
+    selectedNetwork,
+    apiUrl,
+    useCompactMode,
+    applyLayout,
+    setNodes,
+    setEdges,
+    fitView,
+    setViewport,
+    viewportConfig: {
+      x: 0,
+      y: 0,
+      zoom: 0.5,
+      duration: 800,
+    },
+  });
 
   return (
     <Box sx={{ 
@@ -229,16 +140,8 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               variant="contained"
               startIcon={<AutoArrangeIcon />}
               onClick={() => {
-                if (layoutManager && nodes.length > 0) {
-                  try {
-                    const { nodes: laidOut } = layoutManager.forceLayout(nodes, edges);
-                    setNodes(laidOut as Node[]);
-                    // persist immediately so the view sticks next load
-                    layoutManager.savePositions(laidOut as Node[]);
-                  } catch (e) {
-                    console.warn("[AgentFlow] forceLayout failed:", e);
-                  }
-                }
+                const laidOutNodes = forceLayout(nodes, edges);
+                setNodes(laidOutNodes);
                 fitView();
               }}
               sx={{
