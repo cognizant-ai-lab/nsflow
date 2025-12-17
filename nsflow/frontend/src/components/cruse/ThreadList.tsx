@@ -339,7 +339,7 @@ export function ThreadList({
 
           <Divider sx={{ my: 0.5 }} />
 
-          {/* Cruse Theme Settings (same as expanded) */}
+          {/* Cruse Theme Settings - 3 Row Design (same as expanded) */}
           <MenuItem
             sx={{
               py: 1.5,
@@ -347,116 +347,113 @@ export function ThreadList({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'stretch',
-              gap: 1,
+              gap: 1.5,
               '&:hover': {
                 bgcolor: 'action.hover',
               },
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <PaletteIcon fontSize="small" sx={{ color: 'primary.main' }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
-                Cruse Theme
-              </Typography>
-              <Switch
-                checked={cruseThemeEnabled}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  onCruseThemeToggle?.(e.target.checked);
-                }}
-                size="small"
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: 'success.main',
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: 'success.main',
-                  },
-                }}
-              />
-            </Box>
-
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                ml: 4,
-                opacity: cruseThemeEnabled ? 1 : 0.4,
-                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
-              }}
-            >
+            {/* Row 1: Cruse/MUI Toggle, Static/Dynamic Toggle, Refresh Button */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {/* Cruse/MUI Toggle */}
               <Box
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCruseThemeToggle?.(!cruseThemeEnabled);
+                }}
                 sx={{
                   display: 'flex',
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  overflow: 'hidden',
-                  flex: 1,
+                  alignItems: 'center',
+                  width: 80,
+                  height: 32,
+                  borderRadius: 16,
+                  bgcolor: cruseThemeEnabled ? 'success.main' : 'action.disabled',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                  '&:hover': {
+                    opacity: 0.9,
+                  },
                 }}
               >
                 <Box
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (cruseThemeEnabled) {
-                      onBackgroundTypeChange?.('static');
-                    }
-                  }}
                   sx={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 0.5,
-                    py: 0.5,
-                    px: 1,
-                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
-                    bgcolor: backgroundType === 'static' ? 'primary.main' : 'transparent',
-                    color: backgroundType === 'static' ? 'primary.contrastText' : 'text.secondary',
-                    transition: 'all 0.2s',
-                    '&:hover': cruseThemeEnabled ? {
-                      bgcolor: backgroundType === 'static' ? 'primary.dark' : 'action.hover',
-                    } : {},
+                    position: 'absolute',
+                    left: cruseThemeEnabled ? 2 : 42,
+                    width: 36,
+                    height: 28,
+                    borderRadius: 14,
+                    bgcolor: 'background.paper',
+                    transition: 'left 0.3s',
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    position: 'absolute',
+                    left: cruseThemeEnabled ? 10 : 50,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    color: cruseThemeEnabled ? 'success.contrastText' : 'text.disabled',
+                    transition: 'all 0.3s',
                   }}
                 >
-                  <StaticIcon sx={{ fontSize: '0.9rem' }} />
-                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
-                    Static
-                  </Typography>
-                </Box>
-                <Box
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (cruseThemeEnabled) {
-                      onBackgroundTypeChange?.('dynamic');
-                    }
-                  }}
-                  sx={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 0.5,
-                    py: 0.5,
-                    px: 1,
-                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
-                    bgcolor: backgroundType === 'dynamic' ? 'primary.main' : 'transparent',
-                    color: backgroundType === 'dynamic' ? 'primary.contrastText' : 'text.secondary',
-                    transition: 'all 0.2s',
-                    '&:hover': cruseThemeEnabled ? {
-                      bgcolor: backgroundType === 'dynamic' ? 'primary.dark' : 'action.hover',
-                    } : {},
-                  }}
-                >
-                  <DynamicIcon sx={{ fontSize: '0.9rem' }} />
-                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
-                    Dynamic
-                  </Typography>
-                </Box>
+                  {cruseThemeEnabled ? 'Cruse' : 'MUI'}
+                </Typography>
               </Box>
 
+              {/* Static/Dynamic Toggle */}
+              <Box
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (cruseThemeEnabled) {
+                    onBackgroundTypeChange?.(backgroundType === 'static' ? 'dynamic' : 'static');
+                  }
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  width: 80,
+                  height: 32,
+                  borderRadius: 16,
+                  bgcolor: cruseThemeEnabled && backgroundType === 'dynamic' ? 'primary.main' : 'action.disabled',
+                  cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                  opacity: cruseThemeEnabled ? 1 : 0.4,
+                  '&:hover': cruseThemeEnabled ? {
+                    opacity: 0.9,
+                  } : {},
+                }}
+              >
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: backgroundType === 'static' ? 2 : 42,
+                    width: 36,
+                    height: 28,
+                    borderRadius: 14,
+                    bgcolor: 'background.paper',
+                    transition: 'left 0.3s',
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    position: 'absolute',
+                    left: backgroundType === 'static' ? 8 : 48,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    color: cruseThemeEnabled && backgroundType === 'dynamic' ? 'primary.contrastText' : 'text.disabled',
+                    transition: 'all 0.3s',
+                  }}
+                >
+                  {backgroundType === 'static' ? 'Static' : 'Dynamic'}
+                </Typography>
+              </Box>
+
+              {/* Refresh Button */}
               <IconButton
                 size="small"
                 disabled={!cruseThemeEnabled || isRefreshingTheme}
@@ -467,10 +464,12 @@ export function ThreadList({
                   }
                 }}
                 sx={{
+                  width: 32,
+                  height: 32,
                   border: 1,
                   borderColor: 'divider',
-                  borderRadius: 1,
-                  p: 0.5,
+                  borderRadius: '50%',
+                  opacity: cruseThemeEnabled ? 1 : 0.4,
                   '&:hover': {
                     bgcolor: 'action.hover',
                   },
@@ -482,9 +481,81 @@ export function ThreadList({
                 {isRefreshingTheme ? (
                   <CircularProgress size={16} />
                 ) : (
-                  <RefreshIcon sx={{ fontSize: '1rem' }} />
+                  <RefreshIcon sx={{ fontSize: '1.1rem' }} />
                 )}
               </IconButton>
+            </Box>
+
+            {/* Row 2: Opacity Slider (horizontal layout) */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                opacity: cruseThemeEnabled ? 1 : 0.4,
+                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
+              }}
+            >
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+                Opacity
+              </Typography>
+              <Slider
+                value={glassOpacity}
+                onChange={(_, value) => setGlassOpacity(value as number)}
+                min={0}
+                max={100}
+                step={5}
+                disabled={!cruseThemeEnabled}
+                size="small"
+                sx={{
+                  flex: 1,
+                  '& .MuiSlider-thumb': {
+                    width: 12,
+                    height: 12,
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+              <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+                {glassOpacity}%
+              </Typography>
+            </Box>
+
+            {/* Row 3: Blur Slider (horizontal layout) */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                opacity: cruseThemeEnabled ? 1 : 0.4,
+                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
+              }}
+            >
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+                Blur
+              </Typography>
+              <Slider
+                value={glassBlur}
+                onChange={(_, value) => setGlassBlur(value as number)}
+                min={0}
+                max={10}
+                step={0.1}
+                disabled={!cruseThemeEnabled}
+                size="small"
+                sx={{
+                  flex: 1,
+                  '& .MuiSlider-thumb': {
+                    width: 12,
+                    height: 12,
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+              <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+                {glassBlur.toFixed(1)}px
+              </Typography>
             </Box>
           </MenuItem>
 
@@ -844,7 +915,7 @@ export function ThreadList({
 
           <Divider sx={{ my: 0.5 }} />
 
-          {/* Cruse Theme Settings */}
+          {/* Cruse Theme Settings - 3 Row Design */}
           <MenuItem
             sx={{
               py: 1.5,
@@ -852,117 +923,113 @@ export function ThreadList({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'stretch',
-              gap: 1,
+              gap: 1.5,
               '&:hover': {
                 bgcolor: 'action.hover',
               },
             }}
-            onClick={(e) => e.stopPropagation()} // Prevent menu from closing
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* First Row: Cruse Theme Toggle */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <PaletteIcon fontSize="small" sx={{ color: 'primary.main' }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
-                Cruse Theme
-              </Typography>
-              <Switch
-                checked={cruseThemeEnabled}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  onCruseThemeToggle?.(e.target.checked);
-                }}
-                size="small"
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: 'success.main',
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: 'success.main',
-                  },
-                }}
-              />
-            </Box>
-
-            {/* Second Row: Type Toggle and Refresh Button */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                ml: 4, // Indent to align with content
-                opacity: cruseThemeEnabled ? 1 : 0.4,
-                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
-              }}
-            >
-              {/* Static/Dynamic Toggle Buttons */}
+            {/* Row 1: Cruse/MUI Toggle, Static/Dynamic Toggle, Refresh Button */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {/* Cruse/MUI Toggle */}
               <Box
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCruseThemeToggle?.(!cruseThemeEnabled);
+                }}
                 sx={{
                   display: 'flex',
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  overflow: 'hidden',
-                  flex: 1,
+                  alignItems: 'center',
+                  width: 80,
+                  height: 32,
+                  borderRadius: 16,
+                  bgcolor: cruseThemeEnabled ? 'success.main' : 'action.disabled',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                  '&:hover': {
+                    opacity: 0.9,
+                  },
                 }}
               >
                 <Box
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (cruseThemeEnabled) {
-                      onBackgroundTypeChange?.('static');
-                    }
-                  }}
                   sx={{
-                    flex: 1,
+                    position: 'absolute',
+                    left: cruseThemeEnabled ? 2 : 42,
+                    width: 36,
+                    height: 28,
+                    borderRadius: 14,
+                    bgcolor: 'background.paper',
+                    transition: 'left 0.3s',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 0.5,
-                    py: 0.5,
-                    px: 1,
-                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
-                    bgcolor: backgroundType === 'static' ? 'primary.main' : 'transparent',
-                    color: backgroundType === 'static' ? 'primary.contrastText' : 'text.secondary',
-                    transition: 'all 0.2s',
-                    '&:hover': cruseThemeEnabled ? {
-                      bgcolor: backgroundType === 'static' ? 'primary.dark' : 'action.hover',
-                    } : {},
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    position: 'absolute',
+                    left: cruseThemeEnabled ? 10 : 50,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    color: cruseThemeEnabled ? 'success.contrastText' : 'text.disabled',
+                    transition: 'all 0.3s',
                   }}
                 >
-                  <StaticIcon sx={{ fontSize: '0.9rem' }} />
-                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
-                    Static
-                  </Typography>
-                </Box>
+                  {cruseThemeEnabled ? 'Cruse' : 'MUI'}
+                </Typography>
+              </Box>
+
+              {/* Static/Dynamic Toggle */}
+              <Box
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (cruseThemeEnabled) {
+                    onBackgroundTypeChange?.(backgroundType === 'static' ? 'dynamic' : 'static');
+                  }
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  width: 80,
+                  height: 32,
+                  borderRadius: 16,
+                  bgcolor: cruseThemeEnabled && backgroundType === 'dynamic' ? 'primary.main' : 'action.disabled',
+                  cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                  opacity: cruseThemeEnabled ? 1 : 0.4,
+                  '&:hover': cruseThemeEnabled ? {
+                    opacity: 0.9,
+                  } : {},
+                }}
+              >
                 <Box
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (cruseThemeEnabled) {
-                      onBackgroundTypeChange?.('dynamic');
-                    }
-                  }}
                   sx={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 0.5,
-                    py: 0.5,
-                    px: 1,
-                    cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
-                    bgcolor: backgroundType === 'dynamic' ? 'primary.main' : 'transparent',
-                    color: backgroundType === 'dynamic' ? 'primary.contrastText' : 'text.secondary',
-                    transition: 'all 0.2s',
-                    '&:hover': cruseThemeEnabled ? {
-                      bgcolor: backgroundType === 'dynamic' ? 'primary.dark' : 'action.hover',
-                    } : {},
+                    position: 'absolute',
+                    left: backgroundType === 'static' ? 2 : 42,
+                    width: 36,
+                    height: 28,
+                    borderRadius: 14,
+                    bgcolor: 'background.paper',
+                    transition: 'left 0.3s',
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    position: 'absolute',
+                    left: backgroundType === 'static' ? 8 : 48,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    color: cruseThemeEnabled && backgroundType === 'dynamic' ? 'primary.contrastText' : 'text.disabled',
+                    transition: 'all 0.3s',
                   }}
                 >
-                  <DynamicIcon sx={{ fontSize: '0.9rem' }} />
-                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
-                    Dynamic
-                  </Typography>
-                </Box>
+                  {backgroundType === 'static' ? 'Static' : 'Dynamic'}
+                </Typography>
               </Box>
 
               {/* Refresh Button */}
@@ -976,10 +1043,12 @@ export function ThreadList({
                   }
                 }}
                 sx={{
+                  width: 32,
+                  height: 32,
                   border: 1,
                   borderColor: 'divider',
-                  borderRadius: 1,
-                  p: 0.5,
+                  borderRadius: '50%',
+                  opacity: cruseThemeEnabled ? 1 : 0.4,
                   '&:hover': {
                     bgcolor: 'action.hover',
                   },
@@ -991,86 +1060,81 @@ export function ThreadList({
                 {isRefreshingTheme ? (
                   <CircularProgress size={16} />
                 ) : (
-                  <RefreshIcon sx={{ fontSize: '1rem' }} />
+                  <RefreshIcon sx={{ fontSize: '1.1rem' }} />
                 )}
               </IconButton>
             </Box>
 
-            {/* Third Row: Opacity Slider */}
+            {/* Row 2: Opacity Slider (horizontal layout) */}
             <Box
               sx={{
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 0.5,
-                ml: 4,
-                mt: 1,
+                alignItems: 'center',
+                gap: 1.5,
+                opacity: cruseThemeEnabled ? 1 : 0.4,
+                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-                  Opacity
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500 }}>
-                  {glassOpacity}%
-                </Typography>
-              </Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+                Opacity
+              </Typography>
               <Slider
                 value={glassOpacity}
                 onChange={(_, value) => setGlassOpacity(value as number)}
                 min={0}
                 max={100}
                 step={5}
+                disabled={!cruseThemeEnabled}
                 size="small"
                 sx={{
+                  flex: 1,
                   '& .MuiSlider-thumb': {
                     width: 12,
                     height: 12,
-                  },
-                  '& .MuiSlider-track': {
-                    bgcolor: 'primary.main',
                   },
                 }}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
               />
+              <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+                {glassOpacity}%
+              </Typography>
             </Box>
 
-            {/* Fourth Row: Blur Slider */}
+            {/* Row 3: Blur Slider (horizontal layout) */}
             <Box
               sx={{
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 0.5,
-                ml: 4,
+                alignItems: 'center',
+                gap: 1.5,
+                opacity: cruseThemeEnabled ? 1 : 0.4,
+                pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-                  Blur
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500 }}>
-                  {glassBlur.toFixed(1)}px
-                </Typography>
-              </Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+                Blur
+              </Typography>
               <Slider
                 value={glassBlur}
                 onChange={(_, value) => setGlassBlur(value as number)}
                 min={0}
                 max={10}
                 step={0.1}
+                disabled={!cruseThemeEnabled}
                 size="small"
                 sx={{
+                  flex: 1,
                   '& .MuiSlider-thumb': {
                     width: 12,
                     height: 12,
-                  },
-                  '& .MuiSlider-track': {
-                    bgcolor: 'primary.main',
                   },
                 }}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
               />
+              <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+                {glassBlur.toFixed(1)}px
+              </Typography>
             </Box>
           </MenuItem>
 
