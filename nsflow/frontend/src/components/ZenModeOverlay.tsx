@@ -142,31 +142,43 @@ const ZenModeOverlay = () => {
   }, []);
 
   // Memoize which panel to render based on activeTab
-  const tabContent = useMemo(() => {
-    if (!hasAdvancedPanels || activeTab === 0) {
-      return <ZenModeChat />;
+    const tabContent = useMemo(() => {
+        const tabs = [
+        { key: 'chat', component: <ZenModeChat />, always: true },
+        { key: 'internal', component: <InternalChatPanel />, show: config.features.showInternalChat },
+        { key: 'config', component: <ConfigPanel selectedNetwork={activeNetwork || ""} />, show: config.features.showConfigPanel },
+        { key: 'slydata', component: <SlyDataPanel />, show: config.features.showSlyDataPanel },
+        { key: 'logs', component: <LogsPanel />, show: config.features.showLogsPanel },
+        ];
+        
+        const visibleTabs = tabs.filter(t => t.always || t.show);
+        return visibleTabs[activeTab]?.component || <ZenModeChat />;
+    }, [activeTab, config.features, activeNetwork]);
+  // Theme-aware colors based on current MUI theme
+  const isDark = theme.palette.mode === 'dark';
+  const themeAwareColors = useMemo(() => {
+    if (isDark) {
+      // Dark theme - use config colors
+      return {
+        backgroundGradient: config.theme.backgroundGradient,
+        headerBackground: config.theme.headerBackground,
+        agentFlowBackground: config.theme.agentFlowBackground,
+        agentFlowBorder: config.theme.agentFlowBorder,
+        chatBackground: config.theme.chatBackground,
+        chatBorder: config.theme.chatBorder,
+      };
+    } else {
+      // Light theme - use theme-aware colors
+      return {
+        backgroundGradient: `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 50%, ${theme.palette.background.default} 100%)`,
+        headerBackground: alpha(theme.palette.background.paper, 0.95),
+        agentFlowBackground: 'transparent',
+        agentFlowBorder: alpha(theme.palette.primary.main, 0.2),
+        chatBackground: alpha(theme.palette.background.paper, 0.98),
+        chatBorder: alpha(theme.palette.primary.main, 0.3),
+      };
     }
-
-    // Calculate which advanced panel corresponds to activeTab
-    let tabIndex = 1;
-    if (config.features.showInternalChat) {
-      if (activeTab === tabIndex) return <InternalChatPanel />;
-      tabIndex++;
-    }
-    if (config.features.showConfigPanel) {
-      if (activeTab === tabIndex) return <ConfigPanel selectedNetwork={activeNetwork || ""} />;
-      tabIndex++;
-    }
-    if (config.features.showSlyDataPanel) {
-      if (activeTab === tabIndex) return <SlyDataPanel />;
-      tabIndex++;
-    }
-    if (config.features.showLogsPanel) {
-      if (activeTab === tabIndex) return <LogsPanel />;
-      tabIndex++;
-    }
-    return <ZenModeChat />; // Fallback to chat
-  }, [activeTab, hasAdvancedPanels, config.features.showInternalChat, config.features.showConfigPanel, config.features.showSlyDataPanel, config.features.showLogsPanel, activeNetwork]);
+  }, [isDark, theme, config.theme]);
 
   // Handle visibility with animation timing
   useEffect(() => {
@@ -200,7 +212,7 @@ const ZenModeOverlay = () => {
         right: 0,
         bottom: 0,
         zIndex: 9999,
-        background: config.theme.backgroundGradient,
+        background: themeAwareColors.backgroundGradient,
         ...transitionStyle,
       }}
     >
@@ -222,8 +234,8 @@ const ZenModeOverlay = () => {
             width: "200%",
             height: "200%",
             background: `
-              radial-gradient(circle at 20% 30%, ${alpha(config.theme.primaryAccent, 0.08)} 0%, transparent 40%),
-              radial-gradient(circle at 80% 70%, ${alpha(config.theme.secondaryAccent, 0.06)} 0%, transparent 40%)
+              radial-gradient(circle at 20% 30%, ${alpha(theme.palette.primary.main, isDark ? 0.08 : 0.05)} 0%, transparent 40%),
+              radial-gradient(circle at 80% 70%, ${alpha(theme.palette.success.main, isDark ? 0.06 : 0.04)} 0%, transparent 40%)
             `,
             animation: "ambientFloat 20s ease-in-out infinite",
             "@keyframes ambientFloat": {
@@ -245,9 +257,9 @@ const ZenModeOverlay = () => {
               left: 0,
               right: 0,
               height: config.theme.headerHeight,
-              background: config.theme.headerBackground,
+              background: themeAwareColors.headerBackground,
               backdropFilter: "blur(12px)",
-              borderBottom: `1px solid ${alpha(config.theme.primaryAccent, 0.2)}`,
+              borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -265,14 +277,14 @@ const ZenModeOverlay = () => {
                   px: 2,
                   py: 0.75,
                   borderRadius: 2,
-                  background: alpha(config.theme.primaryAccent, 0.1),
-                  border: `1px solid ${alpha(config.theme.primaryAccent, 0.3)}`,
+                  background: alpha(theme.palette.primary.main, 0.1),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
                 }}
               >
                 <NetworkIcon
                   sx={{
                     fontSize: 20,
-                    color: config.theme.primaryAccent,
+                    color: theme.palette.primary.main,
                   }}
                 />
                 <Typography
@@ -292,9 +304,9 @@ const ZenModeOverlay = () => {
                   size="small"
                   label="Connected"
                   sx={{
-                    backgroundColor: alpha(config.theme.secondaryAccent, 0.15),
-                    color: config.theme.secondaryAccent,
-                    border: `1px solid ${alpha(config.theme.secondaryAccent, 0.3)}`,
+                    backgroundColor: alpha(theme.palette.success.main, 0.15),
+                    color: theme.palette.success.main,
+                    border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
                     fontWeight: 500,
                     "& .MuiChip-label": { px: 1.5 },
                     "&::before": {
@@ -302,7 +314,7 @@ const ZenModeOverlay = () => {
                       width: 6,
                       height: 6,
                       borderRadius: "50%",
-                      backgroundColor: config.theme.secondaryAccent,
+                      backgroundColor: theme.palette.success.main,
                       marginRight: 1,
                       animation: "pulse 2s ease-in-out infinite",
                       "@keyframes pulse": {
@@ -478,9 +490,9 @@ const ZenModeOverlay = () => {
                     height: "100%",
                     borderRadius: 3,
                     overflow: "hidden",
-                    background: config.theme.agentFlowBackground,
-                    border: `1px solid ${config.theme.agentFlowBorder}`,
-                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, 0.2)}`,
+                    background: themeAwareColors.agentFlowBackground,
+                    border: `1px solid ${themeAwareColors.agentFlowBorder}`,
+                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
                   }}
                 >
                   <ReactFlowProvider>
@@ -522,18 +534,18 @@ const ZenModeOverlay = () => {
               minSize={15}
               maxSize={50}
             >
-              <Box
-                sx={{
-                  height: "100%",
-                  borderRadius: 3,
-                  overflow: "hidden",
-                  background: config.theme.chatBackground,
-                  border: `1px solid ${config.theme.chatBorder}`,
-                  boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, 0.2)}`,
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
+                <Box
+                  sx={{
+                    height: "100%",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    background: themeAwareColors.chatBackground,
+                    border: `1px solid ${themeAwareColors.chatBorder}`,
+                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
                 {/* Tabs for Chat and Advanced Panels */}
                 {hasAdvancedPanels && (
                   <ZenModeTabs
