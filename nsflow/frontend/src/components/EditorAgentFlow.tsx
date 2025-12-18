@@ -73,13 +73,13 @@ const EditorAgentFlow = ({
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
-  
+
   // Layout control state (similar to AgentFlow)
   const [baseRadius, setBaseRadius] = useState(30);
   const [levelSpacing, setLevelSpacing] = useState(80);
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
-  const { pluginManualEditor } = getFeatureFlags();
+  const { pluginManualEditor, pluginCruse } = getFeatureFlags();
   const canEdit = !!pluginManualEditor;
   const shouldForceLayoutRef = useRef(false);
   const lastSeenNameRef = useRef<string | null>(null);
@@ -712,109 +712,138 @@ const EditorAgentFlow = ({
             zIndex: 20,
           }}
         >
-          <ButtonGroup
-            ref={launchAnchorRef}
-            variant="contained"
-            color="primary"
-            sx={{
-              borderRadius: '28px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              '& .MuiButton-root': {
-                height: 56,
-                '&:hover': {
-                  backgroundColor: theme.palette.primary.dark,
-                  transform: 'scale(1.02)',
-                  transition: 'all 0.2s ease-in-out'
-                }
-              }
-            }}
-          >
-            {/* Main Launch Button - Cruse */}
-            <Tooltip title={`Launch ${lastSeenNameRef.current} in Cruse`}>
-              <Button
-                onClick={handleLaunchCruse}
+          {pluginCruse ? (
+            // Cruse enabled: Show Launch to Cruse with dropdown for Home
+            <>
+              <ButtonGroup
+                ref={launchAnchorRef}
+                variant="contained"
+                color="primary"
                 sx={{
+                  borderRadius: '28px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  '& .MuiButton-root': {
+                    height: 56,
+                    '&:hover': {
+                      backgroundColor: theme.palette.primary.dark,
+                      transform: 'scale(1.02)',
+                      transition: 'all 0.2s ease-in-out'
+                    }
+                  }
+                }}
+              >
+                {/* Main Launch Button - Cruse */}
+                <Tooltip title={`Launch ${lastSeenNameRef.current} in Cruse`}>
+                  <Button
+                    onClick={handleLaunchCruse}
+                    sx={{
+                      minWidth: 48,
+                      px: 2.5,
+                      borderTopLeftRadius: '28px',
+                      borderBottomLeftRadius: '28px',
+                      backgroundColor: theme.palette.primary.main,
+                    }}
+                  >
+                    <LaunchIcon />
+                  </Button>
+                </Tooltip>
+
+                {/* Dropdown Arrow */}
+                <Tooltip title="More launch options">
+                  <Button
+                    size="small"
+                    onClick={handleToggleLaunchMenu}
+                    sx={{
+                      px: 0.5,
+                      minWidth: 32,
+                      borderTopRightRadius: '28px',
+                      borderBottomRightRadius: '28px',
+                      borderLeft: `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
+                      backgroundColor: theme.palette.primary.main,
+                    }}
+                  >
+                    <ArrowDropDownIcon />
+                  </Button>
+                </Tooltip>
+              </ButtonGroup>
+
+              {/* Dropdown Menu */}
+              <Popper
+                open={launchMenuOpen}
+                anchorEl={launchAnchorRef.current}
+                role={undefined}
+                placement="bottom-end"
+                transition
+                disablePortal
+                sx={{ zIndex: 21 }}
+              >
+                {({ TransitionProps, placement }) => (
+                  <Grow
+                    {...TransitionProps}
+                    style={{
+                      transformOrigin: placement === 'bottom-end' ? 'right top' : 'right bottom',
+                    }}
+                  >
+                    <Paper
+                      elevation={8}
+                      sx={{
+                        mt: 1,
+                        minWidth: 160,
+                        borderRadius: 2,
+                        backgroundColor: theme.palette.background.paper,
+                      }}
+                    >
+                      <ClickAwayListener onClickAway={handleCloseLaunchMenu}>
+                        <MenuList sx={{ py: 0.5 }}>
+                          <MenuItem
+                            onClick={handleLaunchHome}
+                            sx={{
+                              display: 'flex',
+                              gap: 1,
+                              py: 1,
+                              px: 1.5,
+                              '&:hover': {
+                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              }
+                            }}
+                          >
+                            <HomeIcon fontSize="small" color="action" />
+                            <Typography variant="body2" fontWeight={500}>
+                              Launch in Home
+                            </Typography>
+                          </MenuItem>
+                        </MenuList>
+                      </ClickAwayListener>
+                    </Paper>
+                  </Grow>
+                )}
+              </Popper>
+            </>
+          ) : (
+            // Cruse disabled: Show simple Launch to Home button
+            <Tooltip title={`Launch ${lastSeenNameRef.current} in Home`}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleLaunchHome}
+                sx={{
+                  height: 56,
                   minWidth: 48,
                   px: 2.5,
-                  borderTopLeftRadius: '28px',
-                  borderBottomLeftRadius: '28px',
+                  borderRadius: '28px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                   backgroundColor: theme.palette.primary.main,
+                  '&:hover': {
+                    backgroundColor: theme.palette.primary.dark,
+                    transform: 'scale(1.02)',
+                    transition: 'all 0.2s ease-in-out'
+                  }
                 }}
               >
                 <LaunchIcon />
               </Button>
             </Tooltip>
-
-            {/* Dropdown Arrow */}
-            <Tooltip title="More launch options">
-              <Button
-                size="small"
-                onClick={handleToggleLaunchMenu}
-                sx={{
-                  px: 0.5,
-                  minWidth: 32,
-                  borderTopRightRadius: '28px',
-                  borderBottomRightRadius: '28px',
-                  borderLeft: `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
-                  backgroundColor: theme.palette.primary.main,
-                }}
-              >
-                <ArrowDropDownIcon />
-              </Button>
-            </Tooltip>
-          </ButtonGroup>
-
-          {/* Dropdown Menu */}
-          <Popper
-            open={launchMenuOpen}
-            anchorEl={launchAnchorRef.current}
-            role={undefined}
-            placement="bottom-end"
-            transition
-            disablePortal
-            sx={{ zIndex: 21 }}
-          >
-            {({ TransitionProps, placement }) => (
-              <Grow
-                {...TransitionProps}
-                style={{
-                  transformOrigin: placement === 'bottom-end' ? 'right top' : 'right bottom',
-                }}
-              >
-                <Paper
-                  elevation={8}
-                  sx={{
-                    mt: 1,
-                    minWidth: 160,
-                    borderRadius: 2,
-                    backgroundColor: theme.palette.background.paper,
-                  }}
-                >
-                  <ClickAwayListener onClickAway={handleCloseLaunchMenu}>
-                    <MenuList sx={{ py: 0.5 }}>
-                      <MenuItem
-                        onClick={handleLaunchHome}
-                        sx={{
-                          display: 'flex',
-                          gap: 1,
-                          py: 1,
-                          px: 1.5,
-                          '&:hover': {
-                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                          }
-                        }}
-                      >
-                        <HomeIcon fontSize="small" color="action" />
-                        <Typography variant="body2" fontWeight={500}>
-                          Launch in Home
-                        </Typography>
-                      </MenuItem>
-                    </MenuList>
-                  </ClickAwayListener>
-                </Paper>
-              </Grow>
-            )}
-          </Popper>
+          )}
         </Box>
       )}
 

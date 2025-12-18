@@ -29,6 +29,7 @@ import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Downloa
 
 import MuiThemeToggle from "./MuiThemeToggle";
 import { useTheme } from "../context/ThemeContext";
+import { getFeatureFlags } from "../utils/config";
 
 interface HeaderProps {
   selectedNetwork: string;
@@ -42,6 +43,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
+  const { pluginCruse } = getFeatureFlags();
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
@@ -219,23 +221,25 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           </Button>
 
           {/* CRUSE Button */}
-          <Tooltip title="Context-Reactive User Experience" arrow>
-            <Button
-              variant="outlined"
-              startIcon={<ChatIcon />}
-              onClick={handleNavigateToCruse}
-              sx={{
-                ...(isOnCrusePage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-                borderColor: muiTheme.palette.secondary.main,
-                '&:hover': {
-                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          {pluginCruse && (
+            <Tooltip title="Context-Reactive User Experience" arrow>
+              <Button
+                variant="outlined"
+                startIcon={<ChatIcon />}
+                onClick={handleNavigateToCruse}
+                sx={{
+                  ...(isOnCrusePage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
                   borderColor: muiTheme.palette.secondary.main,
-                },
-              }}
-            >
-              CRUSE
-            </Button>
-          </Tooltip>
+                  '&:hover': {
+                    backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                    borderColor: muiTheme.palette.secondary.main,
+                  },
+                }}
+              >
+                CRUSE
+              </Button>
+            </Tooltip>
+          )}
 
           {/* Export Dropdown */}
           {!isOnEditorPage && !isCrusePage && (
