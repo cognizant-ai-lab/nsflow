@@ -49,6 +49,7 @@ def get_runtime_config():
             "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),
             "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
             # NEW: feature flags (booleans)
+            "NSFLOW_PLUGIN_CRUSE": _env_bool("NSFLOW_PLUGIN_CRUSE", True),
             "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
             "NSFLOW_PLUGIN_MANUAL_EDITOR": _env_bool("NSFLOW_PLUGIN_MANUAL_EDITOR", False),
             "NSFLOW_PLUGIN_VQA_ENDPOINT": _env_bool("NSFLOW_PLUGIN_VQA_ENDPOINT", False),

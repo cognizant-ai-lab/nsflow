@@ -30,8 +30,7 @@ import {
   AccountTree as LayoutIcon,
   RocketLaunchTwoTone as LaunchIcon,
   ArrowDropDown as ArrowDropDownIcon,
-  Home as HomeIcon,
-  Chat as ChatIcon
+  Home as HomeIcon
 } from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";

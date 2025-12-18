@@ -36,7 +36,6 @@ import {
 import { Message } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
 import { DynamicWidgetCard } from "./cruse/DynamicWidgetCard";
-import { useGlassEffect } from "../context/GlassEffectContext";
 
 // type Message = {
 //   sender: "user" | "agent" | "system";
@@ -54,6 +53,8 @@ type Props = {
   useSpeech?: boolean;
   onWidgetSubmit?: (data: Record<string, unknown>) => void;
   isCrusePage?: boolean;
+  /** Callback when widget form data changes (for Send button integration) */
+  onWidgetDataChange?: (data: Record<string, unknown>) => void;
 };
 
 const ScrollableMessageContainer: React.FC<Props> = ({
@@ -64,6 +65,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   useSpeech,
   onWidgetSubmit,
   isCrusePage = false,
+  onWidgetDataChange,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
       ? "User"
@@ -81,7 +83,6 @@ const ScrollableMessageContainer: React.FC<Props> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
-  const { getGlassStyles } = useGlassEffect();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -409,6 +410,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                     }}
                     defaultExpanded={true}
                     disabled={!isLatestAgentMessage}
+                    onFormDataChange={isLatestAgentMessage && onWidgetDataChange ? onWidgetDataChange : undefined}
                   />
                 </Box>
               )}

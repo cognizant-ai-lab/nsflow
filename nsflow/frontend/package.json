@@ -25,7 +25,7 @@
     "d3": "^7.9.0",
     "date-fns": "^4.1.0",
     "hocon-parser": "^1.0.1",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.1.1",
     "json-edit-react": "^1.29.0",
     "lucide-react": "^0.476.0",
     "react": "^18.3.1",
@@ -43,6 +43,10 @@
     "remark-gfm": "^4.0.0",
     "trianglify": "^4.1.1",
     "use-undo": "^1.1.1"
+  },
+  "resolutions": {
+    "glob": "^10.5.0",
+    "mdast-util-to-hast": "^13.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -44,6 +44,8 @@ export interface DynamicWidgetCardProps {
   defaultExpanded?: boolean;
   /** Whether the submit button should be disabled (for old widgets) */
   disabled?: boolean;
+  /** Optional callback when form data changes (for parent to track current state) */
+  onFormDataChange?: (data: Record<string, unknown>) => void;
 }
 
 /**
@@ -58,6 +60,7 @@ export function DynamicWidgetCard({
   submitText = 'Submit',
   defaultExpanded = true,
   disabled = false,
+  onFormDataChange,
 }: DynamicWidgetCardProps) {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -67,6 +70,13 @@ export function DynamicWidgetCard({
 
   const { title, description, icon, color = '#9c27b0', schema } = widget;
   const IconComponent = resolveIcon(icon);
+
+  // Call onFormDataChange whenever formData changes
+  React.useEffect(() => {
+    if (onFormDataChange) {
+      onFormDataChange(formData);
+    }
+  }, [formData, onFormDataChange]);
 
   // Create theme-aware gradient background
   const isDarkMode = theme.palette.mode === 'dark';

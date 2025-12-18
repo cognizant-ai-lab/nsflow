@@ -114,6 +114,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false); // Thinking spinner state
   const [previousWidget, setPreviousWidget] = useState<any>(null); // Track last widget for cruse_widget_agent
+  const [currentWidgetData, setCurrentWidgetData] = useState<Record<string, unknown>>({}); // Track latest widget form data
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -225,12 +226,57 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
     }
   }, [chatWs, addChatMessage, activeNetwork, getChatContextForSend]);
 
+  // Helper function to format widget data (exclude empty fields)
+  const formatWidgetData = useCallback((data: Record<string, unknown>): string => {
+    const nonEmptyEntries = Object.entries(data).filter(([_, value]) => {
+      // Exclude null, undefined, empty strings, and empty arrays
+      if (value === null || value === undefined || value === '') return false;
+      if (Array.isArray(value) && value.length === 0) return false;
+      return true;
+    });
+
+    if (nonEmptyEntries.length === 0) return '';
+
+    return nonEmptyEntries
+      .map(([key, value]) => {
+        // Format dates nicely
+        if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+          const date = new Date(value);
+          return `${key}: ${date.toLocaleDateString()}`;
+        }
+        // Format arrays
+        if (Array.isArray(value)) {
+          return `${key}: ${value.join(', ')}`;
+        }
+        return `${key}: ${value}`;
+      })
+      .join('\n');
+  }, []);
+
   // Send message function
   const sendMessage = useCallback(() => {
-    if (!newMessage.trim()) return;
-    sendMessageWithText(newMessage);
+    if (!newMessage.trim() && Object.keys(currentWidgetData).length === 0) return;
+
+    // Combine text message with widget data if both exist
+    let combinedMessage = newMessage.trim();
+    const widgetText = formatWidgetData(currentWidgetData);
+
+    if (widgetText) {
+      if (combinedMessage) {
+        // Both message and widget data exist - combine them
+        combinedMessage = `${combinedMessage}\n\n${widgetText}`;
+      } else {
+        // Only widget data exists
+        combinedMessage = widgetText;
+      }
+    }
+
+    if (!combinedMessage) return; // Safety check
+
+    sendMessageWithText(combinedMessage);
     setNewMessage("");
-  }, [newMessage, sendMessageWithText]);
+    setCurrentWidgetData({}); // Clear widget data after sending
+  }, [newMessage, currentWidgetData, sendMessageWithText, formatWidgetData]);
 
   const handleSampleQueryClick = (query: string) => {
     sendMessageWithText(query);
@@ -272,6 +318,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
     lastProcessedCountRef.current = 0;
     setIsWaitingForResponse(false); // Clear thinking spinner when thread changes
     setPreviousWidget(null); // Clear previous widget for new thread
+    setCurrentWidgetData({}); // Clear widget data when switching threads
   }, [currentThread?.id]);
 
   useEffect(() => {
@@ -478,6 +525,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
             onCopy={copyToClipboard}
             onWidgetSubmit={handleWidgetSubmit}
             isCrusePage={cruseThemeEnabled}
+            onWidgetDataChange={setCurrentWidgetData}
           />
 
           {/* Thinking spinner while waiting for AI response */}
