@@ -446,7 +446,7 @@ export function ThreadList({
             onChange={(_, value) => setGlassOpacity(value as number)}
             min={0}
             max={100}
-            step={5}
+            step={1}
             disabled={!cruseThemeEnabled}
             size="small"
             sx={{

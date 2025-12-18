@@ -41,7 +41,6 @@
     "reactflow": "^11.11.4",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
-    "trianglify": "^4.1.1",
     "use-undo": "^1.1.1"
   },
   "resolutions": {

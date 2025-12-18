@@ -17,10 +17,9 @@ limitations under the License.
 import { useState, useEffect } from 'react';
 import { Box } from '@mui/material';
 import { CssDoodleBackground } from './CssDoodleBackground';
-import { TrianglifyBackground } from './TrianglifyBackground';
 import { GradientBackground } from './GradientBackground';
 import type { BackgroundSchema } from './types';
-import { isCssDoodleSchema, isTrianglifySchema, isGradientSchema } from './types';
+import { isCssDoodleSchema, isGradientSchema } from './types';
 
 export interface BackgroundEngineProps {
   /** Background schema from agent theme */
@@ -34,7 +33,7 @@ export interface BackgroundEngineProps {
  *
  * Main orchestrator for CRUSE dynamic/static backgrounds.
  * Interprets agent theme schemas and dispatches to the appropriate
- * background component (CssDoodle, Trianglify, or Gradient).
+ * background component (CssDoodle or Gradient).
  *
  * Features:
  * - Schema-driven rendering
@@ -108,14 +107,12 @@ function renderBackground(schema: BackgroundSchema): JSX.Element | null {
       return <CssDoodleBackground schema={schema} />;
     }
 
-    if (isTrianglifySchema(schema)) {
-      return <TrianglifyBackground schema={schema} />;
-    }
-
     if (isGradientSchema(schema)) {
       return <GradientBackground schema={schema} />;
     }
 
+    // Unknown schema type - log warning and use fallback
+    console.warn('[BackgroundEngine] Unknown schema type:', (schema as any).type);
     return null;
   } catch (error) {
     console.error('[BackgroundEngine] Failed to render background:', error);

@@ -149,34 +149,11 @@ const CruseContent: React.FC = () => {
 
       try {
         // Get or generate theme (fetches from DB or generates if not exists)
+        // Note: getOrGenerateTheme always returns a valid schema (uses fallback if needed)
         const theme = await getOrGenerateTheme(apiUrl, activeNetwork, backgroundType);
-
-        if (theme) {
-          setBackgroundSchema(theme);
-        } else {
-          // Fallback to default gradient if theme loading fails
-          setBackgroundSchema({
-            type: 'gradient',
-            mode: 'linear',
-            angle: '135deg',
-            colors: [
-              { color: '#0f172a', stop: '0%' },
-              { color: '#1e293b', stop: '100%' },
-            ],
-          });
-        }
+        setBackgroundSchema(theme);
       } catch (error) {
-        console.error(`[Cruse] Error loading theme:`, error);
-        // Fallback to default gradient
-        setBackgroundSchema({
-          type: 'gradient',
-          mode: 'linear',
-          angle: '135deg',
-          colors: [
-            { color: '#0f172a', stop: '0%' },
-            { color: '#1e293b', stop: '100%' },
-          ],
-        });
+        console.error(`[Cruse] Unexpected error loading theme:`, error);
       }
     };
 
@@ -207,15 +184,11 @@ const CruseContent: React.FC = () => {
     setIsRefreshingTheme(true);
 
     try {
+      // Note: refreshTheme always returns a valid schema (uses fallback if needed)
       const theme = await refreshTheme(apiUrl, activeNetwork, backgroundType, userPrompt);
-
-      if (theme) {
-        setBackgroundSchema(theme);
-      } else {
-        console.error(`[Cruse] Failed to refresh theme`);
-      }
+      setBackgroundSchema(theme);
     } catch (error) {
-      console.error(`[Cruse] Error refreshing theme:`, error);
+      console.error(`[Cruse] Unexpected error refreshing theme:`, error);
     } finally {
       setIsRefreshingTheme(false);
     }

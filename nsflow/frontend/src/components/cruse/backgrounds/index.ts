@@ -24,7 +24,6 @@ export { BackgroundEngine } from './BackgroundEngine';
 export type { BackgroundEngineProps } from './BackgroundEngine';
 
 export { CssDoodleBackground } from './CssDoodleBackground';
-export { TrianglifyBackground } from './TrianglifyBackground';
 export { GradientBackground } from './GradientBackground';
 
 export * from './types';

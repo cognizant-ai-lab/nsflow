@@ -21,6 +21,32 @@ import { fetchAgentTheme, saveAgentTheme } from '../../components/cruse/backgrou
 export const CRUSE_THEME_ENABLED_KEY = 'cruse_theme_enabled';
 export const CRUSE_BACKGROUND_TYPE_KEY = 'cruse_background_type';
 
+// Fallback schemas when theme generation fails
+const FALLBACK_DYNAMIC_THEME: BackgroundSchema = {
+  type: 'css-doodle',
+  grid: '10x8',
+  seed: 'agent:fallback',
+  rules: ':doodle { @grid: 10x8 / 100vmax; background: var(--bg); } @shape: @p(triangle, square); background: @p(var(--color1), var(--color2), var(--color3), transparent); opacity: @rand(.2, .5); transform: scale(@rand(.8, 1.2)) rotate(@rand(360deg));',
+  vars: {
+    '--bg': '#f0f4c3',
+    '--color1': '#ffb74d',
+    '--color2': '#ff8a65',
+    '--color3': '#aed581',
+  },
+};
+
+const FALLBACK_STATIC_THEME: BackgroundSchema = {
+  type: 'gradient',
+  mode: 'linear',
+  angle: '135deg',
+  colors: [
+    { color: '#ffafcc', stop: '0%' },
+    { color: '#ffc3a0', stop: '33%' },
+    { color: '#ffdfba', stop: '66%' },
+    { color: '#c1f4c5', stop: '100%' },
+  ],
+};
+
 /**
  * Connectivity API node structure
  */
@@ -114,7 +140,7 @@ export async function generateTheme(
   agentDetails: AgentDetails,
   backgroundType: 'static' | 'dynamic',
   userPrompt?: string
-): Promise<BackgroundSchema | null> {
+): Promise<BackgroundSchema> {
   try {
     const payload: any = {
       agent_details: agentDetails,
@@ -138,8 +164,8 @@ export async function generateTheme(
     });
 
     if (!response.ok) {
-      console.error(`[ThemeManager] Theme generation failed: ${response.statusText}`);
-      return null;
+      console.warn(`[ThemeManager] Theme agent failed to respond (${response.statusText}), using fallback default schema`);
+      return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
     }
 
     const data = await response.json();
@@ -160,15 +186,16 @@ export async function generateTheme(
           return themeData as BackgroundSchema;
         }
       } catch (parseError) {
-        console.error(`[ThemeManager] Failed to parse theme response:`, parseError);
+        console.warn(`[ThemeManager] Failed to parse theme response, using fallback default schema:`, parseError);
+        return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
       }
     }
 
-    console.error(`[ThemeManager] Invalid theme response structure`);
-    return null;
+    console.warn(`[ThemeManager] Invalid theme response structure, using fallback default schema`);
+    return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
   } catch (error) {
-    console.error(`[ThemeManager] Error generating theme:`, error);
-    return null;
+    console.warn(`[ThemeManager] Error generating theme, using fallback default schema:`, error);
+    return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
   }
 }
 
@@ -184,7 +211,7 @@ export async function getOrGenerateTheme(
   apiUrl: string,
   agentName: string,
   backgroundType: 'static' | 'dynamic'
-): Promise<BackgroundSchema | null> {
+): Promise<BackgroundSchema> {
   try {
     console.log(`[ThemeManager] Getting ${backgroundType} theme for ${agentName}`);
 
@@ -207,19 +234,15 @@ export async function getOrGenerateTheme(
     // Step 2: Fetch connectivity data
     const connectivityData = await fetchConnectivity(apiUrl, agentName);
     if (!connectivityData) {
-      console.error(`[ThemeManager] Failed to fetch connectivity data`);
-      return null;
+      console.warn(`[ThemeManager] Failed to fetch connectivity data, using fallback default schema`);
+      return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
     }
 
     // Transform connectivity data
     const agentDetails = transformConnectivityToAgentDetails(connectivityData);
 
-    // Step 3: Generate theme via cruse_theme_agent
+    // Step 3: Generate theme via cruse_theme_agent (always returns a valid schema, fallback if needed)
     const generatedTheme = await generateTheme(apiUrl, agentDetails, backgroundType);
-    if (!generatedTheme) {
-      console.error(`[ThemeManager] Failed to generate theme`);
-      return null;
-    }
 
     // Step 4: Save to DB
     await saveAgentTheme(agentName, backgroundType, generatedTheme);
@@ -227,8 +250,8 @@ export async function getOrGenerateTheme(
 
     return generatedTheme;
   } catch (error) {
-    console.error(`[ThemeManager] Error in getOrGenerateTheme:`, error);
-    return null;
+    console.warn(`[ThemeManager] Error in getOrGenerateTheme, using fallback default schema:`, error);
+    return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
   }
 }
 
@@ -241,26 +264,22 @@ export async function refreshTheme(
   agentName: string,
   backgroundType: 'static' | 'dynamic',
   userPrompt?: string
-): Promise<BackgroundSchema | null> {
+): Promise<BackgroundSchema> {
   try {
     console.log(`[ThemeManager] Refreshing ${backgroundType} theme for ${agentName}`);
 
     // Fetch connectivity data
     const connectivityData = await fetchConnectivity(apiUrl, agentName);
     if (!connectivityData) {
-      console.error(`[ThemeManager] Failed to fetch connectivity data`);
-      return null;
+      console.warn(`[ThemeManager] Failed to fetch connectivity data, using fallback default schema`);
+      return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
     }
 
     // Transform connectivity data
     const agentDetails = transformConnectivityToAgentDetails(connectivityData);
 
-    // Generate theme via cruse_theme_agent
+    // Generate theme via cruse_theme_agent (always returns a valid schema, fallback if needed)
     const generatedTheme = await generateTheme(apiUrl, agentDetails, backgroundType, userPrompt);
-    if (!generatedTheme) {
-      console.error(`[ThemeManager] Failed to generate theme`);
-      return null;
-    }
 
     // Save to DB (this will update existing theme)
     await saveAgentTheme(agentName, backgroundType, generatedTheme);
@@ -268,8 +287,8 @@ export async function refreshTheme(
 
     return generatedTheme;
   } catch (error) {
-    console.error(`[ThemeManager] Error in refreshTheme:`, error);
-    return null;
+    console.warn(`[ThemeManager] Error in refreshTheme, using fallback default schema:`, error);
+    return backgroundType === 'dynamic' ? FALLBACK_DYNAMIC_THEME : FALLBACK_STATIC_THEME;
   }
 }
 

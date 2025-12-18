@@ -63,21 +63,6 @@ export interface CssDoodleBackgroundSchema extends BaseBackgroundSchema {
   vars?: Record<string, string>;
 }
 
-// Trianglify static background schema
-export interface TrianglifyBackgroundSchema extends BaseBackgroundSchema {
-  type: 'trianglify';
-  width?: number;
-  height?: number;
-  cellSize?: number;
-  variance?: number;
-  seed?: string | null;
-  xColors?: string[] | string;
-  yColors?: string[] | string;
-  fill?: boolean;
-  strokeWidth?: number;
-  colorSpace?: 'lab' | 'rgb' | 'hsv';
-}
-
 // CSS Gradient background schema
 export interface GradientBackgroundSchema extends BaseBackgroundSchema {
   type: 'gradient';
@@ -93,16 +78,11 @@ export interface GradientBackgroundSchema extends BaseBackgroundSchema {
 // Union type for all background schemas
 export type BackgroundSchema =
   | CssDoodleBackgroundSchema
-  | TrianglifyBackgroundSchema
   | GradientBackgroundSchema;
 
 // Type guard functions
 export function isCssDoodleSchema(schema: BackgroundSchema): schema is CssDoodleBackgroundSchema {
   return schema.type === 'css-doodle';
-}
-
-export function isTrianglifySchema(schema: BackgroundSchema): schema is TrianglifyBackgroundSchema {
-  return schema.type === 'trianglify';
 }
 
 export function isGradientSchema(schema: BackgroundSchema): schema is GradientBackgroundSchema {
