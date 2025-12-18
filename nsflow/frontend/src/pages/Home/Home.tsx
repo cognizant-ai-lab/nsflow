@@ -1,4 +1,3 @@
-
 /*
 Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 
@@ -25,6 +24,7 @@ import TabbedChatPanel from "../../components/TabbedChatPanel";
 import LogsPanel from "../../components/LogsPanel";
 import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
+import ZenModeOverlay from "../../components/ZenModeOverlay";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
 import { ChatProvider, useChatContext } from "../../context/ChatContext";
@@ -95,6 +95,9 @@ const HomeContent: React.FC = () => {
                 <TabbedChatPanel />
               </Panel>
             </PanelGroup>
+
+            {/* Zen Mode Overlay - renders on top when activated */}
+            <ZenModeOverlay />
           </div>
         </NeuroSanProvider>
       </ApiPortProvider>

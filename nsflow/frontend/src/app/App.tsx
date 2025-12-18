@@ -1,4 +1,3 @@
-
 /*
 Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 
@@ -22,6 +21,7 @@ import { ApiPortProvider } from "../context/ApiPortContext";
 import { NeuroSanProvider } from "../context/NeuroSanContext";
 import { ChatProvider } from "../context/ChatContext";
 import { ThemeProvider } from "../context/ThemeContext";
+import { ZenModeProvider } from "../context/ZenModeContext";
 
 const App: React.FC = () => {
   return (
@@ -29,9 +29,11 @@ const App: React.FC = () => {
       <ChatProvider>
         <ApiPortProvider>
           <NeuroSanProvider>
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
+            <ZenModeProvider>
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </ZenModeProvider>
           </NeuroSanProvider>
         </ApiPortProvider>
       </ChatProvider>
