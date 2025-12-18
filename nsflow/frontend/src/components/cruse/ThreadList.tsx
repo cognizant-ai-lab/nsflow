@@ -241,12 +241,12 @@ export function ThreadList({
       {/* Cruse Theme Settings - 3 Row Design */}
       <MenuItem
         sx={{
-          py: 1.5,
+          py: 1,
           px: 2,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'stretch',
-          gap: 1.5,
+          gap: 1,
           '&:hover': {
             bgcolor: 'action.hover',
           },
@@ -265,7 +265,7 @@ export function ThreadList({
               display: 'flex',
               alignItems: 'center',
               width: 80,
-              height: 32,
+              height: 24,
               borderRadius: 16,
               bgcolor: cruseThemeEnabled ? 'success.main' : 'action.disabled',
               cursor: 'pointer',
@@ -281,7 +281,7 @@ export function ThreadList({
                 position: 'absolute',
                 left: cruseThemeEnabled ? 2 : 42,
                 width: 36,
-                height: 28,
+                height: 20,
                 borderRadius: 14,
                 bgcolor: 'background.paper',
                 transition: 'left 0.3s',
@@ -292,7 +292,7 @@ export function ThreadList({
               sx={{
                 position: 'absolute',
                 left: cruseThemeEnabled ? 10 : 50,
-                fontSize: '0.45rem',
+                fontSize: '0.4rem',
                 fontWeight: 600,
                 color: 'text.primary',
                 transition: 'all 0.3s',
@@ -314,7 +314,7 @@ export function ThreadList({
               display: 'flex',
               alignItems: 'center',
               width: 80,
-              height: 32,
+              height: 24,
               borderRadius: 16,
               bgcolor: cruseThemeEnabled && backgroundType === 'dynamic' ? 'primary.main' : 'action.disabled',
               cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
@@ -331,7 +331,7 @@ export function ThreadList({
                 position: 'absolute',
                 left: backgroundType === 'static' ? 2 : 42,
                 width: 36,
-                height: 28,
+                height: 20,
                 borderRadius: 14,
                 bgcolor: 'background.paper',
                 transition: 'left 0.3s',
@@ -363,8 +363,8 @@ export function ThreadList({
               }
             }}
             sx={{
-              width: 32,
-              height: 32,
+              width: 24,
+              height: 24,
               border: 1,
               borderColor: 'divider',
               borderRadius: '50%',

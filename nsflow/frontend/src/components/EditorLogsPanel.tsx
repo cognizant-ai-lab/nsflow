@@ -35,20 +35,31 @@ import {
 } from "@mui/icons-material";
 import LogsPanel from "./LogsPanel";
 
-const EditorLogsPanel: React.FC = () => {
+export interface EditorLogsPanelProps {
+  /** Optional left offset in pixels. If provided, overrides auto-detection. */
+  leftOffset?: number;
+}
+
+const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({ leftOffset }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
-  const [sidebarWidth, setSidebarWidth] = useState(0);
+  const [sidebarWidth, setSidebarWidth] = useState(leftOffset || 0);
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
 
   // Track sidebar width for dynamic positioning
   useEffect(() => {
+    // If leftOffset prop is provided, use it and skip auto-detection
+    if (leftOffset !== undefined) {
+      setSidebarWidth(leftOffset);
+      return;
+    }
+
     const updateSidebarWidth = () => {
       // Find the sidebar container more reliably - look for EditorSidebar's Paper element
       const sidebarContainer = document.querySelector('[data-panel-group] > [data-panel]:first-child') as HTMLElement;
-      
+
       if (sidebarContainer) {
         const width = sidebarContainer.offsetWidth;
         setSidebarWidth(width);
@@ -69,11 +80,11 @@ const EditorLogsPanel: React.FC = () => {
     // Use MutationObserver to detect when panels are resized
     const observer = new MutationObserver(updateSidebarWidth);
     const panelGroup = document.querySelector('[data-panel-group]');
-    
+
     if (panelGroup) {
-      observer.observe(panelGroup, { 
-        attributes: true, 
-        childList: true, 
+      observer.observe(panelGroup, {
+        attributes: true,
+        childList: true,
         subtree: true,
         attributeFilter: ['style']
       });
@@ -84,7 +95,7 @@ const EditorLogsPanel: React.FC = () => {
       window.removeEventListener('resize', updateSidebarWidth);
       observer.disconnect();
     };
-  }, []);
+  }, [leftOffset]);
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {
@@ -123,7 +134,7 @@ const EditorLogsPanel: React.FC = () => {
       elevation={8}
       sx={{
         position: 'fixed',
-        bottom: 16,
+        bottom: 24,
         left: sidebarWidth + 16, // Position just after sidebar edge with 16px gap
         zIndex: theme.zIndex.drawer + 1, // Above all drawers and palettes
         backgroundColor: theme.palette.background.paper,

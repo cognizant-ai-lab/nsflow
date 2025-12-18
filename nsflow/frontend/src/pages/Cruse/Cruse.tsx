@@ -275,7 +275,7 @@ const CruseContent: React.FC = () => {
               />
 
               {/* Expandable Logs Panel in bottom center-left */}
-              {showLogs && <EditorLogsPanel />}
+              {showLogs && <EditorLogsPanel leftOffset={328} />}
             </Box>
           </Box>
         </GlassEffectProvider>
