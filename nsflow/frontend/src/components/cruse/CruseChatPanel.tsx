@@ -38,6 +38,7 @@ import { useChatContext } from "../../context/ChatContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useGlassEffect } from "../../context/GlassEffectContext";
 import ScrollableMessageContainer from "../ScrollableMessageContainer";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 import type { MessageOrigin, CruseThread } from "../../types/cruse";
 
 interface CruseChatPanelProps {
@@ -94,6 +95,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
     addChatMessage,
     chatWs,
     setChatMessages,
+    widgetAgentName
   } = useChatContext();
 
   // Component mount logging
@@ -406,7 +408,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            agent_name: 'cruse_widget_agent',
+            agent_name: widgetAgentName,
             message: payload,
           }),
         });
@@ -528,37 +530,8 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
             onWidgetDataChange={setCurrentWidgetData}
           />
 
-          {/* Thinking spinner while waiting for AI response */}
-          {isWaitingForResponse && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                py: 2,
-                px: 3,
-                mb: 2,
-                bgcolor: alpha(theme.palette.primary.main, 0.05),
-                borderRadius: 2,
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-              }}
-            >
-              <CircularProgress
-                size={20}
-                thickness={5}
-                sx={{ color: theme.palette.primary.main }}
-              />
-              <Typography
-                variant="body2"
-                sx={{
-                  color: theme.palette.text.secondary,
-                  fontStyle: 'italic',
-                }}
-              >
-                Thinking...
-              </Typography>
-            </Box>
-          )}
+          {/* Thinking indicator while waiting for AI response */}
+          <ThinkingIndicator isVisible={isWaitingForResponse} />
 
           <div ref={messagesEndRef} />
         </Box>

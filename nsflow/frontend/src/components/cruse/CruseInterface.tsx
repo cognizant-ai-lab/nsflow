@@ -35,7 +35,7 @@ export interface CruseInterfaceProps {
   onCruseThemeToggle?: (enabled: boolean) => void;
   backgroundType?: 'static' | 'dynamic';
   onBackgroundTypeChange?: (type: 'static' | 'dynamic') => void;
-  onRefreshTheme?: (userPrompt?: string) => void;
+  onRefreshTheme?: (userPrompt?: string, modifyPreviousBackground?: boolean) => void;
   isRefreshingTheme?: boolean;
 }
 

@@ -48,6 +48,8 @@ def get_runtime_config():
             "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
             "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),
             "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
+            "NSFLOW_CRUSE_WIDGET_AGENT_NAME": os.getenv("NSFLOW_CRUSE_WIDGET_AGENT_NAME", "cruse_widget_agent"),
+            "NSFLOW_CRUSE_THEME_AGENT_NAME": os.getenv("NSFLOW_CRUSE_THEME_AGENT_NAME", "cruse_theme_agent"),
             # NEW: feature flags (booleans)
             "NSFLOW_PLUGIN_CRUSE": _env_bool("NSFLOW_PLUGIN_CRUSE", False),
             "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),

@@ -36,7 +36,7 @@ import {
 const CRUSE_SHOW_LOGS_KEY = 'cruse_show_logs';
 
 const CruseContent: React.FC = () => {
-  const { setIsEditorMode, activeNetwork } = useChatContext();
+  const { setIsEditorMode, activeNetwork, themeAgentName } = useChatContext();
   const { apiUrl } = useApiPort();
 
   // Initialize showLogs from localStorage, default to true if not set
@@ -142,7 +142,7 @@ const CruseContent: React.FC = () => {
   useEffect(() => {
     const loadTheme = async () => {
       // Clear theme if disabled or no agent selected
-      if (!cruseThemeEnabled || !activeNetwork || !apiUrl) {
+      if (!cruseThemeEnabled || !activeNetwork || !apiUrl || !themeAgentName) {
         setBackgroundSchema(null);
         return;
       }
@@ -150,7 +150,7 @@ const CruseContent: React.FC = () => {
       try {
         // Get or generate theme (fetches from DB or generates if not exists)
         // Note: getOrGenerateTheme always returns a valid schema (uses fallback if needed)
-        const theme = await getOrGenerateTheme(apiUrl, activeNetwork, backgroundType);
+        const theme = await getOrGenerateTheme(apiUrl, themeAgentName, activeNetwork, backgroundType);
         setBackgroundSchema(theme);
       } catch (error) {
         console.error(`[Cruse] Unexpected error loading theme:`, error);
@@ -158,7 +158,7 @@ const CruseContent: React.FC = () => {
     };
 
     loadTheme();
-  }, [cruseThemeEnabled, activeNetwork, backgroundType, apiUrl]);
+  }, [cruseThemeEnabled, activeNetwork, backgroundType, apiUrl, themeAgentName]);
 
   const handleToggleLogs = () => {
     setShowLogs(!showLogs);
@@ -175,9 +175,9 @@ const CruseContent: React.FC = () => {
   }, []);
 
   // Handle theme refresh
-  const handleRefreshTheme = useCallback(async (userPrompt?: string) => {
-    if (!activeNetwork || !apiUrl) {
-      console.warn(`[Cruse] Cannot refresh theme: missing activeNetwork or apiUrl`);
+  const handleRefreshTheme = useCallback(async (userPrompt?: string, modifyPreviousBackground?: boolean) => {
+    if (!activeNetwork || !apiUrl || !themeAgentName) {
+      console.warn(`[Cruse] Cannot refresh theme: missing activeNetwork, apiUrl, or themeAgentName`);
       return;
     }
 
@@ -185,14 +185,14 @@ const CruseContent: React.FC = () => {
 
     try {
       // Note: refreshTheme always returns a valid schema (uses fallback if needed)
-      const theme = await refreshTheme(apiUrl, activeNetwork, backgroundType, userPrompt);
+      const theme = await refreshTheme(apiUrl, themeAgentName, activeNetwork, backgroundType, userPrompt, modifyPreviousBackground ?? true);
       setBackgroundSchema(theme);
     } catch (error) {
       console.error(`[Cruse] Unexpected error refreshing theme:`, error);
     } finally {
       setIsRefreshingTheme(false);
     }
-  }, [activeNetwork, backgroundType, apiUrl]);
+  }, [activeNetwork, backgroundType, apiUrl, themeAgentName]);
 
   return (
     <ApiPortProvider>
