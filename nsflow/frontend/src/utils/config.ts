@@ -25,6 +25,7 @@ type AppRuntimeConfig = {
   VITE_USE_SPEECH: boolean;
   NSFLOW_WAND_NAME: string;
   // NEW flags (booleans from backend)
+  NSFLOW_PLUGIN_CRUSE: boolean;
   NSFLOW_PLUGIN_WAND: boolean;
   NSFLOW_PLUGIN_MANUAL_EDITOR: boolean;
 };
@@ -60,6 +61,7 @@ export function getAppConfig(): AppRuntimeConfig {
 export function getFeatureFlags() {
   const c = getAppConfig();
   return {
+    pluginCruse: !!c.NSFLOW_PLUGIN_CRUSE,
     pluginWand: !!c.NSFLOW_PLUGIN_WAND,
     pluginManualEditor: !!c.NSFLOW_PLUGIN_MANUAL_EDITOR,
     viteUseSpeech: !!c.VITE_USE_SPEECH

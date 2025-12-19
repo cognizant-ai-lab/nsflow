@@ -33,8 +33,9 @@ import {
   VolumeUp as VolumeIcon
 } from "@mui/icons-material";
 
-import { Message } from "../types/chat";
+import { Message } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
+import { DynamicWidgetCard } from "./cruse/DynamicWidgetCard";
 
 // type Message = {
 //   sender: "user" | "agent" | "system";
@@ -50,6 +51,10 @@ type Props = {
   renderSenderLabel?: (msg: Message) => string;
   getMessageClass?: (msg: Message) => string;
   useSpeech?: boolean;
+  onWidgetSubmit?: (data: Record<string, unknown>) => void;
+  isCrusePage?: boolean;
+  /** Callback when widget form data changes (for Send button integration) */
+  onWidgetDataChange?: (data: Record<string, unknown>) => void;
 };
 
 const ScrollableMessageContainer: React.FC<Props> = ({
@@ -58,6 +63,9 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   onCopy,
   onTextToSpeech,
   useSpeech,
+  onWidgetSubmit,
+  isCrusePage = false,
+  onWidgetDataChange,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
       ? "User"
@@ -111,24 +119,32 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   };
 
   return (
-    <Box sx={{ 
-      flexGrow: 1, 
-      overflow: 'auto', 
+    <Box sx={{
+      flexGrow: 1,
+      overflow: 'auto',
       pr: 0.5,
-      backgroundColor: theme.palette.background.default
+      // Only apply background when NOT on Cruse page (other pages need it)
+      ...(!isCrusePage && { backgroundColor: theme.palette.background.default }),
     }}>
-      <Box sx={{ 
+      <Box sx={{
         p: 0.5,
         display: 'flex',
         flexDirection: 'column',
         gap: 1
       }}>
-        {messages.map((msg, index) => {
-          const colors = getMessageColors(msg.sender);
-          const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
-          const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
-          
-          return (
+        {(() => {
+          // Find the index of the last agent message once for all messages
+          const lastAgentMessageIndex = messages.map((m, i) => m.sender === 'agent' ? i : -1)
+            .filter(i => i !== -1)
+            .pop() ?? -1;
+
+          return messages.map((msg, index) => {
+            const colors = getMessageColors(msg.sender);
+            const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+            const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
+            const isLatestAgentMessage = msg.sender === 'agent' && index === lastAgentMessageIndex;
+
+            return (
             <Paper
               key={key}
               elevation={1}
@@ -381,6 +397,24 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                 </ReactMarkdown>
               </Box>
 
+              {/* Widget Rendering (CRUSE) */}
+              {msg.widget && msg.widget.schema && (
+                <Box sx={{ mt: 1.5, mb: 0.5 }}>
+                  <DynamicWidgetCard
+                    widget={msg.widget}
+                    onSubmit={(data) => {
+                      console.log('[CRUSE] Widget form submitted:', data);
+                      if (onWidgetSubmit) {
+                        onWidgetSubmit(data);
+                      }
+                    }}
+                    defaultExpanded={true}
+                    disabled={!isLatestAgentMessage}
+                    onFormDataChange={isLatestAgentMessage && onWidgetDataChange ? onWidgetDataChange : undefined}
+                  />
+                </Box>
+              )}
+
               {/* Copied notification */}
               {copiedMessage === index && (
                 <Paper
@@ -402,8 +436,9 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                 </Paper>
               )}
             </Paper>
-          );
-        })}
+            );
+          });
+        })()}
         <Box ref={messagesEndRef} />
       </Box>
     </Box>

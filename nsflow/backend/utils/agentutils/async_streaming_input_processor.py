@@ -51,10 +51,10 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
         """
         empty: Dict[str, Any] = {}
         user_input: str = state.get("user_input")
-        last_chat_response = state.get("last_chat_response")
-        num_input = state.get("num_input")
-        chat_context = state.get("chat_context", empty)
-        chat_filter = state.get("chat_filter", empty)
+        last_chat_response: str = state.get("last_chat_response")
+        num_input: int = state.get("num_input")
+        chat_context: Dict[str, Any] = state.get("chat_context", empty)
+        chat_filter: Dict[str, Any] = state.get("chat_filter", empty)
         origin_str: str = ""
 
         if user_input is None or user_input == self.default_input:
@@ -94,7 +94,7 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
         if origin_str is None or len(origin_str) == 0:
             origin_str = "agent network"
 
-        update = {
+        update: Dict[str, Any] = {
             "chat_context": chat_context,
             "num_input": num_input + 1,
             "last_chat_response": last_chat_response,

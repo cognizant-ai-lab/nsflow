@@ -167,6 +167,20 @@ declare module '@mui/material/styles' {
       home: { headerBg: string };
       editor: { headerBg: string };
     };
+    navButton: {
+      active: {
+        backgroundColor: string;
+        color: string;
+        fontWeight: number;
+        borderWidth: string;
+      };
+      inactive: {
+        backgroundColor: string;
+        color: string;
+        fontWeight: number;
+        borderWidth: string;
+      };
+    };
   }
 
   interface ThemeOptions {
@@ -198,6 +212,20 @@ declare module '@mui/material/styles' {
     pageVariants?: {
       home?: { headerBg?: string };
       editor?: { headerBg?: string };
+    };
+    navButton?: {
+      active?: {
+        backgroundColor?: string;
+        color?: string;
+        fontWeight?: number;
+        borderWidth?: string;
+      };
+      inactive?: {
+        backgroundColor?: string;
+        color?: string;
+        fontWeight?: number;
+        borderWidth?: string;
+      };
     };
   }
 }
@@ -237,6 +265,20 @@ const augmentedLightTheme = createTheme(lightTheme, {
         headerBg: '#fef9c3', // Amber-100
       },
     },
+  navButton: {
+    active: {
+      backgroundColor: '#10b981', // Emerald-500
+      color: '#ffffff',
+      fontWeight: 700,
+      borderWidth: '2px',
+    },
+    inactive: {
+      backgroundColor: 'transparent',
+      color: '#0f172a', // text.primary
+      fontWeight: 500,
+      borderWidth: '1px',
+    },
+  },
 });
 
 const augmentedDarkTheme = createTheme(darkTheme, {
@@ -273,6 +315,20 @@ const augmentedDarkTheme = createTheme(darkTheme, {
         headerBg: '#3f3f46', // 3f3f46=Zinc-700, '#3a2e16' // dark depp amber //'#5b4519' // bright deep amber
       },
     },
+  navButton: {
+    active: {
+      backgroundColor: '#34d399', // Emerald-400 (lighter for dark mode)
+      color: '#0f172a',
+      fontWeight: 700,
+      borderWidth: '2px',
+    },
+    inactive: {
+      backgroundColor: 'transparent',
+      color: '#f8fafc', // text.primary
+      fontWeight: 500,
+      borderWidth: '1px',
+    },
+  },
 });
 
 interface ThemeContextType {

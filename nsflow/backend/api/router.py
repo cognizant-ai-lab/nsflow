@@ -21,10 +21,12 @@ from .v1 import (
     agent_flows,
     app_configs,
     audio_endpoints,
+    cruse_endpoints,
     editor_endpoints,
     export_endpoints,
     fast_websocket,
     fastapi_grpc_endpoints,
+    oneshot_endpoints,
     vqa_endpoints,
 )
 
@@ -39,5 +41,7 @@ router.include_router(export_endpoints.router, tags=["Notebook Export"])
 router.include_router(fastapi_grpc_endpoints.router, tags=["Concierge Endpoints"])
 router.include_router(audio_endpoints.router, tags=["Audio Processing"])
 router.include_router(editor_endpoints.router, tags=["Agent Network Designer"])
+router.include_router(cruse_endpoints.router, prefix="/api/v1", tags=["CRUSE Threads"])
+router.include_router(oneshot_endpoints.router, tags=["One-Shot Chat"])
 if NSFLOW_PLUGIN_VQA_ENDPOINT:
     router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])

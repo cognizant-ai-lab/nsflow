@@ -35,16 +35,23 @@ const generateSessionId = (): string => {
   return `${prefix}${ts}_${randHex}`;
 };
 
-type Message = {
+export type Message = {
   sender: "system" | "internal" | "user" | "agent" | string;
   text: string | object; // Allow objects for SlyData messages;
   network?: string;
   otrace?: string[];
   connectionId?: string;
+
+  // Optional fields for CRUSE and message tracking
+  id?: string; // Message ID from database
+  ts?: number; // Timestamp
+  widget?: any; // For CRUSE dynamic widgets
+  origin?: Array<{ tool: string; instantiation_index: number }>; // Origin from AI messages
 };
 
 type ChatContextType = {
   sessionId: string; // Unique session identifier for WebSocket connections
+  regenerateSessionId: () => void; // Function to regenerate sessionId for new threads
   chatMessages: Message[];
   internalChatMessages: Message[];
   slyDataMessages: Message[];
@@ -105,8 +112,15 @@ type ChatContextType = {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
-  // Generate a unique session ID once when the context is created
-  const [sessionId] = useState<string>(() => generateSessionId());
+  // Generate a unique session ID - can be regenerated for new threads/conversations
+  const [sessionId, setSessionId] = useState<string>(() => generateSessionId());
+
+  // Function to regenerate session ID (for new threads/conversations)
+  const regenerateSessionId = () => {
+    const newSessionId = generateSessionId();
+    console.log('[ChatContext] Regenerating sessionId:', newSessionId);
+    setSessionId(newSessionId);
+  };
 
   const [chatMessages, setChatMessages] = useState<Message[]>([
     { sender: "system", text: "Welcome to the chat!" },
@@ -218,6 +232,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ChatContext.Provider value={{
       sessionId, // Unique session ID for WebSocket connections
+      regenerateSessionId, // Function to regenerate sessionId for new threads
       chatMessages, internalChatMessages, slyDataMessages, logMessages, progressMessages,
 
       addChatMessage, addInternalChatMessage, addSlyDataMessage, addLogMessage, addProgressMessage,

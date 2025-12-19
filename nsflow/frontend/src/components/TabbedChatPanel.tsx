@@ -286,13 +286,26 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
         </Tabs>
       </Box>
 
-      {/* Content */}
-      <Box sx={{ 
+      {/* Content - Keep all tabs mounted to preserve state */}
+      <Box sx={{
         flexGrow: 1,
         overflow: 'hidden',
-        backgroundColor: theme.palette.background.default
+        backgroundColor: theme.palette.background.default,
+        position: 'relative'
       }}>
-        {tabConfig[activeTabIndex]?.component}
+        {tabConfig.map((tab, index) => (
+          <Box
+            key={tab.id}
+            sx={{
+              display: index === activeTabIndex ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%'
+            }}
+          >
+            {tab.component}
+          </Box>
+        ))}
       </Box>
     </Paper>
   );

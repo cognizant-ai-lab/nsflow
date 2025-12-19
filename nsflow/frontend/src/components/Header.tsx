@@ -21,29 +21,35 @@ import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
-  MenuItem,  Box, useTheme as useMuiTheme, alpha } from "@mui/material";
+  MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon
+  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
 import { useTheme } from "../context/ThemeContext";
+import { getFeatureFlags } from "../utils/config";
 
 interface HeaderProps {
   selectedNetwork: string;
   isEditorPage?: boolean;
+  isCrusePage?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }) => {
+const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, isCrusePage = false }) => {
   const { apiUrl } = useApiPort();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
+  const { pluginCruse } = getFeatureFlags();
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
+
+  // Determine if we're on CRUSE page based on location or prop
+  const isOnCrusePage = isCrusePage || location.pathname.includes('/cruse');
 
   const handleExportNotebook = async () => {
     if (!selectedNetwork) return alert("Please select an agent network first.");
@@ -77,6 +83,10 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
   const handleNavigateToEditor = () => {
     window.open('/editor', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleNavigateToCruse = () => {
+    window.open('/cruse', '_blank', 'noopener,noreferrer');
   };
 
   const handleNavigateToHome = () => {
@@ -145,7 +155,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
               display: { xs: 'none', sm: 'block' }
             }}
           >
-            {isOnEditorPage ? 'Workflow Agent Network Designer' : 'Neuro AI - Multi-Agent Accelerator Client'}
+            {isOnEditorPage ? 'Workflow Agent Network Designer' : isOnCrusePage? 'Context Reactive User Experience' : 'Neuro AI - Multi-Agent Accelerator Client'}
           </Typography>
         </Box>
 
@@ -178,22 +188,16 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
           {/* Home Button */}
           <Button
-            variant={!isOnEditorPage ? "contained" : "outlined"}
+            variant="outlined"
             startIcon={<HomeIcon />}
             onClick={handleNavigateToHome}
             sx={{
-              color: muiTheme.palette.text.primary,
-              borderColor: muiTheme.palette.primary.main,
+              ...((!isOnEditorPage && !isOnCrusePage) ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+              borderColor: muiTheme.palette.secondary.main,
               '&:hover': {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                borderColor: muiTheme.palette.primary.main,
+                backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                borderColor: muiTheme.palette.secondary.main,
               },
-              ...(isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-              }),
-              ...(!isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
-              })
             }}
           >
             Home
@@ -201,29 +205,44 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
           {/* Editor Button */}
           <Button
-            variant={isOnEditorPage ? "contained" : "outlined"}
+            variant="outlined"
             startIcon={<CodeIcon />}
             onClick={handleNavigateToEditor}
             sx={{
-              color: muiTheme.palette.text.primary,
-              borderColor: muiTheme.palette.primary.main,
+              ...(isOnEditorPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+              borderColor: muiTheme.palette.secondary.main,
               '&:hover': {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                borderColor: muiTheme.palette.primary.main,
+                backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                borderColor: muiTheme.palette.secondary.main,
               },
-              ...(isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
-              }),
-              ...(!isOnEditorPage && {
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-              })
             }}
           >
             Editor
           </Button>
 
+          {/* CRUSE Button */}
+          {pluginCruse && (
+            <Tooltip title="Context-Reactive User Experience" arrow>
+              <Button
+                variant="outlined"
+                startIcon={<ChatIcon />}
+                onClick={handleNavigateToCruse}
+                sx={{
+                  ...(isOnCrusePage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+                  borderColor: muiTheme.palette.secondary.main,
+                  '&:hover': {
+                    backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                    borderColor: muiTheme.palette.secondary.main,
+                  },
+                }}
+              >
+                CRUSE
+              </Button>
+            </Tooltip>
+          )}
+
           {/* Export Dropdown */}
-          {!isOnEditorPage && (
+          {!isOnEditorPage && !isCrusePage && (
             <>
               <Button
                 variant="outlined"
@@ -284,7 +303,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
                   }}
                 >
                   <EditIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
                     Export as Notebook
                   </Typography>
                 </MenuItem>
@@ -299,7 +318,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
                   }}
                 >
                   <NetworkIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
                     Export as HOCON
                   </Typography>
                 </MenuItem>
@@ -309,9 +328,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
         </Box>
 
         {/* Right - Theme Toggle + Profile */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 1,
           flex: '0 0 auto'
         }}>

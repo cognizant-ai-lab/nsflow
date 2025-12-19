@@ -18,7 +18,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import ReactFlow, { Background, Controls, useEdgesState, useNodesState, useReactFlow, 
   Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "reactflow";
 import "reactflow/dist/style.css";
-import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button } from "@mui/material";
+import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Grow, Popper, MenuList, MenuItem } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
@@ -26,7 +26,12 @@ import EditorPalette from "./EditorPalette";
 import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
-import { AccountTree as LayoutIcon, RocketLaunchTwoTone as LaunchIcon } from "@mui/icons-material";
+import {
+  AccountTree as LayoutIcon,
+  RocketLaunchTwoTone as LaunchIcon,
+  ArrowDropDown as ArrowDropDownIcon,
+  Home as HomeIcon
+} from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
@@ -68,17 +73,19 @@ const EditorAgentFlow = ({
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
-  
+
   // Layout control state (similar to AgentFlow)
   const [baseRadius, setBaseRadius] = useState(30);
   const [levelSpacing, setLevelSpacing] = useState(80);
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
-  const { pluginManualEditor } = getFeatureFlags();
+  const { pluginManualEditor, pluginCruse } = getFeatureFlags();
   const canEdit = !!pluginManualEditor;
   const shouldForceLayoutRef = useRef(false);
   const lastSeenNameRef = useRef<string | null>(null);
   const [showLaunchButton, setShowLaunchButton] = useState(false);
+  const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
+  const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
   const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork, 
@@ -377,15 +384,39 @@ const EditorAgentFlow = ({
     await fetchNetworkData();
   };
 
-  // Handle launch button click
-  const handleLaunch = useCallback(() => {
+  // Handle launch to Cruse (default)
+  const handleLaunchCruse = useCallback(() => {
     const agentNetworkName = getLatestAgentNetworkName();
     if (agentNetworkName) {
-      // Open Home page in a new tab with the agent network name as a URL parameter
-      const homeUrl = `${window.location.origin}/?network=${encodeURIComponent(agentNetworkName)}`;
-      window.open(homeUrl, '_blank');
+      const cruseUrl = `${window.location.origin}/cruse?network=${encodeURIComponent(agentNetworkName)}`;
+      window.open(cruseUrl, '_blank');
     }
   }, [getLatestAgentNetworkName]);
+
+  // Handle launch to Home (dropdown option)
+  const handleLaunchHome = useCallback(() => {
+    const agentNetworkName = getLatestAgentNetworkName();
+    if (agentNetworkName) {
+      const homeUrl = `${window.location.origin}/home?network=${encodeURIComponent(agentNetworkName)}`;
+      window.open(homeUrl, '_blank');
+    }
+    setLaunchMenuOpen(false);
+  }, [getLatestAgentNetworkName]);
+
+  // Toggle launch menu
+  const handleToggleLaunchMenu = () => {
+    setLaunchMenuOpen((prevOpen) => !prevOpen);
+  };
+
+  const handleCloseLaunchMenu = (event: Event | React.SyntheticEvent) => {
+    if (
+      launchAnchorRef.current &&
+      launchAnchorRef.current.contains(event.target as HTMLElement)
+    ) {
+      return;
+    }
+    setLaunchMenuOpen(false);
+  };
 
   // API functions for agent operations
   const createAgent = async (agentName: string, parentName?: string) => {
@@ -671,37 +702,149 @@ const EditorAgentFlow = ({
         </Paper>
       )}
 
-      {/* Launch Button */}
+      {/* Launch Button with Dropdown */}
       {showLaunchButton && (
-        <Tooltip title={`Launch ${lastSeenNameRef.current} in Home page`}>
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            startIcon={<LaunchIcon />}
-            onClick={handleLaunch}
-            sx={{
-              position: 'absolute',
-              top: 16,
-              right: 180, // Position to the left of Layout Controls
-              zIndex: 20,
-              borderRadius: '50%',
-              minWidth: 56,
-              width: 56,
-              height: 56,
-              backgroundColor: theme.palette.primary.main,
-              '&:hover': {
-                backgroundColor: theme.palette.primary.dark,
-                transform: 'scale(1.05)',
-                transition: 'all 0.2s ease-in-out'
-              },
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              '& .MuiButton-startIcon': {
-                margin: 0
-              }
-            }}
-          />
-        </Tooltip>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 180, // Position to the left of Layout Controls
+            zIndex: 20,
+          }}
+        >
+          {pluginCruse ? (
+            // Cruse enabled: Show Launch to Cruse with dropdown for Home
+            <>
+              <ButtonGroup
+                ref={launchAnchorRef}
+                variant="contained"
+                color="primary"
+                sx={{
+                  borderRadius: '28px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  '& .MuiButton-root': {
+                    height: 56,
+                    '&:hover': {
+                      backgroundColor: theme.palette.primary.dark,
+                      transform: 'scale(1.02)',
+                      transition: 'all 0.2s ease-in-out'
+                    }
+                  }
+                }}
+              >
+                {/* Main Launch Button - Cruse */}
+                <Tooltip title={`Launch ${lastSeenNameRef.current} in Cruse`}>
+                  <Button
+                    onClick={handleLaunchCruse}
+                    sx={{
+                      minWidth: 48,
+                      px: 2.5,
+                      borderTopLeftRadius: '28px',
+                      borderBottomLeftRadius: '28px',
+                      backgroundColor: theme.palette.primary.main,
+                    }}
+                  >
+                    <LaunchIcon />
+                  </Button>
+                </Tooltip>
+
+                {/* Dropdown Arrow */}
+                <Tooltip title="More launch options">
+                  <Button
+                    size="small"
+                    onClick={handleToggleLaunchMenu}
+                    sx={{
+                      px: 0.5,
+                      minWidth: 32,
+                      borderTopRightRadius: '28px',
+                      borderBottomRightRadius: '28px',
+                      borderLeft: `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
+                      backgroundColor: theme.palette.primary.main,
+                    }}
+                  >
+                    <ArrowDropDownIcon />
+                  </Button>
+                </Tooltip>
+              </ButtonGroup>
+
+              {/* Dropdown Menu */}
+              <Popper
+                open={launchMenuOpen}
+                anchorEl={launchAnchorRef.current}
+                role={undefined}
+                placement="bottom-end"
+                transition
+                disablePortal
+                sx={{ zIndex: 21 }}
+              >
+                {({ TransitionProps, placement }) => (
+                  <Grow
+                    {...TransitionProps}
+                    style={{
+                      transformOrigin: placement === 'bottom-end' ? 'right top' : 'right bottom',
+                    }}
+                  >
+                    <Paper
+                      elevation={8}
+                      sx={{
+                        mt: 1,
+                        minWidth: 160,
+                        borderRadius: 2,
+                        backgroundColor: theme.palette.background.paper,
+                      }}
+                    >
+                      <ClickAwayListener onClickAway={handleCloseLaunchMenu}>
+                        <MenuList sx={{ py: 0.5 }}>
+                          <MenuItem
+                            onClick={handleLaunchHome}
+                            sx={{
+                              display: 'flex',
+                              gap: 1,
+                              py: 1,
+                              px: 1.5,
+                              '&:hover': {
+                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              }
+                            }}
+                          >
+                            <HomeIcon fontSize="small" color="action" />
+                            <Typography variant="body2" fontWeight={500}>
+                              Launch in Home
+                            </Typography>
+                          </MenuItem>
+                        </MenuList>
+                      </ClickAwayListener>
+                    </Paper>
+                  </Grow>
+                )}
+              </Popper>
+            </>
+          ) : (
+            // Cruse disabled: Show simple Launch to Home button
+            <Tooltip title={`Launch ${lastSeenNameRef.current} in Home`}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleLaunchHome}
+                sx={{
+                  height: 56,
+                  minWidth: 48,
+                  px: 2.5,
+                  borderRadius: '28px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  backgroundColor: theme.palette.primary.main,
+                  '&:hover': {
+                    backgroundColor: theme.palette.primary.dark,
+                    transform: 'scale(1.02)',
+                    transition: 'all 0.2s ease-in-out'
+                  }
+                }}
+              >
+                <LaunchIcon />
+              </Button>
+            </Tooltip>
+          )}
+        </Box>
       )}
 
       {/* Layout Controls Panel */}
