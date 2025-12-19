@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import AgentFlow from "../../components/AgentFlow";
@@ -28,12 +28,16 @@ import ZenModeOverlay from "../../components/ZenModeOverlay";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
 import { ChatProvider, useChatContext } from "../../context/ChatContext";
+import { useZenMode } from "../../hooks/useZenMode";
 import { getInitialTheme } from "../../utils/theme";
 
 // Inner component that has access to ChatContext
 const HomeContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
   const { setActiveNetwork } = useChatContext();
+  const { isZenMode } = useZenMode();
+  const [agentFlowKey, setAgentFlowKey] = useState(0);
+  const prevZenModeRef = useRef(isZenMode);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", getInitialTheme());
@@ -48,6 +52,14 @@ const HomeContent: React.FC = () => {
       setActiveNetwork(networkParam);
     }
   }, [setActiveNetwork]);
+
+  // Force AgentFlow to re-render when exiting Zen Mode to load cached positions
+  useEffect(() => {
+    if (prevZenModeRef.current === true && isZenMode === false) {
+      setAgentFlowKey(prev => prev + 1);
+    }
+    prevZenModeRef.current = isZenMode;
+  }, [isZenMode]);
 
   return (
     <ReactFlowProvider>
@@ -69,7 +81,7 @@ const HomeContent: React.FC = () => {
                 <PanelGroup direction="vertical">
                   <Panel defaultSize={66} minSize={50} maxSize={85}>
                     {/* AgentFlow */}
-                    <AgentFlow selectedNetwork={selectedNetwork} />
+                    <AgentFlow key={agentFlowKey} selectedNetwork={selectedNetwork} />
                   </Panel>
                   <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
 

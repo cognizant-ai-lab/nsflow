@@ -46,8 +46,8 @@ import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
-import { Mp3Encoder } from "@breezystack/lamejs";
 import { useSampleQueries } from "../hooks/useSampleQueries";
+import { convertToMp3 } from "../utils/audioUtils";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
@@ -392,36 +392,6 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       throw error;
     }
   };
-
-  const convertToMp3 = async (audioBuffer: AudioBuffer): Promise<Blob> => {
-    const numberOfChannels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
-    const left = audioBuffer.getChannelData(0);
-    const right = numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
-
-    const leftInt16 = new Int16Array(left.length);
-    const rightInt16 = new Int16Array(right.length);
-    for (let i = 0; i < left.length; i++) {
-      leftInt16[i] = Math.max(-32768, Math.min(32767, left[i] * 32768));
-      rightInt16[i] = Math.max(-32768, Math.min(32767, right[i] * 32768));
-    }
-
-    const mp3encoder = new Mp3Encoder(numberOfChannels, sampleRate, 128);
-    const mp3Data: Uint8Array[] = [];
-    const sampleBlockSize = 1152;
-
-    for (let i = 0; i < leftInt16.length; i += sampleBlockSize) {
-      const leftChunk = leftInt16.subarray(i, i + sampleBlockSize);
-      const rightChunk = rightInt16.subarray(i, i + sampleBlockSize);
-      const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
-      if (mp3buf.length > 0) mp3Data.push(mp3buf);
-    }
-
-    const mp3buf = mp3encoder.flush();
-    if (mp3buf.length > 0) mp3Data.push(mp3buf);
-
-    return new Blob(mp3Data.map((c) => new Uint8Array(c)), { type: "audio/mp3" });
-    };
 
   const downloadMessages = () => {
     const logText = chatMessages.map((msg) => `${msg.sender}: ${msg.text}`).join("\n");

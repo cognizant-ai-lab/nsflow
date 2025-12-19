@@ -45,10 +45,9 @@ export interface ZenModeFeatures {
     
     // Chat features
     showSampleQueries: boolean;
-    showSpeechControls: boolean;
+    showSpeechToText: boolean;
+    showTextToSpeech: boolean;
     showClearChat: boolean;
-    showDownloadChat: boolean;
-    showSlyDataToggle: boolean;
     
     // Advanced panels
     showInternalChat: boolean;
@@ -132,10 +131,9 @@ export interface ZenModeFeatures {
       
       // Chat
       showSampleQueries: true,
-      showSpeechControls: true,
+      showSpeechToText: false,
+      showTextToSpeech: true,
       showClearChat: true,
-      showDownloadChat: true, // Hidden for cleaner look
-      showSlyDataToggle: true, // Hidden for cleaner look
       
       // Advanced panels
       showInternalChat: false,
@@ -192,10 +190,9 @@ export interface ZenModeFeatures {
       showLayoutPanel: false,
       showMinimap: false,
       showSampleQueries: true,
-      showSpeechControls: false,
+      showSpeechToText: false,
+      showTextToSpeech: false,
       showClearChat: false,
-      showDownloadChat: false,
-      showSlyDataToggle: false,
       enableNodeDragging: false,
       chatPanelWidth: 25,
     },
@@ -215,10 +212,9 @@ export interface ZenModeFeatures {
       showLayoutPanel: true,
       showMinimap: true,
       showSampleQueries: true,
-      showSpeechControls: true,
+      showSpeechToText: false,
+      showTextToSpeech: true,
       showClearChat: true,
-      showDownloadChat: true,
-      showSlyDataToggle: true,
       chatPanelWidth: 35,
     },
     theme: {

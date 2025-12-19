@@ -31,9 +31,6 @@ import {
 } from "@mui/material";
 import {
   Close as CloseIcon,
-  ZoomIn as ZoomInIcon,
-  ZoomOut as ZoomOutIcon,
-  RestartAlt as ResetZoomIcon,
   Hub as NetworkIcon,
 } from "@mui/icons-material";
 import { useZenMode } from "../hooks/useZenMode";
@@ -113,9 +110,6 @@ const ZenModeOverlay = () => {
     exitZenMode,
     config,
     zoomLevel,
-    zoomIn,
-    zoomOut,
-    resetZoom,
   } = useZenMode();
   const { activeNetwork } = useChatContext();
   const { theme } = useTheme();
@@ -141,19 +135,94 @@ const ZenModeOverlay = () => {
     setActiveTab(newValue);
   }, []);
 
-  // Memoize which panel to render based on activeTab
-    const tabContent = useMemo(() => {
-        const tabs = [
-        { key: 'chat', component: <ZenModeChat />, always: true },
-        { key: 'internal', component: <InternalChatPanel />, show: config.features.showInternalChat },
-        { key: 'config', component: <ConfigPanel selectedNetwork={activeNetwork || ""} />, show: config.features.showConfigPanel },
-        { key: 'slydata', component: <SlyDataPanel />, show: config.features.showSlyDataPanel },
-        { key: 'logs', component: <LogsPanel />, show: config.features.showLogsPanel },
-        ];
-        
-        const visibleTabs = tabs.filter(t => t.always || t.show);
-        return visibleTabs[activeTab]?.component || <ZenModeChat />;
-    }, [activeTab, config.features, activeNetwork]);
+  // Calculate tab indices for each panel
+  const tabIndices = useMemo(() => {
+    let index = 0;
+    const indices: { [key: string]: number } = { chat: index++ };
+    if (config.features.showInternalChat) indices.internal = index++;
+    if (config.features.showConfigPanel) indices.config = index++;
+    if (config.features.showSlyDataPanel) indices.slydata = index++;
+    if (config.features.showLogsPanel) indices.logs = index++;
+    return indices;
+  }, [config.features]);
+
+  // Render all panels but keep them mounted - use CSS to show/hide
+  const tabContent = useMemo(() => {
+    return (
+      <>
+        {/* Chat Panel - Always visible */}
+        <Box
+          sx={{
+            display: activeTab === tabIndices.chat ? 'flex' : 'none',
+            flexDirection: 'column',
+            height: '100%',
+            width: '100%',
+          }}
+        >
+          <ZenModeChat />
+        </Box>
+
+        {/* Internal Chat Panel */}
+        {config.features.showInternalChat && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.internal ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <InternalChatPanel />
+          </Box>
+        )}
+
+        {/* Config Panel */}
+        {config.features.showConfigPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.config ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <ConfigPanel selectedNetwork={activeNetwork || ""} />
+          </Box>
+        )}
+
+        {/* Sly Data Panel */}
+        {config.features.showSlyDataPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.slydata ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <SlyDataPanel />
+          </Box>
+        )}
+
+        {/* Logs Panel - Keep mounted when enabled to prevent reset */}
+        {config.features.showLogsPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.logs ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+              position: activeTab === tabIndices.logs ? 'relative' : 'absolute',
+              visibility: activeTab === tabIndices.logs ? 'visible' : 'hidden',
+              pointerEvents: activeTab === tabIndices.logs ? 'auto' : 'none',
+            }}
+          >
+            <LogsPanel />
+          </Box>
+        )}
+      </>
+    );
+  }, [activeTab, tabIndices, config.features, activeNetwork]);
   // Theme-aware colors based on current MUI theme
   const isDark = theme.palette.mode === 'dark';
   const themeAwareColors = useMemo(() => {
@@ -316,6 +385,7 @@ const ZenModeOverlay = () => {
                       borderRadius: "50%",
                       backgroundColor: theme.palette.success.main,
                       marginRight: 1,
+                      marginLeft: 1,
                       animation: "pulse 2s ease-in-out infinite",
                       "@keyframes pulse": {
                         "0%, 100%": { opacity: 1 },
@@ -347,63 +417,7 @@ const ZenModeOverlay = () => {
 
             {/* Right - Controls */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              {/* Zoom Controls */}
-              {config.features.enableZoomControls && (
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.5,
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: 2,
-                    background: alpha(theme.palette.background.paper, 0.3),
-                    border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-                  }}
-                >
-                  <Tooltip title="Zoom Out (-)">
-                    <IconButton
-                      size="small"
-                      onClick={zoomOut}
-                      sx={{ color: theme.palette.text.secondary }}
-                    >
-                      <ZoomOutIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
 
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      minWidth: 45,
-                      textAlign: "center",
-                      color: theme.palette.text.primary,
-                      fontWeight: 500,
-                    }}
-                  >
-                    {Math.round(zoomLevel * 100)}%
-                  </Typography>
-
-                  <Tooltip title="Zoom In (+)">
-                    <IconButton
-                      size="small"
-                      onClick={zoomIn}
-                      sx={{ color: theme.palette.text.secondary }}
-                    >
-                      <ZoomInIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-
-                  <Tooltip title="Reset Zoom">
-                    <IconButton
-                      size="small"
-                      onClick={resetZoom}
-                      sx={{ color: theme.palette.text.secondary }}
-                    >
-                      <ResetZoomIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              )}
 
               {/* Zen Mode Settings */}
               <ZenModeSettings />

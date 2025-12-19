@@ -36,6 +36,8 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Mic as MicIcon,
+  ZoomIn as ZoomInIcon,
+  ZoomOut as ZoomOutIcon,
 } from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -43,15 +45,16 @@ import { useZenMode } from "../hooks/useZenMode";
 import { useTheme } from "../context/ThemeContext";
 import { getFeatureFlags } from "../utils/config";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
-import { useTextToSpeech } from "../hooks/useTextToSpeech";
-import { useSpeechToText } from "../hooks/useSpeechToText";
+import { useTextToSpeech as useTextToSpeechHook } from "../hooks/useTextToSpeech";
+import { useSpeechToText as useSpeechToTextHook } from "../hooks/useSpeechToText";
 import { useSampleQueries } from "../hooks/useSampleQueries";
 
 const ZenModeChat = () => {
   const { theme } = useTheme();
   const { config } = useZenMode();
   const { viteUseSpeech } = getFeatureFlags();
-  const useSpeech = config.features.showSpeechControls && !!viteUseSpeech;
+  const enableSpeechToText = config.features.showSpeechToText && !!viteUseSpeech;
+  const enableTextToSpeech = config.features.showTextToSpeech && !!viteUseSpeech;
 
   const {
     activeNetwork,
@@ -61,16 +64,30 @@ const ZenModeChat = () => {
   } = useChatContext();
 
   const { stopWebSocket, clearChat } = useChatControls();
-  const { textToSpeech, audioRef } = useTextToSpeech();
-  const { isRecording, isProcessing, startRecording, stopRecording, processRecording } = useSpeechToText();
+  const { textToSpeech, audioRef } = useTextToSpeechHook();
+  const { isRecording, isProcessing, startRecording, stopRecording, processRecording } = useSpeechToTextHook();
   const sampleQueries = useSampleQueries(activeNetwork);
 
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
   const [shouldAutoPlayNextAgent, setShouldAutoPlayNextAgent] = useState(false);
+  const [chatZoomLevel, setChatZoomLevel] = useState(1);
   const lastMessageCountRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Chat zoom controls
+  const chatZoomIn = () => {
+    setChatZoomLevel((prev) => Math.min(prev + 0.1, 2)); // Max 200%
+  };
+
+  const chatZoomOut = () => {
+    setChatZoomLevel((prev) => Math.max(prev - 0.1, 0.5)); // Min 50%
+  };
+
+  const chatZoomReset = () => {
+    setChatZoomLevel(1);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -190,6 +207,54 @@ const ZenModeChat = () => {
         </Typography>
 
         <Box sx={{ display: 'flex', gap: 0.5 }}>
+        {config.features.enableZoomControls && (
+        <>
+          {/* Chat Zoom Controls */}
+          <Tooltip title="Zoom In">
+            <IconButton
+              size="small"
+              onClick={chatZoomIn}
+              disabled={chatZoomLevel >= 2}
+              sx={{
+                color: theme.palette.text.secondary,
+                "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                "&.Mui-disabled": { opacity: 0.3 },
+              }}
+            >
+              <ZoomInIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Zoom Out">
+            <IconButton
+              size="small"
+              onClick={chatZoomOut}
+              disabled={chatZoomLevel <= 0.5}
+              sx={{
+                color: theme.palette.text.secondary,
+                "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                "&.Mui-disabled": { opacity: 0.3 },
+              }}
+            >
+              <ZoomOutIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+            <Tooltip title={`Reset Zoom (${Math.round(chatZoomLevel * 100)}%)`}>
+              <IconButton
+                size="small"
+                onClick={chatZoomReset}
+                sx={{
+                  color: theme.palette.text.secondary,
+                  "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                  fontSize: '0.7rem',
+                  minWidth: 'auto',
+                  px: 0.5,
+                }}
+              >
+                {Math.round(chatZoomLevel * 100)}%
+              </IconButton>
+            </Tooltip>
+            </>
+          )}
           {config.features.showClearChat && (
             <Tooltip title="Clear Chat">
               <IconButton
@@ -226,15 +291,29 @@ const ZenModeChat = () => {
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
+          position: 'relative',
+          backgroundColor: theme.palette.background.default,
         }}
       >
-        <ScrollableMessageContainer
-          messages={chatMessages}
-          copiedMessage={copiedMessage}
-          onCopy={copyToClipboard}
-          onTextToSpeech={(text) => textToSpeech(text)}
-          useSpeech={useSpeech}
-        />
+        <Box
+          sx={{
+            flex: 1,
+            overflow: 'auto',
+            transform: `scale(${chatZoomLevel})`,
+            transformOrigin: 'top left',
+            width: `${100 / chatZoomLevel}%`,
+            height: `${100 / chatZoomLevel}%`,
+            backgroundColor: theme.palette.background.default,
+          }}
+        >
+          <ScrollableMessageContainer
+            messages={chatMessages}
+            copiedMessage={copiedMessage}
+            onCopy={copyToClipboard}
+            onTextToSpeech={(text) => textToSpeech(text)}
+            useSpeech={enableTextToSpeech}
+          />
+        </Box>
       </Box>
 
       {/* Audio playback */}
@@ -382,7 +461,7 @@ const ZenModeChat = () => {
           />
           
           <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
-            {useSpeech && (
+            {enableSpeechToText && (
               <Tooltip
                 title={
                   isProcessing ? "Processing..." : isRecording ? "Recording..." : "Hold to record"

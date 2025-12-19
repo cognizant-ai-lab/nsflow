@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   IconButton,
   Popover,
@@ -23,10 +23,7 @@ import {
   FormControlLabel,
   Checkbox,
   Divider,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
+  Button,
   alpha,
   useTheme,
   Tooltip,
@@ -58,10 +55,9 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   
   // Chat
   { key: "showSampleQueries", label: "Sample Queries", category: "Chat" },
-  { key: "showSpeechControls", label: "Speech Controls", category: "Chat" },
+  { key: "showSpeechToText", label: "Speech to Text", category: "Chat" },
+  { key: "showTextToSpeech", label: "Text to Speech", category: "Chat" },
   { key: "showClearChat", label: "Clear Chat Button", category: "Chat" },
-  { key: "showDownloadChat", label: "Download Chat", category: "Chat" },
-  { key: "showSlyDataToggle", label: "Sly Data Toggle", category: "Chat" },
   
   // Advanced Panels
   { key: "showInternalChat", label: "Internal Chat", category: "Advanced Panels" },
@@ -76,13 +72,18 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "showActiveAgentIndicator", label: "Active Agent Indicator", category: "Visual" },
   
   // Zoom
-  { key: "enableZoomControls", label: "Zoom Controls", category: "Zoom" },
+  { key: "enableZoomControls", label: "Chat Zoom Controls", category: "Zoom" },
 ];
 
 const ZenModeSettings: React.FC = () => {
   const theme = useTheme();
   const { config, updateConfig, resetConfig, currentPreset, setPreset, availablePresets } = useZenMode();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+
+  // Ensure we always have at least default preset
+  const effectivePresets = useMemo(() => {
+    return availablePresets.length > 0 ? availablePresets : ['default'];
+  }, [availablePresets]);
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -177,20 +178,81 @@ const ZenModeSettings: React.FC = () => {
         </Box>
 
         {/* Preset Selector */}
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-          <InputLabel>Preset</InputLabel>
-          <Select
-            value={currentPreset}
-            label="Preset"
-            onChange={(e) => handlePresetChange(e.target.value)}
+        <Box sx={{ mb: 2 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: theme.palette.text.secondary,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              display: "block",
+              mb: 1,
+            }}
           >
-            {availablePresets.map((preset) => (
-              <MenuItem key={preset} value={preset}>
-                {preset.charAt(0).toUpperCase() + preset.slice(1).replace(/_/g, " ")}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            Preset
+          </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+            {effectivePresets.map((preset) => {
+              const displayName = preset.charAt(0).toUpperCase() + preset.slice(1).replace(/-/g, " ").replace(/_/g, " ");
+              const isSelected = currentPreset === preset;
+              return (
+                <Button
+                  key={preset}
+                  size="small"
+                  variant={isSelected ? "contained" : "outlined"}
+                  onClick={() => handlePresetChange(preset)}
+                  sx={{
+                    minWidth: "auto",
+                    px: 1.5,
+                    py: 0.5,
+                    fontSize: "0.75rem",
+                    textTransform: "none",
+                    ...(isSelected && {
+                      backgroundColor: theme.palette.primary.main,
+                      color: theme.palette.primary.contrastText,
+                      "&:hover": {
+                        backgroundColor: theme.palette.primary.dark,
+                      },
+                    }),
+                    ...(!isSelected && {
+                      borderColor: alpha(theme.palette.primary.main, 0.3),
+                      color: theme.palette.text.secondary,
+                      "&:hover": {
+                        borderColor: theme.palette.primary.main,
+                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                      },
+                    }),
+                  }}
+                >
+                  {displayName}
+                </Button>
+              );
+            })}
+            {/* Show Custom button if current preset is custom */}
+            {currentPreset === 'custom' && !effectivePresets.includes('custom') && (
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => handlePresetChange('custom')}
+                sx={{
+                  minWidth: "auto",
+                  px: 1.5,
+                  py: 0.5,
+                  fontSize: "0.75rem",
+                  textTransform: "none",
+                  backgroundColor: theme.palette.primary.main,
+                  color: theme.palette.primary.contrastText,
+                  "&:hover": {
+                    backgroundColor: theme.palette.primary.dark,
+                  },
+                }}
+              >
+                Custom (Modified)
+              </Button>
+            )}
+          </Box>
+        </Box>
 
         <Divider sx={{ my: 1 }} />
 

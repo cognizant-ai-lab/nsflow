@@ -87,7 +87,7 @@ export const useAgentFlowData = ({
         if (viewportConfig.padding !== undefined) {
           setTimeout(() => {
             fitView({ padding: viewportConfig.padding, duration: viewportConfig.fitViewDuration });
-          }, 100);
+          }, 300);
         } else {
           fitView();
         }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState, useCallback, useEffect, ReactNode } from 'react';
+import { useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
 import {
   ZenModeConfig,
   getZenModeConfig,
@@ -23,6 +23,7 @@ import {
   getPresetConfig,
   setCustomZenModeConfig,
   resetZenModeConfig,
+  ZEN_MODE_PRESETS,
 } from '../config/zenModeConfig';
 import { ZenModeContext, ZenModeContextType } from './zenModeTypes';
 
@@ -200,13 +201,23 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
     setCurrentPreset('default');
   }, []);
 
+  // Memoize available presets to ensure they're always available
+  const availablePresets = useMemo(() => {
+    const presets = getAvailablePresets();
+    // Fallback: if presets are empty, get them directly from ZEN_MODE_PRESETS
+    if (presets.length === 0 && ZEN_MODE_PRESETS) {
+      return Object.keys(ZEN_MODE_PRESETS);
+    }
+    return presets;
+  }, []);
+
   const value: ZenModeContextType = {
     isZenMode,
     isTransitioning,
     zoomLevel,
     config,
     currentPreset,
-    availablePresets: getAvailablePresets(),
+    availablePresets,
     enterZenMode,
     exitZenMode,
     toggleZenMode,
