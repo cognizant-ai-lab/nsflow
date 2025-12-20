@@ -164,7 +164,7 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
                 px: 1.5,
               }}
             >
-              Arrange
+              Auto Arrange
             </Button>
           </Tooltip>
         </Box>

@@ -167,7 +167,7 @@ const ZenModeSettings: React.FC = () => {
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600}>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ color: theme.palette.text.primary }}>
             Zen Mode Settings
           </Typography>
           <Tooltip title="Reset to Default">
@@ -217,10 +217,11 @@ const ZenModeSettings: React.FC = () => {
                     }),
                     ...(!isSelected && {
                       borderColor: alpha(theme.palette.primary.main, 0.3),
-                      color: theme.palette.text.secondary,
+                      color: theme.palette.text.primary,
                       "&:hover": {
                         borderColor: theme.palette.primary.main,
                         backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                        color: theme.palette.primary.main,
                       },
                     }),
                   }}
@@ -294,7 +295,7 @@ const ZenModeSettings: React.FC = () => {
                       />
                     }
                     label={
-                      <Typography variant="body2" sx={{ fontSize: "0.85rem" }}>
+                      <Typography variant="body2" sx={{ fontSize: "0.85rem", color: theme.palette.text.primary }}>
                         {toggle.label}
                       </Typography>
                     }
