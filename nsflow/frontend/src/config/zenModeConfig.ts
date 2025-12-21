@@ -215,6 +215,10 @@ export interface ZenModeFeatures {
       showSpeechToText: false,
       showTextToSpeech: true,
       showClearChat: true,
+      showInternalChat: true,
+      showConfigPanel: true,
+      showSlyDataPanel: true,
+      showLogsPanel: true,
       chatPanelWidth: 35,
     },
     theme: {
@@ -232,6 +236,7 @@ export interface ZenModeFeatures {
       showLayoutPanel: false,
       chatPanelWidth: 45,
       chatPanelMinWidth: 400,
+      showInternalChat: true,
     },
     theme: {
       ...DEFAULT_CONFIG.theme,

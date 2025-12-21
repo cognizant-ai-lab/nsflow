@@ -26,13 +26,18 @@ interface UseAgentHighlightingProps {
  * Hook to manage real-time agent highlighting via WebSocket
  * Tracks active agents and edges based on otrace data from logs
  */
+
+// Shared state outside component to persist across mounts
+let lastActiveAgents: Set<string> = new Set();
+let lastActiveEdges: Set<string> = new Set();
+
 export const useAgentHighlighting = ({
   selectedNetwork,
   wsUrl,
   sessionId,
 }: UseAgentHighlightingProps) => {
-  const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
-  const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
+  const [activeAgents, setActiveAgents] = useState<Set<string>>(lastActiveAgents);
+  const [activeEdges, setActiveEdges] = useState<Set<string>>(lastActiveEdges);
 
   useEffect(() => {
     if (!selectedNetwork) return;
@@ -64,6 +69,7 @@ export const useAgentHighlighting = ({
             // Update active agents from otrace
             const newActiveAgents = new Set<string>(logMessage.otrace);
             setActiveAgents(newActiveAgents);
+            lastActiveAgents = newActiveAgents; // Persist to shared state
 
             // Generate active edges from the agent sequence
             if (logMessage.otrace.length > 1) {
@@ -74,6 +80,11 @@ export const useAgentHighlighting = ({
                 );
               }
               setActiveEdges(newActiveEdges);
+              lastActiveEdges = newActiveEdges; // Persist to shared state
+            } else {
+              // Clear edges if no sequence
+              setActiveEdges(new Set());
+              lastActiveEdges = new Set();
             }
           }
         }

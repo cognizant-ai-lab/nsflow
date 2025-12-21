@@ -41,15 +41,146 @@ type LogEntry = {
 // Get formatted timestamp
 const getCurrentTimestamp = () => new Date().toISOString().replace("T", " ").split(".")[0];
 
+// localStorage keys and constants
+const LOGS_STORAGE_PREFIX = 'nsflow-logs-';
+const LOGS_METADATA_KEY = 'nsflow-logs-metadata';
+const MAX_LOGS_PER_SESSION = 1000;
+const MAX_SESSIONS = 2;
+
+interface LogsMetadata {
+  sessions: Array<{
+    sessionId: string;
+    timestamp: number;
+    logCount: number;
+  }>;
+}
+
+// Helper functions for localStorage management
+const getLogsStorageKey = (sessionId: string): string => `${LOGS_STORAGE_PREFIX}${sessionId}`;
+
+const loadLogsFromStorage = (sessionId: string): LogEntry[] => {
+  try {
+    const key = getLogsStorageKey(sessionId);
+    const stored = localStorage.getItem(key);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('Failed to load logs from localStorage:', error);
+    return [];
+  }
+};
+
+const saveLogsToStorage = (sessionId: string, logs: LogEntry[]): void => {
+  const key = getLogsStorageKey(sessionId);
+  try {
+    const logsToSave = logs.slice(-MAX_LOGS_PER_SESSION);
+    localStorage.setItem(key, JSON.stringify(logsToSave));
+    updateLogsMetadata(sessionId, logsToSave.length);
+    cleanupOldSessions();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      console.warn('localStorage quota exceeded, cleaning up old sessions...');
+      cleanupOldSessions(true);
+      try {
+        const reducedLogs = logs.slice(-Math.floor(MAX_LOGS_PER_SESSION * 0.8));
+        localStorage.setItem(key, JSON.stringify(reducedLogs));
+        updateLogsMetadata(sessionId, reducedLogs.length);
+      } catch (retryError) {
+        console.error('Failed to save logs after cleanup:', retryError);
+      }
+    } else {
+      console.error('Failed to save logs to localStorage:', error);
+    }
+  }
+};
+
+const updateLogsMetadata = (sessionId: string, logCount: number): void => {
+  try {
+    const stored = localStorage.getItem(LOGS_METADATA_KEY);
+    const metadata: LogsMetadata = stored ? JSON.parse(stored) : { sessions: [] };
+    
+    const existingIndex = metadata.sessions.findIndex(s => s.sessionId === sessionId);
+    if (existingIndex >= 0) {
+      metadata.sessions[existingIndex].timestamp = Date.now();
+      metadata.sessions[existingIndex].logCount = logCount;
+    } else {
+      metadata.sessions.push({
+        sessionId,
+        timestamp: Date.now(),
+        logCount,
+      });
+    }
+    
+    // Sort by timestamp (newest first)
+    metadata.sessions.sort((a, b) => b.timestamp - a.timestamp);
+    
+    localStorage.setItem(LOGS_METADATA_KEY, JSON.stringify(metadata));
+  } catch (error) {
+    console.warn('Failed to update logs metadata:', error);
+  }
+};
+
+const cleanupOldSessions = (forceCleanup = false): void => {
+  try {
+    const stored = localStorage.getItem(LOGS_METADATA_KEY);
+    if (!stored) return;
+    
+    const metadata: LogsMetadata = JSON.parse(stored);
+    
+    if (metadata.sessions.length > MAX_SESSIONS || forceCleanup) {
+      const sessionsToKeep = metadata.sessions.slice(0, MAX_SESSIONS);
+      const sessionsToRemove = metadata.sessions.slice(MAX_SESSIONS);
+      
+      // Remove old session logs from localStorage
+      sessionsToRemove.forEach(session => {
+        const key = getLogsStorageKey(session.sessionId);
+        localStorage.removeItem(key);
+      });
+      
+      // Update metadata with new sessions array
+      const updatedMetadata: LogsMetadata = {
+        sessions: sessionsToKeep,
+      };
+      localStorage.setItem(LOGS_METADATA_KEY, JSON.stringify(updatedMetadata));
+    }
+  } catch (error) {
+    console.warn('Failed to cleanup old sessions:', error);
+  }
+};
+
 const LogsPanel = () => {
   const { wsUrl } = useApiPort();
-  const [logs, setLogs] = useState<LogEntry[]>([
-    { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "System initialized." },
-    { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "Frontend app loaded successfully." },
-  ]);
   const { sessionId, targetNetwork } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const currentNetworkRef = useRef<string>("");
+  const isInitializedRef = useRef<boolean>(false);
   const theme = useTheme();
+  
+  const [logs, setLogs] = useState<LogEntry[]>(() => {
+    const stored = loadLogsFromStorage(sessionId);
+    if (stored && stored.length > 0) {
+      return stored;
+    }
+    // Only initialize with default messages if this is truly the first time
+    const initialLogs = [
+      { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "System initialized." },
+      { timestamp: getCurrentTimestamp(), agent: "None", source: "Frontend", message: "Frontend app loaded successfully." },
+    ];
+    // Save initial logs to localStorage
+    saveLogsToStorage(sessionId, initialLogs);
+    return initialLogs;
+  });
+
+  // Persist logs to localStorage whenever they change (with debouncing to avoid excessive writes)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveLogsToStorage(sessionId, logs);
+    }, 500); // Debounce: save 500ms after last change
+
+    return () => clearTimeout(timeoutId);
+  }, [logs, sessionId]);
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -59,32 +190,116 @@ const LogsPanel = () => {
   useEffect(() => {
     if (!wsUrl || !targetNetwork) return; // Prevents WebSocket from connecting before port is set
 
-    setLogs((prevLogs) => [
-      ...prevLogs,
-      { timestamp: getCurrentTimestamp(), agent: `${targetNetwork}`, source: "Frontend", message: `Connected to ${wsUrl}` },
-    ]);
+    // Check if we need to create a new WebSocket connection
+    const networkChanged = currentNetworkRef.current !== targetNetwork;
+    const needsNewConnection = 
+      !wsRef.current || 
+      wsRef.current.readyState === WebSocket.CLOSED ||
+      wsRef.current.readyState === WebSocket.CLOSING ||
+      networkChanged;
 
-    // WebSocket for real-time logs
-    const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${targetNetwork}/${sessionId}`);
-    
-    ws.onopen = () => console.log("Logs WebSocket Connected.");
-    ws.onmessage = (event) => {
-      try {
-        const data: LogEntry = JSON.parse(event.data);
-        if (data.timestamp && data.message) {
-          setLogs((prev) => [...prev, data]);
+    if (needsNewConnection) {
+      // Close existing connection if switching networks or if connection is dead
+      if (wsRef.current) {
+        const oldWs = wsRef.current;
+        // Remove event listeners to prevent memory leaks
+        oldWs.onopen = null;
+        oldWs.onmessage = null;
+        oldWs.onclose = null;
+        oldWs.onerror = null;
+        if (oldWs.readyState === WebSocket.OPEN || oldWs.readyState === WebSocket.CONNECTING) {
+          oldWs.close();
         }
-      } catch (error) {
-        console.error("Error parsing WebSocket message:", error);
+        wsRef.current = null;
+      }
+
+      // Only add connection message if this is a new network
+      if (networkChanged) {
+        setLogs((prevLogs) => {
+          // Avoid duplicate connection messages
+          const lastLog = prevLogs[prevLogs.length - 1];
+          const connectionMsg = `Connected to ${targetNetwork} via ${wsUrl}`;
+          if (lastLog?.message !== connectionMsg) {
+            return [
+              ...prevLogs,
+              { timestamp: getCurrentTimestamp(), agent: `${targetNetwork}`, source: "Frontend", message: connectionMsg },
+            ];
+          }
+          return prevLogs;
+        });
+        currentNetworkRef.current = targetNetwork;
+      }
+
+      // Create new WebSocket connection
+      const ws = new WebSocket(`${wsUrl}/api/v1/ws/logs/${targetNetwork}/${sessionId}`);
+      
+      ws.onopen = () => {
+        console.log("Logs WebSocket Connected.");
+        wsRef.current = ws;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data: LogEntry = JSON.parse(event.data);
+          if (data.timestamp && data.message) {
+            setLogs((prev) => {
+              // Prevent duplicate messages
+              const isDuplicate = prev.some(
+                (log) => log.timestamp === data.timestamp && log.message === data.message && log.agent === data.agent
+              );
+              if (isDuplicate) return prev;
+              return [...prev, data];
+            });
+          }
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("Logs WebSocket Disconnected");
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("Logs WebSocket Error:", error);
+      };
+
+      wsRef.current = ws;
+      isInitializedRef.current = true;
+    }
+
+    // Cleanup function - close WebSocket when dependencies change
+    return () => {
+      // Store the current network before cleanup
+      const previousNetwork = currentNetworkRef.current;
+      
+      // If network is changing or component is unmounting, close the connection
+      if (wsRef.current && (previousNetwork !== targetNetwork || !targetNetwork)) {
+        const ws = wsRef.current;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+        wsRef.current = null;
       }
     };
-    ws.onclose = () => console.log("Logs WebSocket Disconnected");
-
-    // Cleanup function
-    return () => {
-      ws.close();
-    };
   }, [targetNetwork, wsUrl, sessionId]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
 
   const downloadLogs = () => {
     const logText = logs

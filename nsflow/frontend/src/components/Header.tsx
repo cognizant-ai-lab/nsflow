@@ -67,9 +67,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false }
 
   const handleExportNotebook = async () => {
     if (!selectedNetwork) return alert("Please select an agent network first.");
-    const response = await fetch(
-      `${apiUrl}/api/v1/export/notebook/${selectedNetwork}`
-    );
+    const response = await fetch(`${apiUrl}/api/v1/export/notebook/${selectedNetwork}`);
     if (!response.ok) return alert("Failed to generate notebook.");
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
