@@ -35,7 +35,7 @@ export interface CruseInterfaceProps {
   onCruseThemeToggle?: (enabled: boolean) => void;
   backgroundType?: 'static' | 'dynamic';
   onBackgroundTypeChange?: (type: 'static' | 'dynamic') => void;
-  onRefreshTheme?: (userPrompt?: string) => void;
+  onRefreshTheme?: (userPrompt?: string, modifyPreviousBackground?: boolean) => void;
   isRefreshingTheme?: boolean;
 }
 
@@ -95,6 +95,13 @@ export function CruseInterface({
 
   // Track if URL parameter has been processed
   const urlParamProcessed = useRef(false);
+
+  // Use ref to store latest threads to avoid recreating handleAgentChange
+  // This prevents race condition when threads state updates during agent selection
+  const threadsRef = useRef(threads);
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   // Fetch agents from backend (similar to Sidebar.tsx pattern)
   useEffect(() => {
@@ -323,8 +330,8 @@ export function CruseInterface({
       // Update active network
       setActiveNetwork(agentId);
 
-      // Check if agent has any threads
-      const agentThreads = threads.filter((t) => t.agent_name === agentId);
+      // Check if agent has any threads (use ref to avoid recreating this callback)
+      const agentThreads = threadsRef.current.filter((t) => t.agent_name === agentId);
 
       if (agentThreads.length === 0) {
         // Auto-create first thread for this agent
@@ -337,7 +344,7 @@ export function CruseInterface({
         await loadThread(agentThreads[0].id);
       }
     },
-    [setActiveNetwork, threads, loadThread, handleNewThread, setChatMessages, regenerateSessionId]
+    [setActiveNetwork, loadThread, handleNewThread, setChatMessages, regenerateSessionId]
   );
 
   // Handle URL parameters to set the active network on page load
@@ -408,8 +415,8 @@ export function CruseInterface({
   const handleDeleteThread = useCallback(
     async (threadId: string) => {
       try {
-        // Find the thread to get its details for the notification
-        const thread = threads.find((t) => t.id === threadId);
+        // Find the thread to get its details for the notification (use ref to get latest state)
+        const thread = threadsRef.current.find((t) => t.id === threadId);
         const threadTitle = thread?.title || 'Unknown';
         const agentName = thread?.agent_name || 'Unknown';
 
@@ -443,7 +450,7 @@ export function CruseInterface({
         });
       }
     },
-    [deleteThread, threads, showSnackbar]
+    [deleteThread, showSnackbar]
   );
 
   // Handle delete all threads for agent
@@ -464,7 +471,8 @@ export function CruseInterface({
     }
 
     try {
-      const agentThreads = threads.filter((t) => t.agent_name === activeNetwork);
+      // Use ref to get latest threads state
+      const agentThreads = threadsRef.current.filter((t) => t.agent_name === activeNetwork);
       const threadCount = agentThreads.length;
 
       if (threadCount === 0) {
@@ -516,7 +524,7 @@ export function CruseInterface({
         duration: SNACKBAR_DURATION,
       });
     }
-  }, [activeNetwork, threads, currentThread, setChatMessages, showSnackbar, fetchThreads, loadThread, clearCurrentThread]);
+  }, [activeNetwork, currentThread, setChatMessages, showSnackbar, fetchThreads, loadThread, clearCurrentThread]);
 
   const handleCancelDeleteAll = useCallback(() => {
     setDeleteConfirmOpen(false);

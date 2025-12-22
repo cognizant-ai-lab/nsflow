@@ -15,36 +15,12 @@ limitations under the License.
 */
 
 import { useState, useEffect } from 'react';
-import {
-  Box,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  ListItemIcon,
-  IconButton,
-  Divider,
-  Typography,
-  CircularProgress,
-  Menu,
-  MenuItem,
-  Switch,
-  Tooltip,
-  Slider,
-  TextField,
+import { Box, List, ListItem, ListItemButton, ListItemText, ListItemIcon, IconButton, Divider,
+  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, useTheme, Checkbox
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  Chat as ChatIcon,
-  SettingsTwoTone as SettingsIcon,
-  DeleteSweep as DeleteSweepIcon,
-  Visibility as VisibilityIcon,
-  Refresh as RefreshIcon,
-  ChevronLeft as CollapseIcon,
-  ChevronRight as ExpandIcon,
-  Search as SearchIcon,
-} from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Chat as ChatIcon, SettingsTwoTone as SettingsIcon,
+  DeleteSweep as DeleteSweepIcon, Visibility as VisibilityIcon, Refresh as RefreshIcon, ChevronLeft as CollapseIcon,
+  ChevronRight as ExpandIcon, Search as SearchIcon } from '@mui/icons-material';
 import { formatMessageTime } from '../../utils/cruse';
 import { AgentSelector, Agent } from './AgentSelector';
 import type { CruseThread } from '../../types/cruse';
@@ -89,7 +65,7 @@ export interface ThreadListProps {
   /** Callback when background type is changed */
   onBackgroundTypeChange?: (type: 'static' | 'dynamic') => void;
   /** Callback when refresh theme button is clicked */
-  onRefreshTheme?: (userPrompt?: string) => void;
+  onRefreshTheme?: (userPrompt?: string, modifyPreviousBackground?: boolean) => void;
   /** Is theme refreshing */
   isRefreshingTheme?: boolean;
 }
@@ -142,12 +118,20 @@ export function ThreadList({
   const settingsOpen = Boolean(settingsAnchorEl);
 
   const [agentSelectorOpen, setAgentSelectorOpen] = useState(false);
+  const theme = useTheme();
 
   // Theme refresh prompt state - stored per targetNetwork (not selectedAgentId)
   const [themePrompt, setThemePrompt] = useState(() => {
     if (!targetNetwork) return '';
     const stored = localStorage.getItem(`cruse_theme_prompt_${targetNetwork}`);
     return stored || '';
+  });
+
+  // Modify previous background state - stored per targetNetwork
+  const [modifyPreviousBackground, setModifyPreviousBackground] = useState(() => {
+    if (!targetNetwork) return false;
+    const stored = localStorage.getItem(`cruse_modify_previous_${targetNetwork}`);
+    return stored === 'true';
   });
 
   // Filter threads by selected agent
@@ -170,6 +154,13 @@ export function ThreadList({
     }
   }, [themePrompt, targetNetwork]);
 
+  // Persist modify previous background to localStorage (per targetNetwork)
+  useEffect(() => {
+    if (targetNetwork) {
+      localStorage.setItem(`cruse_modify_previous_${targetNetwork}`, String(modifyPreviousBackground));
+    }
+  }, [modifyPreviousBackground, targetNetwork]);
+
   // Load theme prompt when targetNetwork changes
   useEffect(() => {
     if (targetNetwork) {
@@ -177,6 +168,16 @@ export function ThreadList({
       setThemePrompt(stored || '');
     } else {
       setThemePrompt('');
+    }
+  }, [targetNetwork]);
+
+  // Load modify previous background when targetNetwork changes
+  useEffect(() => {
+    if (targetNetwork) {
+      const stored = localStorage.getItem(`cruse_modify_previous_${targetNetwork}`);
+      setModifyPreviousBackground(stored === 'true');
+    } else {
+      setModifyPreviousBackground(false);
     }
   }, [targetNetwork]);
 
@@ -215,7 +216,7 @@ export function ThreadList({
         onClick={handleDeleteAllThreads}
         disabled={!selectedAgentId || agentThreads.length === 0}
         sx={{
-          py: 1.5,
+          py: 1,
           px: 2,
           gap: 1.5,
           '&:hover': {
@@ -233,17 +234,17 @@ export function ThreadList({
         </Typography>
       </MenuItem>
 
-      <Divider sx={{ my: 0.5 }} />
+      <Divider sx={{ my: 0 }} />
 
       {/* Cruse Theme Settings - 3 Row Design */}
       <MenuItem
         sx={{
-          py: 1,
+          py: 0.5,
           px: 2,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'stretch',
-          gap: 1,
+          gap: 0.25,
           '&:hover': {
             bgcolor: 'action.hover',
           },
@@ -356,7 +357,7 @@ export function ThreadList({
             onClick={(e) => {
               e.stopPropagation();
               if (cruseThemeEnabled && !isRefreshingTheme) {
-                onRefreshTheme?.(themePrompt);
+                onRefreshTheme?.(themePrompt, modifyPreviousBackground);
               }
             }}
             sx={{
@@ -385,29 +386,71 @@ export function ThreadList({
         {/* Row 1.5: User Prompt for Theme Refresh */}
         <Box
           sx={{
+            mt: 0.5,
             display: 'flex',
             flexDirection: 'column',
-            gap: 0.5,
+            gap: 0.3,
             opacity: cruseThemeEnabled ? 1 : 0.4,
             pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-            User Prompt
-          </Typography>
+          {/* Label Row */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.25 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: theme.palette.text.secondary,
+                fontSize: '0.6rem',
+                fontWeight: 500,
+              }}
+            >
+              User Prompt
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  fontSize: '0.6rem',
+                  fontWeight: 500,
+                }}
+              >
+                Modify Bg
+              </Typography>
+              <Checkbox
+                checked={modifyPreviousBackground}
+                onChange={(e) => setModifyPreviousBackground(e.target.checked)}
+                disabled={!cruseThemeEnabled}
+                size="small"
+                sx={{
+                  padding: 0,
+                  width: 16,
+                  height: 16,
+                  '& .MuiSvgIcon-root': {
+                    fontSize: '1rem',
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Box>
+          </Box>
+
+          {/* TextField - Slightly taller than 1 row with scroll */}
           <TextField
             value={themePrompt}
             onChange={(e) => setThemePrompt(e.target.value)}
             placeholder="Optional: Customize theme generation..."
             disabled={!cruseThemeEnabled}
             multiline
-            maxRows={1}
-            minRows={1}
+            maxRows={1.5}
+            minRows={1.5}
             size="small"
             fullWidth
             sx={{
               '& .MuiOutlinedInput-root': {
                 fontSize: '0.75rem',
+                maxHeight: '42px',
+                overflow: 'auto',
                 '& fieldset': {
                   borderColor: 'divider',
                 },
@@ -420,6 +463,7 @@ export function ThreadList({
               },
               '& .MuiInputBase-input': {
                 py: 0.5,
+                px: 0.75,
               },
             }}
             onClick={(e) => e.stopPropagation()}
@@ -433,12 +477,13 @@ export function ThreadList({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: 1,
+            mt: 0.25,
             opacity: cruseThemeEnabled ? 1 : 0.4,
             pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', width: 48 }}>
             Opacity
           </Typography>
           <Slider
@@ -459,7 +504,7 @@ export function ThreadList({
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />
-          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.65rem', fontWeight: 500, width: 32, textAlign: 'right' }}>
             {glassOpacity}%
           </Typography>
         </Box>
@@ -469,12 +514,13 @@ export function ThreadList({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: 1,
+            mt: 0.25,
             opacity: cruseThemeEnabled ? 1 : 0.4,
             pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', width: 48 }}>
             Blur
           </Typography>
           <Slider
@@ -495,18 +541,18 @@ export function ThreadList({
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />
-          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.65rem', fontWeight: 500, width: 32, textAlign: 'right' }}>
             {glassBlur.toFixed(1)}px
           </Typography>
         </Box>
       </MenuItem>
 
-      <Divider sx={{ my: 0.5 }} />
+      <Divider sx={{ my: 0 }} />
 
       <MenuItem
         onClick={handleToggleLogs}
         sx={{
-          py: 1.5,
+          py: 1,
           px: 2,
           gap: 1.5,
         }}

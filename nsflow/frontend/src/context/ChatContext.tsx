@@ -17,6 +17,7 @@ limitations under the License.
 
 import { createContext, useContext, useState, ReactNode, useRef } from "react";
 import { getWandName } from "../utils/config";
+import { getCruseAgentNames } from "../utils/config";
 
 // Generate a unique session ID for this browser session
 // const generateSessionId = (): string => {
@@ -75,6 +76,8 @@ type ChatContextType = {
   isEditorMode: boolean;
   setIsEditorMode: (isEditor: boolean) => void;
   targetNetwork: string; // Computed network based on mode
+  widgetAgentName: string;
+  themeAgentName: string;
 
   chatWs: WebSocket | null;
   internalChatWs: WebSocket | null;
@@ -156,6 +159,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [lastSlyDataAt, setLastSlyDataAt] = useState<number>(0);
   // define Workflow Agent Network Designer Name coming in from env variable
   const { wandName } = getWandName();
+  const { widgetAgentName, themeAgentName } = getCruseAgentNames();
 
   // Centralized network logic
   const targetNetwork = isEditorMode ? wandName : activeNetwork;
@@ -240,6 +244,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       setChatMessages, setInternalChatMessages, setSlyDataMessages, setLogMessages, setProgressMessages,
 
       activeNetwork, setActiveNetwork, isEditorMode, setIsEditorMode, targetNetwork,
+      widgetAgentName, themeAgentName,
 
       chatWs, setChatWs, internalChatWs, setInternalChatWs, slyDataWs, setSlyDataWs, logWs, setLogWs, progressWs, setProgressWs,
 

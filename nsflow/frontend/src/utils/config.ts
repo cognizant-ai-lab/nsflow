@@ -24,6 +24,8 @@ type AppRuntimeConfig = {
   VITE_WS_PROTOCOL: string;
   VITE_USE_SPEECH: boolean;
   NSFLOW_WAND_NAME: string;
+  NSFLOW_CRUSE_WIDGET_AGENT_NAME: string;
+  NSFLOW_CRUSE_THEME_AGENT_NAME: string;
   // NEW flags (booleans from backend)
   NSFLOW_PLUGIN_CRUSE: boolean;
   NSFLOW_PLUGIN_WAND: boolean;
@@ -73,5 +75,13 @@ export function getWandName() {
   const c = getAppConfig();
   return {
     wandName: c.NSFLOW_WAND_NAME,
+  };
+}
+
+export function getCruseAgentNames() {
+  const c = getAppConfig();
+  return {
+    widgetAgentName: c.NSFLOW_CRUSE_WIDGET_AGENT_NAME,
+    themeAgentName: c.NSFLOW_CRUSE_THEME_AGENT_NAME,
   };
 }

@@ -137,9 +137,12 @@ export async function fetchConnectivity(
  */
 export async function generateTheme(
   apiUrl: string,
+  themeAgentName: string,
   agentDetails: AgentDetails,
   backgroundType: 'static' | 'dynamic',
-  userPrompt?: string
+  userPrompt?: string,
+  previousBackground?: BackgroundSchema,
+  includePreviousBackground: boolean = true
 ): Promise<BackgroundSchema> {
   try {
     const payload: any = {
@@ -152,13 +155,18 @@ export async function generateTheme(
       payload.user_prompt = userPrompt.trim();
     }
 
-    console.log(`[ThemeManager] Generating ${backgroundType} theme via cruse_theme_agent`);
+    // Add previous background if provided and user wants to modify it
+    if (previousBackground && includePreviousBackground) {
+      payload.previous_background = previousBackground;
+    }
+
+    console.log(`[ThemeManager] Generating ${backgroundType} theme via ${themeAgentName}`);
 
     const response = await fetch(`${apiUrl}/api/v1/oneshot/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        agent_name: 'cruse_theme_agent',
+        agent_name: themeAgentName,
         message: JSON.stringify(payload),
       }),
     });
@@ -209,6 +217,7 @@ export async function generateTheme(
  */
 export async function getOrGenerateTheme(
   apiUrl: string,
+  themeAgentName: string,
   agentName: string,
   backgroundType: 'static' | 'dynamic'
 ): Promise<BackgroundSchema> {
@@ -242,7 +251,7 @@ export async function getOrGenerateTheme(
     const agentDetails = transformConnectivityToAgentDetails(connectivityData);
 
     // Step 3: Generate theme via cruse_theme_agent (always returns a valid schema, fallback if needed)
-    const generatedTheme = await generateTheme(apiUrl, agentDetails, backgroundType);
+    const generatedTheme = await generateTheme(apiUrl, themeAgentName, agentDetails, backgroundType);
 
     // Step 4: Save to DB
     await saveAgentTheme(agentName, backgroundType, generatedTheme);
@@ -261,12 +270,26 @@ export async function getOrGenerateTheme(
  */
 export async function refreshTheme(
   apiUrl: string,
+  themeAgentName: string,
   agentName: string,
   backgroundType: 'static' | 'dynamic',
-  userPrompt?: string
+  userPrompt?: string,
+  includePreviousBackground: boolean = true
 ): Promise<BackgroundSchema> {
   try {
     console.log(`[ThemeManager] Refreshing ${backgroundType} theme for ${agentName}`);
+
+    // Fetch existing theme from DB to include as previous_background (if user wants to modify it)
+    const existingTheme = await fetchAgentTheme(agentName);
+    const previousBackground = existingTheme
+      ? (backgroundType === 'static' ? existingTheme.static_theme : existingTheme.dynamic_theme) ?? undefined
+      : undefined;
+
+    if (previousBackground && includePreviousBackground) {
+      console.log(`[ThemeManager] Found previous ${backgroundType} theme, including in refresh payload`);
+    } else if (previousBackground && !includePreviousBackground) {
+      console.log(`[ThemeManager] Found previous ${backgroundType} theme, but user chose not to modify it`);
+    }
 
     // Fetch connectivity data
     const connectivityData = await fetchConnectivity(apiUrl, agentName);
@@ -279,7 +302,8 @@ export async function refreshTheme(
     const agentDetails = transformConnectivityToAgentDetails(connectivityData);
 
     // Generate theme via cruse_theme_agent (always returns a valid schema, fallback if needed)
-    const generatedTheme = await generateTheme(apiUrl, agentDetails, backgroundType, userPrompt);
+    // Pass previousBackground and includePreviousBackground flag
+    const generatedTheme = await generateTheme(apiUrl, themeAgentName, agentDetails, backgroundType, userPrompt, previousBackground, includePreviousBackground);
 
     // Save to DB (this will update existing theme)
     await saveAgentTheme(agentName, backgroundType, generatedTheme);
