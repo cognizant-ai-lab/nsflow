@@ -16,7 +16,7 @@ limitations under the License.
 
 import { useState, useEffect } from 'react';
 import { Box, List, ListItem, ListItemButton, ListItemText, ListItemIcon, IconButton, Divider,
-  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, Paper, useTheme, Checkbox
+  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, useTheme, Checkbox
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Chat as ChatIcon, SettingsTwoTone as SettingsIcon,
   DeleteSweep as DeleteSweepIcon, Visibility as VisibilityIcon, Refresh as RefreshIcon, ChevronLeft as CollapseIcon,
@@ -216,7 +216,7 @@ export function ThreadList({
         onClick={handleDeleteAllThreads}
         disabled={!selectedAgentId || agentThreads.length === 0}
         sx={{
-          py: 1.5,
+          py: 1,
           px: 2,
           gap: 1.5,
           '&:hover': {
@@ -234,17 +234,17 @@ export function ThreadList({
         </Typography>
       </MenuItem>
 
-      <Divider sx={{ my: 0.5 }} />
+      <Divider sx={{ my: 0 }} />
 
       {/* Cruse Theme Settings - 3 Row Design */}
       <MenuItem
         sx={{
-          py: 0.75,
+          py: 0.5,
           px: 2,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'stretch',
-          gap: 0.5,
+          gap: 0.25,
           '&:hover': {
             bgcolor: 'action.hover',
           },
@@ -252,7 +252,7 @@ export function ThreadList({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Row 1: Cruse/MUI Toggle, Static/Dynamic Toggle, Refresh Button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {/* Cruse/MUI Toggle */}
           <Box
             onClick={(e) => {
@@ -384,97 +384,106 @@ export function ThreadList({
         </Box>
 
         {/* Row 1.5: User Prompt for Theme Refresh */}
-        <Box sx={{ position: 'absolute', top: 32, left: 24, display: 'flex', alignItems: 'center', px: 0.5, py: 0.5, mt: 0.7,
-            backgroundColor: theme.palette.background.paper, zIndex: 2 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              color: theme.palette.text.secondary,
-              fontSize: '0.5rem',
-            }}
-          >
-            User Prompt
-          </Typography>
-        </Box>
-        <Box sx={{ position: 'absolute', top: 32, right: 24, display: 'flex', alignItems: 'center', gap: 0.25, px: 0.5, py: 0.5, mt: 0.7,
-            backgroundColor: theme.palette.background.paper, zIndex: 2 }}>
-          <Typography variant="caption"
-            sx={{
-              color: theme.palette.text.secondary,
-              fontSize: '0.5rem',
-            }} > Modify </Typography>
-          <Checkbox
-            checked={modifyPreviousBackground}
-            onChange={(e) => setModifyPreviousBackground(e.target.checked)}
+        <Box
+          sx={{
+            mt: 0.5,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.3,
+            opacity: cruseThemeEnabled ? 1 : 0.4,
+            pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
+          }}
+        >
+          {/* Label Row */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.25 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: theme.palette.text.secondary,
+                fontSize: '0.6rem',
+                fontWeight: 500,
+              }}
+            >
+              User Prompt
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  fontSize: '0.6rem',
+                  fontWeight: 500,
+                }}
+              >
+                Modify Bg
+              </Typography>
+              <Checkbox
+                checked={modifyPreviousBackground}
+                onChange={(e) => setModifyPreviousBackground(e.target.checked)}
+                disabled={!cruseThemeEnabled}
+                size="small"
+                sx={{
+                  padding: 0,
+                  width: 16,
+                  height: 16,
+                  '& .MuiSvgIcon-root': {
+                    fontSize: '1rem',
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Box>
+          </Box>
+
+          {/* TextField - Slightly taller than 1 row with scroll */}
+          <TextField
+            value={themePrompt}
+            onChange={(e) => setThemePrompt(e.target.value)}
+            placeholder="Optional: Customize theme generation..."
             disabled={!cruseThemeEnabled}
+            multiline
+            maxRows={1.5}
+            minRows={1.5}
             size="small"
+            fullWidth
             sx={{
-              padding: 0,
-              width: 14,
-              height: 14,
-              '& .MuiSvgIcon-root': {
+              '& .MuiOutlinedInput-root': {
                 fontSize: '0.75rem',
+                maxHeight: '42px',
+                overflow: 'auto',
+                '& fieldset': {
+                  borderColor: 'divider',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'primary.main',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'primary.main',
+                },
+              },
+              '& .MuiInputBase-input': {
+                py: 0.5,
+                px: 0.75,
               },
             }}
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
           />
         </Box>
-        <Paper>
-          <Box
-            sx={{
-              mt: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              opacity: cruseThemeEnabled ? 1 : 0.4,
-              pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
-            }}
-          >
-            <TextField
-              value={themePrompt}
-              onChange={(e) => setThemePrompt(e.target.value)}
-              placeholder="Optional: Customize theme generation..."
-              disabled={!cruseThemeEnabled}
-              multiline
-              maxRows={1}
-              minRows={1}
-              size="small"
-              fullWidth
-              sx={{
-                mt: -0.5,
-                '& .MuiOutlinedInput-root': {
-                  fontSize: '0.75rem',
-                  '& fieldset': {
-                    borderColor: 'divider',
-                  },
-                  '&:hover fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'primary.main',
-                  },
-                },
-                '& .MuiInputBase-input': {
-                  py: 0.5,
-                },
-              }}
-              onClick={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            />
-          </Box>
-        </Paper>
 
         {/* Row 2: Opacity Slider (horizontal layout) */}
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: 1,
+            mt: 0.25,
             opacity: cruseThemeEnabled ? 1 : 0.4,
             pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', width: 48 }}>
             Opacity
           </Typography>
           <Slider
@@ -495,7 +504,7 @@ export function ThreadList({
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />
-          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.65rem', fontWeight: 500, width: 32, textAlign: 'right' }}>
             {glassOpacity}%
           </Typography>
         </Box>
@@ -505,12 +514,13 @@ export function ThreadList({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: 1,
+            mt: 0.25,
             opacity: cruseThemeEnabled ? 1 : 0.4,
             pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', width: 50 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', width: 48 }}>
             Blur
           </Typography>
           <Slider
@@ -531,18 +541,18 @@ export function ThreadList({
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />
-          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.7rem', fontWeight: 500, width: 35, textAlign: 'right' }}>
+          <Typography variant="caption" sx={{ color: 'text.primary', fontSize: '0.65rem', fontWeight: 500, width: 32, textAlign: 'right' }}>
             {glassBlur.toFixed(1)}px
           </Typography>
         </Box>
       </MenuItem>
 
-      <Divider sx={{ my: 0.5 }} />
+      <Divider sx={{ my: 0 }} />
 
       <MenuItem
         onClick={handleToggleLogs}
         sx={{
-          py: 1.5,
+          py: 1,
           px: 2,
           gap: 1.5,
         }}
