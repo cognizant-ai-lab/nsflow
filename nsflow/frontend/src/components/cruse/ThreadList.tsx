@@ -384,7 +384,7 @@ export function ThreadList({
         </Box>
 
         {/* Row 1.5: User Prompt for Theme Refresh */}
-        <Box sx={{ position: 'absolute', top: 32, left: 24, display: 'flex', alignItems: 'center', px: 0.5,
+        <Box sx={{ position: 'absolute', top: 32, left: 24, display: 'flex', alignItems: 'center', px: 0.5, py: 0.5, mt: 0.7,
             backgroundColor: theme.palette.background.paper, zIndex: 2 }}>
           <Typography
             variant="caption"
@@ -396,7 +396,7 @@ export function ThreadList({
             User Prompt
           </Typography>
         </Box>
-        <Box sx={{ position: 'absolute', top: 32, right: 24, display: 'flex', alignItems: 'center', gap: 0.25, px: 0.5,
+        <Box sx={{ position: 'absolute', top: 32, right: 24, display: 'flex', alignItems: 'center', gap: 0.25, px: 0.5, py: 0.5, mt: 0.7,
             backgroundColor: theme.palette.background.paper, zIndex: 2 }}>
           <Typography variant="caption"
             sx={{
@@ -422,6 +422,7 @@ export function ThreadList({
         <Paper>
           <Box
             sx={{
+              mt: 1,
               display: 'flex',
               flexDirection: 'column',
               opacity: cruseThemeEnabled ? 1 : 0.4,
@@ -439,6 +440,7 @@ export function ThreadList({
               size="small"
               fullWidth
               sx={{
+                mt: -0.5,
                 '& .MuiOutlinedInput-root': {
                   fontSize: '0.75rem',
                   '& fieldset': {
