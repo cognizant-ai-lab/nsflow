@@ -16,23 +16,8 @@ limitations under the License.
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Paper,
-  Chip,
-  Stack,
-  Collapse,
-  alpha,
-  CircularProgress,
-} from "@mui/material";
-import {
-  Send as SendIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-} from "@mui/icons-material";
+import { Box, Typography, TextField, Button, Paper, Chip, Stack, Collapse, alpha } from "@mui/material";
+import { Send as SendIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from "@mui/icons-material";
 import { useApiPort } from "../../context/ApiPortContext";
 import { useChatContext } from "../../context/ChatContext";
 import { useTheme } from "../../context/ThemeContext";
