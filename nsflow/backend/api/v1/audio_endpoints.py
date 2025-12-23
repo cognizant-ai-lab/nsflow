@@ -63,7 +63,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
         file_size = len(content)
         logging.info("Audio file size: %d bytes", file_size)
 
-        if file_size < 1000:  # arbitrary minimum size for valid audio
+        if file_size < 100:  # arbitrary minimum size for valid audio
             raise HTTPException(
                 status_code=400,
                 detail=f"Audio file is too small or empty ({file_size} bytes) please ensure microphone permission is granted and try recording again."
