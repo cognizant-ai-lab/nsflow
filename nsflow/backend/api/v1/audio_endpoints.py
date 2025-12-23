@@ -84,8 +84,6 @@ async def speech_to_text(audio: UploadFile = File(...)):
             audio_format = "mp4"
             file_suffix = ".m4a"
         logging.info("Detected audio format: %s", audio_format)
-
-
         # Create a temporary file to save the uploaded audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_audio:
             temp_audio.write(content)
@@ -114,6 +112,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 except Exception as e1:
                     logging.warning("Failed to load audio as %s: %s", audio_format, str(e1))
                     conversation_error = str(e1)
+
                     # try generic loading
                     try:
                         audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path)
