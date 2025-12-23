@@ -99,8 +99,59 @@ async def speech_to_text(audio: UploadFile = File(...)):
             try:
                 from pydub import AudioSegment  # pylint: disable=import-outside-toplevel
 
-                # load and preprocess
-                audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, "mp3")
+                # try loading with fallback methods
+                audio_segment = None
+                conversation_error = None
+
+                # try with a specific format first
+                try:
+                    audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, format=audio_format)
+                except Exception as e1:
+                    logging.warning("Failed to load audio as %s: %s", audio_format, str(e1))
+                    conversation_error = str(e1)
+                    # try generic loading
+                    try:
+                        audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path)
+                        logging.info("Loaded audio using generic format detection")
+                    except Exception as e2:
+                        logging.error("Failed to load audio generically: %s", str(e2))
+                        conversation_error += "; " + str(e2)
+
+                        # for webM, treat it as raw file
+                        if audio_format == "webm":
+                            try:
+                                audio_segment = AudioSegment.from_file(
+                                    temp_audio_path,
+                                    format="raw",
+                                    frame_rate=48000,
+                                    channels=1,
+                                    sample_width=2,
+                                )
+                                logging.info("Loaded webM audio as raw format")
+                            except Exception as e3:
+                                logging.error("Failed to load webM audio as raw: %s", str(e3))
+                                conversation_error += "; " + str(e3)
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail=f"Could not process audio file. Errors: {conversation_error}",
+                                ) from e3
+                if audio_segment is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Could not process audio file. Errors: {conversation_error}",
+                    )
+                # log audio properties
+                duration_seconds = len(audio_segment) / 1000.0
+                logging.info("Audio duration: %.2f seconds, channels: %d, frame_rate: %d",
+                             duration_seconds, audio_segment.channels, audio_segment.frame_rate)
+                if duration_seconds < 0.5:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Audio file is too short ({duration_seconds:.2f} seconds). Please provide a longer audio.",
+                    )
+                # apply audio processing to improve quality
+                logging.info("Applying audio preprocessing for better speech recognition...")
+
                 # normalize and convert to mono
                 normalized_audio = audio_segment.normalize()
 
