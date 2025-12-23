@@ -112,10 +112,16 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
             # Load the audio file
             with sr.AudioFile(temp_wav_path) as source:
+                # adjust for ambient noise
+                recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio_data = recognizer.record(source)
 
             # Use Google Speech Recognition
-            transcribed_text = recognizer.recognize_google(audio_data)
+            transcribed_text = recognizer.recognize_google(
+                audio_data,
+                language="en-US",
+                show_all=False
+                )
 
             logging.info("Transcription successful: %.50s...", transcribed_text)
 
