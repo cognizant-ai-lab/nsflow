@@ -57,9 +57,21 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
         # Read file content
         content = await audio.read()
-
+        # Detect audio format from content type
+        audio_format =  "mp3" # default
+        file_suffix = ".mp3"
+        if "webm" in audio.content_type.lower():
+            audio_format = "webm"
+            file_suffix = ".webm"
+        elif "wav" in audio.content_type.lower():
+            audio_format = "wav"
+            file_suffix = ".wav"
+        elif "ogg" in audio.content_type.lower():
+            audio_format = "ogg"
+            file_suffix = ".ogg"
+        elif "m4a" in audio.content_type.lower() or "mp4" in audio.content_type.lower():
         # Create a temporary file to save the uploaded audio
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_audio:
             temp_audio.write(content)
             temp_audio_path = temp_audio.name
 
