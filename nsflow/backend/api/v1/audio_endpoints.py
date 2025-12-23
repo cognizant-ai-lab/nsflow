@@ -66,8 +66,11 @@ async def speech_to_text(audio: UploadFile = File(...)):
         if file_size < 100:  # arbitrary minimum size for valid audio
             raise HTTPException(
                 status_code=400,
-                detail=f"Audio file is too small or empty ({file_size} bytes) please ensure microphone permission is granted and try recording again."
+                detail=(
+                    f"Audio file is too small or empty ({file_size} bytes) "
+                    "please ensure microphone permission is granted and try recording again."
                 )
+            )
         # Detect audio format from content type
         audio_format =  "mp3" # default
         file_suffix = ".mp3"
@@ -151,7 +154,10 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 if duration_seconds < 0.5:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Audio file is too short ({duration_seconds:.2f} seconds). Please provide a longer audio.",
+                        detail=(
+                            f"Audio file is too short ({duration_seconds:.2f} seconds). "
+                            "Please provide a longer audio."
+                        ),
                     )
                 # apply audio processing to improve quality
                 logging.info("Applying audio preprocessing for better speech recognition...")
