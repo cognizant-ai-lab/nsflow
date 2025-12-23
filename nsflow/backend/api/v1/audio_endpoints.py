@@ -88,7 +88,22 @@ async def speech_to_text(audio: UploadFile = File(...)):
             try:
                 from pydub import AudioSegment  # pylint: disable=import-outside-toplevel
 
+                # load and preprocess
                 audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, "mp3")
+                # normalize and convert to mono
+                normalized_audio = audio_segment.normalize()
+
+                if normalized_audio.channels > 1:
+                    normalized_audio = normalized_audio.set_channels(1)
+
+                if normalized_audio.frame_rate != 16000:
+                    normalized_audio = normalized_audio.set_frame_rate(16000)
+
+                #boost volume for webM
+                if audio_format == "webm":
+                    normalized_audio = normalized_audio + 10  # increase volume by 10dB
+
+                #export
                 audio_segment.export(temp_wav_path, format="wav")
             except ImportError as exc:
                 raise HTTPException(
