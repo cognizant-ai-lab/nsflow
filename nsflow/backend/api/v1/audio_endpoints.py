@@ -155,9 +155,12 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 # normalize and convert to mono
                 normalized_audio = audio_segment.normalize()
 
+                #convert to mono if stereo
                 if normalized_audio.channels > 1:
                     normalized_audio = normalized_audio.set_channels(1)
+                    logging.info("Converted audio to mono")
 
+                # resample to 16kHz (optimal for speech recognition)
                 if normalized_audio.frame_rate != 16000:
                     normalized_audio = normalized_audio.set_frame_rate(16000)
 
@@ -182,7 +185,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
             transcribed_text = recognizer.recognize_google(
                 audio_data,
                 language="en-US",
-                show_all=False
+                show_all=False #return best match only
                 )
 
             logging.info("Transcription successful: %.50s...", transcribed_text)
@@ -197,7 +200,11 @@ async def speech_to_text(audio: UploadFile = File(...)):
             raise HTTPException(status_code=503, detail="Speech recognition service unavailable") from exc
         finally:
             # Clean up temporary files
-            try:
+            # TEMPORARILY enable FOR DEBUGGING - Keep files for manual inspection
+            # logging.info("DEBUG: Temporary files kept for inspection:")
+            # logging.info("  Original audio: %s", temp_audio_path)
+            # logging.info("  Processed WAV: %s", temp_wav_path)
+            try:# disable deletion for debugging if needed and enable logging above
                 os.unlink(temp_audio_path)
                 os.unlink(temp_wav_path)
             except OSError:
