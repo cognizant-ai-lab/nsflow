@@ -81,6 +81,11 @@ async def speech_to_text(audio: UploadFile = File(...)):
             audio_format = "ogg"
             file_suffix = ".ogg"
         elif "m4a" in audio.content_type.lower() or "mp4" in audio.content_type.lower():
+            audio_format = "mp4"
+            file_suffix = ".m4a"
+        logging.info("Detected audio format: %s", audio_format)
+
+
         # Create a temporary file to save the uploaded audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_audio:
             temp_audio.write(content)
