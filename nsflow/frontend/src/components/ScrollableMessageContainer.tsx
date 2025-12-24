@@ -15,33 +15,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import { 
-  Box, 
-  Typography, 
-  IconButton, 
-  Paper, 
-  Tooltip,
-  alpha,
-  Chip
-} from "@mui/material";
-import { 
-  ContentCopy as CopyIcon,
-  VolumeUp as VolumeIcon
-} from "@mui/icons-material";
+import { Box, Typography, IconButton, Paper, Tooltip, alpha, Chip } from "@mui/material";
+import { ContentCopy as CopyIcon, VolumeUp as VolumeIcon } from "@mui/icons-material";
 
 import { Message } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
 import { DynamicWidgetCard } from "./cruse/DynamicWidgetCard";
-
-// type Message = {
-//   sender: "user" | "agent" | "system";
-//   text: string;
-//   network?: string;
-// };
+import { MultiMediaCard } from "./cruse/MultiMediaCard";
+import { parseMultimediaFromText } from "../utils/cruse";
+import { getFeatureFlags } from "../utils/config";
 
 type Props = {
   messages: Message[];
@@ -83,10 +69,31 @@ const ScrollableMessageContainer: React.FC<Props> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
+  const { pluginMultiMediaCard } = getFeatureFlags();
+  const useMultimediaCard = !!pluginMultiMediaCard
+  const [copiedMediaUrl, setCopiedMediaUrl] = useState<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handler for copying multimedia URLs
+  const handleMediaCopy = (url: string) => {
+    setCopiedMediaUrl(url);
+    setTimeout(() => setCopiedMediaUrl(null), 2000);
+  };
+
+  // Pre-parse multimedia items for all messages to avoid re-parsing (only if feature flag is enabled)
+  const messageMultimedia = useMemo(() => {
+    if (!useMultimediaCard) {
+      // Feature flag disabled - return empty arrays for all messages
+      return messages.map(() => []);
+    }
+    return messages.map((msg) => {
+      const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+      return parseMultimediaFromText(messageText);
+    });
+  }, [messages, useMultimediaCard]);
 
   // Helper function to get message colors based on sender
   const getMessageColors = (sender: string) => {
@@ -143,6 +150,17 @@ const ScrollableMessageContainer: React.FC<Props> = ({
             const messageText = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
             const key = msg.id ?? (msg.ts ? `${msg.sender}-${msg.ts}` : `${msg.sender}-${index}`);
             const isLatestAgentMessage = msg.sender === 'agent' && index === lastAgentMessageIndex;
+
+            // Get pre-parsed multimedia items for this message
+            const multimediaItems = messageMultimedia[index];
+
+            // Create a set of multimedia URLs to exclude from rendering in markdown
+            const multimediaUrls = new Set(multimediaItems.map(item => item.url));
+            if (multimediaItems.some(item => item.originalUrl)) {
+              multimediaItems.forEach(item => {
+                if (item.originalUrl) multimediaUrls.add(item.originalUrl);
+              });
+            }
 
             return (
             <Paper
@@ -294,6 +312,45 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                         {children}
                       </Typography>
                     ),
+                    img: ({ src, alt }) => {
+                      // Only prevent duplicate rendering if feature flag enabled
+                      if (useMultimediaCard && src && multimediaUrls.has(src)) {
+                        // Don't render images that are being handled by MultiMediaCard
+                        // Instead, show the URL as a text link
+                        return (
+                          <Typography
+                            component="a"
+                            href={src}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{
+                              color: theme.palette.primary.light,
+                              textDecoration: 'none',
+                              fontSize: '0.875rem',
+                              display: 'inline-block',
+                              my: 0.5,
+                              '&:hover': { textDecoration: 'underline' }
+                            }}
+                          >
+                            {src}
+                          </Typography>
+                        );
+                      }
+                      // Render images normally (when feature flag disabled or not in multimedia list)
+                      return (
+                        <Box
+                          component="img"
+                          src={src}
+                          alt={alt}
+                          sx={{
+                            maxWidth: '100%',
+                            height: 'auto',
+                            borderRadius: 1,
+                            my: 1
+                          }}
+                        />
+                      );
+                    },
                     blockquote: ({ children }) => (
                       <Box
                         sx={{
@@ -397,6 +454,23 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                 </ReactMarkdown>
               </Box>
 
+              {/* Multimedia Rendering - only if feature flag enabled */}
+              {useMultimediaCard && multimediaItems.length > 0 && (
+                <Box sx={{ mt: 1.5, mb: 0.5 }}>
+                  {multimediaItems.map((item, idx) => (
+                    <MultiMediaCard
+                      key={`${key}-media-${idx}`}
+                      url={item.url}
+                      type={item.type}
+                      isEmbed={item.isEmbed}
+                      originalUrl={item.originalUrl}
+                      index={idx}
+                      onCopy={handleMediaCopy}
+                    />
+                  ))}
+                </Box>
+              )}
+
               {/* Widget Rendering (CRUSE) */}
               {msg.widget && msg.widget.schema && (
                 <Box sx={{ mt: 1.5, mb: 0.5 }}>
@@ -433,6 +507,27 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                   }}
                 >
                   Copied!
+                </Paper>
+              )}
+
+              {/* Multimedia URL copied notification - only if feature flag enabled */}
+              {useMultimediaCard && copiedMediaUrl && multimediaItems.some(item => item.url === copiedMediaUrl || item.originalUrl === copiedMediaUrl) && (
+                <Paper
+                  elevation={3}
+                  sx={{
+                    position: 'absolute',
+                    bottom: 8,
+                    right: 8,
+                    backgroundColor: theme.palette.info.main,
+                    color: 'white',
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 1,
+                    fontSize: '0.75rem',
+                    zIndex: 1000
+                  }}
+                >
+                  URL Copied!
                 </Paper>
               )}
             </Paper>
