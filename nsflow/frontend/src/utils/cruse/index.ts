@@ -30,6 +30,12 @@ export {
   formatMessageTime,
   getLastNMessages,
   prepareMessagesForAgent,
+  parseMultimediaFromText,
+} from './messageParser';
+
+// Re-export multimedia types for convenience
+export type {
+  MultimediaItem,
 } from './messageParser';
 
 // Schema validation utilities
