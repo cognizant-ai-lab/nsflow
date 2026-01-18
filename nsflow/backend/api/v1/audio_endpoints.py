@@ -23,6 +23,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from gtts import gTTS
 from pydantic import BaseModel
+from pydub import AudioSegment
 
 router = APIRouter(prefix="/api/v1")
 
@@ -113,88 +114,81 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
             # Use pydub to convert MP3 to WAV
 
+            # try loading with fallback methods
+            audio_segment = None
+            conversation_error = None
+
+            # try with a specific format first
             try:
-                from pydub import AudioSegment  # pylint: disable=import-outside-toplevel
+                audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, format=audio_format)
+            except Exception as e1:
+                logging.warning("Failed to load audio as %s: %s", audio_format, str(e1))
+                conversation_error = str(e1)
 
-                # try loading with fallback methods
-                audio_segment = None
-                conversation_error = None
-
-                # try with a specific format first
+                # try generic loading
                 try:
-                    audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, format=audio_format)
-                except Exception as e1:
-                    logging.warning("Failed to load audio as %s: %s", audio_format, str(e1))
-                    conversation_error = str(e1)
+                    audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path)
+                    logging.info("Loaded audio using generic format detection")
+                except Exception as e2:
+                    logging.error("Failed to load audio generically: %s", str(e2))
+                    conversation_error += "; " + str(e2)
 
-                    # try generic loading
-                    try:
-                        audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path)
-                        logging.info("Loaded audio using generic format detection")
-                    except Exception as e2:
-                        logging.error("Failed to load audio generically: %s", str(e2))
-                        conversation_error += "; " + str(e2)
-
-                        # for webM, treat it as raw file
-                        if audio_format == "webm":
-                            try:
-                                audio_segment = AudioSegment.from_file(
-                                    temp_audio_path,
-                                    format="raw",
-                                    frame_rate=48000,
-                                    channels=1,
-                                    sample_width=2,
-                                )
-                                logging.info("Loaded webM audio as raw format")
-                            except Exception as e3:
-                                logging.error("Failed to load webM audio as raw: %s", str(e3))
-                                conversation_error += "; " + str(e3)
-                                raise HTTPException(
-                                    status_code=400,
-                                    detail=f"Could not process audio file. Errors: {conversation_error}",
-                                ) from e3
-                if audio_segment is None:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Could not process audio file. Errors: {conversation_error}",
-                    )
-                # log audio properties
-                duration_seconds = len(audio_segment) / 1000.0
-                logging.info("Audio duration: %.2f seconds, channels: %d, frame_rate: %d",
-                             duration_seconds, audio_segment.channels, audio_segment.frame_rate)
-                if duration_seconds < 0.5:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Audio file is too short ({duration_seconds:.2f} seconds). "
-                            "Please provide a longer audio."
-                        ),
-                    )
-                # apply audio processing to improve quality
-                logging.info("Applying audio preprocessing for better speech recognition...")
-
-                # normalize and convert to mono
-                normalized_audio = audio_segment.normalize()
-
-                #convert to mono if stereo
-                if normalized_audio.channels > 1:
-                    normalized_audio = normalized_audio.set_channels(1)
-                    logging.info("Converted audio to mono")
-
-                # resample to 16kHz (optimal for speech recognition)
-                if normalized_audio.frame_rate != 16000:
-                    normalized_audio = normalized_audio.set_frame_rate(16000)
-
-                #boost volume for webM
-                if audio_format == "webm":
-                    normalized_audio = normalized_audio + 10  # increase volume by 10dB
-
-                #export
-                audio_segment.export(temp_wav_path, format="wav")
-            except ImportError as exc:
+                    # for webM, treat it as raw file
+                    if audio_format == "webm":
+                        try:
+                            audio_segment = AudioSegment.from_file(
+                                temp_audio_path,
+                                format="raw",
+                                frame_rate=48000,
+                                channels=1,
+                                sample_width=2,
+                            )
+                            logging.info("Loaded webM audio as raw format")
+                        except Exception as e3:
+                            logging.error("Failed to load webM audio as raw: %s", str(e3))
+                            conversation_error += "; " + str(e3)
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Could not process audio file. Errors: {conversation_error}",
+                            ) from e3
+            if audio_segment is None:
                 raise HTTPException(
-                    status_code=500, detail="pydub library not installed. Required for audio conversion."
-                ) from exc
+                    status_code=400,
+                    detail=f"Could not process audio file. Errors: {conversation_error}",
+                )
+            # log audio properties
+            duration_seconds = len(audio_segment) / 1000.0
+            logging.info("Audio duration: %.2f seconds, channels: %d, frame_rate: %d",
+                         duration_seconds, audio_segment.channels, audio_segment.frame_rate)
+            if duration_seconds < 0.5:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Audio file is too short ({duration_seconds:.2f} seconds). "
+                        "Please provide a longer audio."
+                    ),
+                )
+            # apply audio processing to improve quality
+            logging.info("Applying audio preprocessing for better speech recognition...")
+
+            # normalize and convert to mono
+            normalized_audio = audio_segment.normalize()
+
+            #convert to mono if stereo
+            if normalized_audio.channels > 1:
+                normalized_audio = normalized_audio.set_channels(1)
+                logging.info("Converted audio to mono")
+
+            # resample to 16kHz (optimal for speech recognition)
+            if normalized_audio.frame_rate != 16000:
+                normalized_audio = normalized_audio.set_frame_rate(16000)
+
+            #boost volume for webM
+            if audio_format == "webm":
+                normalized_audio = normalized_audio + 10  # increase volume by 10dB
+
+            #export
+            audio_segment.export(temp_wav_path, format="wav")
 
             # Load the audio file
             with sr.AudioFile(temp_wav_path) as source:
