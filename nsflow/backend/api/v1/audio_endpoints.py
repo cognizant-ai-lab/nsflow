@@ -52,6 +52,55 @@ def detect_audio_format_and_suffix(content_type: str) -> tuple[str, str]:
     return "mp3", ".mp3"  # default
 
 
+def load_audio_segment(file_path: str, audio_format: str) -> tuple[AudioSegment | None, str | None]:
+    """Load audio file with fallback methods.
+
+    Args:
+        file_path: Path to the audio file
+        audio_format: Expected audio format (e.g., 'mp3', 'webm', 'wav')
+
+    Returns:
+        Tuple of (AudioSegment or None, error_message or None)
+    """
+    audio_segment = None
+    conversion_error = None
+
+    # Try with specific format first
+    try:
+        audio_segment = AudioSegment.from_file_using_temporary_files(file_path, format=audio_format)
+        return audio_segment, None
+    except Exception as e1:
+        logging.warning("Failed to load audio as %s: %s", audio_format, str(e1))
+        conversion_error = str(e1)
+
+    # Try generic loading
+    try:
+        audio_segment = AudioSegment.from_file_using_temporary_files(file_path)
+        logging.info("Loaded audio using generic format detection")
+        return audio_segment, None
+    except Exception as e2:
+        logging.error("Failed to load audio generically: %s", str(e2))
+        conversion_error += "; " + str(e2)
+
+    # For webM, try treating it as raw file
+    if audio_format == "webm":
+        try:
+            audio_segment = AudioSegment.from_file(
+                file_path,
+                format="raw",
+                frame_rate=48000,
+                channels=1,
+                sample_width=2,
+            )
+            logging.info("Loaded webM audio as raw format")
+            return audio_segment, None
+        except Exception as e3:
+            logging.error("Failed to load webM audio as raw: %s", str(e3))
+            conversion_error += "; " + str(e3)
+
+    return None, conversion_error
+
+
 class TextToSpeechRequest(BaseModel):
     text: str
 
@@ -112,49 +161,12 @@ async def speech_to_text(audio: UploadFile = File(...)):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_wav:
                 temp_wav_path = temp_wav.name
 
-            # Use pydub to convert MP3 to WAV
-
-            # try loading with fallback methods
-            audio_segment = None
-            conversation_error = None
-
-            # try with a specific format first
-            try:
-                audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path, format=audio_format)
-            except Exception as e1:
-                logging.warning("Failed to load audio as %s: %s", audio_format, str(e1))
-                conversation_error = str(e1)
-
-                # try generic loading
-                try:
-                    audio_segment = AudioSegment.from_file_using_temporary_files(temp_audio_path)
-                    logging.info("Loaded audio using generic format detection")
-                except Exception as e2:
-                    logging.error("Failed to load audio generically: %s", str(e2))
-                    conversation_error += "; " + str(e2)
-
-                    # for webM, treat it as raw file
-                    if audio_format == "webm":
-                        try:
-                            audio_segment = AudioSegment.from_file(
-                                temp_audio_path,
-                                format="raw",
-                                frame_rate=48000,
-                                channels=1,
-                                sample_width=2,
-                            )
-                            logging.info("Loaded webM audio as raw format")
-                        except Exception as e3:
-                            logging.error("Failed to load webM audio as raw: %s", str(e3))
-                            conversation_error += "; " + str(e3)
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"Could not process audio file. Errors: {conversation_error}",
-                            ) from e3
+            # Load audio using pydub with fallback methods
+            audio_segment, conversion_error = load_audio_segment(temp_audio_path, audio_format)
             if audio_segment is None:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Could not process audio file. Errors: {conversation_error}",
+                    detail=f"Could not process audio file. Errors: {conversion_error}",
                 )
             # log audio properties
             duration_seconds = len(audio_segment) / 1000.0
