@@ -101,6 +101,40 @@ def load_audio_segment(file_path: str, audio_format: str) -> tuple[AudioSegment 
     return None, conversion_error
 
 
+def preprocess_audio(audio_segment: AudioSegment, audio_format: str) -> AudioSegment:
+    """Apply audio preprocessing for better speech recognition.
+
+    Applies normalization, mono conversion, resampling to 16kHz,
+    and volume boost for webM format.
+
+    Args:
+        audio_segment: The loaded AudioSegment
+        audio_format: The original audio format (e.g., 'webm', 'mp3')
+
+    Returns:
+        Processed AudioSegment ready for speech recognition
+    """
+    logging.info("Applying audio preprocessing for better speech recognition...")
+
+    # Normalize audio
+    processed_audio = audio_segment.normalize()
+
+    # Convert to mono if stereo
+    if processed_audio.channels > 1:
+        processed_audio = processed_audio.set_channels(1)
+        logging.info("Converted audio to mono")
+
+    # Resample to 16kHz (optimal for speech recognition)
+    if processed_audio.frame_rate != 16000:
+        processed_audio = processed_audio.set_frame_rate(16000)
+
+    # Boost volume for webM
+    if audio_format == "webm":
+        processed_audio = processed_audio + 10  # increase volume by 10dB
+
+    return processed_audio
+
+
 def log_audio_properties(audio_segment: AudioSegment) -> float:
     """Log audio properties and return duration in seconds.
 
@@ -197,27 +231,9 @@ async def speech_to_text(audio: UploadFile = File(...)):
                         "Please provide a longer audio."
                     ),
                 )
-            # apply audio processing to improve quality
-            logging.info("Applying audio preprocessing for better speech recognition...")
-
-            # normalize and convert to mono
-            normalized_audio = audio_segment.normalize()
-
-            #convert to mono if stereo
-            if normalized_audio.channels > 1:
-                normalized_audio = normalized_audio.set_channels(1)
-                logging.info("Converted audio to mono")
-
-            # resample to 16kHz (optimal for speech recognition)
-            if normalized_audio.frame_rate != 16000:
-                normalized_audio = normalized_audio.set_frame_rate(16000)
-
-            #boost volume for webM
-            if audio_format == "webm":
-                normalized_audio = normalized_audio + 10  # increase volume by 10dB
-
-            #export
-            audio_segment.export(temp_wav_path, format="wav")
+            # Apply audio preprocessing and export
+            processed_audio = preprocess_audio(audio_segment, audio_format)
+            processed_audio.export(temp_wav_path, format="wav")
 
             # Load the audio file
             with sr.AudioFile(temp_wav_path) as source:
