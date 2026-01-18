@@ -101,6 +101,25 @@ def load_audio_segment(file_path: str, audio_format: str) -> tuple[AudioSegment 
     return None, conversion_error
 
 
+def log_audio_properties(audio_segment: AudioSegment) -> float:
+    """Log audio properties and return duration in seconds.
+
+    Args:
+        audio_segment: The loaded AudioSegment
+
+    Returns:
+        Duration in seconds
+    """
+    duration_seconds = len(audio_segment) / 1000.0
+    logging.info(
+        "Audio duration: %.2f seconds, channels: %d, frame_rate: %d",
+        duration_seconds,
+        audio_segment.channels,
+        audio_segment.frame_rate,
+    )
+    return duration_seconds
+
+
 class TextToSpeechRequest(BaseModel):
     text: str
 
@@ -168,10 +187,8 @@ async def speech_to_text(audio: UploadFile = File(...)):
                     status_code=400,
                     detail=f"Could not process audio file. Errors: {conversion_error}",
                 )
-            # log audio properties
-            duration_seconds = len(audio_segment) / 1000.0
-            logging.info("Audio duration: %.2f seconds, channels: %d, frame_rate: %d",
-                         duration_seconds, audio_segment.channels, audio_segment.frame_rate)
+            # Log audio properties
+            duration_seconds = log_audio_properties(audio_segment)
             if duration_seconds < 0.5:
                 raise HTTPException(
                     status_code=400,
