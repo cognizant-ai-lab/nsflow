@@ -30,6 +30,27 @@ router = APIRouter(prefix="/api/v1")
 MIN_AUDIO_BYTES = 100  # Minimum file size for valid audio
 
 
+def detect_audio_format_and_suffix(content_type: str) -> tuple[str, str]:
+    """Detect audio format and file suffix from content type.
+
+    Args:
+        content_type: The MIME content type of the audio file
+
+    Returns:
+        Tuple of (audio_format, file_suffix)
+    """
+    content_type_lower = content_type.lower()
+    if "webm" in content_type_lower:
+        return "webm", ".webm"
+    if "wav" in content_type_lower:
+        return "wav", ".wav"
+    if "ogg" in content_type_lower:
+        return "ogg", ".ogg"
+    if "m4a" in content_type_lower or "mp4" in content_type_lower:
+        return "mp4", ".m4a"
+    return "mp3", ".mp3"  # default
+
+
 class TextToSpeechRequest(BaseModel):
     text: str
 
@@ -75,20 +96,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 )
             )
         # Detect audio format from content type
-        audio_format =  "mp3" # default
-        file_suffix = ".mp3"
-        if "webm" in audio.content_type.lower():
-            audio_format = "webm"
-            file_suffix = ".webm"
-        elif "wav" in audio.content_type.lower():
-            audio_format = "wav"
-            file_suffix = ".wav"
-        elif "ogg" in audio.content_type.lower():
-            audio_format = "ogg"
-            file_suffix = ".ogg"
-        elif "m4a" in audio.content_type.lower() or "mp4" in audio.content_type.lower():
-            audio_format = "mp4"
-            file_suffix = ".m4a"
+        audio_format, file_suffix = detect_audio_format_and_suffix(audio.content_type)
         logging.info("Detected audio format: %s", audio_format)
         # Create a temporary file to save the uploaded audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_audio:
