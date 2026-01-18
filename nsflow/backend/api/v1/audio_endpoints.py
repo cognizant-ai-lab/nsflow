@@ -26,6 +26,9 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1")
 
+# Constants
+MIN_AUDIO_BYTES = 100  # Minimum file size for valid audio
+
 
 class TextToSpeechRequest(BaseModel):
     text: str
@@ -63,7 +66,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
         file_size = len(content)
         logging.info("Audio file size: %d bytes", file_size)
 
-        if file_size < 100:  # arbitrary minimum size for valid audio
+        if file_size < MIN_AUDIO_BYTES:
             raise HTTPException(
                 status_code=400,
                 detail=(
