@@ -337,7 +337,7 @@ export function getThemePreferences(): {
 /**
  * Save theme preferences to localStorage
  */
-export function saveThemePreferences(enabled: boolean, backgroundType: 'static' | 'dynamic'): void {
+export function saveThemePreferences(_enabled: boolean, _backgroundType: 'static' | 'dynamic'): void {
   // Always save as enabled (true)
   localStorage.setItem(CRUSE_THEME_ENABLED_KEY, 'true');
   // Always save as 'dynamic' (ignore the passed value)

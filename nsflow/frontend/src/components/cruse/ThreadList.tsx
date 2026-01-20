@@ -96,9 +96,9 @@ export function ThreadList({
   showLogs = true,
   onToggleLogs,
   cruseThemeEnabled = false,
-  onCruseThemeToggle,
-  backgroundType = 'dynamic',
-  onBackgroundTypeChange,
+  onCruseThemeToggle: _onCruseThemeToggle,
+  backgroundType: _backgroundType = 'dynamic',
+  onBackgroundTypeChange: _onBackgroundTypeChange,
   onRefreshTheme,
   isRefreshingTheme = false,
 }: ThreadListProps) {
@@ -244,7 +244,7 @@ export function ThreadList({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 1.5,
+          gap: 0.75,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -264,8 +264,8 @@ export function ThreadList({
             }
           }}
           sx={{
-            width: 24,
-            height: 24,
+            width: 28,
+            height: 28,
             border: 1,
             borderColor: 'divider',
             borderRadius: '50%',
@@ -278,9 +278,9 @@ export function ThreadList({
           }}
         >
           {isRefreshingTheme ? (
-            <CircularProgress size={16} />
+            <CircularProgress size={18} />
           ) : (
-            <RefreshIcon sx={{ fontSize: '1.1rem' }} />
+            <RefreshIcon sx={{ fontSize: '1.4rem' }} />
           )}
         </IconButton>
       </Box>
@@ -304,7 +304,7 @@ export function ThreadList({
         {/* User Prompt for Theme Refresh */}
         <Box
           sx={{
-            mt: 0.5,
+            mt: 0,
             display: 'flex',
             flexDirection: 'column',
             gap: 0.3,
@@ -364,7 +364,7 @@ export function ThreadList({
               '& .MuiOutlinedInput-root': {
                 fontSize: '0.75rem',
                 maxHeight: '42px',
-                overflow: 'auto',
+                overflow: 'hidden',
                 '& fieldset': {
                   borderColor: 'divider',
                 },
@@ -373,6 +373,16 @@ export function ThreadList({
                 },
                 '&.Mui-focused fieldset': {
                   borderColor: 'primary.main',
+                },
+                '& textarea': {
+                  overflow: 'auto !important',
+                  '&::-webkit-scrollbar': {
+                    width: '6px',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '3px',
+                  },
                 },
               },
               '& .MuiInputBase-input': {
@@ -942,6 +952,11 @@ export function ThreadList({
 
       {/* Settings Section at Bottom */}
       <Box
+        onClick={(e) => {
+          if (!settingsOpen) {
+            handleSettingsClick(e);
+          }
+        }}
         sx={{
           borderTop: 1,
           borderColor: 'divider',
@@ -950,14 +965,28 @@ export function ThreadList({
           alignItems: 'center',
           justifyContent: 'center',
           bgcolor: 'background.paper',
+          cursor: 'pointer',
+          transition: 'background-color 0.2s',
+          '&:hover': {
+            bgcolor: (theme) => theme.palette.mode === 'dark'
+              ? 'rgba(255, 255, 255, 0.12)'
+              : 'rgba(0, 0, 0, 0.08)',
+            '& .settings-icon': {
+              color: 'primary.main',
+            },
+          },
         }}
       >
         <IconButton
-          onClick={handleSettingsClick}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSettingsClick(e);
+          }}
           sx={{
             width: 40,
             height: 40,
             color: 'text.secondary',
+            pointerEvents: 'all',
             '&:hover': {
               color: 'primary.main',
               bgcolor: (theme) => theme.palette.mode === 'dark'
@@ -966,7 +995,7 @@ export function ThreadList({
             },
           }}
         >
-          <SettingsIcon />
+          <SettingsIcon className="settings-icon" />
         </IconButton>
 
         <Menu
