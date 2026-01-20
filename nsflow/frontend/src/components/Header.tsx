@@ -19,6 +19,7 @@ import * as React from "react";
 import { useState } from "react";
 import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
+import { useChatContext } from "../context/ChatContext";
 import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
@@ -39,6 +40,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, isCrusePage = false }) => {
   const { apiUrl } = useApiPort();
+  const { activeNetwork } = useChatContext();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
   const { isDarkMode } = useTheme();
@@ -86,7 +88,9 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   };
 
   const handleNavigateToCruse = () => {
-    window.open('/cruse', '_blank', 'noopener,noreferrer');
+    // Pass activeNetwork as URL parameter so CRUSE can auto-select the agent
+    const url = activeNetwork ? `/cruse?network=${encodeURIComponent(activeNetwork)}` : '/cruse';
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleNavigateToHome = () => {
@@ -220,24 +224,35 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             Editor
           </Button>
 
-          {/* CRUSE Button */}
-          {pluginCruse && (
-            <Tooltip title="Context-Reactive User Experience" arrow>
-              <Button
-                variant="outlined"
-                startIcon={<ChatIcon />}
-                onClick={handleNavigateToCruse}
-                sx={{
-                  ...(isOnCrusePage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-                  borderColor: muiTheme.palette.secondary.main,
-                  '&:hover': {
-                    backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          {/* CRUSE Button - Hide on Editor page, Disable if no agent selected */}
+          {pluginCruse && !isOnEditorPage && (
+            <Tooltip
+              title={!activeNetwork ? "Select an agent first" : "Context-Reactive User Experience"}
+              arrow
+            >
+              <span>
+                <Button
+                  variant="outlined"
+                  startIcon={<ChatIcon />}
+                  onClick={handleNavigateToCruse}
+                  disabled={!activeNetwork}
+                  sx={{
+                    ...(isOnCrusePage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
                     borderColor: muiTheme.palette.secondary.main,
-                  },
-                }}
-              >
-                CRUSE
-              </Button>
+                    '&:hover': !activeNetwork ? {} : {
+                      backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                      borderColor: muiTheme.palette.secondary.main,
+                    },
+                    '&.Mui-disabled': {
+                      opacity: 0.5,
+                      borderColor: muiTheme.palette.action.disabled,
+                      color: muiTheme.palette.text.disabled,
+                    },
+                  }}
+                >
+                  CRUSE
+                </Button>
+              </span>
             </Tooltip>
           )}
 
