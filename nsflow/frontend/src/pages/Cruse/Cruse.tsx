@@ -63,6 +63,14 @@ const CruseContent: React.FC = () => {
   // Track if transparency override is active to prevent cleanup race conditions
   const transparencyAppliedRef = useRef(false);
 
+  // One-time migration: Force theme preferences to defaults on mount
+  useEffect(() => {
+    // Ensure localStorage is always set to Cruse enabled and dynamic theme
+    saveThemePreferences(true, 'dynamic');
+    setCruseThemeEnabled(true);
+    setBackgroundType('dynamic');
+  }, []); // Empty dependency array = runs once on mount
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", getInitialTheme());
     // Set editor mode to false for CRUSE (it's a chat interface, not editor)
