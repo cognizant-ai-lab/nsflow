@@ -20,7 +20,7 @@ import { Box, List, ListItem, ListItemButton, ListItemText, ListItemIcon, IconBu
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Chat as ChatIcon, SettingsTwoTone as SettingsIcon,
   DeleteSweep as DeleteSweepIcon, Visibility as VisibilityIcon, Refresh as RefreshIcon, ChevronLeft as CollapseIcon,
-  ChevronRight as ExpandIcon, Search as SearchIcon } from '@mui/icons-material';
+  ChevronRight as ExpandIcon, Search as SearchIcon, Palette as PaletteIcon } from '@mui/icons-material';
 import { formatMessageTime } from '../../utils/cruse';
 import { AgentSelector, Agent } from './AgentSelector';
 import type { CruseThread } from '../../types/cruse';
@@ -96,9 +96,9 @@ export function ThreadList({
   showLogs = true,
   onToggleLogs,
   cruseThemeEnabled = false,
-  onCruseThemeToggle,
-  backgroundType = 'dynamic',
-  onBackgroundTypeChange,
+  onCruseThemeToggle: _onCruseThemeToggle,
+  backgroundType: _backgroundType = 'dynamic',
+  onBackgroundTypeChange: _onBackgroundTypeChange,
   onRefreshTheme,
   isRefreshingTheme = false,
 }: ThreadListProps) {
@@ -236,7 +236,56 @@ export function ThreadList({
 
       <Divider sx={{ my: 0 }} />
 
-      {/* Cruse Theme Settings - 3 Row Design */}
+      {/* Theme Settings Header */}
+      <Box
+        sx={{
+          py: 1,
+          px: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 0.75,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <PaletteIcon fontSize="small" sx={{ color: 'primary.main' }} />
+          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
+            Theme
+          </Typography>
+        </Box>
+        {/* Refresh Button */}
+        <IconButton
+          size="small"
+          disabled={isRefreshingTheme}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isRefreshingTheme) {
+              onRefreshTheme?.(themePrompt, modifyPreviousBackground);
+            }
+          }}
+          sx={{
+            width: 28,
+            height: 28,
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: '50%',
+            '&:hover': {
+              bgcolor: 'action.hover',
+            },
+            '&.Mui-disabled': {
+              opacity: 0.4,
+            },
+          }}
+        >
+          {isRefreshingTheme ? (
+            <CircularProgress size={18} />
+          ) : (
+            <RefreshIcon sx={{ fontSize: '1.4rem' }} />
+          )}
+        </IconButton>
+      </Box>
+
+      {/* Theme Settings Content */}
       <MenuItem
         sx={{
           py: 0.5,
@@ -251,147 +300,14 @@ export function ThreadList({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Row 1: Cruse/MUI Toggle, Static/Dynamic Toggle, Refresh Button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {/* Cruse/MUI Toggle */}
-          <Box
-            onClick={(e) => {
-              e.stopPropagation();
-              onCruseThemeToggle?.(!cruseThemeEnabled);
-            }}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              width: 80,
-              height: 24,
-              borderRadius: 16,
-              bgcolor: cruseThemeEnabled ? 'success.main' : 'action.disabled',
-              cursor: 'pointer',
-              position: 'relative',
-              transition: 'all 0.3s',
-              '&:hover': {
-                opacity: 0.9,
-              },
-            }}
-          >
-            <Box
-              sx={{
-                position: 'absolute',
-                left: cruseThemeEnabled ? 2 : 42,
-                width: 36,
-                height: 20,
-                borderRadius: 14,
-                bgcolor: 'background.paper',
-                transition: 'left 0.3s',
-              }}
-            />
-            <Typography
-              variant="caption"
-              sx={{
-                position: 'absolute',
-                left: cruseThemeEnabled ? 10 : 50,
-                fontSize: '0.4rem',
-                fontWeight: 600,
-                color: 'text.primary',
-                transition: 'all 0.3s',
-              }}
-            >
-              {cruseThemeEnabled ? 'Cruse' : 'MUI'}
-            </Typography>
-          </Box>
 
-          {/* Static/Dynamic Toggle */}
-          <Box
-            onClick={(e) => {
-              e.stopPropagation();
-              if (cruseThemeEnabled) {
-                onBackgroundTypeChange?.(backgroundType === 'static' ? 'dynamic' : 'static');
-              }
-            }}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              width: 80,
-              height: 24,
-              borderRadius: 16,
-              bgcolor: cruseThemeEnabled && backgroundType === 'dynamic' ? 'primary.main' : 'action.disabled',
-              cursor: cruseThemeEnabled ? 'pointer' : 'not-allowed',
-              position: 'relative',
-              transition: 'all 0.3s',
-              opacity: cruseThemeEnabled ? 1 : 0.4,
-              '&:hover': cruseThemeEnabled ? {
-                opacity: 0.9,
-              } : {},
-            }}
-          >
-            <Box
-              sx={{
-                position: 'absolute',
-                left: backgroundType === 'static' ? 2 : 42,
-                width: 36,
-                height: 20,
-                borderRadius: 14,
-                bgcolor: 'background.paper',
-                transition: 'left 0.3s',
-              }}
-            />
-            <Typography
-              variant="caption"
-              sx={{
-                position: 'absolute',
-                left: backgroundType === 'static' ? 8 : 48,
-                fontSize: '0.4rem',
-                fontWeight: 600,
-                color: 'text.primary',
-                transition: 'all 0.3s',
-              }}
-            >
-              {backgroundType === 'static' ? 'Static' : 'Dynamic'}
-            </Typography>
-          </Box>
-
-          {/* Refresh Button */}
-          <IconButton
-            size="small"
-            disabled={!cruseThemeEnabled || isRefreshingTheme}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (cruseThemeEnabled && !isRefreshingTheme) {
-                onRefreshTheme?.(themePrompt, modifyPreviousBackground);
-              }
-            }}
-            sx={{
-              width: 24,
-              height: 24,
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: '50%',
-              opacity: cruseThemeEnabled ? 1 : 0.4,
-              '&:hover': {
-                bgcolor: 'action.hover',
-              },
-              '&.Mui-disabled': {
-                opacity: 0.4,
-              },
-            }}
-          >
-            {isRefreshingTheme ? (
-              <CircularProgress size={16} />
-            ) : (
-              <RefreshIcon sx={{ fontSize: '1.1rem' }} />
-            )}
-          </IconButton>
-        </Box>
-
-        {/* Row 1.5: User Prompt for Theme Refresh */}
+        {/* User Prompt for Theme Refresh */}
         <Box
           sx={{
-            mt: 0.5,
+            mt: 0,
             display: 'flex',
             flexDirection: 'column',
             gap: 0.3,
-            opacity: cruseThemeEnabled ? 1 : 0.4,
-            pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
           {/* Label Row */}
@@ -420,7 +336,6 @@ export function ThreadList({
               <Checkbox
                 checked={modifyPreviousBackground}
                 onChange={(e) => setModifyPreviousBackground(e.target.checked)}
-                disabled={!cruseThemeEnabled}
                 size="small"
                 sx={{
                   padding: 0,
@@ -440,7 +355,6 @@ export function ThreadList({
             value={themePrompt}
             onChange={(e) => setThemePrompt(e.target.value)}
             placeholder="Optional: Customize theme generation..."
-            disabled={!cruseThemeEnabled}
             multiline
             maxRows={1.5}
             minRows={1.5}
@@ -450,7 +364,7 @@ export function ThreadList({
               '& .MuiOutlinedInput-root': {
                 fontSize: '0.75rem',
                 maxHeight: '42px',
-                overflow: 'auto',
+                overflow: 'hidden',
                 '& fieldset': {
                   borderColor: 'divider',
                 },
@@ -459,6 +373,16 @@ export function ThreadList({
                 },
                 '&.Mui-focused fieldset': {
                   borderColor: 'primary.main',
+                },
+                '& textarea': {
+                  overflow: 'auto !important',
+                  '&::-webkit-scrollbar': {
+                    width: '6px',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '3px',
+                  },
                 },
               },
               '& .MuiInputBase-input': {
@@ -472,15 +396,13 @@ export function ThreadList({
           />
         </Box>
 
-        {/* Row 2: Opacity Slider (horizontal layout) */}
+        {/* Opacity Slider */}
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 1,
             mt: 0.25,
-            opacity: cruseThemeEnabled ? 1 : 0.4,
-            pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
           <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', width: 48 }}>
@@ -492,7 +414,6 @@ export function ThreadList({
             min={0}
             max={100}
             step={1}
-            disabled={!cruseThemeEnabled}
             size="small"
             sx={{
               flex: 1,
@@ -509,15 +430,13 @@ export function ThreadList({
           </Typography>
         </Box>
 
-        {/* Row 3: Blur Slider (horizontal layout) */}
+        {/* Blur Slider */}
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 1,
             mt: 0.25,
-            opacity: cruseThemeEnabled ? 1 : 0.4,
-            pointerEvents: cruseThemeEnabled ? 'auto' : 'none',
           }}
         >
           <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', width: 48 }}>
@@ -529,7 +448,6 @@ export function ThreadList({
             min={0}
             max={10}
             step={0.1}
-            disabled={!cruseThemeEnabled}
             size="small"
             sx={{
               flex: 1,
@@ -1034,6 +952,11 @@ export function ThreadList({
 
       {/* Settings Section at Bottom */}
       <Box
+        onClick={(e) => {
+          if (!settingsOpen) {
+            handleSettingsClick(e);
+          }
+        }}
         sx={{
           borderTop: 1,
           borderColor: 'divider',
@@ -1042,14 +965,28 @@ export function ThreadList({
           alignItems: 'center',
           justifyContent: 'center',
           bgcolor: 'background.paper',
+          cursor: 'pointer',
+          transition: 'background-color 0.2s',
+          '&:hover': {
+            bgcolor: (theme) => theme.palette.mode === 'dark'
+              ? 'rgba(255, 255, 255, 0.12)'
+              : 'rgba(0, 0, 0, 0.08)',
+            '& .settings-icon': {
+              color: 'primary.main',
+            },
+          },
         }}
       >
         <IconButton
-          onClick={handleSettingsClick}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSettingsClick(e);
+          }}
           sx={{
             width: 40,
             height: 40,
             color: 'text.secondary',
+            pointerEvents: 'all',
             '&:hover': {
               color: 'primary.main',
               bgcolor: (theme) => theme.palette.mode === 'dark'
@@ -1058,7 +995,7 @@ export function ThreadList({
             },
           }}
         >
-          <SettingsIcon />
+          <SettingsIcon className="settings-icon" />
         </IconButton>
 
         <Menu

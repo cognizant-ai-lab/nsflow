@@ -323,8 +323,13 @@ export function getThemePreferences(): {
   enabled: boolean;
   backgroundType: 'static' | 'dynamic';
 } {
-  const enabled = localStorage.getItem(CRUSE_THEME_ENABLED_KEY) === 'true';
-  const backgroundType = (localStorage.getItem(CRUSE_BACKGROUND_TYPE_KEY) as 'static' | 'dynamic') || 'dynamic';
+  // Default to true (enabled) - always use Cruse themes
+  const storedEnabled = localStorage.getItem(CRUSE_THEME_ENABLED_KEY);
+  const enabled = storedEnabled === null ? true : storedEnabled === 'true';
+
+  // Always force 'dynamic' as the default background type
+  // (Overrides any old 'static' values from localStorage)
+  const backgroundType: 'static' | 'dynamic' = 'dynamic';
 
   return { enabled, backgroundType };
 }
@@ -332,7 +337,9 @@ export function getThemePreferences(): {
 /**
  * Save theme preferences to localStorage
  */
-export function saveThemePreferences(enabled: boolean, backgroundType: 'static' | 'dynamic'): void {
-  localStorage.setItem(CRUSE_THEME_ENABLED_KEY, String(enabled));
-  localStorage.setItem(CRUSE_BACKGROUND_TYPE_KEY, backgroundType);
+export function saveThemePreferences(_enabled: boolean, _backgroundType: 'static' | 'dynamic'): void {
+  // Always save as enabled (true)
+  localStorage.setItem(CRUSE_THEME_ENABLED_KEY, 'true');
+  // Always save as 'dynamic' (ignore the passed value)
+  localStorage.setItem(CRUSE_BACKGROUND_TYPE_KEY, 'dynamic');
 }
