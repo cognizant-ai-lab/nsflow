@@ -73,6 +73,7 @@ class AgentLogProcessor(MessageProcessor):
         internal_chat = None
         otrace = None
         token_accounting: Dict[str, Any] = {}
+        structure: Dict[str, Any] = chat_message_dict.get("structure", {})
         progress = None
 
         # Log the original chat_message_dict in full only for debugging on client interface
@@ -92,14 +93,18 @@ class AgentLogProcessor(MessageProcessor):
             # We also ignore ChatMessageType.HUMAN message here because that is already available via the ChatPanel
             return
 
-        # Get the token accounting information
-        if message_type == ChatMessageType.AGENT:
-            token_accounting = chat_message_dict.get("structure", token_accounting)
+        # Extract token accounting from AGENT messages
+        if message_type == ChatMessageType.AGENT and "total_tokens" in structure:
+            token_accounting = structure
 
-            # fetch progress messages fron sub_networks
+        # Fetch agent network definition fron sub_networks to show progress
+        if message_type == ChatMessageType.AGENT:
             tool_output = self.extract_agent_network_definition(chat_message_dict)
             if tool_output:
-                progress = {"agent_network_definition": tool_output, "agent_network_name": "new_agent_network"}
+                progress = {
+                    "agent_network_definition": tool_output,
+                    "agent_network_name": "new_agent_network"
+                }
                 await self.logs_manager.progress_event({"text": progress})
 
         if message_type == ChatMessageType.AGENT_PROGRESS:
@@ -117,9 +122,18 @@ class AgentLogProcessor(MessageProcessor):
         otrace = chat_message_dict.get("origin", [])
         otrace = [i.get("tool") for i in otrace]
 
+        # Build internal chat message for AGENT and AGENT_TOOL_RESULT
         if message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
-            # Get the internal chat message between agents
             internal_chat = chat_message_dict.get("text", "")
+
+            # Append structure if it exists and isn't token accounting
+            if structure and "total_tokens" not in structure:
+                internal_chat += "\n" + json.dumps(structure)
+
+            # Prepend tool name for tool results
+            if message_type == ChatMessageType.AGENT_TOOL_RESULT:
+                tool_name = chat_message_dict.get("tool_result_origin", [{}])[-1].get("tool", "unknown")
+                internal_chat = f"result from {tool_name}\n{internal_chat}"
 
         otrace_str = json.dumps({"otrace": otrace})
         # Always send longs with a key "text" to any web socket
