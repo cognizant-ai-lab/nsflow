@@ -136,8 +136,8 @@ class NotebookGenerator:
                 "    return parsed\n\n"
                 "def get_chat_context(result_dict: Dict[str, Any]) -> Dict[str, Any]:\n"
                 '    """\n'
-                "    Extracts the updated chat context from the gRPC result.\n"
-                "    :param result_dict: The gRPC response parsed to a dictionary.\n"
+                "    Extracts the updated chat context from the service result.\n"
+                "    :param result_dict: The service response parsed to a dictionary.\n"
                 "    :return: The extracted chat_context dictionary or empty if not found.\n"
                 '    """\n'
                 '    response: Dict[str, Any] = result_dict.get("response", {})\n'

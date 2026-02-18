@@ -26,7 +26,7 @@ class AgentData:
 
 
 # pylint: disable=too-few-public-methods
-class NsGrpcNetworkUtils:
+class NsNetworkUtils:
     """
     Utility class to handle network-related operations for Neuro-San agents.
     This includes building nodes and edges for visualization.
@@ -37,7 +37,7 @@ class NsGrpcNetworkUtils:
     def build_nodes_and_edges(connectivity_response: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict]]:
         """
         Build nodes and edges for the agent network based on connectivity information.
-        :param connectivity_response: The response from the gRPC connectivity call.
+        :param connectivity_response: The response from the connectivity call.
         :return: A dictionary containing nodes and edges for the network.
         """
         # Initialize data structures
@@ -132,7 +132,7 @@ class NsGrpcNetworkUtils:
         # Build parent mapping from down_chains
         # Also collect all down_chain agents that might not be defined yet
         for agent_name, agent_data in agent_definition.items():
-            down_chains = NsGrpcNetworkUtils.get_children(agent_data)
+            down_chains = NsNetworkUtils.get_children(agent_data)
             all_agent_names.update(down_chains)
             for child in down_chains:
                 parent_map[child] = agent_name
@@ -158,7 +158,7 @@ class NsGrpcNetworkUtils:
 
             # Add children to queue
             if current_node in agent_definition:
-                down_chains = NsGrpcNetworkUtils.get_children(agent_definition[current_node])
+                down_chains = NsNetworkUtils.get_children(agent_definition[current_node])
                 for child in down_chains:
                     if child not in visited:
                         queue.append((child, depth + 1))
@@ -169,13 +169,13 @@ class NsGrpcNetworkUtils:
                 depth_map[agent_name] = 0  # Place orphans at root level
 
         # Step 3: Position calculation for better layout
-        positions = NsGrpcNetworkUtils._calculate_positions(all_agent_names, depth_map, parent_map)
+        positions = NsNetworkUtils._calculate_positions(all_agent_names, depth_map, parent_map)
 
         # Step 4: Create node objects
         for agent_name in all_agent_names:
             agent_data = agent_definition.get(agent_name, {})
             # more details could be added here, but as of now, we are only using down_chains and instructions
-            down_chains = NsGrpcNetworkUtils.get_children(agent_data)
+            down_chains = NsNetworkUtils.get_children(agent_data)
             instructions = agent_data.get("instructions", "")
 
             # Determine node type
@@ -203,7 +203,7 @@ class NsGrpcNetworkUtils:
 
         # Step 5: Create edges
         for agent_name, agent_data in agent_definition.items():
-            down_chains = NsGrpcNetworkUtils.get_children(agent_data)
+            down_chains = NsNetworkUtils.get_children(agent_data)
             for target in down_chains:
                 edge = {
                     "id": f"{agent_name}-{target}",
@@ -215,7 +215,7 @@ class NsGrpcNetworkUtils:
                 edges.append(edge)
 
         # Summary stats & components
-        components = NsGrpcNetworkUtils._find_connected_components(all_agent_names, parent_map)
+        components = NsNetworkUtils._find_connected_components(all_agent_names, parent_map)
         total_agents = len(all_agent_names)
         defined_agents = len(agent_definition)
         undefined_agents = total_agents - defined_agents
@@ -259,7 +259,7 @@ class NsGrpcNetworkUtils:
         component_spacing = 300  # Extra spacing between disconnected components
 
         # Find connected components
-        components = NsGrpcNetworkUtils._find_connected_components(agent_names, parent_map)
+        components = NsNetworkUtils._find_connected_components(agent_names, parent_map)
 
         current_x_offset = 0
 
@@ -341,7 +341,7 @@ class NsGrpcNetworkUtils:
         """
         parent_map: Dict[str, str] = {}
         for parent, data in (agent_definition or {}).items():
-            for child in NsGrpcNetworkUtils.get_children(data):
+            for child in NsNetworkUtils.get_children(data):
                 parent_map[child] = parent
         return parent_map
 
@@ -361,17 +361,17 @@ class NsGrpcNetworkUtils:
         defined_names = set(agent_definition.keys())
         referenced_names = set()
         for _, data in agent_definition.items():
-            referenced_names.update(NsGrpcNetworkUtils.get_children(data))
+            referenced_names.update(NsNetworkUtils.get_children(data))
         all_names = defined_names | referenced_names
 
         if agent_name not in all_names:
             return None
 
-        parent_map = NsGrpcNetworkUtils.build_parent_map(agent_definition)
+        parent_map = NsNetworkUtils.build_parent_map(agent_definition)
         data = agent_definition.get(agent_name, {})  # {} if undefined but referenced
 
         instructions = data.get("instructions", "") if isinstance(data, dict) else ""
-        tools = NsGrpcNetworkUtils.get_children(data) if isinstance(data, dict) else []
+        tools = NsNetworkUtils.get_children(data) if isinstance(data, dict) else []
         klass = data.get("class") if isinstance(data, dict) else None
         parent = parent_map.get(agent_name)
 

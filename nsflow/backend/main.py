@@ -59,8 +59,6 @@ def initialize_ns_config_from_env():
         logging.info("CLIENT-ONLY mode detected. Starting client with default neuro-san configs.")
     default_connection = os.getenv("NEURO_SAN_SERVER_CONNECTION", "http")
     default_host = os.getenv("NEURO_SAN_SERVER_HOST", "localhost")
-    if default_connection == "grpc":
-        default_port = int(os.getenv("NEURO_SAN_GRPC_SERVER_PORT", "30011"))
     NsConfigsRegistry.set_current(default_connection, default_host, default_port)
     logging.info("[Startup] Default NsConfig set to %s://%s:%s", default_connection, default_host, default_port)
 

@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
-from nsflow.backend.utils.agentutils.ns_grpc_network_utils import NsGrpcNetworkUtils
+from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 
 router = APIRouter(prefix="/api/v1")
@@ -41,21 +41,21 @@ def get_networks():
 async def get_agent_network(network_name: str):
     """Retrieves the network structure for a given agent network."""
     try:
-        ns_grpc_utils = NsWebsocketUtils(network_name, None)
-        result = ns_grpc_utils.get_connectivity()
+        ns_utils = NsWebsocketUtils(network_name, None)
+        result = ns_utils.get_connectivity()
 
     except Exception as e:
         logging.exception("Failed to retrieve connectivity info: %s", e)
         raise HTTPException(status_code=500, detail="Failed to retrieve connectivity info") from e
 
-    grpc_network_utils = NsGrpcNetworkUtils()
-    res = grpc_network_utils.build_nodes_and_edges(result)
+    network_utils = NsNetworkUtils()
+    res = network_utils.build_nodes_and_edges(result)
     return JSONResponse(content=res)
 
 
 @router.post(
     "/connectivity/from_json",
-    summary="Build connectivity graph from raw JSON (no gRPC, no Pydantic).",
+    summary="Build connectivity graph from raw JSON.",
     responses={
         200: {"description": "Connectivity graph built from provided JSON."},
         422: {"description": "Invalid payload. Provide exactly one of the accepted formats."},
@@ -66,10 +66,10 @@ async def build_connectivity_from_json(request: Request):
     """
     Accepts ONE of:
       A) connectivity_info: [{ "origin": str, "tools": [str, ...] }, ...]
-         -> NsGrpcNetworkUtils.build_nodes_and_edges(...)
+         -> NsNetworkUtils.build_nodes_and_edges(...)
       B) agent_network_definition: { "<agent>": { "down_chains": [...], "instructions": str }, ... }
          + optional agent_network_name
-         -> NsGrpcNetworkUtils.partial_build_nodes_and_edges(...)
+         -> NsNetworkUtils.partial_build_nodes_and_edges(...)
     """
     try:
         data: Dict[str, Any] = await request.json()
@@ -87,7 +87,7 @@ async def build_connectivity_from_json(request: Request):
         )
 
     try:
-        utils = NsGrpcNetworkUtils()
+        utils = NsNetworkUtils()
 
         if has_conn:
             # Minimal pass-through shape used by build_nodes_and_edges(...)
@@ -112,7 +112,7 @@ async def build_connectivity_from_json(request: Request):
 
 @router.post(
     "/connectivity/from_json/agents/{agent_name}",
-    summary="Get details for a specific agent from raw JSON (no gRPC, no Pydantic).",
+    summary="Get details for a specific agent from raw JSON.",
     responses={
         200: {"description": "Agent details built from provided JSON."},
         404: {"description": "Agent not found in provided JSON."},
@@ -135,7 +135,7 @@ async def get_agent_details_from_json(agent_name: str, request: Request):
         )
 
     try:
-        utils = NsGrpcNetworkUtils()
+        utils = NsNetworkUtils()
 
         # Normalize keys so everyone sees 'down_chains'
         norm_def = utils.normalize_agent_def(agent_def)

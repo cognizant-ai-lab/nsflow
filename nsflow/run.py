@@ -79,7 +79,6 @@ class NsFlowRunner:
         # Default Configuration
         self.config: Dict[str, Any] = {
             "server_host": os.getenv("NEURO_SAN_SERVER_HOST", "localhost"),
-            "server_grpc_port": int(os.getenv("NEURO_SAN_SERVER_GRPC_PORT", "30011")),
             "server_http_port": int(os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "8080")),
             "server_connection": str(os.getenv("NEURO_SAN_SERVER_CONNECTION", "http")),
             "manifest_update_period_seconds": int(os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")),
@@ -141,16 +140,12 @@ class NsFlowRunner:
             "--connection",
             default="http",
             type=str,
-            choices=["grpc", "http", "https"],
+            choices=["http", "https"],
             help="""
 The type of connection to initiate. Choices are to connect to:
-    "grpc"      - an agent service via gRPC. Needs host and port.
     "http"      - an agent service via HTTP. Needs host and port.
     "https"     - an agent service via secure HTTP. Needs host and port.
 """,
-        )
-        group.add_argument(
-            "--grpc", dest="connection", action="store_const", const="grpc", help="Use a gRPC service connection"
         )
         group.add_argument(
             "--http", dest="connection", action="store_const", const="http", help="Use a HTTP service connection"
@@ -244,7 +239,6 @@ The type of connection to initiate. Choices are to connect to:
 
         server_env = {
             "NEURO_SAN_SERVER_HOST": "server_host",
-            "NEURO_SAN_SERVER_GRPC_PORT": "server_grpc_port",
             "NEURO_SAN_SERVER_HTTP_PORT": "server_http_port",
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",

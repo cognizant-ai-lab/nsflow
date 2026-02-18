@@ -20,8 +20,6 @@ from typing import Any, Dict
 
 import httpx
 from fastapi import HTTPException
-from neuro_san.interfaces.concierge_session import ConciergeSession
-from neuro_san.session.grpc_concierge_session import GrpcConciergeSession
 
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
@@ -36,7 +34,7 @@ class NsConciergeUtils:
 
     def __init__(self, agent_name: str = None, forwarded_request_metadata: str = DEFAULT_FORWARDED_REQUEST_METADATA):
         """
-        Initialize the gRPC service API wrapper.
+        Initialize the concierge service API wrapper.
         :param agent_name: This is just for keeping consistency with the logs.
         """
         try:
@@ -44,7 +42,7 @@ class NsConciergeUtils:
         except RuntimeError as e:
             raise RuntimeError(
                 "No active NsConfigStore. \
-                               Please set it via /set_config before using gRPC endpoints."
+                               Please set it via /set_config before using endpoints."
             ) from e
 
         self.server_host = config.host
@@ -61,7 +59,7 @@ class NsConciergeUtils:
         Extract forwarded metadata from the Request headers.
 
         :param headers: Dictionary of incoming request headers.
-        :return: Dictionary of gRPC metadata.
+        :return: Dictionary of metadata.
         """
         headers: Dict[str, Any] = request.headers
         metadata: Dict[str, Any] = {}
@@ -70,22 +68,12 @@ class NsConciergeUtils:
                 metadata[item_name] = headers[item_name]
         return metadata
 
-    def get_concierge_grpc_session(self, metadata: Dict[str, Any]) -> ConciergeSession:
-        """
-        Build gRPC session to talk to "concierge" service
-        :return: ConciergeSession to use
-        """
-        grpc_session: ConciergeSession = GrpcConciergeSession(
-            host=self.server_host, port=self.server_port, metadata=metadata
-        )
-        return grpc_session
-
     async def list_concierge(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Call the concierge `list()` method via gRPC.
+        Call the concierge `list()` method via HTTP.
 
         :param metadata: Metadata to be forwarded with the request (e.g., from headers).
-        :return: Dictionary containing the result from the gRPC service.
+        :return: Dictionary containing the result from the HTTP service.
         """
         # fail fast if the server is not reachable
         # This might not be always true when using a http sidecar for example
@@ -94,45 +82,35 @@ class NsConciergeUtils:
                 status_code=503, detail=f"NeuroSan server at {self.server_host}:{self.server_port} is not reachable"
             )
 
-        if self.connection == "grpc":
-            try:
-                grpc_session = self.get_concierge_grpc_session(metadata=metadata)
-                request_data: Dict[str, Any] = {}
-                return grpc_session.list(request_data)
-            except Exception as e:
-                await self.logs_manager.log_event(f"Failed to fetch concierge list: {e}", "NeuroSan")
-                raise
+        if str(self.server_host) in ("localhost", "127.0.0.1"):
+            self.connection = "http"
+        if self.server_port == "443":
+            url = f"{self.connection}://{self.server_host}/api/v1/list"
         else:
-            if str(self.server_host) in ("localhost", "127.0.0.1"):
-                self.connection = "http"
-            if self.server_port == "443":
-                url = f"{self.connection}://{self.server_host}/api/v1/list"
-            else:
-                url = f"{self.connection}://{self.server_host}:{self.server_port}/api/v1/list"
+            url = f"{self.connection}://{self.server_host}:{self.server_port}/api/v1/list"
 
-            try:
-                # consider verify=True in prod
-                async with httpx.AsyncClient(verify=True, headers={"host": self.server_host}) as client:
-                    response = await client.get(
-                        url,
-                        headers={
-                            "User-Agent": "curl/8.7.1",
-                            "Accept": "*/*",
-                            "Host": self.server_host,  # important for SNI + proxying
-                        },
-                    )
-                    try:
-                        json_data = response.json()
-                    except (httpx.HTTPError, json.JSONDecodeError):
-                        json_data = {
-                            "error": "The NeuroSan Server did not return valid JSON",
-                            "status_code": response.status_code,
-                            "text": response.text.strip(),
-                        }
-                    return json_data
-            except httpx.RequestError as exc:
-                await self.logs_manager.log_event(f"Failed to fetch concierge list: {exc}", "NeuroSan")
-                raise HTTPException(status_code=502, detail=f"Failed to reach {url}: {str(exc)}") from exc
+        try:
+            async with httpx.AsyncClient(verify=True, headers={"host": self.server_host}) as client:
+                response = await client.get(
+                    url,
+                    headers={
+                        "User-Agent": "curl/8.7.1",
+                        "Accept": "*/*",
+                        "Host": self.server_host,  # important for SNI + proxying
+                    },
+                )
+                try:
+                    json_data = response.json()
+                except (httpx.HTTPError, json.JSONDecodeError):
+                    json_data = {
+                        "error": "The NeuroSan Server did not return valid JSON",
+                        "status_code": response.status_code,
+                        "text": response.text.strip(),
+                    }
+                return json_data
+        except httpx.RequestError as exc:
+            await self.logs_manager.log_event(f"Failed to fetch concierge list: {exc}", "NeuroSan")
+            raise HTTPException(status_code=502, detail=f"Failed to reach {url}: {str(exc)}") from exc
 
     def is_port_open(self, host: str, port: int, timeout=1.0) -> bool:
         """
