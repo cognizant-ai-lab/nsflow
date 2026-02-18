@@ -28,12 +28,11 @@ router = APIRouter(prefix="/api/v1")
 async def get_concierge_list(request: Request):
     """
     GET handler for concierge list API.
-    Extracts forwarded metadata from headers and uses the utility class to call gRPC.
+    Extracts forwarded metadata from headers and uses the utility class to call the NeuroSan service.
 
     :param request: The FastAPI Request object, used to extract headers.
-    :return: JSON response from gRPC service.
+    :return: JSON response from the NeuroSan service.
     """
-    # common class for both grpc and https/https
     ns_concierge_utils = NsConciergeUtils()
     try:
         # Extract metadata from headers

@@ -25,7 +25,7 @@ from .v1 import (
     editor_endpoints,
     export_endpoints,
     fast_websocket,
-    fastapi_grpc_endpoints,
+    fastapi_concierge_endpoints,
     oneshot_endpoints,
     vqa_endpoints,
 )
@@ -38,7 +38,7 @@ router.include_router(app_configs.router, tags=["App Configs"])
 router.include_router(fast_websocket.router, tags=["WebSocket API"])
 router.include_router(agent_flows.router, tags=["Agent Flows"])
 router.include_router(export_endpoints.router, tags=["Notebook Export"])
-router.include_router(fastapi_grpc_endpoints.router, tags=["Concierge Endpoints"])
+router.include_router(fastapi_concierge_endpoints.router, tags=["Concierge Endpoints"])
 router.include_router(audio_endpoints.router, tags=["Audio Processing"])
 router.include_router(editor_endpoints.router, tags=["Agent Network Designer"])
 router.include_router(cruse_endpoints.router, prefix="/api/v1", tags=["CRUSE Threads"])

@@ -27,7 +27,7 @@ class NsConfig:
 
     host: str
     port: int
-    connection_type: str = "grpc"
+    connection_type: str = "http"
 
     @property
     def config_id(self) -> str:

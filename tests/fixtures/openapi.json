@@ -297,9 +297,9 @@
     },
     "/api/v1/list": {
       "get": {
-        "tags": ["gRPC Endpoints"],
+        "tags": ["Concierge Endpoints"],
         "summary": "Get Concierge List",
-        "description": "GET handler for concierge list API.\nExtracts forwarded metadata from headers and uses the utility class to call gRPC.\n\n:param request: The FastAPI Request object, used to extract headers.\n:return: JSON response from gRPC service.",
+        "description": "GET handler for concierge list API.\nExtracts forwarded metadata from headers and uses the utility class to call the NeuroSan service.\n\n:param request: The FastAPI Request object, used to extract headers.\n:return: JSON response from the NeuroSan service.",
         "operationId": "get_concierge_list_api_v1_list_get",
         "responses": {
           "200": {
