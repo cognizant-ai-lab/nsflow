@@ -25,5 +25,5 @@ Werkzeug>=3.1.4
 #     brew install ffmpeg
 gTTS==2.5.4
 pydub==0.25.1
-python-multipart==0.0.20
+python-multipart>=0.0.22
 SpeechRecognition==3.14.3
