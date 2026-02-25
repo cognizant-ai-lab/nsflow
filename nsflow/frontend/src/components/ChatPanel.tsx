@@ -39,6 +39,8 @@ import {
   Send as SendIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
+  AttachFile as AttachFileIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -50,6 +52,12 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
+
+import * as pdfjsLib from "pdfjs-dist";
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { apiUrl } = useApiPort();
@@ -75,6 +83,9 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [loading, setLoading] = useState(false);
   const [sampleQueries, setSampleQueries] = useState<string[]>([]);
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
+
+  const [attachedFiles, setAttachedFiles] = useState<{ file: File; content: string }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
@@ -215,15 +226,55 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     return {}; // if editor is blank, still send {}
   }, [useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
 
+  const handleFileAttach = () => {
+    fileInputRef.current?.click();
+  };
+
+  const extractPdfText = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pages: string[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      pages.push(text);
+    }
+    return pages.join("\n\n");
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      try {
+        const isPdf = file.name.toLowerCase().endsWith(".pdf");
+        const text = isPdf ? await extractPdfText(file) : await file.text();
+        setAttachedFiles((prev) => [...prev, { file, content: text }]);
+      } catch (err) {
+        console.error(`Failed to read file ${file.name}:`, err);
+      }
+    }
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removeAttachedFile = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const sendMessage = () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() && attachedFiles.length === 0) return;
     // Reset auto-play flag for typed messages (not from microphone)
     setShouldAutoPlayNextAgent(false);
     sendMessageWithText(newMessage);
   };
 
   const sendMessageWithText = (messageText: string) => {
-    if (!messageText.trim()) return;
+    if (!messageText.trim() && attachedFiles.length === 0) return;
     if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
       console.error("WebSocket not connected. Unable to send message.");
       return;
@@ -232,9 +283,31 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     const slyDataToSend = getSlyDataForSend();
     const network = targetNetwork || activeNetwork;
 
+    // Build the full message text including any attached file contents for backend
+    let fullMessageForBackend = messageText;
+    if (attachedFiles.length > 0) {
+      const fileContents = attachedFiles
+        .map((af) => `--- ${af.file.name} ---\n${af.content}`)
+        .join("\n\n");
+      fullMessageForBackend = fullMessageForBackend.trim()
+        ? `${fullMessageForBackend}\n\n${fileContents}`
+        : fileContents;
+    }
+
+    // Display the user's typed message and attached file names (without file content) in chatbox
+    let displayMessage = messageText;
+    if (attachedFiles.length > 0) {
+      const fileNames = attachedFiles
+        .map((af) => `📎 ${af.file.name}`)
+        .join("\n");
+      displayMessage = displayMessage.trim()
+        ? `${displayMessage}\n\n${fileNames}`
+        : fileNames;
+    }
+
     addChatMessage({
       sender: "user",
-      text: messageText,
+      text: displayMessage,
       network: network,
     });
 
@@ -246,13 +319,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       });
     }
 
+    // Send the full message (with file content) to backend
     chatWs.send(
       JSON.stringify({
-        message: messageText,
+        message: fullMessageForBackend,
         ...(slyDataToSend ? { sly_data: slyDataToSend } : {}),
       })
     );
     setNewMessage("");
+    setAttachedFiles([]);
 
     // Collapse sample queries section after sending message
     setSampleQueriesExpanded(false);
@@ -711,6 +786,39 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               </Box>
             )}
 
+            {/* Attached files display */}
+            {attachedFiles.length > 0 && (
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                {attachedFiles.map((af, index) => (
+                  <Chip
+                    key={`${af.file.name}-${index}`}
+                    icon={<AttachFileIcon sx={{ fontSize: 14 }} />}
+                    label={af.file.name}
+                    size="small"
+                    onDelete={() => removeAttachedFile(index)}
+                    deleteIcon={<CloseIcon sx={{ fontSize: 14 }} />}
+                    variant="outlined"
+                    sx={{
+                      height: 22,
+                      "& .MuiChip-label": { fontSize: "0.7rem", px: 0.5 },
+                      borderColor: theme.palette.primary.main,
+                      color: theme.palette.text.primary,
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.md,.txt"
+              multiple
+              style={{ display: "none" }}
+              onChange={handleFileSelected}
+            />
+
             {/* Message input */}
             <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
               <TextField
@@ -843,34 +951,57 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             </Box>
 
             {/* NEW: Always-visible "Use Sly Data" toggle below the message box */}
-            <Box>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={useSlyDataChecked}
-                    onChange={(e) => setUseSlyDataChecked(e.target.checked)}
-                    size="small"
-                    disableRipple
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={useSlyDataChecked}
+                      onChange={(e) => setUseSlyDataChecked(e.target.checked)}
+                      size="small"
+                      disableRipple
+                      sx={{
+                        p: 0.25,
+                        "& .MuiSvgIcon-root": {
+                          fontSize: 20,
+                        },
+                      }}
+                    />
+                  }
+                  label="Use Edited Sly Data"
+                  sx={{
+                    color: theme.palette.text.primary,
+                    m: 0,
+                    "& .MuiFormControlLabel-label": {
+                      fontSize: 14,
+                   },
+                  }}
+                />
+                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, ml: 1 }}>
+                  (Current sly data from SlyData tab or {`{}`} if empty).
+                </Typography>
+              </Box>
+
+              {/* File attach button on the right */}
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1, marginRight: "100px" }}>
+                <Tooltip title="Attach file (.pdf, .md, .txt)">
+                  <IconButton
+                    size="medium"
+                    onClick={handleFileAttach}
                     sx={{
-                      p: 0.25,
-                      "& .MuiSvgIcon-root": {
-                        fontSize: 20,
+                      width: 40,
+                      height: 40,
+                      color: theme.palette.text.secondary,
+                      "&:hover": {
+                        color: theme.palette.primary.main,
+                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
                       },
                     }}
-                  />
-                }
-                label="Use Edited Sly Data"
-                sx={{
-                  color: theme.palette.text.primary,
-                  m: 0,
-                  "& .MuiFormControlLabel-label": {
-                    fontSize: 14,
-                 },
-                }}
-              />
-              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, ml: 1 }}>
-                (Current sly data from SlyData tab or {`{}`} if empty).
-              </Typography>
+                  >
+                    <AttachFileIcon sx={{ fontSize: 28 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Box>
           </Box>
         </Panel>
