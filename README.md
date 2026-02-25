@@ -6,7 +6,7 @@
 > To see how `nsflow` works in conjunction with the neuro-san library, visit https://github.com/cognizant-ai-lab/neuro-san-studio
 
 > [!TIP]
-> For a production oriented client, visit [https://github.com/cognizant-ai-lab/neuro-san-ui](https://github.com/cognizant-ai-lab/neuro-san-ui)
+> For a production oriented client for neuro-san, visit [https://github.com/cognizant-ai-lab/neuro-san-ui](https://github.com/cognizant-ai-lab/neuro-san-ui)
 
 It comes with an **Agent Network Designer** that embodies the agentic design philosophy, making the neuro-san library accessible to both developers and non-developers alike. This transforms nsflow from a simple interactive chat client into a well-featured agent orchestration platform with visual design capabilities.
 
