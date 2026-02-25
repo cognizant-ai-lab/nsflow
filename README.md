@@ -1,9 +1,12 @@
 # nsflow - A FastAPI powered client and IDE for NeuroSan
 
-Note: To see how `nsflow` works in conjunction with the neuro-san library, visit [https://github.com/cognizant-ai-lab/neuro-san-studio](https://github.com/cognizant-ai-lab/neuro-san-studio)
-
-
 **nsflow** is a fastapi and react based developer-oriented client and IDE that enables users to explore, visualize, and interact with smart agent networks. It integrates with [**NeuroSan**](https://github.com/cognizant-ai-lab/neuro-san) for intelligent agent-based interactions.
+
+> [!TIP]
+> To see how `nsflow` works in conjunction with the neuro-san library, visit https://github.com/cognizant-ai-lab/neuro-san-studio
+
+> [!TIP]
+> For a production oriented client, visit [https://github.com/cognizant-ai-lab/neuro-san-ui](https://github.com/cognizant-ai-lab/neuro-san-ui)
 
 It comes with an **Agent Network Designer** that embodies the agentic design philosophy, making the neuro-san library accessible to both developers and non-developers alike. This transforms nsflow from a simple interactive chat client into a well-featured agent orchestration platform with visual design capabilities.
 
