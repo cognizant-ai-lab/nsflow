@@ -19,7 +19,7 @@
     "@mui/system": "^7.3.5",
     "@mui/x-date-pickers": "^8.21.0",
     "@mui/x-tree-view": "^8.14.1",
-    "ajv": "^8.17.1",
+    "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "css-doodle": "^0.48.0",
     "d3": "^7.9.0",
