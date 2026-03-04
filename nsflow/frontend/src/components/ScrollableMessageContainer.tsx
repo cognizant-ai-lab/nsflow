@@ -1,4 +1,3 @@
-
 /*
 Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 
@@ -19,8 +18,15 @@ import React, { useRef, useEffect, useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import { Box, Typography, IconButton, Paper, Tooltip, alpha, Chip } from "@mui/material";
-import { ContentCopy as CopyIcon, VolumeUp as VolumeIcon } from "@mui/icons-material";
+import { Box, Typography, IconButton, Paper, Tooltip, alpha, Chip, Stack, Button } from "@mui/material";
+import { 
+  ContentCopy as CopyIcon, 
+  VolumeUp as VolumeIcon,
+  InsertDriveFile as FileIcon,
+  PictureAsPdf as PdfIcon,
+  Article as ArticleIcon,
+  Close as CloseIcon,
+} from "@mui/icons-material";
 
 import { Message } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
@@ -39,6 +45,12 @@ type Props = {
   useSpeech?: boolean;
   onWidgetSubmit?: (data: Record<string, unknown>) => void;
   isCrusePage?: boolean;
+  onFileClick?: (fileData: { 
+    file: File; 
+    content: string; 
+    isPdf?: boolean;
+    previewUrl?: string
+  }) => void;
   /** Callback when widget form data changes (for Send button integration) */
   onWidgetDataChange?: (data: Record<string, unknown>) => void;
 };
@@ -51,6 +63,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   useSpeech,
   onWidgetSubmit,
   isCrusePage = false,
+  onFileClick,
   onWidgetDataChange,
   renderSenderLabel = (msg) =>
     msg.sender === "user"
@@ -72,6 +85,14 @@ const ScrollableMessageContainer: React.FC<Props> = ({
   const { pluginMultiMediaCard } = getFeatureFlags();
   const useMultimediaCard = !!pluginMultiMediaCard
   const [copiedMediaUrl, setCopiedMediaUrl] = useState<string | null>(null);
+  
+  // State to track which file is being viewed in modal
+  const [viewingFileFromMessage, setViewingFileFromMessage] = useState<{ 
+    file: File; 
+    content: string; 
+    isPdf: boolean;
+    previewUrl?: string;
+  } | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -123,6 +144,27 @@ const ScrollableMessageContainer: React.FC<Props> = ({
           chipColor: theme.palette.grey[500],
         };
     }
+  };
+
+  // Helper function to get file icon based on extension
+  const getFileIcon = (filename: string) => {
+    const ext = filename.toLowerCase().split('.').pop();
+    switch (ext) {
+      case 'pdf':
+        return <PdfIcon sx={{ fontSize: 16 }} />;
+      case 'md':
+      case 'txt':
+        return <ArticleIcon sx={{ fontSize: 16 }} />;
+      default:
+        return <FileIcon sx={{ fontSize: 16 }} />;
+    }
+  };
+
+  // Helper function to format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
   return (
@@ -246,6 +288,104 @@ const ScrollableMessageContainer: React.FC<Props> = ({
                   </Tooltip>
                 </Box>
               </Box>
+
+              {/* Attached Files Display */}
+              {msg.attachedFiles && msg.attachedFiles.length > 0 && (
+                <Box sx={{ mb: 1, mt: 0.5 }}>
+                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                    {msg.attachedFiles.map((fileData, fileIdx) => {
+                      const isPdf = fileData.file.name.toLowerCase().endsWith('.pdf');
+                      
+                      return (
+                        <Paper
+                          key={`${key}-file-${fileIdx}`}
+                          elevation={0}
+                          onClick={() => {
+                            if (isPdf) {
+                              // Use existing preview URL if available, otherwise create one
+                              const existingUrl = (fileData as any).previewUrl;
+                              const previewUrl = existingUrl || URL.createObjectURL(fileData.file);
+                              setViewingFileFromMessage({
+                                ...fileData,
+                                isPdf: true,
+                                previewUrl
+                              });
+                            } else {
+                              // Open text file in modal
+                              onFileClick?.(fileData);
+                            }
+                          }}
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.75,
+                            px: 1,
+                            py: 0.5,
+                            backgroundColor: alpha(
+                              msg.sender === 'user' 
+                                ? theme.palette.primary.contrastText 
+                                : theme.palette.primary.main, 
+                              msg.sender === 'user' ? 0.15 : 0.08
+                            ),
+                            border: `1px solid ${alpha(
+                              msg.sender === 'user'
+                                ? theme.palette.primary.contrastText
+                                : theme.palette.primary.main,
+                              0.3
+                            )}`,
+                            borderRadius: 1,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: alpha(
+                                msg.sender === 'user'
+                                  ? theme.palette.primary.contrastText
+                                  : theme.palette.primary.main,
+                                msg.sender === 'user' ? 0.25 : 0.15
+                              ),
+                              boxShadow: theme.shadows[2],
+                              transform: 'translateY(-1px)',
+                            }
+                          }}
+                        >
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            color: msg.sender === 'user' 
+                              ? theme.palette.primary.contrastText 
+                              : theme.palette.primary.main
+                          }}>
+                            {getFileIcon(fileData.file.name)}
+                          </Box>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                fontSize: '0.75rem',
+                                fontWeight: 500,
+                                color: colors.color,
+                                lineHeight: 1.2,
+                              }}
+                            >
+                              {fileData.file.name}
+                            </Typography>
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                fontSize: '0.65rem',
+                                color: alpha(colors.color, 0.7),
+                                lineHeight: 1,
+                              }}
+                            >
+                              {formatFileSize(fileData.file.size)}
+                            </Typography>
+                          </Box>
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
+                </Box>
+              )}
 
               {/* Message Content */}
               <Box sx={{ color: colors.color }}>
@@ -536,6 +676,112 @@ const ScrollableMessageContainer: React.FC<Props> = ({
         })()}
         <Box ref={messagesEndRef} />
       </Box>
+      
+      {/* File Viewer Modal - for PDFs clicked from messages */}
+      {viewingFileFromMessage && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => {
+            // Don't revoke URL - it's managed by ChatPanel
+            setViewingFileFromMessage(null);
+          }}
+        >
+          <Box
+            onClick={(e) => e.stopPropagation()}
+            sx={{
+              width: '90%',
+              maxWidth: '900px',
+              height: '90vh',
+              backgroundColor: theme.palette.background.paper,
+              borderRadius: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                p: 2,
+                borderBottom: `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <FileIcon sx={{ color: theme.palette.primary.main }} />
+              <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                {viewingFileFromMessage.file.name}
+              </Typography>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  // Don't revoke URL - it's managed by ChatPanel
+                  setViewingFileFromMessage(null);
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            
+            {/* Content */}
+            <Box sx={{ flexGrow: 1, overflow: 'hidden', p: 2 }}>
+              {viewingFileFromMessage.isPdf && viewingFileFromMessage.previewUrl ? (
+                <iframe
+                  src={viewingFileFromMessage.previewUrl}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    border: 'none',
+                    borderRadius: '4px',
+                  }}
+                  title={`PDF Preview: ${viewingFileFromMessage.file.name}`}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    p: 2,
+                    backgroundColor: alpha(theme.palette.background.default, 0.5),
+                    borderRadius: 1,
+                    height: '100%',
+                    overflowY: 'auto',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {viewingFileFromMessage.content}
+                </Box>
+              )}
+            </Box>
+            
+            {/* Footer */}
+            <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'right' }}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  // Don't revoke URL - it's managed by ChatPanel
+                  setViewingFileFromMessage(null);
+                }}
+              >
+                Close
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 };

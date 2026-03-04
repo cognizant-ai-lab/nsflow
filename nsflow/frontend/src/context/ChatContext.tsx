@@ -1,4 +1,3 @@
-
 /*
 Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
 
@@ -48,6 +47,12 @@ export type Message = {
   ts?: number; // Timestamp
   widget?: any; // For CRUSE dynamic widgets
   origin?: Array<{ tool: string; instantiation_index: number }>; // Origin from AI messages
+  
+  // NEW: For file attachments
+  attachedFiles?: Array<{
+    file: File;
+    content: string;
+  }>;
 };
 
 type ChatContextType = {
