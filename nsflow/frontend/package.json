@@ -19,7 +19,7 @@
     "@mui/system": "^7.3.5",
     "@mui/x-date-pickers": "^8.21.0",
     "@mui/x-tree-view": "^8.14.1",
-    "ajv": "^8.17.1",
+    "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "css-doodle": "^0.48.0",
     "d3": "^7.9.0",
@@ -47,7 +47,10 @@
   "resolutions": {
     "glob": "^10.5.0",
     "mdast-util-to-hast": "^13.2.1",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "ajv": "^8.18.0",
+    "minimatch": "^9.0.7",
+    "rollup": "^4.59.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
