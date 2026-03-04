@@ -27,3 +27,7 @@ gTTS==2.5.4
 pydub==0.25.1
 python-multipart>=0.0.22
 SpeechRecognition==3.14.3
+
+# For PDF processing, matching the version used in neuro-san-studio
+# Note: this is a temporary depndency until multimodal is added to neuro-san.
+pypdf>=6.1.3
