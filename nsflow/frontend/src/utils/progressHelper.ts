@@ -32,11 +32,7 @@ export function parseCodeFenceJSON(s: string): any | undefined {
   try {
     return JSON.parse(raw);
   } catch {
-    try {
-      return JSON.parse(raw.replace(/\\n/g, "\n"));
-    } catch {
-      return undefined;
-    }
+    return undefined;
   }
 }
 
