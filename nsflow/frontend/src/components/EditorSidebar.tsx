@@ -105,6 +105,7 @@ const EditorSidebar = ({
   const canEdit = !!pluginManualEditor;
   const didAutoSelectRef = useRef(false);
   const lastSeenNameRef = useRef<string | null>(null);
+  const designPlaceholderRef = useRef<string | null>(null);
 
   // Edit-mode: Fetch networks with state
   const fetchNetworks = async () => {
@@ -262,9 +263,28 @@ const EditorSidebar = ({
       ? extractProgressPayload(latestProgress) || extractProgressPayload(latestSly)
       : extractProgressPayload(latestSly) || extractProgressPayload(latestProgress);
     // silently ignore; nothing to show yet
-    if (!payload?.agent_network_definition || !payload?.agent_network_name) return;
+    if (!payload?.agent_network_definition) return;
 
-    const nameFromPayload = payload.agent_network_name ?? "(new_agent_network)";
+    // Use the name from the payload if available, otherwise keep the previously seen name.
+    // Pick a fun placeholder once per design session so it stays consistent.
+    if (payload.agent_network_name) {
+      designPlaceholderRef.current = null; // reset for next session
+    } else if (!designPlaceholderRef.current) {
+      const placeholders = [
+        "architecting the hive mind…",
+        "wiring up the neural web…",
+        "assembling the agent squad…",
+        "forging the collective…",
+        "orchestrating the swarm…",
+        "weaving the agent tapestry…",
+        "spinning up the think tank…",
+        "blueprinting the network…",
+        "rallying the digital workforce…",
+        "conjuring the agent council…",
+      ];
+      designPlaceholderRef.current = placeholders[Math.floor(Math.random() * placeholders.length)];
+    }
+    const nameFromPayload = payload.agent_network_name || lastSeenNameRef.current || designPlaceholderRef.current!;
 
     // Ensure dropdown has exactly one option (view-only)
     const singleOption: NetworkOption = {
