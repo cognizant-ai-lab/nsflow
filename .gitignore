@@ -18,11 +18,15 @@ wheels_private/
 .hypothesis/
 .ruff_cache/
 
+# local agent stuff
 registries/
 coded_tools/
 generated_notebooks/
 toolbox/
 draft_states/
+mcp/
+skills/
+middleware/
 
 # Virtual environments
 .venv
