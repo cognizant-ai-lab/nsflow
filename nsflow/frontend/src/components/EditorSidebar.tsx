@@ -271,16 +271,17 @@ const EditorSidebar = ({
       designPlaceholderRef.current = null; // reset for next session
     } else if (!designPlaceholderRef.current) {
       const placeholders = [
-        "architecting the hive mind…",
-        "wiring up the neural web…",
-        "assembling the agent squad…",
-        "forging the collective…",
-        "orchestrating the swarm…",
-        "weaving the agent tapestry…",
-        "spinning up the think tank…",
-        "blueprinting the network…",
-        "rallying the digital workforce…",
-        "conjuring the agent council…",
+        "designing the agent network...",
+        "architecting the agents...",
+        "wiring up the agent web...",
+        "assembling the agent squad...",
+        "forging the collective agents...",
+        "orchestrating the swarm...",
+        "weaving the agent tapestry...",
+        "spinning up the agents...",
+        "blueprinting the agent network...",
+        "rallying the digital workforce...",
+        "conjuring the agent council...",
       ];
       designPlaceholderRef.current = placeholders[Math.floor(Math.random() * placeholders.length)];
     }
