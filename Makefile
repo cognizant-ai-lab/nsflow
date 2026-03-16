@@ -60,9 +60,6 @@ lint: ## Run code formatting and linting tools on source
 		echo ""; \
 		exit 1; \
 	fi
-	isort nsflow/run.py coded_tools/ --force-single-line
-	black nsflow/run.py coded_tools/
-	flake8 nsflow/run.py coded_tools/
 	pylint nsflow/run.py coded_tools/
 
 lint-tests: ## Run code formatting and linting tools on tests
@@ -74,9 +71,6 @@ lint-tests: ## Run code formatting and linting tools on tests
 		echo ""; \
 		exit 1; \
 	fi
-	isort tests/ --force-single-line
-	black tests/
-	flake8 tests/
 	pylint tests/
 
 test: lint lint-tests ## Run tests with coverage

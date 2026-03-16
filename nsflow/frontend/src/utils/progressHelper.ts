@@ -24,7 +24,7 @@ export type ProgressPayload = {
  * ```json
  * { "foo": "bar" }
  * ```
- * Also tries to unescape '\n' if needed.
+ * Performs a strict JSON.parse on the extracted content; on parse failure, returns undefined.
  */
 export function parseCodeFenceJSON(s: string): any | undefined {
   const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -32,11 +32,7 @@ export function parseCodeFenceJSON(s: string): any | undefined {
   try {
     return JSON.parse(raw);
   } catch {
-    try {
-      return JSON.parse(raw.replace(/\\n/g, "\n"));
-    } catch {
-      return undefined;
-    }
+    return undefined;
   }
 }
 

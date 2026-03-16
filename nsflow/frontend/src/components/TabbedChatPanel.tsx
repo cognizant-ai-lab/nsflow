@@ -152,7 +152,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
               slyText = chatTextRaw;
             } else if (!isEmptyObject) {
               // Format as markdown code block
-              slyText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2).replace(/\\n/g, '\n')}\n\`\`\``;
+              slyText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2)}\n\`\`\``;
             }
           if (slyText.trim().length > 0) {
             // lastMessageRef.current = chatText;
