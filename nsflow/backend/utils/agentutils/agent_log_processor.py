@@ -103,7 +103,6 @@ class AgentLogProcessor(MessageProcessor):
             if tool_output:
                 progress = {
                     "agent_network_definition": tool_output,
-                    "agent_network_name": "new_agent_network"
                 }
                 await self.logs_manager.progress_event({"text": progress})
 
