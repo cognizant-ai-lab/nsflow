@@ -36,6 +36,7 @@ import {
   DialogActions,
   Autocomplete,
   CircularProgress,
+  Divider,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -1029,7 +1030,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     "& .MuiOutlinedInput-root": {
                       backgroundColor: theme.palette.background.paper,
                       color: theme.palette.text.primary,
-                      padding: "8px 30px 8px 8px",
+                      padding: "8px 12px 8px 8px",
                       "&:hover": {
                         "& .MuiOutlinedInput-notchedOutline": {
                           borderColor: theme.palette.primary.main,
@@ -1065,16 +1066,22 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                       top: 4,
                       right: 4,
                       zIndex: 1,
-                      width: 30,
-                      height: 30,
-                      color: theme.palette.text.secondary,
+                      width: 34,
+                      height: 34,
+                      color: '#4caf50',
+                      backgroundColor: alpha('#4caf50', 0.12),
+                      borderRadius: 1,
                       "&:hover": {
-                        color: theme.palette.primary.main,
-                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                        color: '#388e3c',
+                        backgroundColor: alpha('#4caf50', 0.22),
+                      },
+                      "&.Mui-disabled": {
+                        color: theme.palette.action.disabled,
+                        backgroundColor: alpha(theme.palette.action.disabled, 0.08),
                       },
                     }}
                   >
-                    <AttachFileIcon sx={{ fontSize: 22 }} />
+                    <AttachFileIcon sx={{ fontSize: 28 }} />
                   </IconButton>
                 </Tooltip>
               </Box>
@@ -1172,194 +1179,150 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           {/* END scrollable area */}
 
           {/* Fixed bottom: network loader + "Use Sly Data" toggle — always visible */}
-          <Box sx={{ flexShrink: 0, px: 2, py: 0.5, borderTop: `1px solid ${theme.palette.divider}` }}>
-            {/* Network loader dropdown (editor mode only) */}
-            {isEditorMode && (
-              <Autocomplete
-                size="small"
-                options={[...availableNetworks].sort((a, b) => {
-                  const folderA = a.split('/').slice(0, -1).join('/');
-                  const folderB = b.split('/').slice(0, -1).join('/');
-                  if (folderA !== folderB) return folderA.localeCompare(folderB);
-                  return a.localeCompare(b);
-                })}
-                groupBy={(option) => option.split('/').slice(0, -1).join('/') || ''}
-                loading={loadingNetworks || loadingDefinition}
-                value={selectedLoadNetwork}
-                disabled={waitingForAgent}
-                onChange={(_event, value) => handleLoadNetwork(value)}
-                renderGroup={(params) => (
-                  <li key={params.key}>
-                    {params.group && (
-                      <Box
-                        component="div"
-                        sx={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          lineHeight: '28px',
-                          minHeight: 28,
-                          pl: 1,
-                          color: theme.palette.text.secondary,
-                          position: 'sticky',
-                          top: -4,
-                          zIndex: 1,
-                          backgroundColor: theme.palette.mode === 'dark' ? '#1a2e1e' : '#e8f5e9',
-                        }}
-                      >
-                        {params.group}
-                      </Box>
-                    )}
-                    <ul style={{ padding: 0 }}>{params.children}</ul>
-                  </li>
-                )}
-                slotProps={{
-                  listbox: {
-                    sx: {
-                      py: 0.5,
-                      '& .MuiAutocomplete-option': {
-                        fontSize: 13,
-                        minHeight: 28,
-                        py: '2px',
-                        pl: 3,
-                        pr: 1,
-                        backgroundColor: 'transparent',
-                        '&[aria-selected="true"]': {
-                          backgroundColor: alpha('#4caf50', 0.18),
-                        },
-                        '&.Mui-focused, &:hover': {
-                          backgroundColor: alpha('#4caf50', 0.12),
-                        },
-                      },
-                      '& .MuiAutocomplete-groupLabel': {
-                        display: 'none',
-                      },
-                      '& .MuiAutocomplete-groupUl': {
-                        backgroundColor: 'transparent',
-                      },
-                    },
-                  },
-                  paper: {
-                    sx: {
-                      backgroundColor: theme.palette.mode === 'dark'
-                        ? '#1a2e1e'
-                        : '#e8f5e9',
-                      backdropFilter: 'blur(12px)',
-                      border: `1px solid ${alpha('#4caf50', 0.25)}`,
-                    },
-                  },
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Load Existing Agent Network"
-                    variant="outlined"
+          <Box sx={{ flexShrink: 0, px: 2, pt: 0.5, pb: 0.25, borderTop: `1px solid ${theme.palette.divider}` }}>
+              {/* Network loader dropdown (editor mode only) */}
+              {isEditorMode && (
+                  <Autocomplete
                     size="small"
-                    slotProps={{
-                      input: {
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {(loadingNetworks || loadingDefinition) && <CircularProgress size={16} />}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      },
-                    }}
-                  />
-                )}
-                sx={{
-                  mb: 0,
-                  '& .MuiOutlinedInput-root': {
-                    fontSize: 13,
-                    py: '1px',
-                    backgroundColor: theme.palette.mode === 'dark'
-                      ? alpha('#4caf50', 0.10)
-                      : alpha('#4caf50', 0.08),
-                    '&:hover': {
-                      backgroundColor: theme.palette.mode === 'dark'
-                        ? alpha('#4caf50', 0.16)
-                        : alpha('#4caf50', 0.13),
-                    },
-                  },
-                  '& .MuiInputLabel-root': {
-                    fontSize: 11,
-                  },
-                  '& .MuiOutlinedInput-notchedOutline legend': {
-                    marginLeft: 'auto',
-                  },
-                  '& .MuiInputLabel-root:not(.MuiInputLabel-shrink)': {
-                    right: 48,
-                    left: 'auto',
-                    transformOrigin: 'top right',
-                  },
-                  '& .MuiInputLabel-shrink': {
-                    right: 24,
-                    left: 'auto',
-                    transformOrigin: 'top right',
-                  },
-                }}
-              />
-            )}
-            <Box
-              component="fieldset"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-start",
-                px: 1.5,
-                pt: 0,
-                pb: '5px',
-                mt: 0,
-                mb: 0,
-                mx: 0,
-                borderRadius: 1,
-                border: `1px solid ${theme.palette.mode === 'dark' ? alpha('#4caf50', 0.3) : alpha('#4caf50', 0.4)}`,
-                backgroundColor: theme.palette.mode === 'dark'
-                  ? alpha('#4caf50', 0.10)
-                  : alpha('#4caf50', 0.08),
-                minHeight: 0,
-              }}
-            >
-              <Box
-                component="legend"
-                sx={{
-                  fontSize: 9,
-                  px: 0.5,
-                  ml: 'auto',
-                  color: theme.palette.text.secondary,
-                }}
-              >
-                Sly Data
-              </Box>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={useSlyDataChecked}
-                    onChange={(e) => setUseSlyDataChecked(e.target.checked)}
+                    options={[...availableNetworks].sort((a, b) => {
+                      const folderA = a.split('/').slice(0, -1).join('/');
+                      const folderB = b.split('/').slice(0, -1).join('/');
+                      if (folderA !== folderB) return folderA.localeCompare(folderB);
+                      return a.localeCompare(b);
+                    })}
+                    groupBy={(option) => option.split('/').slice(0, -1).join('/') || ''}
+                    loading={loadingNetworks || loadingDefinition}
+                    value={selectedLoadNetwork}
                     disabled={waitingForAgent}
-                    size="small"
-                    disableRipple
+                    onChange={(_event, value) => handleLoadNetwork(value)}
+                    renderGroup={(params) => (
+                      <li key={params.key}>
+                        {params.group && (
+                          <Box
+                            component="div"
+                            sx={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              lineHeight: '28px',
+                              minHeight: 28,
+                              pl: 1,
+                              color: theme.palette.text.secondary,
+                              position: 'sticky',
+                              top: -4,
+                              zIndex: 1,
+                              backgroundColor: theme.palette.mode === 'dark' ? '#1a2e1e' : '#e8f5e9',
+                            }}
+                          >
+                            {params.group}
+                          </Box>
+                        )}
+                        <ul style={{ padding: 0 }}>{params.children}</ul>
+                      </li>
+                    )}
+                    slotProps={{
+                      listbox: {
+                        sx: {
+                          py: 0.5,
+                          '& .MuiAutocomplete-option': {
+                            fontSize: 13,
+                            minHeight: 28,
+                            py: '2px',
+                            pl: 3,
+                            pr: 1,
+                            backgroundColor: 'transparent',
+                            '&[aria-selected="true"]': {
+                              backgroundColor: alpha('#4caf50', 0.18),
+                            },
+                            '&.Mui-focused, &:hover': {
+                              backgroundColor: alpha('#4caf50', 0.12),
+                            },
+                          },
+                          '& .MuiAutocomplete-groupLabel': {
+                            display: 'none',
+                          },
+                          '& .MuiAutocomplete-groupUl': {
+                            backgroundColor: 'transparent',
+                          },
+                        },
+                      },
+                      paper: {
+                        sx: {
+                          backgroundColor: theme.palette.mode === 'dark'
+                            ? '#1a2e1e'
+                            : '#e8f5e9',
+                          backdropFilter: 'blur(12px)',
+                          border: `1px solid ${alpha('#4caf50', 0.25)}`,
+                        },
+                      },
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Load Existing Agent Network"
+                        variant="outlined"
+                        size="small"
+                        slotProps={{
+                          input: {
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {(loadingNetworks || loadingDefinition) && <CircularProgress size={16} />}
+                                {params.InputProps.endAdornment}
+                              </>
+                            ),
+                          },
+                        }}
+                      />
+                    )}
                     sx={{
-                      p: 0.25,
-                      "& .MuiSvgIcon-root": {
-                        fontSize: 18,
+                      mr: 'calc(80px + 32px)',
+                      '& .MuiOutlinedInput-root': {
+                        fontSize: 13,
+                        py: 0,
+                        height: 26,
+                      },
+                      '& .MuiOutlinedInput-input': {
+                        py: '2px !important',
+                      },
+                      '& .MuiInputLabel-root': {
+                        fontSize: 11,
+                        top: -5,
+                      },
+                      '& .MuiInputLabel-shrink': {
+                        top: 0,
                       },
                     }}
                   />
-                }
-                label="Use Edited Sly Data"
-                sx={{
-                  color: theme.palette.text.primary,
-                  m: 0,
-                  "& .MuiFormControlLabel-label": {
-                    fontSize: 12,
-                  },
-                }}
-              />
-              <Typography sx={{ color: theme.palette.text.secondary, ml: 1, fontSize: 11 }}>
-                (from SlyData tab or {`{}`} if empty)
-              </Typography>
-            </Box>
+              )}
+              <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={useSlyDataChecked}
+                      onChange={(e) => setUseSlyDataChecked(e.target.checked)}
+                      disabled={waitingForAgent}
+                      disableRipple
+                      sx={{
+                        p: 0.25,
+                        "& .MuiSvgIcon-root": {
+                          fontSize: 22,
+                        },
+                      }}
+                    />
+                  }
+                  label="Use Edited Sly Data"
+                  sx={{
+                    color: theme.palette.text.primary,
+                    m: 0,
+                    "& .MuiFormControlLabel-label": {
+                      fontSize: 12,
+                    },
+                  }}
+                />
+                <Typography sx={{ color: theme.palette.text.secondary, ml: 1, fontSize: 11 }}>
+                  (from SlyData tab or {`{}`} if empty)
+                </Typography>
+              </Box>
           </Box>
           </Box>
         </Panel>
