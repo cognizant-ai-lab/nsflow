@@ -20,6 +20,8 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
+
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
@@ -191,25 +193,19 @@ def get_latest_sly_data(network_name: str):
 )
 async def get_network_definition(network_name: str):
     """Converts a HOCON agent network into an agent_network_definition dict for the editor."""
-    if ".." in network_name:
-        raise HTTPException(status_code=400, detail="Invalid network name")
-
     try:
-        agent_network = agent_utils.get_agent_network(network_name)
+        hocon_file = f"registries/{network_name}.hocon"
+        hocon = EasyHoconPersistence(full_ref=hocon_file, must_exist=True)
+        config = hocon.restore()
+    except (FileNotFoundError, TypeError) as e:
+        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e
     except Exception as e:
         logging.exception("Failed to load network '%s': %s", network_name, e)
-        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e
+        raise HTTPException(status_code=500, detail="Failed to load network definition") from e
 
-    if agent_network is None:
-        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found")
-
-    config = agent_network.get_config()
     tools = config.get("tools", [])
 
-    # Build a lookup of agent names defined in the HOCON
-    agent_names = {t["name"] for t in tools if isinstance(t, dict) and "name" in t}
-
-    agent_network_definition = {}
+    agent_network_definition: Dict[str, Any] = {}
     for tool in tools:
         if not isinstance(tool, dict) or "name" not in tool:
             continue
