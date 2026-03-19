@@ -1237,7 +1237,30 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                         <ul style={{ padding: 0 }}>{params.children}</ul>
                       </li>
                     )}
+                    clearIcon={
+                      <Tooltip title="Clearing this agent-network will reset the Editor to its default state">
+                        <CloseIcon sx={{ fontSize: 18 }} />
+                      </Tooltip>
+                    }
                     slotProps={{
+                      clearIndicator: {
+                        sx: {
+                          color: theme.palette.error.main,
+                          backgroundColor: alpha(theme.palette.error.main, 0.1),
+                          borderRadius: '50%',
+                          width: 22,
+                          height: 22,
+                          transition: 'all 200ms ease',
+                          '&:hover': {
+                            backgroundColor: alpha(theme.palette.error.main, 0.22),
+                            transform: 'scale(1.1)',
+                            boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.3)}`,
+                          },
+                          '&:active': {
+                            transform: 'scale(0.95)',
+                          },
+                        },
+                      },
                       listbox: {
                         sx: {
                           py: 0.5,
