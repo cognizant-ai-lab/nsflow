@@ -117,11 +117,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   // NEW: cache reader to get current editor data
   const { loadSlyDataFromCache, saveSlyDataToCache, clearSlyDataCache } = useSlyDataCache();
 
-  const slyToggleGlobalKey = 'nsflow-use-slydata';
+  const slyTogglePrefix = isEditorMode ? 'nsflow-editor-use-slydata' : 'nsflow-use-slydata';
+  const slyToggleGlobalKey = slyTogglePrefix;
   const slyToggleNetworkKey = useMemo(() => {
     const network = targetNetwork || activeNetwork;
-    return network ? `nsflow-use-slydata-${network}` : null;
-  }, [targetNetwork, activeNetwork]);
+    return network ? `${slyTogglePrefix}-${network}` : null;
+  }, [targetNetwork, activeNetwork, slyTogglePrefix]);
 
   // ADD audioRef here
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -139,13 +140,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const readSlyToggle = (network?: string | null) => {
     try {
       if (network) {
-        const v = localStorage.getItem(`nsflow-use-slydata-${network}`);
+        const v = localStorage.getItem(`${slyTogglePrefix}-${network}`);
         if (v != null) return v === 'true';
       }
-      const g = localStorage.getItem('nsflow-use-slydata');
+      const g = localStorage.getItem(slyTogglePrefix);
       if (g != null) return g === 'true';
-      const legacy = localStorage.getItem('nsflow-use-slydata-default');
-      if (legacy != null) return legacy === 'true';
     } catch {}
     return false;
   };
@@ -289,6 +288,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       const pretty = JSON.stringify(payload, null, 2);
       addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
       setUseSlyDataChecked(true);
+      setSampleQueriesExpanded(false);
       if (network) {
         saveSlyDataToCache(payload, network, 1);
       }
@@ -298,6 +298,24 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       setLoadingDefinition(false);
     }
   }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache]);
+
+  // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
+  const [autoLoadHandled, setAutoLoadHandled] = useState(false);
+  useEffect(() => {
+    if (autoLoadHandled || !isEditorMode || loadingNetworks || !availableNetworks.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const loadNetwork = params.get('loadNetwork');
+    if (loadNetwork && availableNetworks.includes(loadNetwork)) {
+      setAutoLoadHandled(true);
+      // Clean the URL so reload doesn't re-trigger
+      const url = new URL(window.location.href);
+      url.searchParams.delete('loadNetwork');
+      window.history.replaceState({}, '', url.toString());
+      handleLoadNetwork(loadNetwork);
+    } else {
+      setAutoLoadHandled(true);
+    }
+  }, [isEditorMode, loadingNetworks, availableNetworks, autoLoadHandled, handleLoadNetwork]);
 
   // Auto-play agent responses when microphone was used
   useEffect(() => {
