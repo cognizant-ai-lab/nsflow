@@ -182,6 +182,64 @@ def get_latest_sly_data(network_name: str):
 
 
 @router.get(
+    "/network_definition/{network_name:path}",
+    responses={
+        200: {"description": "Network definition found"},
+        400: {"description": "Invalid network name"},
+        404: {"description": "Network not found"},
+    },
+)
+async def get_network_definition(network_name: str):
+    """Converts a HOCON agent network into an agent_network_definition dict for the editor."""
+    if ".." in network_name:
+        raise HTTPException(status_code=400, detail="Invalid network name")
+
+    try:
+        agent_network = agent_utils.get_agent_network(network_name)
+    except Exception as e:
+        logging.exception("Failed to load network '%s': %s", network_name, e)
+        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e
+
+    if agent_network is None:
+        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found")
+
+    config = agent_network.get_config()
+    tools = config.get("tools", [])
+
+    # Build a lookup of agent names defined in the HOCON
+    agent_names = {t["name"] for t in tools if isinstance(t, dict) and "name" in t}
+
+    agent_network_definition = {}
+    for tool in tools:
+        if not isinstance(tool, dict) or "name" not in tool:
+            continue
+
+        name = tool["name"]
+        has_class = "class" in tool
+        has_toolbox = "toolbox" in tool
+
+        if has_toolbox or has_class:
+            # Toolbox tools and coded tools: empty dict in sly_data
+            # (same as AND's CreateNetwork for is_tool=True)
+            agent_network_definition[name] = {}
+        else:
+            # Agent nodes: include instructions and use "tools" key for children
+            # (matches AND's UpdateAgent which sets network_def[agent]["tools"])
+            agent_def: Dict[str, Any] = {
+                "instructions": tool.get("instructions", ""),
+            }
+            child_tools = tool.get("tools", [])
+            if child_tools:
+                agent_def["tools"] = child_tools
+            agent_network_definition[name] = agent_def
+
+    return JSONResponse(content={
+        "agent_network_definition": agent_network_definition,
+        "agent_network_name": network_name,
+    })
+
+
+@router.get(
     "/compact_connectivity/{network_name:path}",
     responses={200: {"description": "Connectivity Info"}, 404: {"description": "HOCON file not found"}},
 )
