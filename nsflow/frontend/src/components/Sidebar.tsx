@@ -642,7 +642,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                   theme,
                   handleNetworkSelection,
                   (networkName: string) => {
-                    window.open(`/editor?loadNetwork=${encodeURIComponent(networkName)}`, '_blank');
+                    window.open(`/editor?loadNetwork=${encodeURIComponent(networkName)}`, '_blank', 'noopener,noreferrer');
                   }
                 )}
               </SimpleTreeView>

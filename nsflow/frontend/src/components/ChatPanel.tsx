@@ -36,7 +36,6 @@ import {
   DialogActions,
   Autocomplete,
   CircularProgress,
-  Divider,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -165,6 +164,23 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       }
     }
   }, [chatMessages, waitingForAgent]);
+
+  // Clear waitingForAgent if websocket closes or disconnects
+  useEffect(() => {
+    if (!waitingForAgent || !chatWs) return;
+    if (chatWs.readyState === WebSocket.CLOSED || chatWs.readyState === WebSocket.CLOSING) {
+      setWaitingForAgent(false);
+      return;
+    }
+    const handleClose = () => setWaitingForAgent(false);
+    const handleError = () => setWaitingForAgent(false);
+    chatWs.addEventListener('close', handleClose);
+    chatWs.addEventListener('error', handleError);
+    return () => {
+      chatWs.removeEventListener('close', handleClose);
+      chatWs.removeEventListener('error', handleError);
+    };
+  }, [waitingForAgent, chatWs]);
 
   // Cleanup blob URLs only when component unmounts (not on every file change)
   useEffect(() => {
@@ -297,7 +313,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     } finally {
       setLoadingDefinition(false);
     }
-  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache]);
+  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache, slyToggleNetworkKey]);
 
   // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
   const [autoLoadHandled, setAutoLoadHandled] = useState(false);
