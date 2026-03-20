@@ -84,7 +84,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   };
 
   const handleNavigateToEditor = () => {
-    window.open('/editor', '_blank', 'noopener,noreferrer');
+    const url = activeNetwork ? `/editor?loadNetwork=${encodeURIComponent(activeNetwork)}` : '/editor';
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleNavigateToCruse = () => {
@@ -208,21 +209,23 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           </Button>
 
           {/* Editor Button */}
-          <Button
-            variant="outlined"
-            startIcon={<CodeIcon />}
-            onClick={handleNavigateToEditor}
-            sx={{
-              ...(isOnEditorPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-              borderColor: muiTheme.palette.secondary.main,
-              '&:hover': {
-                backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          <Tooltip title={activeNetwork ? "Open this agent in Editor in a new tab" : "Open Editor in a new tab"}>
+            <Button
+              variant="outlined"
+              startIcon={<CodeIcon />}
+              onClick={handleNavigateToEditor}
+              sx={{
+                ...(isOnEditorPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
                 borderColor: muiTheme.palette.secondary.main,
-              },
-            }}
-          >
-            Editor
-          </Button>
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                  borderColor: muiTheme.palette.secondary.main,
+                },
+              }}
+            >
+              Editor
+            </Button>
+          </Tooltip>
 
           {/* CRUSE Button - Hide on Editor page, Disable if no agent selected */}
           {pluginCruse && !isOnEditorPage && (

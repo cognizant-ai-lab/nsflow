@@ -20,6 +20,8 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
+
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
@@ -179,6 +181,58 @@ def get_latest_sly_data(network_name: str):
     except Exception as e:
         logging.exception("Failed to retrieve sly_data for network %s: %s", network_name, e)
         raise HTTPException(status_code=500, detail="Failed to retrieve sly_data") from e
+
+
+@router.get(
+    "/network_definition/{network_name:path}",
+    responses={
+        200: {"description": "Network definition found"},
+        400: {"description": "Invalid network name"},
+        404: {"description": "Network not found"},
+    },
+)
+async def get_network_definition(network_name: str):
+    """Converts a HOCON agent network into an agent_network_definition dict for the editor."""
+    try:
+        hocon_file = f"registries/{network_name}.hocon"
+        hocon = EasyHoconPersistence(full_ref=hocon_file, must_exist=True)
+        config = hocon.restore()
+    except (FileNotFoundError, TypeError) as e:
+        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e
+    except Exception as e:
+        logging.exception("Failed to load network '%s': %s", network_name, e)
+        raise HTTPException(status_code=500, detail="Failed to load network definition") from e
+
+    tools = config.get("tools", [])
+
+    agent_network_definition: Dict[str, Any] = {}
+    for tool in tools:
+        if not isinstance(tool, dict) or "name" not in tool:
+            continue
+
+        name = tool["name"]
+        has_class = "class" in tool
+        has_toolbox = "toolbox" in tool
+
+        if has_toolbox or has_class:
+            # Toolbox tools and coded tools: empty dict in sly_data
+            # (same as AND's CreateNetwork for is_tool=True)
+            agent_network_definition[name] = {}
+        else:
+            # Agent nodes: include instructions and use "tools" key for children
+            # (matches AND's UpdateAgent which sets network_def[agent]["tools"])
+            agent_def: Dict[str, Any] = {
+                "instructions": tool.get("instructions", ""),
+            }
+            child_tools = tool.get("tools", [])
+            if child_tools:
+                agent_def["tools"] = child_tools
+            agent_network_definition[name] = agent_def
+
+    return JSONResponse(content={
+        "agent_network_definition": agent_network_definition,
+        "agent_network_name": network_name,
+    })
 
 
 @router.get(

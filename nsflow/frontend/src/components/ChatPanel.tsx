@@ -34,6 +34,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Autocomplete,
+  CircularProgress,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -52,6 +54,7 @@ import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
+import { useNeuroSan } from "../context/NeuroSanContext";
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import { Mp3Encoder } from "@breezystack/lamejs";
 
@@ -73,6 +76,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     addChatMessage,
     addSlyDataMessage,
     chatWs,
+    isEditorMode,
   } = useChatContext();
 
   const { stopWebSocket, clearChat } = useChatControls();
@@ -97,18 +101,27 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     previewUrl?: string;
   } | null>(null);
 
+  // Network loader state (editor mode only)
+  const { connectionType, host, port, isNsReady } = useNeuroSan();
+  const [availableNetworks, setAvailableNetworks] = useState<string[]>([]);
+  const [loadingNetworks, setLoadingNetworks] = useState(false);
+  const [loadingDefinition, setLoadingDefinition] = useState(false);
+  const [waitingForAgent, setWaitingForAgent] = useState(false);
+  const [selectedLoadNetwork, setSelectedLoadNetwork] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
   const messagePanelRef = useRef<ImperativePanelHandle>(null);
 
   // NEW: cache reader to get current editor data
-  const { loadSlyDataFromCache } = useSlyDataCache();
+  const { loadSlyDataFromCache, saveSlyDataToCache, clearSlyDataCache } = useSlyDataCache();
 
-  const slyToggleGlobalKey = 'nsflow-use-slydata';
+  const slyTogglePrefix = isEditorMode ? 'nsflow-editor-use-slydata' : 'nsflow-use-slydata';
+  const slyToggleGlobalKey = slyTogglePrefix;
   const slyToggleNetworkKey = useMemo(() => {
     const network = targetNetwork || activeNetwork;
-    return network ? `nsflow-use-slydata-${network}` : null;
-  }, [targetNetwork, activeNetwork]);
+    return network ? `${slyTogglePrefix}-${network}` : null;
+  }, [targetNetwork, activeNetwork, slyTogglePrefix]);
 
   // ADD audioRef here
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -126,13 +139,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const readSlyToggle = (network?: string | null) => {
     try {
       if (network) {
-        const v = localStorage.getItem(`nsflow-use-slydata-${network}`);
+        const v = localStorage.getItem(`${slyTogglePrefix}-${network}`);
         if (v != null) return v === 'true';
       }
-      const g = localStorage.getItem('nsflow-use-slydata');
+      const g = localStorage.getItem(slyTogglePrefix);
       if (g != null) return g === 'true';
-      const legacy = localStorage.getItem('nsflow-use-slydata-default');
-      if (legacy != null) return legacy === 'true';
     } catch {}
     return false;
   };
@@ -143,6 +154,33 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  // Clear waitingForAgent when an agent message arrives
+  useEffect(() => {
+    if (waitingForAgent && chatMessages.length > 0) {
+      const last = chatMessages[chatMessages.length - 1];
+      if (last.sender === "agent") {
+        setWaitingForAgent(false);
+      }
+    }
+  }, [chatMessages, waitingForAgent]);
+
+  // Clear waitingForAgent if websocket closes or disconnects
+  useEffect(() => {
+    if (!waitingForAgent || !chatWs) return;
+    if (chatWs.readyState === WebSocket.CLOSED || chatWs.readyState === WebSocket.CLOSING) {
+      setWaitingForAgent(false);
+      return;
+    }
+    const handleClose = () => setWaitingForAgent(false);
+    const handleError = () => setWaitingForAgent(false);
+    chatWs.addEventListener('close', handleClose);
+    chatWs.addEventListener('error', handleError);
+    return () => {
+      chatWs.removeEventListener('close', handleClose);
+      chatWs.removeEventListener('error', handleError);
+    };
+  }, [waitingForAgent, chatWs]);
 
   // Cleanup blob URLs only when component unmounts (not on every file change)
   useEffect(() => {
@@ -206,6 +244,94 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       localStorage.setItem(slyToggleGlobalKey, String(useSlyDataChecked));
     } catch {}
   }, [useSlyDataChecked, slyToggleNetworkKey]);
+
+  // Fetch available networks for editor dropdown
+  useEffect(() => {
+    if (!isEditorMode || !isNsReady || !apiUrl) return;
+    const fetchNetworks = async () => {
+      setLoadingNetworks(true);
+      try {
+        const params = new URLSearchParams();
+        if (connectionType) params.set("connection_type", connectionType);
+        if (host) params.set("host", host);
+        if (port) params.set("port", String(port));
+        const response = await fetch(`${apiUrl}/api/v1/list?${params.toString()}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const names: string[] = (data.agents || []).map((a: any) => a.agent_name);
+          setAvailableNetworks(names);
+        }
+      } catch (e) {
+        console.error("Failed to fetch network list for editor:", e);
+      } finally {
+        setLoadingNetworks(false);
+      }
+    };
+    fetchNetworks();
+  }, [isEditorMode, isNsReady, apiUrl, connectionType, host, port]);
+
+  // Handler for loading an existing network into the editor (or clearing on X)
+  const handleLoadNetwork = useCallback(async (networkName: string | null) => {
+    const network = targetNetwork || activeNetwork;
+
+    setSelectedLoadNetwork(networkName);
+
+    if (!networkName) {
+      // User clicked X to clear — reset to "design from scratch" mode.
+      // Write directly to localStorage (React setState + useEffect won't flush before reload).
+      if (slyToggleNetworkKey) {
+        localStorage.setItem(slyToggleNetworkKey, 'false');
+      }
+      localStorage.setItem(slyToggleGlobalKey, 'false');
+      clearSlyDataCache(network || undefined);
+      window.location.reload();
+      return;
+    }
+
+    if (!apiUrl) return;
+    setLoadingDefinition(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error("Failed to load network definition:", errData.detail || response.statusText);
+        return;
+      }
+      const payload = await response.json();
+      const pretty = JSON.stringify(payload, null, 2);
+      addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
+      setUseSlyDataChecked(true);
+      setSampleQueriesExpanded(false);
+      if (network) {
+        saveSlyDataToCache(payload, network, 1);
+      }
+    } catch (e) {
+      console.error("Error loading network definition:", e);
+    } finally {
+      setLoadingDefinition(false);
+    }
+  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache, slyToggleNetworkKey]);
+
+  // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
+  const [autoLoadHandled, setAutoLoadHandled] = useState(false);
+  useEffect(() => {
+    if (autoLoadHandled || !isEditorMode || loadingNetworks || !availableNetworks.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const loadNetwork = params.get('loadNetwork');
+    if (loadNetwork && availableNetworks.includes(loadNetwork)) {
+      setAutoLoadHandled(true);
+      // Clean the URL so reload doesn't re-trigger
+      const url = new URL(window.location.href);
+      url.searchParams.delete('loadNetwork');
+      window.history.replaceState({}, '', url.toString());
+      handleLoadNetwork(loadNetwork);
+    } else {
+      setAutoLoadHandled(true);
+    }
+  }, [isEditorMode, loadingNetworks, availableNetworks, autoLoadHandled, handleLoadNetwork]);
 
   // Auto-play agent responses when microphone was used
   useEffect(() => {
@@ -410,6 +536,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     
     setNewMessage("");
     setAttachedFiles([]);
+    setWaitingForAgent(true);
 
     // Collapse sample queries section after sending message
     setSampleQueriesExpanded(false);
@@ -751,11 +878,21 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           <Box
             sx={{
               height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+          {/* Scrollable area: sample queries, files, message box, dropdown */}
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
               overflowY: "auto",
               overflowX: "hidden",
               pt: 0.5,
               px: 2,
-              pb: 2,
+              pb: 1,
               display: "flex",
               flexDirection: "column",
               gap: 0.5,
@@ -908,50 +1045,82 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
             {/* Message input */}
             <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
-              <TextField
-                multiline
-                minRows={2}
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                sx={{
-                  flexGrow: 1,
-                  "& .MuiOutlinedInput-root": {
-                    backgroundColor: theme.palette.background.paper,
-                    color: theme.palette.text.primary,
-                    padding: "8px 8px",
-                    "&:hover": {
-                      "& .MuiOutlinedInput-notchedOutline": {
-                        borderColor: theme.palette.primary.main,
+              {/* Message box wrapper with anchored attach icon */}
+              <Box sx={{ flexGrow: 1, position: "relative" }}>
+                <TextField
+                  multiline
+                  minRows={3}
+                  placeholder="Type a message..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  sx={{
+                    width: "100%",
+                    "& .MuiOutlinedInput-root": {
+                      backgroundColor: theme.palette.background.paper,
+                      color: theme.palette.text.primary,
+                      padding: "8px 12px 8px 8px",
+                      "&:hover": {
+                        "& .MuiOutlinedInput-notchedOutline": {
+                          borderColor: theme.palette.primary.main,
+                        },
+                      },
+                      "&.Mui-focused": {
+                        "& .MuiOutlinedInput-notchedOutline": {
+                          borderColor: theme.palette.primary.main,
+                          borderWidth: 2,
+                        },
                       },
                     },
-                    "&.Mui-focused": {
-                      "& .MuiOutlinedInput-notchedOutline": {
-                        borderColor: theme.palette.primary.main,
-                        borderWidth: 2,
-                      },
+                    "& .MuiOutlinedInput-notchedOutline": {
+                      borderColor: theme.palette.divider,
                     },
-                  },
-                  "& .MuiOutlinedInput-notchedOutline": {
-                    borderColor: theme.palette.divider,
-                  },
-                  "& .MuiInputBase-input": {
-                    padding: "0 !important",
-                  },
-                  "& textarea": {
-                    resize: "vertical",
-                    padding: "0 !important",
-                  },
-                }}
-              />
-              {/* Right column: mic (top, small) + Send (bottom) */}
-              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+                    "& .MuiInputBase-input": {
+                      padding: "0 !important",
+                    },
+                    "& textarea": {
+                      resize: "vertical",
+                      padding: "0 !important",
+                    },
+                  }}
+                />
+                {/* Attach icon anchored inside the message box, top-right */}
+                <Tooltip title="Attach file (.pdf, .md, .txt)">
+                  <IconButton
+                    size="small"
+                    disabled={waitingForAgent}
+                    onClick={handleFileAttach}
+                    sx={{
+                      position: "absolute",
+                      top: 4,
+                      right: 4,
+                      zIndex: 1,
+                      width: 34,
+                      height: 34,
+                      color: '#4caf50',
+                      backgroundColor: alpha('#4caf50', 0.12),
+                      borderRadius: 1,
+                      "&:hover": {
+                        color: '#388e3c',
+                        backgroundColor: alpha('#4caf50', 0.22),
+                      },
+                      "&.Mui-disabled": {
+                        color: theme.palette.action.disabled,
+                        backgroundColor: alpha(theme.palette.action.disabled, 0.08),
+                      },
+                    }}
+                  >
+                    <AttachFileIcon sx={{ fontSize: 28 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              {/* Right column: mic (top) + Send (bottom) */}
+              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
                 {useSpeech && (
                   <Tooltip
                     title={
@@ -974,8 +1143,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                         onTouchEnd={stopRecording}
                         disabled={loading}
                         sx={{
-                          width: 28,
-                          height: 28,
+                          width: 36,
+                          height: 36,
                           color: loading
                             ? theme.palette.info.main
                             : isRecording
@@ -1000,7 +1169,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                       >
                         <MicIcon
                           sx={{
-                            fontSize: 18,
+                            fontSize: 24,
                             transition: "transform .15s ease, opacity .15s ease",
                             animation: loading
                               ? "spin 1s linear infinite"
@@ -1024,11 +1193,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
                 <Button
                   variant="contained"
+                  disabled={waitingForAgent}
                   onClick={sendMessage}
                   sx={{
                     backgroundColor: theme.palette.primary.main,
                     "&:hover": { backgroundColor: theme.palette.primary.dark },
                     minWidth: 80,
+                    minHeight: 48,
                   }}
                   startIcon={<SendIcon />}
                 >
@@ -1037,20 +1208,161 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               </Box>
             </Box>
 
-            {/* NEW: Always-visible "Use Sly Data" toggle below the message box */}
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <Box>
+
+          </Box>
+          {/* END scrollable area */}
+
+          {/* Fixed bottom: network loader + "Use Sly Data" toggle — always visible */}
+          <Box sx={{ flexShrink: 0, px: 2, pt: 0.5, pb: 0.25, borderTop: `1px solid ${theme.palette.divider}` }}>
+              {/* Network loader dropdown (editor mode only) */}
+              {isEditorMode && (
+                  <Autocomplete
+                    size="small"
+                    options={[...availableNetworks].sort((a, b) => {
+                      const folderA = a.split('/').slice(0, -1).join('/');
+                      const folderB = b.split('/').slice(0, -1).join('/');
+                      if (folderA !== folderB) return folderA.localeCompare(folderB);
+                      return a.localeCompare(b);
+                    })}
+                    groupBy={(option) => option.split('/').slice(0, -1).join('/') || ''}
+                    loading={loadingNetworks || loadingDefinition}
+                    value={selectedLoadNetwork}
+                    disabled={waitingForAgent}
+                    onChange={(_event, value) => handleLoadNetwork(value)}
+                    renderGroup={(params) => (
+                      <li key={params.key}>
+                        {params.group && (
+                          <Box
+                            component="div"
+                            sx={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              lineHeight: '28px',
+                              minHeight: 28,
+                              pl: 1,
+                              color: theme.palette.text.secondary,
+                              position: 'sticky',
+                              top: -4,
+                              zIndex: 1,
+                              backgroundColor: theme.palette.mode === 'dark' ? '#1a2e1e' : '#e8f5e9',
+                            }}
+                          >
+                            {params.group}
+                          </Box>
+                        )}
+                        <ul style={{ padding: 0 }}>{params.children}</ul>
+                      </li>
+                    )}
+                    clearIcon={
+                      <Tooltip title="Clearing this agent-network will reset the Editor to its default state">
+                        <CloseIcon sx={{ fontSize: 18 }} />
+                      </Tooltip>
+                    }
+                    slotProps={{
+                      clearIndicator: {
+                        sx: {
+                          color: theme.palette.error.main,
+                          backgroundColor: alpha(theme.palette.error.main, 0.1),
+                          borderRadius: '50%',
+                          width: 22,
+                          height: 22,
+                          transition: 'all 200ms ease',
+                          '&:hover': {
+                            backgroundColor: alpha(theme.palette.error.main, 0.22),
+                            transform: 'scale(1.1)',
+                            boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.3)}`,
+                          },
+                          '&:active': {
+                            transform: 'scale(0.95)',
+                          },
+                        },
+                      },
+                      listbox: {
+                        sx: {
+                          py: 0.5,
+                          '& .MuiAutocomplete-option': {
+                            fontSize: 13,
+                            minHeight: 28,
+                            py: '2px',
+                            pl: 3,
+                            pr: 1,
+                            backgroundColor: 'transparent',
+                            '&[aria-selected="true"]': {
+                              backgroundColor: alpha('#4caf50', 0.18),
+                            },
+                            '&.Mui-focused, &:hover': {
+                              backgroundColor: alpha('#4caf50', 0.12),
+                            },
+                          },
+                          '& .MuiAutocomplete-groupLabel': {
+                            display: 'none',
+                          },
+                          '& .MuiAutocomplete-groupUl': {
+                            backgroundColor: 'transparent',
+                          },
+                        },
+                      },
+                      paper: {
+                        sx: {
+                          backgroundColor: theme.palette.mode === 'dark'
+                            ? '#1a2e1e'
+                            : '#e8f5e9',
+                          backdropFilter: 'blur(12px)',
+                          border: `1px solid ${alpha('#4caf50', 0.25)}`,
+                        },
+                      },
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Load Existing Agent Network"
+                        variant="outlined"
+                        size="small"
+                        slotProps={{
+                          input: {
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {(loadingNetworks || loadingDefinition) && <CircularProgress size={16} />}
+                                {params.InputProps.endAdornment}
+                              </>
+                            ),
+                          },
+                        }}
+                      />
+                    )}
+                    sx={{
+                      mr: 'calc(80px + 32px)',
+                      '& .MuiOutlinedInput-root': {
+                        fontSize: 13,
+                        py: 0,
+                        height: 26,
+                      },
+                      '& .MuiOutlinedInput-input': {
+                        py: '2px !important',
+                      },
+                      '& .MuiInputLabel-root': {
+                        fontSize: 11,
+                        top: -5,
+                      },
+                      '& .MuiInputLabel-shrink': {
+                        top: 0,
+                      },
+                    }}
+                  />
+              )}
+              <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
                 <FormControlLabel
                   control={
                     <Checkbox
                       checked={useSlyDataChecked}
                       onChange={(e) => setUseSlyDataChecked(e.target.checked)}
-                      size="small"
+                      disabled={waitingForAgent}
                       disableRipple
                       sx={{
                         p: 0.25,
                         "& .MuiSvgIcon-root": {
-                          fontSize: 20,
+                          fontSize: 22,
                         },
                       }}
                     />
@@ -1060,36 +1372,15 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     color: theme.palette.text.primary,
                     m: 0,
                     "& .MuiFormControlLabel-label": {
-                      fontSize: 14,
-                   },
+                      fontSize: 12,
+                    },
                   }}
                 />
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, ml: 1 }}>
-                  (Current sly data from SlyData tab or {`{}`} if empty).
+                <Typography sx={{ color: theme.palette.text.secondary, ml: 1, fontSize: 11 }}>
+                  (from SlyData tab or {`{}`} if empty)
                 </Typography>
               </Box>
-
-              {/* File attach button on the right */}
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1, marginRight: "100px" }}>
-                <Tooltip title="Attach file (.pdf, .md, .txt)">
-                  <IconButton
-                    size="medium"
-                    onClick={handleFileAttach}
-                    sx={{
-                      width: 40,
-                      height: 40,
-                      color: theme.palette.text.secondary,
-                      "&:hover": {
-                        color: theme.palette.primary.main,
-                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                      },
-                    }}
-                  >
-                    <AttachFileIcon sx={{ fontSize: 28 }} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Box>
+          </Box>
           </Box>
         </Panel>
       </PanelGroup>

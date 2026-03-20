@@ -18,7 +18,7 @@ limitations under the License.
 import * as React from "react";
 import { alpha } from "@mui/material/styles";
 import { Box, Paper, Tooltip, Typography } from "@mui/material";
-import { Folder, FolderOpen, AccountTreeTwoTone } from "@mui/icons-material";
+import { Folder, FolderOpen, AccountTreeTwoTone, EditOutlined } from "@mui/icons-material";
 import { TreeItem, treeItemClasses } from "@mui/x-tree-view";
 
 export type TreeNode = Record<
@@ -86,7 +86,8 @@ export const renderTree = (
   path: string[] = [],
   activeNetwork: string,
   theme: any,
-  onSelect: (n: string) => void
+  onSelect: (n: string) => void,
+  onEditNetwork?: (n: string) => void
 ): React.ReactNode[] => {
   return sortNodeEntries(node).map(([key, value]) => {
     const fullPath = [...path, key].join("/");
@@ -120,6 +121,9 @@ export const renderTree = (
                 "&:hover": {
                   backgroundColor: alpha(theme.palette.primary.main, 0.05),
                   cursor: "pointer",
+                  "& .edit-icon": {
+                    opacity: 1,
+                  },
                 },
               }}
             >
@@ -145,7 +149,7 @@ export const renderTree = (
                     flexShrink: 0,
                   }}
                 />
-                <Tooltip title={fullPath} placement="right">
+                <Tooltip title={fullPath} placement="bottom-start" enterDelay={500}>
                   <Typography
                     variant="caption"
                     sx={{
@@ -166,6 +170,45 @@ export const renderTree = (
                     {key}
                   </Typography>
                 </Tooltip>
+                {onEditNetwork && (
+                  <Tooltip title="Open in Editor" placement="right">
+                    <Box
+                      className="edit-icon"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        onEditNetwork(fullPath);
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        opacity: 0,
+                        transition: "all 200ms ease",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        backgroundColor: alpha(theme.palette.success.main, 0.12),
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.success.main, 0.25),
+                          transform: "scale(1.1)",
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.success.main, 0.3)}`,
+                        },
+                        "&:active": {
+                          transform: "scale(0.95)",
+                        },
+                      }}
+                    >
+                      <EditOutlined
+                        sx={{
+                          fontSize: 13,
+                          color: theme.palette.success.main,
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                )}
               </Box>
             </Paper>
           }
@@ -232,7 +275,7 @@ export const renderTree = (
           },
         }}
       >
-        {renderTree(children, [...path, key], activeNetwork, theme, onSelect)}
+        {renderTree(children, [...path, key], activeNetwork, theme, onSelect, onEditNetwork)}
       </TreeItem>
     );
   });
