@@ -191,22 +191,40 @@ export function AgentSelector({
         MenuProps={{
           PaperProps: {
             sx: {
-              bgcolor: 'background.paper',
+              bgcolor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(30, 30, 30, 0.98)'
+                : 'rgba(255, 255, 255, 0.98)',
+              backdropFilter: 'blur(20px)',
+              border: (theme) => `1px solid ${
+                theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : 'rgba(0, 0, 0, 0.06)'
+              }`,
+              borderRadius: 3,
+              boxShadow: (theme) => theme.palette.mode === 'dark'
+                ? '0 8px 32px rgba(0, 0, 0, 0.5)'
+                : '0 8px 32px rgba(0, 0, 0, 0.12)',
               width: '100%',
               maxWidth: '280px',
               maxHeight: 400,
               '& .MuiList-root': {
-                pt: 0, // Remove default padding to make search box flush
+                pt: 0,
               },
               '& .MuiMenuItem-root': {
                 color: 'text.primary',
                 '&:hover': {
-                  bgcolor: 'action.hover',
+                  bgcolor: (theme) => theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.06)'
+                    : 'rgba(0, 0, 0, 0.04)',
                 },
                 '&.Mui-selected': {
-                  bgcolor: 'action.selected',
+                  bgcolor: (theme) => theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.10)'
+                    : 'rgba(0, 0, 0, 0.06)',
                   '&:hover': {
-                    bgcolor: 'action.selected',
+                    bgcolor: (theme) => theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.10)'
+                      : 'rgba(0, 0, 0, 0.06)',
                   },
                 },
               },
@@ -277,13 +295,9 @@ export function AgentSelector({
           );
         }}
       >
-        {/* Search Box - Pinned at top */}
+        {/* Search Box */}
         <Box
           sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1,
-            bgcolor: 'background.paper',
             p: 1.5,
             pb: 1,
             borderBottom: 1,

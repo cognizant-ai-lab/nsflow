@@ -687,8 +687,16 @@ export function ThreadList({
             paper: {
               sx: {
                 minWidth: 220,
-                borderRadius: 2,
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+                borderRadius: 3,
+                border: (theme) => `1px solid ${
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.06)'
+                }`,
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  : '0 8px 32px rgba(0, 0, 0, 0.12)',
+                bgcolor: 'background.paper',
               },
             },
           }}
@@ -765,34 +773,35 @@ export function ThreadList({
           <ListItemButton
             onClick={onNewThread}
             sx={{
-              borderRadius: 3,
-              border: 1,
-              borderColor: 'primary.main',
-              py: 0.4,
-              px: 1,
+              borderRadius: 2.5,
+              py: 0.6,
+              px: 1.5,
               minHeight: 0,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
               gap: 0.5,
+              bgcolor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.08)'
+                : 'rgba(0, 0, 0, 0.04)',
+              transition: 'background-color 0.2s ease',
               '&:hover': {
-                bgcolor: 'primary.main',
-                color: 'primary.contrastText',
-                '& .MuiSvgIcon-root': {
-                  color: 'text.primary',
-                },
+                bgcolor: 'success.main',
+                color: 'success.contrastText',
+                '& .MuiSvgIcon-root': { color: 'success.contrastText' },
+                '& .MuiTypography-root': { color: 'success.contrastText' },
+              },
+              '&:active': {
+                bgcolor: 'success.dark',
               },
             }}
           >
-            <AddIcon sx={{ fontSize: '1rem' }} color="primary" />
+            <AddIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
             <Typography
               sx={{
-                fontWeight: 600,
-                fontSize: '0.85rem',
-                color: 'text.primary',
-                '.MuiListItemButton-root:hover &': {
-                  color: 'inherit',
-                },
+                fontWeight: 500,
+                fontSize: '0.8rem',
+                color: 'text.secondary',
               }}
             >
               New Thread
@@ -876,23 +885,29 @@ export function ThreadList({
                       }}
                       sx={{
                         opacity: isActive ? 1 : 0,
-                        transition: 'opacity 0.2s',
+                        transition: 'all 0.2s ease',
+                        color: 'text.secondary',
                         '.MuiListItem-root:hover &': {
                           opacity: 1,
                         },
+                        '&:hover': {
+                          color: 'error.main',
+                          bgcolor: (theme) => theme.palette.mode === 'dark'
+                            ? 'rgba(244, 67, 54, 0.15)'
+                            : 'rgba(244, 67, 54, 0.10)',
+                          boxShadow: '0 0 8px rgba(244, 67, 54, 0.3)',
+                        },
                         mr: 0.5,
+                        borderRadius: '50%',
                       }}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   }
                   sx={{
-                    mb: 0.5,
+                    mb: 0.25,
                     borderRadius: 2,
                     overflow: 'hidden',
-                    '&:hover': {
-                      bgcolor: 'action.hover',
-                    },
                   }}
                 >
                   <ListItemButton
@@ -903,10 +918,22 @@ export function ThreadList({
                       px: 1.5,
                       borderRadius: 2,
                       minHeight: 0,
+                      transition: 'background-color 0.15s ease',
+                      bgcolor: isActive
+                        ? (theme) => theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.10)'
+                          : 'rgba(0, 0, 0, 0.06)'
+                        : 'transparent',
+                      '&:hover': {
+                        bgcolor: (theme) => theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.07)'
+                          : 'rgba(0, 0, 0, 0.04)',
+                      },
                       ...(isActive && {
-                        bgcolor: 'action.selected',
                         '&:hover': {
-                          bgcolor: 'action.selected',
+                          bgcolor: (theme) => theme.palette.mode === 'dark'
+                            ? 'rgba(255, 255, 255, 0.10)'
+                            : 'rgba(0, 0, 0, 0.06)',
                         },
                       }),
                     }}
@@ -1015,10 +1042,16 @@ export function ThreadList({
               sx: {
                 mt: -1,
                 minWidth: 220,
-                borderRadius: 2,
+                borderRadius: 3,
+                border: (theme) => `1px solid ${
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.06)'
+                }`,
                 boxShadow: (theme) => theme.palette.mode === 'dark'
-                  ? '0 4px 20px rgba(0, 0, 0, 0.5)'
-                  : '0 4px 20px rgba(0, 0, 0, 0.15)',
+                  ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  : '0 8px 32px rgba(0, 0, 0, 0.12)',
+                bgcolor: 'background.paper',
               },
             },
           }}

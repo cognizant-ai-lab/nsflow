@@ -25,7 +25,7 @@ import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { useNeuroSan } from '../../context/NeuroSanContext';
 import { useSnackbar } from '../../context/SnackbarContext';
-import { SNACKBAR_DURATION, NOTIFICATION_TEXT_TRUNCATE_LENGTH } from '../../constants/notifications';
+import { SNACKBAR_DURATION } from '../../constants/notifications';
 import type { MessageOrigin } from '../../types/cruse';
 
 export interface CruseInterfaceProps {
@@ -423,19 +423,9 @@ export function CruseInterface({
         // Delete the thread
         await deleteThread(threadId);
 
-        // Truncate strings using constant
-        const truncatedTitle =
-          threadTitle.length > NOTIFICATION_TEXT_TRUNCATE_LENGTH
-            ? threadTitle.slice(0, NOTIFICATION_TEXT_TRUNCATE_LENGTH) + '...'
-            : threadTitle;
-        const truncatedAgent =
-          agentName.length > NOTIFICATION_TEXT_TRUNCATE_LENGTH
-            ? agentName.slice(0, NOTIFICATION_TEXT_TRUNCATE_LENGTH) + '...'
-            : agentName;
-
         // Show success notification
         showSnackbar({
-          message: `Thread: ${truncatedTitle} deleted for agent: ${truncatedAgent}`,
+          message: `Thread: ${threadTitle} deleted for agent: ${agentName}`,
           severity: 'success',
           duration: SNACKBAR_DURATION,
         });
