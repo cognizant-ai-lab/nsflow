@@ -16,7 +16,8 @@ limitations under the License.
 
 import { useState, useEffect } from 'react';
 import { Box, List, ListItem, ListItemButton, ListItemText, ListItemIcon, IconButton, Divider,
-  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, useTheme, Checkbox
+  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, useTheme, Checkbox,
+  Popover
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Chat as ChatIcon, SettingsTwoTone as SettingsIcon,
   DeleteSweep as DeleteSweepIcon, Visibility as VisibilityIcon, Refresh as RefreshIcon, ChevronLeft as CollapseIcon,
@@ -117,7 +118,8 @@ export function ThreadList({
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const settingsOpen = Boolean(settingsAnchorEl);
 
-  const [agentSelectorOpen, setAgentSelectorOpen] = useState(false);
+  const [agentSelectorAnchorEl, setAgentSelectorAnchorEl] = useState<null | HTMLElement>(null);
+  const agentSelectorOpen = Boolean(agentSelectorAnchorEl);
   const theme = useTheme();
 
   // Theme refresh prompt state - stored per targetNetwork (not selectedAgentId)
@@ -542,34 +544,10 @@ export function ThreadList({
           </Box>
         ) : (
           <>
-            {/* Hidden AgentSelector - controlled externally */}
-            <Box
-              sx={{
-                position: 'absolute',
-                left: -9999,
-                opacity: 0,
-                pointerEvents: agentSelectorOpen ? 'auto' : 'none',
-              }}
-            >
-              <AgentSelector
-                agents={agents}
-                selectedAgentId={selectedAgentId}
-                onAgentChange={(agentId) => {
-                  if (onAgentChange) {
-                    onAgentChange(agentId);
-                  }
-                }}
-                open={agentSelectorOpen}
-                onOpen={() => setAgentSelectorOpen(true)}
-                onClose={() => setAgentSelectorOpen(false)}
-                cruseThemeEnabled={cruseThemeEnabled}
-              />
-            </Box>
-
-            {/* Visible Search Icon Button */}
+            {/* Search Icon Button */}
             <Tooltip title="Select Agent" placement="right">
               <IconButton
-                onClick={() => setAgentSelectorOpen(true)}
+                onClick={(e) => setAgentSelectorAnchorEl(e.currentTarget)}
                 sx={{
                   m: 1,
                   width: 40,
@@ -584,6 +562,41 @@ export function ThreadList({
                 <SearchIcon />
               </IconButton>
             </Tooltip>
+
+            {/* AgentSelector in a Popover */}
+            <Popover
+              open={agentSelectorOpen}
+              anchorEl={agentSelectorAnchorEl}
+              onClose={() => setAgentSelectorAnchorEl(null)}
+              anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              slotProps={{
+                paper: {
+                  sx: {
+                    p: 1.5,
+                    minWidth: 280,
+                    bgcolor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 3,
+                    boxShadow: theme.palette.mode === 'dark'
+                      ? '0 8px 32px rgba(0, 0, 0, 0.5)'
+                      : '0 8px 32px rgba(0, 0, 0, 0.12)',
+                  },
+                },
+              }}
+            >
+              <AgentSelector
+                agents={agents}
+                selectedAgentId={selectedAgentId}
+                onAgentChange={(agentId) => {
+                  if (onAgentChange) {
+                    onAgentChange(agentId);
+                  }
+                  setAgentSelectorAnchorEl(null);
+                }}
+                cruseThemeEnabled={cruseThemeEnabled}
+              />
+            </Popover>
           </>
         )}
 
