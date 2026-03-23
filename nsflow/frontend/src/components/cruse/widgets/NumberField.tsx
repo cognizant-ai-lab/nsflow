@@ -63,7 +63,7 @@ export function NumberField({
       value={value ?? ''}
       onChange={handleChange}
       error={!!error}
-      helperText={error || description}
+      helperText={error || undefined}
       inputProps={{
         min: minimum,
         max: maximum,
@@ -71,7 +71,7 @@ export function NumberField({
       }}
       variant="outlined"
       size="small"
-      sx={{ mb: 2 }}
+      sx={{ mb: 1.5 }}
     />
   );
 }

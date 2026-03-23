@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { TextField as MuiTextField, MenuItem } from '@mui/material';
+import { TextField as MuiTextField, MenuItem, InputAdornment, IconButton } from '@mui/material';
+import { Clear as ClearIcon } from '@mui/icons-material';
 import { WidgetFieldProps } from '../../../types/cruse';
 import { getSelectOptions } from '../../../utils/cruse';
 
@@ -48,6 +49,7 @@ export function SelectField({
   };
 
   const validValue = options.some((opt) => opt.value === value) ? value : '';
+  const hasValue = validValue !== '' && validValue !== null && validValue !== undefined;
 
   return (
     <MuiTextField
@@ -60,10 +62,19 @@ export function SelectField({
       value={validValue}
       onChange={handleChange}
       error={!!error}
-      helperText={error || description}
+      helperText={error || undefined}
       variant="outlined"
       size="small"
-      sx={{ mb: 2 }}
+      sx={{ mb: 1.5 }}
+      InputProps={{
+        endAdornment: hasValue && !disabled ? (
+          <InputAdornment position="end" sx={{ mr: 2 }}>
+            <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+              <ClearIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </InputAdornment>
+        ) : undefined,
+      }}
     >
       {options.map((option) => (
         <MenuItem key={String(option.value)} value={option.value}>

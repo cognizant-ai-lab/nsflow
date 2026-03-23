@@ -50,7 +50,7 @@ export function SliderField({
   };
 
   return (
-    <Box sx={{ mb: 2, px: 1 }}>
+    <Box sx={{ mb: 1.5, px: 1 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
         <FormLabel error={!!error}>
           {label}{required ? ' *' : ''}
@@ -74,9 +74,9 @@ export function SliderField({
         sx={{ mt: 1 }}
       />
 
-      {(error || description) && (
-        <FormHelperText error={!!error}>
-          {error || description}
+      {error && (
+        <FormHelperText error>
+          {error}
         </FormHelperText>
       )}
     </Box>

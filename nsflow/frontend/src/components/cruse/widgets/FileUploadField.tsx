@@ -116,7 +116,7 @@ export function FileUploadField({
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 1.5 }}>
       {label && (
         <FormLabel required={required} disabled={disabled} error={!!error}>
           {label}
@@ -155,11 +155,6 @@ export function FileUploadField({
         <Typography variant="body1" color="text.primary" gutterBottom>
           {isDragActive ? 'Drop files here...' : 'Drag & drop files here, or click to select'}
         </Typography>
-        {description && (
-          <Typography variant="caption" color="text.secondary">
-            {description}
-          </Typography>
-        )}
         {accept && (
           <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
             Accepted: {accept}

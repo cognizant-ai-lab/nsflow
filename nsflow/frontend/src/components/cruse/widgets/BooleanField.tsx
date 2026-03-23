@@ -38,7 +38,7 @@ export function BooleanField({
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 1.5 }}>
       <FormControlLabel
         control={
           <Switch
@@ -51,9 +51,9 @@ export function BooleanField({
         }
         label={`${label}${required ? ' *' : ''}`}
       />
-      {(error || description) && (
-        <FormHelperText error={!!error}>
-          {error || description}
+      {error && (
+        <FormHelperText error>
+          {error}
         </FormHelperText>
       )}
     </Box>

@@ -66,7 +66,7 @@ export function RadioGroupField({
       required={required}
       disabled={disabled}
       fullWidth
-      sx={{ mb: 2 }}
+      sx={{ mb: 1.5 }}
     >
       <FormLabel component="legend">{label}</FormLabel>
       <RadioGroup
@@ -84,8 +84,8 @@ export function RadioGroupField({
           />
         ))}
       </RadioGroup>
-      {(error || description) && (
-        <FormHelperText>{error || description}</FormHelperText>
+      {error && (
+        <FormHelperText>{error}</FormHelperText>
       )}
     </FormControl>
   );

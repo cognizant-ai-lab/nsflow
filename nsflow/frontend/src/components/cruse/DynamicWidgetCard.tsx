@@ -23,10 +23,15 @@ import {
   Button,
   Collapse,
   IconButton,
+  Tooltip,
   alpha,
   useTheme,
 } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import {
+  ExpandMore as ExpandMoreIcon,
+  ContentCopy as CopyIcon,
+  InfoOutlined as InfoIcon,
+} from '@mui/icons-material';
 import { WidgetCardDefinition } from '../../types/cruse';
 import { WidgetFormRenderer } from './WidgetFormRenderer';
 import { resolveIcon } from '../../utils/cruse';
@@ -65,6 +70,7 @@ export function DynamicWidgetCard({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
 
@@ -107,8 +113,20 @@ export function DynamicWidgetCard({
       return;
     }
 
-    // Validate before submitting
-    const validation = validateSchema(schema, formData);
+    // Only validate required fields — optional fields are accepted as-is
+    const requiredFields: string[] = Array.isArray(schema.required) ? schema.required as string[] : [];
+    let validationError: string | undefined;
+
+    for (const fieldName of requiredFields) {
+      const value = formData[fieldName];
+      if (value === null || value === undefined || value === '' ||
+          (Array.isArray(value) && value.length === 0)) {
+        validationError = `${fieldName} is required`;
+        break;
+      }
+    }
+
+    const validation = { valid: !validationError, errorMessage: validationError };
 
     if (!validation.valid) {
       console.error('Validation failed:', validation.errorMessage);
@@ -132,7 +150,7 @@ export function DynamicWidgetCard({
       sx={{
         maxWidth: 600,
         borderRadius: 3,
-        borderLeft: `6px solid ${color}`,
+        borderLeft: `4px solid ${color}`,
         boxShadow: isDarkMode
           ? '0 4px 12px rgba(0, 0, 0, 0.4)'
           : '0 4px 12px rgba(0, 0, 0, 0.1)',
@@ -147,23 +165,23 @@ export function DynamicWidgetCard({
         background: `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`,
       }}
     >
-      <CardContent sx={{ p: 3 }}>
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         {/* Header */}
         <Box
           display="flex"
           alignItems="center"
           justifyContent="space-between"
-          mb={expanded ? 2 : 0}
+          mb={expanded ? 1.5 : 0}
           sx={{ cursor: 'pointer' }}
           onClick={() => setExpanded(!expanded)}
         >
-          <Box display="flex" alignItems="center" gap={1.5}>
+          <Box display="flex" alignItems="center" gap={1}>
             {IconComponent && (
               <Box
                 sx={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 2,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 1.5,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -175,11 +193,11 @@ export function DynamicWidgetCard({
                   },
                 }}
               >
-                <IconComponent sx={{ color, fontSize: 28 }} />
+                <IconComponent sx={{ color, fontSize: 20 }} />
               </Box>
             )}
             <Box>
-              <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.2, color: 'text.secondary' }}>
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ lineHeight: 1.2, color: 'text.secondary' }}>
                 {title}
               </Typography>
               {description && !expanded && (
@@ -189,40 +207,55 @@ export function DynamicWidgetCard({
               )}
             </Box>
           </Box>
-          <IconButton
-            size="small"
-            sx={{
-              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.3s',
-              backgroundColor: alpha(color, 0.2),
-              '&:hover': {
-                backgroundColor: alpha(color, 0.15),
-              },
-            }}
-          >
-            <ExpandMoreIcon />
-          </IconButton>
-        </Box>
-
-        {description && expanded && (
-          <Box
-            sx={{
-              backgroundColor: alpha(color, 0.05),
-              borderRadius: 1.5,
-              p: 1.5,
-              mb: 2,
-              borderLeft: `3px solid ${color}`,
-            }}
-          >
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ fontStyle: 'italic' }}
+          <Box display="flex" alignItems="center" gap={0.5}>
+            {expanded && description && (
+              <Tooltip title={description} placement="top" arrow>
+                <IconButton
+                  size="small"
+                  onClick={(e) => e.stopPropagation()}
+                  sx={{
+                    backgroundColor: alpha(color, 0.15),
+                    '&:hover': { backgroundColor: alpha(color, 0.25) },
+                  }}
+                >
+                  <InfoIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {expanded && (
+              <Tooltip title={copied ? 'Copied!' : 'Copy as JSON'} placement="top">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(JSON.stringify(formData, null, 2));
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  sx={{
+                    backgroundColor: alpha(color, 0.15),
+                    '&:hover': { backgroundColor: alpha(color, 0.25) },
+                  }}
+                >
+                  <CopyIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            <IconButton
+              size="small"
+              sx={{
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s',
+                backgroundColor: alpha(color, 0.2),
+                '&:hover': {
+                  backgroundColor: alpha(color, 0.15),
+                },
+              }}
             >
-              {description}
-            </Typography>
+              <ExpandMoreIcon />
+            </IconButton>
           </Box>
-        )}
+        </Box>
 
         {/* Form Content */}
         <Collapse in={expanded}>
@@ -232,35 +265,36 @@ export function DynamicWidgetCard({
               onChange={setFormData}
             />
 
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={handleSubmit}
-              disabled={isSubmitting || disabled}
-              sx={{
-                mt: 3,
-                py: 1.5,
-                borderRadius: 2,
-                backgroundColor: color,
-                fontSize: '1rem',
-                fontWeight: 600,
-                textTransform: 'none',
-                boxShadow: `0 4px 12px ${alpha(color, 0.3)}`,
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  backgroundColor: alpha(color, 0.9),
-                  boxShadow: `0 6px 16px ${alpha(color, 0.4)}`,
-                  transform: 'translateY(-2px)',
-                },
-                '&:disabled': {
-                  backgroundColor: alpha(color, 0.3),
-                  color: alpha(theme.palette.getContrastText(color), 0.5),
-                  cursor: 'not-allowed',
-                },
-              }}
-            >
-              {isSubmitting ? 'Submitting...' : disabled ? 'Submit' : submitText}
-            </Button>
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
+              <Button
+                variant="contained"
+                onClick={handleSubmit}
+                disabled={isSubmitting || disabled}
+                sx={{
+                  px: 5,
+                  py: 0.75,
+                  borderRadius: 2,
+                  backgroundColor: color,
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: `0 4px 12px ${alpha(color, 0.3)}`,
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    backgroundColor: alpha(color, 0.9),
+                    boxShadow: `0 6px 16px ${alpha(color, 0.4)}`,
+                    transform: 'translateY(-2px)',
+                  },
+                  '&:disabled': {
+                    backgroundColor: alpha(color, 0.3),
+                    color: alpha(theme.palette.getContrastText(color), 0.5),
+                    cursor: 'not-allowed',
+                  },
+                }}
+              >
+                {isSubmitting ? 'Submitting...' : disabled ? 'Submit' : submitText}
+              </Button>
+            </Box>
           </Box>
         </Collapse>
       </CardContent>

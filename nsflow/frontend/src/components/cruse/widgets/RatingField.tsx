@@ -48,7 +48,7 @@ export function RatingField({
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 1.5 }}>
       <FormLabel error={!!error}>
         {label}{required ? ' *' : ''}
       </FormLabel>
@@ -72,9 +72,9 @@ export function RatingField({
         )}
       </Box>
 
-      {(error || description) && (
-        <FormHelperText error={!!error}>
-          {error || description}
+      {error && (
+        <FormHelperText error>
+          {error}
         </FormHelperText>
       )}
     </Box>

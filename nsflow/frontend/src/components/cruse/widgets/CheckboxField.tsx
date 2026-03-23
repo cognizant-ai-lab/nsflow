@@ -39,7 +39,7 @@ export function CheckboxField({
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 1.5 }}>
       <FormControlLabel
         control={
           <Checkbox
@@ -52,9 +52,9 @@ export function CheckboxField({
         }
         label={`${label}${required ? ' *' : ''}`}
       />
-      {(error || description) && (
-        <FormHelperText error={!!error}>
-          {error || description}
+      {error && (
+        <FormHelperText error>
+          {error}
         </FormHelperText>
       )}
     </Box>
