@@ -26,7 +26,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from nsflow.backend.db.models import Message
 
@@ -36,12 +36,14 @@ logger = logging.getLogger(__name__)
 # ==================== Message Schemas ====================
 
 class WidgetDefinition(BaseModel):
+    model_config = {"populate_by_name": True}
+
     title: str
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
     bgImage: Optional[str] = None
-    schema: dict  # JSON Schema
+    form_schema: dict = Field(alias="schema")  # JSON Schema
 
 
 class MessageOrigin(BaseModel):
@@ -163,4 +165,4 @@ def serialize_widget(widget: Optional[WidgetDefinition]) -> Optional[str]:
     """Serialize a WidgetDefinition to a JSON string for DB storage."""
     if widget is None:
         return None
-    return json.dumps(widget.model_dump())
+    return json.dumps(widget.model_dump(by_alias=True))
