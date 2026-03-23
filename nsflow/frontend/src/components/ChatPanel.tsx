@@ -48,6 +48,7 @@ import {
   AttachFile as AttachFileIcon,
   Close as CloseIcon,
   InsertDriveFile as FileIcon,
+  WarningAmber as WarningAmberIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -1216,6 +1217,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           <Box sx={{ flexShrink: 0, px: 2, pt: 0.5, pb: 0.25, borderTop: `1px solid ${theme.palette.divider}` }}>
               {/* Network loader dropdown (editor mode only) */}
               {isEditorMode && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'calc(80px + 32px)' }}>
                   <Autocomplete
                     size="small"
                     options={[...availableNetworks].sort((a, b) => {
@@ -1332,7 +1334,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                       />
                     )}
                     sx={{
-                      mr: 'calc(80px + 32px)',
+                      flex: 1,
                       '& .MuiOutlinedInput-root': {
                         fontSize: 13,
                         py: 0,
@@ -1350,6 +1352,20 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                       },
                     }}
                   />
+                  <Tooltip
+                    title={
+                      <>
+                        <strong>Loading existing Agent-Network is an Experimental feature. </strong>
+                        Works best for agent-networks that are "generated" by Agent Network Designer or agent-networks that do not have any python coded-tools.<br />
+                        <strong>Caution!</strong> Editing might change the behavior of an Agent-Network.
+                      </>
+                    }
+                    placement="right"
+                    arrow
+                  >
+                    <WarningAmberIcon sx={{ fontSize: 16, color: '#ed6c02', cursor: 'help', flexShrink: 0 }} />
+                  </Tooltip>
+                </Box>
               )}
               <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
                 <FormControlLabel
