@@ -482,7 +482,7 @@ export function ThreadList({
       >
         <VisibilityIcon fontSize="small" sx={{ color: 'primary.main' }} />
         <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
-          Show Logs
+          Show Floating Menu
         </Typography>
         <Switch
           checked={showLogs}

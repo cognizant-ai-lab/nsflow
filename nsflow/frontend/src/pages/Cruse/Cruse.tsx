@@ -19,7 +19,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Box } from "@mui/material";
 import Header from "../../components/Header";
 import { CruseInterface } from "../../components/cruse/CruseInterface";
-import EditorLogsPanel from "../../components/EditorLogsPanel";
+import CruseFloatingPanel from "../../components/cruse/CruseFloatingPanel";
 import { BackgroundEngine, type BackgroundSchema } from "../../components/cruse/backgrounds";
 import { ApiPortProvider, useApiPort } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
@@ -267,8 +267,8 @@ const CruseContent: React.FC = () => {
                 isRefreshingTheme={isRefreshingTheme}
               />
 
-              {/* Expandable Logs Panel in bottom center-left */}
-              {showLogs && <EditorLogsPanel leftOffset={328} />}
+              {/* Floating Panel with Logs + AgentFlow tabs */}
+              {showLogs && <CruseFloatingPanel leftOffset={328} activeNetwork={activeNetwork || ''} />}
             </Box>
           </Box>
         </GlassEffectProvider>
