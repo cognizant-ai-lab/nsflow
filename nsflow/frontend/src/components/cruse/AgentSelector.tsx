@@ -81,7 +81,7 @@ export function AgentSelector({
   selectedAgentId,
   onAgentChange,
   size = 'small',
-  label = 'Select Agent',
+  label = 'Select Agent-Network',
   open: externalOpen,
   onOpen: externalOnOpen,
   onClose: externalOnClose,
@@ -306,6 +306,9 @@ export function AgentSelector({
           '&.Mui-focused': {
             color: 'primary.main',
           },
+        },
+        '& .MuiOutlinedInput-input': {
+          fontSize: '0.75rem',
         },
         '& .MuiOutlinedInput-root': {
           '& fieldset': {
