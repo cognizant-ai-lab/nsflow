@@ -270,8 +270,13 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
   };
 
   const handleWidgetSubmit = (data: Record<string, unknown>) => {
-    // Format widget data as a readable message
+    // Format widget data as a readable message, excluding empty optional fields
     const formattedMessage = Object.entries(data)
+      .filter(([_, value]) => {
+        if (value === null || value === undefined || value === '') return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      })
       .map(([key, value]) => {
         // Format dates nicely
         if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
@@ -288,6 +293,8 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
 
     console.log('[CRUSE] Widget submission:', data);
     sendMessageWithText(formattedMessage);
+    // Clear tracked widget data so it doesn't bleed into the next text message
+    setCurrentWidgetData({});
   };
 
   const copyToClipboard = (text: string, index: number) => {
@@ -306,6 +313,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
     setIsWaitingForResponse(false); // Clear thinking spinner when thread changes
     setPreviousWidget(null); // Clear previous widget for new thread
     setCurrentWidgetData({}); // Clear widget data when switching threads
+    setSampleQueriesExpanded(true); // Re-expand sample queries for new/switched thread
   }, [currentThread?.id]);
 
   useEffect(() => {

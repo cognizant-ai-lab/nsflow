@@ -71,15 +71,16 @@ export function DynamicWidgetCard({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hasSubmitted = React.useRef(false);
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
 
   const { title, description, icon, color = '#9c27b0', schema } = widget;
   const IconComponent = resolveIcon(icon);
 
-  // Call onFormDataChange whenever formData changes
+  // Call onFormDataChange whenever formData changes, but not after submission
   React.useEffect(() => {
-    if (onFormDataChange) {
+    if (onFormDataChange && !hasSubmitted.current) {
       onFormDataChange(formData);
     }
   }, [formData, onFormDataChange]);
@@ -140,7 +141,13 @@ export function DynamicWidgetCard({
     setIsSubmitting(true);
     try {
       await onSubmit(formData);
-    } finally {
+      hasSubmitted.current = true;
+      // Clear parent's tracked widget data so it doesn't bleed into future text messages
+      if (onFormDataChange) {
+        onFormDataChange({});
+      }
+    } catch {
+      // Only re-enable on error so user can retry
       setIsSubmitting(false);
     }
   };
@@ -149,39 +156,39 @@ export function DynamicWidgetCard({
     <Card
       sx={{
         maxWidth: 600,
-        borderRadius: 3,
+        borderRadius: 2,
         borderLeft: `4px solid ${color}`,
         boxShadow: isDarkMode
-          ? '0 4px 12px rgba(0, 0, 0, 0.4)'
-          : '0 4px 12px rgba(0, 0, 0, 0.1)',
+          ? '0 2px 8px rgba(0, 0, 0, 0.3)'
+          : '0 2px 8px rgba(0, 0, 0, 0.08)',
         transition: 'all 0.3s ease',
         '&:hover': {
-          transform: 'translateY(-4px)',
+          transform: 'translateY(-2px)',
           boxShadow: isDarkMode
-            ? '0 8px 24px rgba(0, 0, 0, 0.6)'
-            : '0 8px 24px rgba(0, 0, 0, 0.15)',
+            ? '0 4px 16px rgba(0, 0, 0, 0.5)'
+            : '0 4px 16px rgba(0, 0, 0, 0.12)',
         },
-        mb: 2,
+        mb: 1,
         background: `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`,
       }}
     >
-      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         {/* Header */}
         <Box
           display="flex"
           alignItems="center"
           justifyContent="space-between"
-          mb={expanded ? 1.5 : 0}
+          mb={expanded ? 1 : 0}
           sx={{ cursor: 'pointer' }}
           onClick={() => setExpanded(!expanded)}
         >
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box display="flex" alignItems="center" gap={0.75}>
             {IconComponent && (
               <Box
                 sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 1.5,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -193,11 +200,11 @@ export function DynamicWidgetCard({
                   },
                 }}
               >
-                <IconComponent sx={{ color, fontSize: 20 }} />
+                <IconComponent sx={{ color, fontSize: 16 }} />
               </Box>
             )}
             <Box>
-              <Typography variant="subtitle1" fontWeight="bold" sx={{ lineHeight: 1.2, color: 'text.secondary' }}>
+              <Typography variant="body2" fontWeight="bold" sx={{ lineHeight: 1.2, color: 'text.secondary' }}>
                 {title}
               </Typography>
               {description && !expanded && (
@@ -292,7 +299,7 @@ export function DynamicWidgetCard({
                   },
                 }}
               >
-                {isSubmitting ? 'Submitting...' : disabled ? 'Submit' : submitText}
+                {isSubmitting ? (hasSubmitted.current ? 'Submitted' : 'Submitting...') : disabled ? 'Submit' : submitText}
               </Button>
             </Box>
           </Box>

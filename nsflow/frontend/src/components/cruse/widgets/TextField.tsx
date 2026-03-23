@@ -76,7 +76,7 @@ export function TextField({
       variant="outlined"
       size="small"
       sx={{
-        mb: 1.5,
+        mb: 1,
         '& .MuiOutlinedInput-root': {
           borderRadius: 2,
           transition: 'all 0.3s ease',

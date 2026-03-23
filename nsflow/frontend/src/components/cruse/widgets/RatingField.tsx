@@ -48,7 +48,7 @@ export function RatingField({
   };
 
   return (
-    <Box sx={{ mb: 1.5 }}>
+    <Box sx={{ mb: 1 }}>
       <FormLabel error={!!error}>
         {label}{required ? ' *' : ''}
       </FormLabel>

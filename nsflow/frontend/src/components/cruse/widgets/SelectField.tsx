@@ -65,7 +65,7 @@ export function SelectField({
       helperText={error || undefined}
       variant="outlined"
       size="small"
-      sx={{ mb: 1.5 }}
+      sx={{ mb: 1 }}
       InputProps={{
         endAdornment: hasValue && !disabled ? (
           <InputAdornment position="end" sx={{ mr: 2 }}>

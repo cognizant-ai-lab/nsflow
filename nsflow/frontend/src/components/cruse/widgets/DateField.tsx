@@ -55,7 +55,7 @@ export function DateField({
   };
 
   return (
-    <FormControl fullWidth error={!!error} sx={{ mb: 1.5 }}>
+    <FormControl fullWidth error={!!error} sx={{ mb: 1 }}>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <DatePicker
           label={label}

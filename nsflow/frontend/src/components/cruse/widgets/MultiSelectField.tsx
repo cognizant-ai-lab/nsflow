@@ -74,7 +74,7 @@ export function MultiSelectField({
       disabled={disabled}
       variant="outlined"
       size="small"
-      sx={{ mb: 1.5 }}
+      sx={{ mb: 1 }}
     >
       <InputLabel id={`${name}-label`}>{label}</InputLabel>
       <Select

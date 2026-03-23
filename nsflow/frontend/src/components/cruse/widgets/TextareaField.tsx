@@ -89,7 +89,7 @@ export function TextareaField({
       }}
       variant="outlined"
       size="small"
-      sx={{ mb: 1.5 }}
+      sx={{ mb: 1 }}
     />
   );
 }

@@ -125,7 +125,7 @@ export function WidgetFormRenderer({
     });
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, columnGap: 1, mb: -1 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, columnGap: 1, mb: -0.5 }}>
       {fieldEntries.map(({ propertyName, fieldSchema, widgetType, compact }) => {
         const WidgetComponent = widgetRegistry[widgetType];
 

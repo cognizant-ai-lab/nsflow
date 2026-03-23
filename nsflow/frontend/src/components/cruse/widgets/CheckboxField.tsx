@@ -39,7 +39,7 @@ export function CheckboxField({
   };
 
   return (
-    <Box sx={{ mb: 1.5 }}>
+    <Box sx={{ mb: 1 }}>
       <FormControlLabel
         control={
           <Checkbox

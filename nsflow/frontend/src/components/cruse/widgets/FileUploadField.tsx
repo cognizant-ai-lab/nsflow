@@ -116,7 +116,7 @@ export function FileUploadField({
   };
 
   return (
-    <Box sx={{ mb: 1.5 }}>
+    <Box sx={{ mb: 1 }}>
       {label && (
         <FormLabel required={required} disabled={disabled} error={!!error}>
           {label}
