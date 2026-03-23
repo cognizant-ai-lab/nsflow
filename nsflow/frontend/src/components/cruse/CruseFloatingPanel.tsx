@@ -230,48 +230,50 @@ const CruseFloatingPanel: React.FC<CruseFloatingPanelProps> = ({ leftOffset = 32
         {isExpanded && (
           <>
             <Box sx={{ flex: 1 }} />
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsPinned(!isPinned);
-              }}
-              sx={{
-                color: isPinned ? theme.palette.primary.main : theme.palette.text.secondary,
-                '&:hover': {
-                  color: isPinned ? theme.palette.primary.dark : theme.palette.text.primary,
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                },
-                p: 0.5,
-              }}
-              title={isPinned ? "Unpin (auto-close on outside click)" : "Pin (stay open)"}
-            >
-              {isPinned ? (
-                <PinIcon sx={{ fontSize: 14 }} />
-              ) : (
-                <UnpinIcon sx={{ fontSize: 14 }} />
-              )}
-            </IconButton>
-            <Box
-              onMouseDown={handleResizeMouseDown}
-              sx={{
-                cursor: 'nesw-resize',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                p: 0.25,
-                borderRadius: 0.5,
-                color: theme.palette.text.secondary,
-                transition: 'all 0.15s ease',
-                '&:hover': {
-                  color: theme.palette.primary.main,
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                },
-              }}
-              title="Drag to resize"
-            >
-              <ResizeIcon sx={{ fontSize: 14 }} />
-            </Box>
+            <Tooltip title={isPinned ? "Unpin (auto-close on outside click)" : "Pin (stay open)"} placement="top" arrow>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPinned(!isPinned);
+                }}
+                sx={{
+                  color: isPinned ? theme.palette.primary.main : theme.palette.text.secondary,
+                  '&:hover': {
+                    color: isPinned ? theme.palette.primary.dark : theme.palette.text.primary,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  },
+                  p: 0.5,
+                }}
+              >
+                {isPinned ? (
+                  <PinIcon sx={{ fontSize: 14 }} />
+                ) : (
+                  <UnpinIcon sx={{ fontSize: 14 }} />
+                )}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Drag to resize" placement="top" arrow>
+              <Box
+                onMouseDown={handleResizeMouseDown}
+                sx={{
+                  cursor: 'nesw-resize',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 0.25,
+                  borderRadius: 0.5,
+                  color: theme.palette.text.secondary,
+                  transition: 'all 0.15s ease',
+                  '&:hover': {
+                    color: theme.palette.primary.main,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  },
+                }}
+              >
+                <ResizeIcon sx={{ fontSize: 14 }} />
+              </Box>
+            </Tooltip>
           </>
         )}
       </Box>
