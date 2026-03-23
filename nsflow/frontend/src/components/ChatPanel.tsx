@@ -1355,7 +1355,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   <Tooltip
                     title={
                       <>
-                        <strong>Loading existing Agent-Network is an Experimental feature. </strong>
+                        <strong>Editing existing Agent-Networks is an Experimental feature.</strong><br />
                         Works best for agent-networks that are "generated" by Agent Network Designer or agent-networks that do not have any python coded-tools.<br />
                         <strong>Caution!</strong> Editing might change the behavior of an Agent-Network.
                       </>
