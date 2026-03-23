@@ -67,6 +67,7 @@ export function CruseInterface({
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false);
 
   // Context hooks
   const { apiUrl } = useApiPort();
@@ -574,6 +575,7 @@ export function CruseInterface({
             onBackgroundTypeChange={onBackgroundTypeChange}
             onRefreshTheme={onRefreshTheme}
             isRefreshingTheme={isRefreshingTheme}
+            disabled={isWaitingForAI}
           />
 
       {/* Chat Panel - Floating Panel */}
@@ -607,6 +609,7 @@ export function CruseInterface({
                 await addMessageToThread(currentThread.id, messageRequest);
               }
             }}
+            onWaitingChange={setIsWaitingForAI}
           />
         ) : (
           <Box

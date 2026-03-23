@@ -69,6 +69,8 @@ export interface ThreadListProps {
   onRefreshTheme?: (userPrompt?: string, modifyPreviousBackground?: boolean) => void;
   /** Is theme refreshing */
   isRefreshingTheme?: boolean;
+  /** Disable interactions while waiting for AI */
+  disabled?: boolean;
 }
 
 /**
@@ -102,6 +104,7 @@ export function ThreadList({
   onBackgroundTypeChange: _onBackgroundTypeChange,
   onRefreshTheme,
   isRefreshingTheme = false,
+  disabled = false,
 }: ThreadListProps) {
   // Collapsed state from localStorage
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -548,6 +551,7 @@ export function ThreadList({
             <Tooltip title="Select Agent" placement="right">
               <IconButton
                 onClick={(e) => setAgentSelectorAnchorEl(e.currentTarget)}
+                disabled={disabled}
                 sx={{
                   m: 1,
                   width: 40,
@@ -605,6 +609,7 @@ export function ThreadList({
           <Tooltip title="New Thread" placement="right">
             <IconButton
               onClick={onNewThread}
+              disabled={disabled}
               sx={{
                 m: 1,
                 mt: 0,
@@ -775,6 +780,7 @@ export function ThreadList({
               selectedAgentId={selectedAgentId}
               onAgentChange={onAgentChange || (() => {})}
               cruseThemeEnabled={cruseThemeEnabled}
+              disabled={disabled}
             />
           )}
         </Box>
@@ -785,6 +791,7 @@ export function ThreadList({
         <Box sx={{ px: 1.5, pt: 1.5, pb: 0.5 }}>
           <ListItemButton
             onClick={onNewThread}
+            disabled={disabled}
             sx={{
               borderRadius: 2.5,
               py: 0.6,

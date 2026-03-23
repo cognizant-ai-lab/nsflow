@@ -59,6 +59,8 @@ export interface AgentSelectorProps {
   collapsed?: boolean;
   /** Cruse Theme enabled state */
   cruseThemeEnabled?: boolean;
+  /** Disable interactions */
+  disabled?: boolean;
 }
 
 /**
@@ -85,6 +87,7 @@ export function AgentSelector({
   onClose: externalOnClose,
   collapsed = false,
   cruseThemeEnabled = false,
+  disabled = false,
 }: AgentSelectorProps) {
   const theme = useTheme();
   const { getGlassStyles } = useGlassEffect();
@@ -125,6 +128,7 @@ export function AgentSelector({
 
   return (
     <Autocomplete
+      disabled={disabled}
       size={size}
       options={sortedAgents}
       getOptionLabel={(option) => option.name}

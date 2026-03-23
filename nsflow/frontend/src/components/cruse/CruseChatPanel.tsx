@@ -30,6 +30,7 @@ interface CruseChatPanelProps {
   currentThread: CruseThread | null;
   cruseThemeEnabled?: boolean;
   onSaveMessage: (messageRequest: any) => Promise<void>;
+  onWaitingChange?: (waiting: boolean) => void;
 }
 
 /**
@@ -70,7 +71,7 @@ function parseWidgetResponse(response: any): any {
   return response;
 }
 
-const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage }) => {
+const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage, onWaitingChange }) => {
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
   const { getGlassStyles } = useGlassEffect();
@@ -99,7 +100,11 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
-  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false); // Thinking spinner state
+  const [isWaitingForResponse, _setIsWaitingForResponse] = useState(false); // Thinking spinner state
+  const setIsWaitingForResponse = useCallback((waiting: boolean) => {
+    _setIsWaitingForResponse(waiting);
+    onWaitingChange?.(waiting);
+  }, [onWaitingChange]);
   const [previousWidget, setPreviousWidget] = useState<any>(null); // Track last widget for cruse_widget_agent
   const [currentWidgetData, setCurrentWidgetData] = useState<Record<string, unknown>>({}); // Track latest widget form data
 
@@ -668,7 +673,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
               variant="contained"
               endIcon={<SendIcon />}
               onClick={sendMessage}
-              disabled={!currentThread || !newMessage.trim()}
+              disabled={!currentThread || !newMessage.trim() || isWaitingForResponse}
               sx={{
                 minHeight: 40,
                 px: 2,
