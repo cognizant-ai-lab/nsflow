@@ -24,7 +24,7 @@ import {
   addMessage,
   getMessages,
 } from '../utils/cruse/persistence';
-import { parseMessageOrigin, parseWidgetJson } from '../utils/cruse/messageParser';
+import { parseWidgetJson } from '../utils/cruse/messageParser';
 import type {
   CruseThread,
   CruseMessage,
@@ -34,12 +34,12 @@ import type {
 
 /**
  * Converts a MessageResponse from the API to a CruseMessage for the UI.
- * Handles parsing of JSON string fields (origin, widget).
+ * Origin is already parsed by the backend; widget needs type narrowing.
  */
 function convertMessageResponseToCruseMessage(msg: MessageResponse): CruseMessage {
   return {
     ...msg,
-    origin: parseMessageOrigin(msg.origin),
+    origin: msg.origin,
     widget: msg.widget ? parseWidgetJson(msg.widget) : undefined,
     created_at: msg.created_at,
   };

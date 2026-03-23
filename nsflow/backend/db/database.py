@@ -22,63 +22,63 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
 
-# CRUSE Threads database configuration
+# NSS local database configuration
 # Supports both SQLite (default) and PostgreSQL
-THREADS_DB_TYPE = os.getenv("THREADS_DB_TYPE", "sqlite").lower()
-THREADS_DB_URL = None
+NSS_DB_TYPE = os.getenv("NSS_DB_TYPE", "sqlite").lower()
+NSS_DB_URL = None
 
-if THREADS_DB_TYPE == "postgresql":
+if NSS_DB_TYPE == "postgresql":
     # PostgreSQL configuration
-    THREADS_DB_HOST = os.getenv("THREADS_DB_HOST", "localhost")
-    THREADS_DB_PORT = os.getenv("THREADS_DB_PORT", "5432")
-    THREADS_DB_NAME = os.getenv("THREADS_DB_NAME", "threads_db")
-    THREADS_DB_USER = os.getenv("THREADS_DB_USER", "postgres")
-    THREADS_DB_PASSWORD = os.getenv("THREADS_DB_PASSWORD", "postgres")
-    THREADS_DB_URL = f"postgresql://{THREADS_DB_USER}:{THREADS_DB_PASSWORD}@{THREADS_DB_HOST}:{THREADS_DB_PORT}/{THREADS_DB_NAME}"
+    NSS_DB_HOST = os.getenv("NSS_DB_HOST", "localhost")
+    NSS_DB_PORT = os.getenv("NSS_DB_PORT", "5432")
+    NSS_DB_NAME = os.getenv("NSS_DB_NAME", "nss_db")
+    NSS_DB_USER = os.getenv("NSS_DB_USER", "postgres")
+    NSS_DB_PASSWORD = os.getenv("NSS_DB_PASSWORD", "postgres")
+    NSS_DB_URL = f"postgresql://{NSS_DB_USER}:{NSS_DB_PASSWORD}@{NSS_DB_HOST}:{NSS_DB_PORT}/{NSS_DB_NAME}"
 else:
     # SQLite configuration (default)
-    THREADS_DB_PATH = os.getenv("THREADS_DB_PATH", "./cruse_threads.db")
-    THREADS_DB_URL = f"sqlite:///{THREADS_DB_PATH}"
+    NSS_DB_PATH = os.getenv("NSS_DB_PATH", "./nss_local.db")
+    NSS_DB_URL = f"sqlite:///{NSS_DB_PATH}"
 
-# Create threads engine and session
-if THREADS_DB_URL:
-    threads_engine_args = {"connect_args": {"check_same_thread": False}} if THREADS_DB_TYPE == "sqlite" else {}
-    threads_engine = create_engine(THREADS_DB_URL, **threads_engine_args)
+# Create engine and session
+if NSS_DB_URL:
+    nss_engine_args = {"connect_args": {"check_same_thread": False}} if NSS_DB_TYPE == "sqlite" else {}
+    nss_engine = create_engine(NSS_DB_URL, **nss_engine_args)
 
     # Enable foreign key constraints for SQLite (required for CASCADE DELETE)
-    if THREADS_DB_TYPE == "sqlite":
-        @event.listens_for(threads_engine, "connect")
+    if NSS_DB_TYPE == "sqlite":
+        @event.listens_for(nss_engine, "connect")
         def set_sqlite_pragma(dbapi_conn, connection_record):
             _ = connection_record  # Unused
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
-    ThreadsSessionLocal = sessionmaker(bind=threads_engine, autocommit=False, autoflush=False)
+    NssSessionLocal = sessionmaker(bind=nss_engine, autocommit=False, autoflush=False)
 else:
-    threads_engine = None
-    ThreadsSessionLocal = None
+    nss_engine = None
+    NssSessionLocal = None
 
 
-def get_threads_db():
+def get_nss_db():
     """
-    Dependency function for FastAPI endpoints to get a threads database session.
-    Usage: db: Session = Depends(get_threads_db)
+    Dependency function for FastAPI endpoints to get a database session.
+    Usage: db: Session = Depends(get_nss_db)
     """
-    if ThreadsSessionLocal is None:
-        raise RuntimeError("Threads database is not configured")
-    db = ThreadsSessionLocal()
+    if NssSessionLocal is None:
+        raise RuntimeError("NSS database is not configured")
+    db = NssSessionLocal()
     try:
         yield db
     finally:
         db.close()
 
 
-def init_threads_db():
+def init_nss_db():
     """
-    Initialize threads database tables.
+    Initialize NSS database tables.
     Should be called on application startup.
     """
-    if threads_engine is None:
-        raise RuntimeError("Threads database engine is not configured")
-    Base.metadata.create_all(bind=threads_engine)
+    if nss_engine is None:
+        raise RuntimeError("NSS database engine is not configured")
+    Base.metadata.create_all(bind=nss_engine)
