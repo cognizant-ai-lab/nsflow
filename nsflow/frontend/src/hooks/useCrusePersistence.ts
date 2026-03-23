@@ -102,6 +102,9 @@ export function useCrusePersistence() {
     async (threadId: string) => {
       setIsLoadingMessages(true);
       setError(null);
+      // Clear messages immediately to prevent stale data from the previous thread
+      // being associated with the new thread during async gaps
+      setMessages([]);
 
       try {
         const thread = await getThread(threadId);

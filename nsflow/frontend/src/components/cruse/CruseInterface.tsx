@@ -295,6 +295,10 @@ export function CruseInterface({
       // Generate a new session_id for the new thread to prevent message mix-up
       regenerateSessionId();
 
+      // Clear messages before creating new thread for clean transition
+      setChatMessages([]);
+      persistedMessageIds.current.clear();
+
       // Use provided agentId or fall back to activeNetwork
       const agentIdToUse = agentId || activeNetwork;
       const selectedAgent = agents.find((a) => a.id === agentIdToUse);

@@ -795,12 +795,14 @@ export function ThreadList({
               alignItems: 'center',
               gap: 0.5,
               bgcolor: (theme) => theme.palette.mode === 'dark'
-                ? 'rgba(255, 255, 255, 0.08)'
-                : 'rgba(0, 0, 0, 0.04)',
-              transition: 'background-color 0.2s ease',
+                ? 'rgba(255, 255, 255, 0.10)'
+                : 'rgba(0, 0, 0, 0.08)',
+              backdropFilter: 'blur(8px)',
+              transition: 'all 0.2s ease',
               '&:hover': {
                 bgcolor: 'success.main',
                 color: 'success.contrastText',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
                 '& .MuiSvgIcon-root': { color: 'success.contrastText' },
                 '& .MuiTypography-root': { color: 'success.contrastText' },
               },
@@ -931,22 +933,25 @@ export function ThreadList({
                       px: 1.5,
                       borderRadius: 2,
                       minHeight: 0,
-                      transition: 'background-color 0.15s ease',
+                      transition: 'all 0.15s ease',
+                      backdropFilter: 'blur(8px)',
                       bgcolor: isActive
                         ? (theme) => theme.palette.mode === 'dark'
-                          ? 'rgba(255, 255, 255, 0.10)'
-                          : 'rgba(0, 0, 0, 0.06)'
+                          ? 'rgba(255, 255, 255, 0.12)'
+                          : 'rgba(0, 0, 0, 0.10)'
                         : 'transparent',
                       '&:hover': {
                         bgcolor: (theme) => theme.palette.mode === 'dark'
-                          ? 'rgba(255, 255, 255, 0.07)'
-                          : 'rgba(0, 0, 0, 0.04)',
+                          ? 'rgba(255, 255, 255, 0.10)'
+                          : 'rgba(0, 0, 0, 0.08)',
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
                       },
                       ...(isActive && {
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
                         '&:hover': {
                           bgcolor: (theme) => theme.palette.mode === 'dark'
-                            ? 'rgba(255, 255, 255, 0.10)'
-                            : 'rgba(0, 0, 0, 0.06)',
+                            ? 'rgba(255, 255, 255, 0.12)'
+                            : 'rgba(0, 0, 0, 0.10)',
                         },
                       }),
                     }}
