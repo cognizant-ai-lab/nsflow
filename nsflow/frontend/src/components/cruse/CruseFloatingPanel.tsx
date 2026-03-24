@@ -278,9 +278,9 @@ const CruseFloatingPanel: React.FC<CruseFloatingPanelProps> = ({ activeNetwork }
                 }}
               >
                 {isPinned ? (
-                  <PinIcon sx={{ fontSize: 14 }} />
+                  <PinIcon sx={{ fontSize: 18 }} />
                 ) : (
-                  <UnpinIcon sx={{ fontSize: 14 }} />
+                  <UnpinIcon sx={{ fontSize: 18 }} />
                 )}
               </IconButton>
             </Tooltip>
@@ -288,6 +288,7 @@ const CruseFloatingPanel: React.FC<CruseFloatingPanelProps> = ({ activeNetwork }
               <Box
                 onMouseDown={handleResizeMouseDown}
                 sx={{
+                  ml: 0.5,
                   cursor: 'nesw-resize',
                   display: 'flex',
                   alignItems: 'center',
@@ -302,7 +303,7 @@ const CruseFloatingPanel: React.FC<CruseFloatingPanelProps> = ({ activeNetwork }
                   },
                 }}
               >
-                <ResizeIcon sx={{ fontSize: 14 }} />
+                <ResizeIcon sx={{ fontSize: 18 }} />
               </Box>
             </Tooltip>
           </>
