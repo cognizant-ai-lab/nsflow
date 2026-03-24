@@ -32,7 +32,6 @@ export function SliderField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const minimum = schema.minimum ?? 0;
   const maximum = schema.maximum ?? 100;
   const step = schema.multipleOf ?? 1;

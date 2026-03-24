@@ -29,9 +29,8 @@ export function BooleanField({
   value,
   onChange,
   error,
-  schema,
+  schema: _schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.checked);

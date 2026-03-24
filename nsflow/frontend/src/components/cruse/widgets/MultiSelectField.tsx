@@ -46,7 +46,6 @@ export function MultiSelectField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   // Extract options from array schema items
   const itemsSchema = (schema as Record<string, unknown>).items as JSONSchema7 | undefined || {};

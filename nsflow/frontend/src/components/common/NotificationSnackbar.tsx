@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Snackbar, Alert, AlertColor, Box, LinearProgress, alpha, IconButton, Tooltip } from '@mui/material';
 import { ContentCopy as CopyIcon, Close as CloseIcon } from '@mui/icons-material';
 import { styled, keyframes } from '@mui/material/styles';

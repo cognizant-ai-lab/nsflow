@@ -35,7 +35,6 @@ import {
 import { WidgetCardDefinition } from '../../types/cruse';
 import { WidgetFormRenderer } from './WidgetFormRenderer';
 import { resolveIcon } from '../../utils/cruse';
-import { validateSchema } from '../../utils/cruse';
 import { useSnackbar } from '../../context/SnackbarContext';
 
 export interface DynamicWidgetCardProps {

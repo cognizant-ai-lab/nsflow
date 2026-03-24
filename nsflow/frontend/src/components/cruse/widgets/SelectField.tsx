@@ -33,7 +33,6 @@ export function SelectField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const options = getSelectOptions(schema);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {

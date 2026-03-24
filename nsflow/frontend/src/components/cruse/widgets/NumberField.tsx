@@ -31,7 +31,6 @@ export function NumberField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const minimum = schema.minimum;
   const maximum = schema.maximum;
   const multipleOf = schema.multipleOf;

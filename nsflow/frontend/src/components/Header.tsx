@@ -160,7 +160,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
               display: { xs: 'none', sm: 'block' }
             }}
           >
-            {isOnEditorPage ? 'Workflow Agent Network Designer' : isOnCrusePage? 'Context Reactive User Experience' : 'Neuro AI - Multi-Agent Accelerator Client'}
+            {isOnEditorPage ? 'Workflow Agent Network Designer' : isOnCrusePage? 'Context-Reactive User Experience' : 'Neuro AI - Multi-Agent Accelerator Client'}
           </Typography>
         </Box>
 

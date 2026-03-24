@@ -35,7 +35,6 @@ export function DateField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   // Extract min/max from schema
   const xUi = (schema as Record<string, unknown>)['x-ui'] as Record<string, unknown> | undefined;

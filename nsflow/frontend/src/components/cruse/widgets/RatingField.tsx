@@ -33,7 +33,6 @@ export function RatingField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const max = (schema.maximum as number | undefined) ?? 5;
 
   // Support x-ui extensions

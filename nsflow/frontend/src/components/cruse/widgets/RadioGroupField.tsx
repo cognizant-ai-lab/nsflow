@@ -40,7 +40,6 @@ export function RadioGroupField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const options = getSelectOptions(schema);
 
   // Support x-ui extensions for direction configuration

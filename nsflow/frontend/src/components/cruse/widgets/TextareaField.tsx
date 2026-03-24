@@ -33,7 +33,6 @@ export function TextareaField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const placeholder =
     schema.examples && Array.isArray(schema.examples)
       ? (schema.examples[0] as string | undefined)

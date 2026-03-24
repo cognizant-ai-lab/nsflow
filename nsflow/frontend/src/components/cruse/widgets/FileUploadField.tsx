@@ -59,7 +59,6 @@ export function FileUploadField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   // Get x-ui configuration
   const xUi = (schema as Record<string, unknown>)['x-ui'] as Record<string, unknown> | undefined;

@@ -40,7 +40,7 @@ const CRUSE_SHOW_LOGS_KEY = 'cruse_show_logs';
 const CruseContent: React.FC = () => {
   const { setIsEditorMode, activeNetwork, themeAgentName } = useChatContext();
   const { apiUrl } = useApiPort();
-  const { isDarkMode, setDarkMode } = useAppTheme();
+  const { setDarkMode } = useAppTheme();
 
   // Initialize showLogs from localStorage, default to true if not set
   const [showLogs, setShowLogs] = useState(() => {
