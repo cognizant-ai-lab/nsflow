@@ -84,7 +84,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   };
 
   const handleNavigateToEditor = () => {
-    const url = activeNetwork ? `/editor?loadNetwork=${encodeURIComponent(activeNetwork)}` : '/editor';
+    // Only pass activeNetwork to editor from the Cruse page
+    const url = (isCrusePage && activeNetwork) ? `/editor?loadNetwork=${encodeURIComponent(activeNetwork)}` : '/editor';
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
