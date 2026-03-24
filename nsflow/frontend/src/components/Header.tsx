@@ -210,7 +210,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           </Button>
 
           {/* Editor Button */}
-          <Tooltip title={activeNetwork ? "Open this agent in Editor in a new tab" : "Open Editor in a new tab"}>
+          <Tooltip title={(isCrusePage && activeNetwork) ? <span>Edit this Agent-Network<br/>Opens in a new tab</span> : <span>Design an Agent-Network from scratch<br/>Opens in a new tab</span>}>
             <Button
               variant="outlined"
               startIcon={<CodeIcon />}
