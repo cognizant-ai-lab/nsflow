@@ -379,7 +379,9 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           animated: activeEdges.has(`${edge.source}-${edge.target}`),
           style: {
             strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 4 : 1,
-            stroke: activeEdges.has(`${edge.source}-${edge.target}`) ? theme.palette.warning.main : theme.palette.divider,
+            stroke: activeEdges.has(`${edge.source}-${edge.target}`)
+              ? theme.palette.warning.main
+              : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.3)',
           },
         }))}
         onNodesChange={handleNodesChange}

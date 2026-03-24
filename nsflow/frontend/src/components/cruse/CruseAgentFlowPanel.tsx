@@ -68,6 +68,19 @@ const CruseAgentFlowPanel: React.FC<CruseAgentFlowPanelProps> = ({ network }) =>
         height: '100%',
         overflow: 'hidden',
         position: 'relative',
+        // Override AgentFlow's background for the Cruse floating panel
+        '& > div > div:first-of-type': {
+          backgroundColor: 'rgba(120, 200, 140, 0.2) !important',
+        },
+        '& .react-flow__background': {
+          opacity: 0.3,
+        },
+        // Adjust inactive edge colors for visibility against green bg
+        '& .react-flow__edge path': {
+          stroke: theme.palette.mode === 'dark'
+            ? 'rgba(255, 255, 255, 0.45) !important'
+            : 'rgba(0, 0, 0, 0.35) !important',
+        },
       }}>
         <Box sx={{
           width: INTERNAL_WIDTH,
