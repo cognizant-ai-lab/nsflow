@@ -50,12 +50,43 @@ export interface CruseFloatingPanelProps {
   activeNetwork: string;
 }
 
-const CruseFloatingPanel: React.FC<CruseFloatingPanelProps> = ({ leftOffset = 328, activeNetwork }) => {
+const SIDEBAR_COLLAPSED_KEY = 'cruse_thread_list_collapsed';
+const SIDEBAR_EXPANDED_OFFSET = 328; // 280 + 24*2
+const SIDEBAR_COLLAPSED_OFFSET = 108; // 60 + 24*2
+
+const CruseFloatingPanel: React.FC<CruseFloatingPanelProps> = ({ activeNetwork }) => {
   const [activeTab, setActiveTab] = useState<TabType | null>(null);
   const [isPinned, setIsPinned] = useState(false);
   const [hasOpenedFlow, setHasOpenedFlow] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
+
+  // Track sidebar collapsed state for dynamic left offset
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+  });
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === SIDEBAR_COLLAPSED_KEY) {
+        setSidebarCollapsed(e.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // Also poll briefly since storage events don't fire in the same tab
+    const interval = setInterval(() => {
+      const val = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+      setSidebarCollapsed(prev => prev !== val ? val : prev);
+    }, 200);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const leftOffset = sidebarCollapsed ? SIDEBAR_COLLAPSED_OFFSET : SIDEBAR_EXPANDED_OFFSET;
 
   // Persisted panel size
   const [expandedWidth, setExpandedWidth] = useState(() => {

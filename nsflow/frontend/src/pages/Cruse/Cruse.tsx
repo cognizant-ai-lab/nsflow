@@ -268,7 +268,7 @@ const CruseContent: React.FC = () => {
               />
 
               {/* Floating Panel with Logs + AgentFlow tabs */}
-              {showLogs && <CruseFloatingPanel leftOffset={328} activeNetwork={activeNetwork || ''} />}
+              {showLogs && <CruseFloatingPanel activeNetwork={activeNetwork || ''} />}
             </Box>
           </Box>
         </GlassEffectProvider>

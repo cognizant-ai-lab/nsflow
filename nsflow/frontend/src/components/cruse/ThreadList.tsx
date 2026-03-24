@@ -502,23 +502,26 @@ export function ThreadList({
 
   const glassStyles = useGlassEffect().getGlassStyles();
 
-  // Collapsed View - Icon only
-  if (isCollapsed) {
-    return (
-      <Box
-        sx={{
-          height: 'calc(100% - 48px)',
-          width: '60px',
-          maxWidth: '60px',
-          display: 'flex',
-          flexDirection: 'column',
-          ...glassStyles,
-          borderRadius: '12px',
-          margin: '24px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          overflow: 'hidden',
-        }}
-      >
+  const sidebarWidth = isCollapsed ? 60 : 280;
+
+  return (
+    <Box
+      sx={{
+        height: 'calc(100% - 48px)',
+        width: sidebarWidth,
+        minWidth: sidebarWidth,
+        display: 'flex',
+        flexDirection: 'column',
+        ...glassStyles,
+        borderRadius: '12px',
+        margin: '24px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden',
+        transition: 'width 0.2s ease-out, min-width 0.2s ease-out',
+      }}
+    >
+    {isCollapsed ? (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Expand Button at Top */}
         <Tooltip title="Expand" placement="right">
           <IconButton
@@ -722,25 +725,8 @@ export function ThreadList({
           {renderSettingsContent()}
         </Menu>
       </Box>
-    );
-  }
-
-  // Expanded View - Full ThreadList
-  return (
-    <Box
-      sx={{
-        height: 'calc(100% - 48px)',
-        width: '280px',
-        maxWidth: '280px',
-        display: 'flex',
-        flexDirection: 'column',
-        ...glassStyles,
-        borderRadius: '12px',
-        margin: '24px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden',
-      }}
-    >
+    ) : (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 280 }}>
       {/* Collapse Button + Agent Selector */}
       <Box
         sx={{
@@ -1084,6 +1070,8 @@ export function ThreadList({
           {renderSettingsContent()}
         </Menu>
       </Box>
+    </Box>
+    )}
     </Box>
   );
 }
