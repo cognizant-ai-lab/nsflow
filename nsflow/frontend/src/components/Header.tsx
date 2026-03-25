@@ -23,9 +23,9 @@ import { useChatContext } from "../context/ChatContext";
 import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
-import { Home as HomeIcon, Code as CodeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
+import { Home as HomeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon
+  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
@@ -209,24 +209,26 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             Home
           </Button>
 
-          {/* Editor Button */}
-          <Tooltip title={(isCrusePage && activeNetwork) ? <span>Edit this Agent-Network<br/>Opens in a new tab</span> : <span>Design an Agent-Network from scratch<br/>Opens in a new tab</span>}>
-            <Button
-              variant="outlined"
-              startIcon={<CodeIcon />}
-              onClick={handleNavigateToEditor}
-              sx={{
-                ...(isOnEditorPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-                borderColor: muiTheme.palette.secondary.main,
-                '&:hover': {
-                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          {/* New Button - hidden on Editor page */}
+          {!isOnEditorPage && (
+            <Tooltip title={(isCrusePage && activeNetwork) ? <span>Edit this Agent-Network<br/>Opens in a new tab</span> : <span>Design an Agent-Network from scratch<br/>Opens in a new tab</span>}>
+              <Button
+                variant="outlined"
+                startIcon={<DrawIcon />}
+                onClick={handleNavigateToEditor}
+                sx={{
+                  ...muiTheme.navButton.inactive,
                   borderColor: muiTheme.palette.secondary.main,
-                },
-              }}
-            >
-              Editor
-            </Button>
-          </Tooltip>
+                  '&:hover': {
+                    backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                    borderColor: muiTheme.palette.secondary.main,
+                  },
+                }}
+              >
+                New
+              </Button>
+            </Tooltip>
+          )}
 
           {/* CRUSE Button - Hide on Editor page, Disable if no agent selected */}
           {pluginCruse && !isOnEditorPage && (
