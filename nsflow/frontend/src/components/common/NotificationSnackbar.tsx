@@ -15,7 +15,8 @@ limitations under the License.
 */
 
 import { useEffect, useState, useRef } from 'react';
-import { Snackbar, Alert, AlertColor, Box, LinearProgress, alpha } from '@mui/material';
+import { Snackbar, Alert, AlertColor, Box, LinearProgress, alpha, IconButton, Tooltip } from '@mui/material';
+import { ContentCopy as CopyIcon, Close as CloseIcon } from '@mui/icons-material';
 import { styled, keyframes } from '@mui/material/styles';
 import {
   SNACKBAR_DURATION,
@@ -131,7 +132,12 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
   onClose,
 }) => {
   const [progress, setProgress] = useState(100);
+  const [copied, setCopied] = useState(false);
   const closeTimeoutRef = useRef<number | null>(null);
+  const isPausedRef = useRef(false);
+
+  const handleMouseEnter = () => { isPausedRef.current = true; };
+  const handleMouseLeave = () => { isPausedRef.current = false; };
 
   useEffect(() => {
     if (!notification || notification.autoHide === false) {
@@ -143,8 +149,11 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
     const decrement = (interval / duration) * 100;
 
     setProgress(100); // Reset progress
+    isPausedRef.current = false;
+    setCopied(false);
 
     const timer = setInterval(() => {
+      if (isPausedRef.current) return;
       setProgress((prev) => {
         const newProgress = prev - decrement;
         if (newProgress <= 0) {
@@ -187,22 +196,57 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       sx={{ mb: 2, mr: 2 }}
     >
-      <Box sx={{
-        position: 'relative',
-        minWidth: 320,
-        maxWidth: 500,
-        borderRadius: 3, // Match Alert border radius
-        overflow: 'hidden', // Clip progress bar to rounded corners
-      }}>
+      <Box
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        sx={{
+          position: 'relative',
+          minWidth: 320,
+          maxWidth: 500,
+          borderRadius: 3,
+          overflow: 'hidden',
+        }}
+      >
         <Alert
-          onClose={onClose}
           severity={severity}
           variant="filled"
+          action={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+              <Tooltip title={copied ? "Copied!" : "Copy to clipboard"} placement="top">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    navigator.clipboard.writeText(notification.message);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  sx={{
+                    color: 'inherit',
+                    opacity: 0.7,
+                    '&:hover': { opacity: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+                  }}
+                >
+                  <CopyIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+              <IconButton
+                size="small"
+                onClick={onClose}
+                sx={{
+                  color: 'inherit',
+                  opacity: 0.7,
+                  '&:hover': { opacity: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+                }}
+              >
+                <CloseIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+          }
           sx={(theme) => ({
             width: '100%',
-            borderRadius: 3, // 12px rounded corners
+            borderRadius: 3,
             boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1)',
-            paddingBottom: autoHide ? '16px' : '12px', // Extra space for progress bar
+            paddingBottom: autoHide ? '16px' : '12px',
             backgroundColor:
               severity === 'success' ? alpha(theme.palette.success.main, 0.4) :
               severity === 'error' ? alpha(theme.palette.error.main, 0.4) :
@@ -210,7 +254,6 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
               alpha(theme.palette.info.main, 0.9),
             '& .MuiAlert-message': {
               width: '100%',
-              wordBreak: 'break-word',
               fontSize: '0.9rem',
               fontWeight: 500,
             },
@@ -224,7 +267,21 @@ export const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
             transition: 'all 0.3s ease-in-out',
           })}
         >
-          {notification.message}
+          <Box
+            sx={{
+              maxHeight: 120,
+              overflowY: 'auto',
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+              '&::-webkit-scrollbar': { width: 4 },
+              '&::-webkit-scrollbar-thumb': {
+                backgroundColor: 'rgba(255,255,255,0.3)',
+                borderRadius: 2,
+              },
+            }}
+          >
+            {notification.message}
+          </Box>
         </Alert>
         {autoHide && (
           <GlowingProgress

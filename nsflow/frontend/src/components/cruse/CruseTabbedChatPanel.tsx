@@ -27,6 +27,7 @@ interface CruseTabbedChatPanelProps {
   currentThread: CruseThread | null;
   cruseThemeEnabled?: boolean;
   onSaveMessage: (messageRequest: any) => Promise<void>;
+  onWaitingChange?: (waiting: boolean) => void;
 }
 
 /**
@@ -38,7 +39,7 @@ interface CruseTabbedChatPanelProps {
  * - NO persistent connections to widget/theme agents
  * - CruseChatPanel handles one-time widget/theme calls
  */
-const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage }) => {
+const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage, onWaitingChange }) => {
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
   const { getGlassStyles } = useGlassEffect();
@@ -124,7 +125,7 @@ const CruseTabbedChatPanel: React.FC<CruseTabbedChatPanelProps> = ({ currentThre
       }}
     >
       {/* Only Chat Panel - no tabs needed */}
-      <CruseChatPanel currentThread={currentThread} cruseThemeEnabled={cruseThemeEnabled} onSaveMessage={onSaveMessage} />
+      <CruseChatPanel currentThread={currentThread} cruseThemeEnabled={cruseThemeEnabled} onSaveMessage={onSaveMessage} onWaitingChange={onWaitingChange} />
     </Paper>
   );
 };

@@ -19,7 +19,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Box } from "@mui/material";
 import Header from "../../components/Header";
 import { CruseInterface } from "../../components/cruse/CruseInterface";
-import EditorLogsPanel from "../../components/EditorLogsPanel";
+import CruseFloatingPanel from "../../components/cruse/CruseFloatingPanel";
 import { BackgroundEngine, type BackgroundSchema } from "../../components/cruse/backgrounds";
 import { ApiPortProvider, useApiPort } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
@@ -31,13 +31,16 @@ import {
   refreshTheme,
   getThemePreferences,
   saveThemePreferences,
+  isBackgroundDark,
 } from "../../utils/cruse/themeManager";
+import { useTheme as useAppTheme } from "../../context/ThemeContext";
 
 const CRUSE_SHOW_LOGS_KEY = 'cruse_show_logs';
 
 const CruseContent: React.FC = () => {
   const { setIsEditorMode, activeNetwork, themeAgentName } = useChatContext();
   const { apiUrl } = useApiPort();
+  const { setDarkMode } = useAppTheme();
 
   // Initialize showLogs from localStorage, default to true if not set
   const [showLogs, setShowLogs] = useState(() => {
@@ -56,6 +59,15 @@ const CruseContent: React.FC = () => {
 
   // Current background schema
   const [backgroundSchema, setBackgroundSchema] = useState<BackgroundSchema | null>(null);
+
+  // Auto-switch MUI light/dark mode based on background brightness
+  // Only triggers when backgroundSchema changes (not on manual toggle)
+  useEffect(() => {
+    if (!backgroundSchema || !cruseThemeEnabled) return;
+    const shouldBeDark = isBackgroundDark(backgroundSchema);
+    setDarkMode(shouldBeDark);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backgroundSchema, cruseThemeEnabled]);
 
   // Theme refreshing state
   const [isRefreshingTheme, setIsRefreshingTheme] = useState(false);
@@ -255,8 +267,8 @@ const CruseContent: React.FC = () => {
                 isRefreshingTheme={isRefreshingTheme}
               />
 
-              {/* Expandable Logs Panel in bottom center-left */}
-              {showLogs && <EditorLogsPanel leftOffset={328} />}
+              {/* Floating Panel with Logs + AgentFlow tabs */}
+              {showLogs && <CruseFloatingPanel activeNetwork={activeNetwork || ''} />}
             </Box>
           </Box>
         </GlassEffectProvider>

@@ -46,7 +46,6 @@ export function MultiSelectField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   // Extract options from array schema items
   const itemsSchema = (schema as Record<string, unknown>).items as JSONSchema7 | undefined || {};
@@ -74,7 +73,7 @@ export function MultiSelectField({
       disabled={disabled}
       variant="outlined"
       size="small"
-      sx={{ mb: 2 }}
+      sx={{ mb: 1 }}
     >
       <InputLabel id={`${name}-label`}>{label}</InputLabel>
       <Select
@@ -102,8 +101,8 @@ export function MultiSelectField({
           </MenuItem>
         ))}
       </Select>
-      {(error || description) && (
-        <FormHelperText>{error || description}</FormHelperText>
+      {error && (
+        <FormHelperText>{error}</FormHelperText>
       )}
     </FormControl>
   );

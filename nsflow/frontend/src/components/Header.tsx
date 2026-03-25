@@ -84,7 +84,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   };
 
   const handleNavigateToEditor = () => {
-    const url = activeNetwork ? `/editor?loadNetwork=${encodeURIComponent(activeNetwork)}` : '/editor';
+    // Only pass activeNetwork to editor from the Cruse page
+    const url = (isCrusePage && activeNetwork) ? `/editor?loadNetwork=${encodeURIComponent(activeNetwork)}` : '/editor';
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -160,7 +161,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
               display: { xs: 'none', sm: 'block' }
             }}
           >
-            {isOnEditorPage ? 'Workflow Agent Network Designer' : isOnCrusePage? 'Context Reactive User Experience' : 'Neuro AI - Multi-Agent Accelerator Client'}
+            {isOnEditorPage ? 'Workflow Agent Network Designer' : isOnCrusePage? 'Context-Reactive User Experience' : 'Neuro AI - Multi-Agent Accelerator Client'}
           </Typography>
         </Box>
 
@@ -209,7 +210,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           </Button>
 
           {/* Editor Button */}
-          <Tooltip title={activeNetwork ? "Open this agent in Editor in a new tab" : "Open Editor in a new tab"}>
+          <Tooltip title={(isCrusePage && activeNetwork) ? <span>Edit this Agent-Network<br/>Opens in a new tab</span> : <span>Design an Agent-Network from scratch<br/>Opens in a new tab</span>}>
             <Button
               variant="outlined"
               startIcon={<CodeIcon />}

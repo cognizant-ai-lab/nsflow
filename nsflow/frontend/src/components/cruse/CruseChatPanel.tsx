@@ -30,6 +30,7 @@ interface CruseChatPanelProps {
   currentThread: CruseThread | null;
   cruseThemeEnabled?: boolean;
   onSaveMessage: (messageRequest: any) => Promise<void>;
+  onWaitingChange?: (waiting: boolean) => void;
 }
 
 /**
@@ -70,7 +71,7 @@ function parseWidgetResponse(response: any): any {
   return response;
 }
 
-const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage }) => {
+const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThemeEnabled = false, onSaveMessage, onWaitingChange }) => {
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
   const { getGlassStyles } = useGlassEffect();
@@ -99,7 +100,11 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
-  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false); // Thinking spinner state
+  const [isWaitingForResponse, _setIsWaitingForResponse] = useState(false); // Thinking spinner state
+  const setIsWaitingForResponse = useCallback((waiting: boolean) => {
+    _setIsWaitingForResponse(waiting);
+    onWaitingChange?.(waiting);
+  }, [onWaitingChange]);
   const [previousWidget, setPreviousWidget] = useState<any>(null); // Track last widget for cruse_widget_agent
   const [currentWidgetData, setCurrentWidgetData] = useState<Record<string, unknown>>({}); // Track latest widget form data
 
@@ -270,8 +275,13 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
   };
 
   const handleWidgetSubmit = (data: Record<string, unknown>) => {
-    // Format widget data as a readable message
+    // Format widget data as a readable message, excluding empty optional fields
     const formattedMessage = Object.entries(data)
+      .filter(([_, value]) => {
+        if (value === null || value === undefined || value === '') return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      })
       .map(([key, value]) => {
         // Format dates nicely
         if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
@@ -288,6 +298,8 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
 
     console.log('[CRUSE] Widget submission:', data);
     sendMessageWithText(formattedMessage);
+    // Clear tracked widget data so it doesn't bleed into the next text message
+    setCurrentWidgetData({});
   };
 
   const copyToClipboard = (text: string, index: number) => {
@@ -306,6 +318,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
     setIsWaitingForResponse(false); // Clear thinking spinner when thread changes
     setPreviousWidget(null); // Clear previous widget for new thread
     setCurrentWidgetData({}); // Clear widget data when switching threads
+    setSampleQueriesExpanded(true); // Re-expand sample queries for new/switched thread
   }, [currentThread?.id]);
 
   useEffect(() => {
@@ -660,7 +673,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
               variant="contained"
               endIcon={<SendIcon />}
               onClick={sendMessage}
-              disabled={!currentThread || !newMessage.trim()}
+              disabled={!currentThread || !newMessage.trim() || isWaitingForResponse}
               sx={{
                 minHeight: 40,
                 px: 2,

@@ -33,7 +33,6 @@ export function RatingField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const max = (schema.maximum as number | undefined) ?? 5;
 
   // Support x-ui extensions
@@ -48,7 +47,7 @@ export function RatingField({
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 1 }}>
       <FormLabel error={!!error}>
         {label}{required ? ' *' : ''}
       </FormLabel>
@@ -72,9 +71,9 @@ export function RatingField({
         )}
       </Box>
 
-      {(error || description) && (
-        <FormHelperText error={!!error}>
-          {error || description}
+      {error && (
+        <FormHelperText error>
+          {error}
         </FormHelperText>
       )}
     </Box>

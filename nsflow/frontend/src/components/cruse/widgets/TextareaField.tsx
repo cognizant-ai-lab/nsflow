@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { TextField as MuiTextField } from '@mui/material';
+import { TextField as MuiTextField, InputAdornment, IconButton } from '@mui/material';
+import { Clear as ClearIcon } from '@mui/icons-material';
 import { WidgetFieldProps } from '../../../types/cruse';
 
 /**
@@ -32,7 +33,6 @@ export function TextareaField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const placeholder =
     schema.examples && Array.isArray(schema.examples)
       ? (schema.examples[0] as string | undefined)
@@ -56,6 +56,8 @@ export function TextareaField({
     ? { rows } // Fixed rows
     : { minRows: minRows || 4, maxRows }; // Dynamic rows with min/max
 
+  const hasValue = value !== null && value !== undefined && value !== '';
+
   return (
     <MuiTextField
       fullWidth
@@ -67,7 +69,7 @@ export function TextareaField({
       value={value || ''}
       onChange={handleChange}
       error={!!error}
-      helperText={error || description}
+      helperText={error || undefined}
       placeholder={placeholder}
       {...rowsProps}
       inputProps={{
@@ -75,9 +77,18 @@ export function TextareaField({
         maxLength,
         pattern,
       }}
+      InputProps={{
+        endAdornment: hasValue && !disabled ? (
+          <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
+            <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+              <ClearIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </InputAdornment>
+        ) : undefined,
+      }}
       variant="outlined"
       size="small"
-      sx={{ mb: 2 }}
+      sx={{ mb: 1 }}
     />
   );
 }

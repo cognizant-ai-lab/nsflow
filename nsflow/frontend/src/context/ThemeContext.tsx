@@ -334,6 +334,7 @@ const augmentedDarkTheme = createTheme(darkTheme, {
 interface ThemeContextType {
   isDarkMode: boolean;
   toggleTheme: () => void;
+  setDarkMode: (isDark: boolean) => void;
   theme: Theme;
 }
 
@@ -419,10 +420,14 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }: ThemeP
     setIsDarkMode(!isDarkMode);
   };
 
+  const setDarkMode = (isDark: boolean) => {
+    setIsDarkMode(isDark);
+  };
+
   const theme = isDarkMode ? augmentedDarkTheme : augmentedLightTheme;
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, theme }}>
+    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, setDarkMode, theme }}>
       <MuiThemeProvider theme={theme}>
         <CssBaseline />
         {children}

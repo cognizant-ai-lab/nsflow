@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { TextField as MuiTextField } from '@mui/material';
+import { TextField as MuiTextField, InputAdornment, IconButton } from '@mui/material';
+import { Clear as ClearIcon } from '@mui/icons-material';
 import { WidgetFieldProps } from '../../../types/cruse';
 
 /**
@@ -31,7 +32,6 @@ export function TextField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const placeholder =
     schema.examples && Array.isArray(schema.examples)
       ? (schema.examples[0] as string | undefined)
@@ -44,6 +44,8 @@ export function TextField({
     onChange(event.target.value);
   };
 
+  const hasValue = value !== null && value !== undefined && value !== '';
+
   return (
     <MuiTextField
       fullWidth
@@ -54,17 +56,26 @@ export function TextField({
       value={value || ''}
       onChange={handleChange}
       error={!!error}
-      helperText={error || description}
+      helperText={error || undefined}
       placeholder={placeholder}
       inputProps={{
         minLength,
         maxLength,
         pattern,
       }}
+      InputProps={{
+        endAdornment: hasValue && !disabled ? (
+          <InputAdornment position="end">
+            <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+              <ClearIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </InputAdornment>
+        ) : undefined,
+      }}
       variant="outlined"
-      size="medium"
+      size="small"
       sx={{
-        mb: 2,
+        mb: 1,
         '& .MuiOutlinedInput-root': {
           borderRadius: 2,
           transition: 'all 0.3s ease',

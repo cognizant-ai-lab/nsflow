@@ -35,7 +35,6 @@ export function DateField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   // Extract min/max from schema
   const xUi = (schema as Record<string, unknown>)['x-ui'] as Record<string, unknown> | undefined;
@@ -55,7 +54,7 @@ export function DateField({
   };
 
   return (
-    <FormControl fullWidth error={!!error} sx={{ mb: 2 }}>
+    <FormControl fullWidth error={!!error} sx={{ mb: 1 }}>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <DatePicker
           label={label}
@@ -69,7 +68,7 @@ export function DateField({
               name,
               required,
               error: !!error,
-              helperText: error || description, // Show error or description
+              helperText: error || undefined,
               variant: 'outlined',
               size: 'small',
             },

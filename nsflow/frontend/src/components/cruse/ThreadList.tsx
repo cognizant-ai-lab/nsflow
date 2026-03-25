@@ -16,7 +16,8 @@ limitations under the License.
 
 import { useState, useEffect } from 'react';
 import { Box, List, ListItem, ListItemButton, ListItemText, ListItemIcon, IconButton, Divider,
-  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, useTheme, Checkbox
+  Typography, CircularProgress, Menu, MenuItem, Switch, Tooltip, Slider, TextField, useTheme, Checkbox,
+  Popover
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Chat as ChatIcon, SettingsTwoTone as SettingsIcon,
   DeleteSweep as DeleteSweepIcon, Visibility as VisibilityIcon, Refresh as RefreshIcon, ChevronLeft as CollapseIcon,
@@ -68,6 +69,8 @@ export interface ThreadListProps {
   onRefreshTheme?: (userPrompt?: string, modifyPreviousBackground?: boolean) => void;
   /** Is theme refreshing */
   isRefreshingTheme?: boolean;
+  /** Disable interactions while waiting for AI */
+  disabled?: boolean;
 }
 
 /**
@@ -101,6 +104,7 @@ export function ThreadList({
   onBackgroundTypeChange: _onBackgroundTypeChange,
   onRefreshTheme,
   isRefreshingTheme = false,
+  disabled = false,
 }: ThreadListProps) {
   // Collapsed state from localStorage
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -117,7 +121,8 @@ export function ThreadList({
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const settingsOpen = Boolean(settingsAnchorEl);
 
-  const [agentSelectorOpen, setAgentSelectorOpen] = useState(false);
+  const [agentSelectorAnchorEl, setAgentSelectorAnchorEl] = useState<null | HTMLElement>(null);
+  const agentSelectorOpen = Boolean(agentSelectorAnchorEl);
   const theme = useTheme();
 
   // Theme refresh prompt state - stored per targetNetwork (not selectedAgentId)
@@ -477,7 +482,7 @@ export function ThreadList({
       >
         <VisibilityIcon fontSize="small" sx={{ color: 'primary.main' }} />
         <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, color: 'text.primary' }}>
-          Show Logs
+          Show Floating Menu
         </Typography>
         <Switch
           checked={showLogs}
@@ -497,23 +502,26 @@ export function ThreadList({
 
   const glassStyles = useGlassEffect().getGlassStyles();
 
-  // Collapsed View - Icon only
-  if (isCollapsed) {
-    return (
-      <Box
-        sx={{
-          height: 'calc(100% - 48px)',
-          width: '60px',
-          maxWidth: '60px',
-          display: 'flex',
-          flexDirection: 'column',
-          ...glassStyles,
-          borderRadius: '12px',
-          margin: '24px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          overflow: 'hidden',
-        }}
-      >
+  const sidebarWidth = isCollapsed ? 60 : 280;
+
+  return (
+    <Box
+      sx={{
+        height: 'calc(100% - 48px)',
+        width: sidebarWidth,
+        minWidth: sidebarWidth,
+        display: 'flex',
+        flexDirection: 'column',
+        ...glassStyles,
+        borderRadius: '12px',
+        margin: '24px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden',
+        transition: 'width 0.2s ease-out, min-width 0.2s ease-out',
+      }}
+    >
+    {isCollapsed ? (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Expand Button at Top */}
         <Tooltip title="Expand" placement="right">
           <IconButton
@@ -542,34 +550,11 @@ export function ThreadList({
           </Box>
         ) : (
           <>
-            {/* Hidden AgentSelector - controlled externally */}
-            <Box
-              sx={{
-                position: 'absolute',
-                left: -9999,
-                opacity: 0,
-                pointerEvents: agentSelectorOpen ? 'auto' : 'none',
-              }}
-            >
-              <AgentSelector
-                agents={agents}
-                selectedAgentId={selectedAgentId}
-                onAgentChange={(agentId) => {
-                  if (onAgentChange) {
-                    onAgentChange(agentId);
-                  }
-                }}
-                open={agentSelectorOpen}
-                onOpen={() => setAgentSelectorOpen(true)}
-                onClose={() => setAgentSelectorOpen(false)}
-                cruseThemeEnabled={cruseThemeEnabled}
-              />
-            </Box>
-
-            {/* Visible Search Icon Button */}
+            {/* Search Icon Button */}
             <Tooltip title="Select Agent" placement="right">
               <IconButton
-                onClick={() => setAgentSelectorOpen(true)}
+                onClick={(e) => setAgentSelectorAnchorEl(e.currentTarget)}
+                disabled={disabled}
                 sx={{
                   m: 1,
                   width: 40,
@@ -584,6 +569,41 @@ export function ThreadList({
                 <SearchIcon />
               </IconButton>
             </Tooltip>
+
+            {/* AgentSelector in a Popover */}
+            <Popover
+              open={agentSelectorOpen}
+              anchorEl={agentSelectorAnchorEl}
+              onClose={() => setAgentSelectorAnchorEl(null)}
+              anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              slotProps={{
+                paper: {
+                  sx: {
+                    p: 1.5,
+                    minWidth: 280,
+                    bgcolor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 3,
+                    boxShadow: theme.palette.mode === 'dark'
+                      ? '0 8px 32px rgba(0, 0, 0, 0.5)'
+                      : '0 8px 32px rgba(0, 0, 0, 0.12)',
+                  },
+                },
+              }}
+            >
+              <AgentSelector
+                agents={agents}
+                selectedAgentId={selectedAgentId}
+                onAgentChange={(agentId) => {
+                  if (onAgentChange) {
+                    onAgentChange(agentId);
+                  }
+                  setAgentSelectorAnchorEl(null);
+                }}
+                cruseThemeEnabled={cruseThemeEnabled}
+              />
+            </Popover>
           </>
         )}
 
@@ -592,6 +612,7 @@ export function ThreadList({
           <Tooltip title="New Thread" placement="right">
             <IconButton
               onClick={onNewThread}
+              disabled={disabled}
               sx={{
                 m: 1,
                 mt: 0,
@@ -687,8 +708,16 @@ export function ThreadList({
             paper: {
               sx: {
                 minWidth: 220,
-                borderRadius: 2,
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+                borderRadius: 3,
+                border: (theme) => `1px solid ${
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.06)'
+                }`,
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  : '0 8px 32px rgba(0, 0, 0, 0.12)',
+                bgcolor: 'background.paper',
               },
             },
           }}
@@ -696,25 +725,8 @@ export function ThreadList({
           {renderSettingsContent()}
         </Menu>
       </Box>
-    );
-  }
-
-  // Expanded View - Full ThreadList
-  return (
-    <Box
-      sx={{
-        height: 'calc(100% - 48px)',
-        width: '280px',
-        maxWidth: '280px',
-        display: 'flex',
-        flexDirection: 'column',
-        ...glassStyles,
-        borderRadius: '12px',
-        margin: '24px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden',
-      }}
-    >
+    ) : (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 280 }}>
       {/* Collapse Button + Agent Selector */}
       <Box
         sx={{
@@ -754,6 +766,7 @@ export function ThreadList({
               selectedAgentId={selectedAgentId}
               onAgentChange={onAgentChange || (() => {})}
               cruseThemeEnabled={cruseThemeEnabled}
+              disabled={disabled}
             />
           )}
         </Box>
@@ -764,35 +777,39 @@ export function ThreadList({
         <Box sx={{ px: 1.5, pt: 1.5, pb: 0.5 }}>
           <ListItemButton
             onClick={onNewThread}
+            disabled={disabled}
             sx={{
-              borderRadius: 3,
-              border: 1,
-              borderColor: 'primary.main',
-              py: 0.4,
-              px: 1,
+              borderRadius: 2.5,
+              py: 0.6,
+              px: 1.5,
               minHeight: 0,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
               gap: 0.5,
+              bgcolor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.10)'
+                : 'rgba(0, 0, 0, 0.08)',
+              backdropFilter: 'blur(8px)',
+              transition: 'all 0.2s ease',
               '&:hover': {
-                bgcolor: 'primary.main',
-                color: 'primary.contrastText',
-                '& .MuiSvgIcon-root': {
-                  color: 'text.primary',
-                },
+                bgcolor: 'success.main',
+                color: 'success.contrastText',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                '& .MuiSvgIcon-root': { color: 'success.contrastText' },
+                '& .MuiTypography-root': { color: 'success.contrastText' },
+              },
+              '&:active': {
+                bgcolor: 'success.dark',
               },
             }}
           >
-            <AddIcon sx={{ fontSize: '1rem' }} color="primary" />
+            <AddIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
             <Typography
               sx={{
-                fontWeight: 600,
-                fontSize: '0.85rem',
-                color: 'text.primary',
-                '.MuiListItemButton-root:hover &': {
-                  color: 'inherit',
-                },
+                fontWeight: 500,
+                fontSize: '0.8rem',
+                color: 'text.secondary',
               }}
             >
               New Thread
@@ -876,23 +893,29 @@ export function ThreadList({
                       }}
                       sx={{
                         opacity: isActive ? 1 : 0,
-                        transition: 'opacity 0.2s',
+                        transition: 'all 0.2s ease',
+                        color: 'text.secondary',
                         '.MuiListItem-root:hover &': {
                           opacity: 1,
                         },
+                        '&:hover': {
+                          color: 'error.main',
+                          bgcolor: (theme) => theme.palette.mode === 'dark'
+                            ? 'rgba(244, 67, 54, 0.15)'
+                            : 'rgba(244, 67, 54, 0.10)',
+                          boxShadow: '0 0 8px rgba(244, 67, 54, 0.3)',
+                        },
                         mr: 0.5,
+                        borderRadius: '50%',
                       }}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   }
                   sx={{
-                    mb: 0.5,
+                    mb: 0.25,
                     borderRadius: 2,
                     overflow: 'hidden',
-                    '&:hover': {
-                      bgcolor: 'action.hover',
-                    },
                   }}
                 >
                   <ListItemButton
@@ -903,10 +926,25 @@ export function ThreadList({
                       px: 1.5,
                       borderRadius: 2,
                       minHeight: 0,
+                      transition: 'all 0.15s ease',
+                      backdropFilter: 'blur(8px)',
+                      bgcolor: isActive
+                        ? (theme) => theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.12)'
+                          : 'rgba(0, 0, 0, 0.10)'
+                        : 'transparent',
+                      '&:hover': {
+                        bgcolor: (theme) => theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.10)'
+                          : 'rgba(0, 0, 0, 0.08)',
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
+                      },
                       ...(isActive && {
-                        bgcolor: 'action.selected',
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
                         '&:hover': {
-                          bgcolor: 'action.selected',
+                          bgcolor: (theme) => theme.palette.mode === 'dark'
+                            ? 'rgba(255, 255, 255, 0.12)'
+                            : 'rgba(0, 0, 0, 0.10)',
                         },
                       }),
                     }}
@@ -1015,10 +1053,16 @@ export function ThreadList({
               sx: {
                 mt: -1,
                 minWidth: 220,
-                borderRadius: 2,
+                borderRadius: 3,
+                border: (theme) => `1px solid ${
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.06)'
+                }`,
                 boxShadow: (theme) => theme.palette.mode === 'dark'
-                  ? '0 4px 20px rgba(0, 0, 0, 0.5)'
-                  : '0 4px 20px rgba(0, 0, 0, 0.15)',
+                  ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  : '0 8px 32px rgba(0, 0, 0, 0.12)',
+                bgcolor: 'background.paper',
               },
             },
           }}
@@ -1026,6 +1070,8 @@ export function ThreadList({
           {renderSettingsContent()}
         </Menu>
       </Box>
+    </Box>
+    )}
     </Box>
   );
 }

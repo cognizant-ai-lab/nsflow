@@ -30,16 +30,15 @@ export function CheckboxField({
   value,
   onChange,
   error,
-  schema,
+  schema: _schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.checked);
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 1 }}>
       <FormControlLabel
         control={
           <Checkbox
@@ -52,9 +51,9 @@ export function CheckboxField({
         }
         label={`${label}${required ? ' *' : ''}`}
       />
-      {(error || description) && (
-        <FormHelperText error={!!error}>
-          {error || description}
+      {error && (
+        <FormHelperText error>
+          {error}
         </FormHelperText>
       )}
     </Box>

@@ -31,7 +31,6 @@ export function NumberField({
   error,
   schema,
 }: WidgetFieldProps) {
-  const description = schema.description;
   const minimum = schema.minimum;
   const maximum = schema.maximum;
   const multipleOf = schema.multipleOf;
@@ -63,7 +62,7 @@ export function NumberField({
       value={value ?? ''}
       onChange={handleChange}
       error={!!error}
-      helperText={error || description}
+      helperText={error || undefined}
       inputProps={{
         min: minimum,
         max: maximum,
@@ -71,7 +70,7 @@ export function NumberField({
       }}
       variant="outlined"
       size="small"
-      sx={{ mb: 2 }}
+      sx={{ mb: 1 }}
     />
   );
 }

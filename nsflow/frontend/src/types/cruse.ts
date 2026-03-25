@@ -83,7 +83,7 @@ export interface MessageResponse {
   id: string;
   thread_id: string;
   sender: MessageSender;
-  origin: string; // JSON string from backend
+  origin: MessageOrigin[]; // Parsed array from backend
   text: string;
   widget?: Record<string, unknown>; // JSON object from backend
   created_at: string;

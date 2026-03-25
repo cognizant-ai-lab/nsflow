@@ -17,26 +17,6 @@ limitations under the License.
 import { CruseMessage, MessageOrigin, WidgetCardDefinition } from '../../types/cruse';
 
 /**
- * Parses the origin field from backend (JSON string) to MessageOrigin array.
- *
- * @param origin - JSON string or array from backend
- * @returns Parsed MessageOrigin array
- */
-export function parseMessageOrigin(origin: string | MessageOrigin[]): MessageOrigin[] {
-  if (Array.isArray(origin)) {
-    return origin;
-  }
-
-  try {
-    const parsed = JSON.parse(origin);
-    return Array.isArray(parsed) ? parsed : [parsed];
-  } catch (error) {
-    console.error('Failed to parse message origin:', error);
-    return [];
-  }
-}
-
-/**
  * Parses widget JSON from backend response.
  *
  * @param widgetJson - JSON string or object from backend

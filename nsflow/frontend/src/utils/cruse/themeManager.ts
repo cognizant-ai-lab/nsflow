@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import type { BackgroundSchema } from '../../components/cruse/backgrounds/types';
+import type { BackgroundSchema, CssDoodleBackgroundSchema, GradientBackgroundSchema } from '../../components/cruse/backgrounds/types';
+import { isCssDoodleSchema, isGradientSchema } from '../../components/cruse/backgrounds/types';
 import { fetchAgentTheme, saveAgentTheme } from '../../components/cruse/backgrounds/utils/themeLoader';
 
 // LocalStorage keys for theme preferences
@@ -342,4 +343,110 @@ export function saveThemePreferences(_enabled: boolean, _backgroundType: 'static
   localStorage.setItem(CRUSE_THEME_ENABLED_KEY, 'true');
   // Always save as 'dynamic' (ignore the passed value)
   localStorage.setItem(CRUSE_BACKGROUND_TYPE_KEY, 'dynamic');
+}
+
+/**
+ * Parse a hex color string to RGB values.
+ * Supports #RGB, #RRGGBB, #RRGGBBAA formats.
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const cleaned = hex.replace('#', '');
+  let r: number, g: number, b: number;
+
+  if (cleaned.length === 3) {
+    r = parseInt(cleaned[0] + cleaned[0], 16);
+    g = parseInt(cleaned[1] + cleaned[1], 16);
+    b = parseInt(cleaned[2] + cleaned[2], 16);
+  } else if (cleaned.length >= 6) {
+    r = parseInt(cleaned.substring(0, 2), 16);
+    g = parseInt(cleaned.substring(2, 4), 16);
+    b = parseInt(cleaned.substring(4, 6), 16);
+  } else {
+    return null;
+  }
+
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+  return { r, g, b };
+}
+
+/**
+ * Calculate relative luminance of a color (0 = black, 1 = white).
+ * Uses the WCAG formula.
+ */
+function luminance(r: number, g: number, b: number): number {
+  const [rs, gs, bs] = [r / 255, g / 255, b / 255].map((c) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  );
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Extract hex color strings from a text (e.g., CSS rules, vars).
+ */
+function extractHexColors(text: string): string[] {
+  const matches = text.match(/#[0-9a-fA-F]{3,8}\b/g);
+  return matches || [];
+}
+
+/**
+ * Determine if a background schema represents a light or dark background.
+ * Returns true if the background is dark (MUI should use dark mode).
+ *
+ * Logic:
+ * 1. If the schema has an explicit `theme` field, use that.
+ * 2. Otherwise, extract colors from the schema and compute average luminance.
+ *    Luminance > 0.5 = light background, <= 0.5 = dark background.
+ */
+export function isBackgroundDark(schema: BackgroundSchema): boolean {
+  // 1. Use explicit theme field if present
+  if (schema.theme === 'light') return false;
+  if (schema.theme === 'dark') return true;
+
+  // 2. Extract colors and compute average luminance
+  const colors: string[] = [];
+
+  if (isGradientSchema(schema)) {
+    for (const stop of (schema as GradientBackgroundSchema).colors) {
+      colors.push(stop.color);
+    }
+  } else if (isCssDoodleSchema(schema)) {
+    const doodle = schema as CssDoodleBackgroundSchema;
+    // Extract from vars (especially --bg which is typically the main background)
+    if (doodle.vars) {
+      // Prioritize --bg if it exists as it's the main background color
+      if (doodle.vars['--bg']) {
+        const rgb = hexToRgb(doodle.vars['--bg']);
+        if (rgb) {
+          // --bg alone is a strong signal
+          return luminance(rgb.r, rgb.g, rgb.b) <= 0.5;
+        }
+      }
+      for (const val of Object.values(doodle.vars)) {
+        colors.push(...extractHexColors(val));
+      }
+    }
+    // Also extract from rules string
+    if (doodle.rules) {
+      colors.push(...extractHexColors(doodle.rules));
+    }
+  }
+
+  if (colors.length === 0) {
+    // Default to dark mode if we can't determine
+    return true;
+  }
+
+  // Compute average luminance
+  let totalLum = 0;
+  let count = 0;
+  for (const color of colors) {
+    const rgb = hexToRgb(color);
+    if (rgb) {
+      totalLum += luminance(rgb.r, rgb.g, rgb.b);
+      count++;
+    }
+  }
+
+  if (count === 0) return true;
+  return (totalLum / count) <= 0.5;
 }

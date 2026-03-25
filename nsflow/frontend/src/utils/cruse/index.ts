@@ -23,7 +23,6 @@ export {
 
 // Message parsing utilities
 export {
-  parseMessageOrigin,
   parseWidgetJson,
   hasWidget,
   getToolName,

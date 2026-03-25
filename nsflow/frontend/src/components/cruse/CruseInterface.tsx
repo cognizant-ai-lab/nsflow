@@ -25,7 +25,7 @@ import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { useNeuroSan } from '../../context/NeuroSanContext';
 import { useSnackbar } from '../../context/SnackbarContext';
-import { SNACKBAR_DURATION, NOTIFICATION_TEXT_TRUNCATE_LENGTH } from '../../constants/notifications';
+import { SNACKBAR_DURATION } from '../../constants/notifications';
 import type { MessageOrigin } from '../../types/cruse';
 
 export interface CruseInterfaceProps {
@@ -67,6 +67,7 @@ export function CruseInterface({
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [rootToolName, setRootToolName] = useState<string>(''); // Root agent name for origin
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false);
 
   // Context hooks
   const { apiUrl } = useApiPort();
@@ -295,6 +296,10 @@ export function CruseInterface({
       // Generate a new session_id for the new thread to prevent message mix-up
       regenerateSessionId();
 
+      // Clear messages before creating new thread for clean transition
+      setChatMessages([]);
+      persistedMessageIds.current.clear();
+
       // Use provided agentId or fall back to activeNetwork
       const agentIdToUse = agentId || activeNetwork;
       const selectedAgent = agents.find((a) => a.id === agentIdToUse);
@@ -423,19 +428,9 @@ export function CruseInterface({
         // Delete the thread
         await deleteThread(threadId);
 
-        // Truncate strings using constant
-        const truncatedTitle =
-          threadTitle.length > NOTIFICATION_TEXT_TRUNCATE_LENGTH
-            ? threadTitle.slice(0, NOTIFICATION_TEXT_TRUNCATE_LENGTH) + '...'
-            : threadTitle;
-        const truncatedAgent =
-          agentName.length > NOTIFICATION_TEXT_TRUNCATE_LENGTH
-            ? agentName.slice(0, NOTIFICATION_TEXT_TRUNCATE_LENGTH) + '...'
-            : agentName;
-
         // Show success notification
         showSnackbar({
-          message: `Thread: ${truncatedTitle} deleted for agent: ${truncatedAgent}`,
+          message: `Thread: ${threadTitle} deleted for agent: ${agentName}`,
           severity: 'success',
           duration: SNACKBAR_DURATION,
         });
@@ -580,6 +575,7 @@ export function CruseInterface({
             onBackgroundTypeChange={onBackgroundTypeChange}
             onRefreshTheme={onRefreshTheme}
             isRefreshingTheme={isRefreshingTheme}
+            disabled={isWaitingForAI}
           />
 
       {/* Chat Panel - Floating Panel */}
@@ -613,6 +609,7 @@ export function CruseInterface({
                 await addMessageToThread(currentThread.id, messageRequest);
               }
             }}
+            onWaitingChange={setIsWaitingForAI}
           />
         ) : (
           <Box
