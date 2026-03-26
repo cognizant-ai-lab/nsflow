@@ -230,8 +230,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </Tooltip>
           )}
 
-          {/* CRUSE Button - Hide on Editor page, Disable if no agent selected */}
-          {pluginCruse && !isOnEditorPage && (
+          {/* CRUSE Button - Hide on Editor and Cruse pages, Disable if no agent selected */}
+          {pluginCruse && !isOnEditorPage && !isOnCrusePage && (
             <Tooltip
               title={!activeNetwork ? "Select an agent first" : "Context-Reactive User Experience"}
               arrow
