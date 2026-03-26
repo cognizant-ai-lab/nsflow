@@ -32,6 +32,7 @@ interface NetworkAgentEditorPanelProps {
   selectedDesignId: string;
   selectedAgentName: string | null;
   onAgentUpdated: () => void;
+  onClose?: () => void;
   enableEditing?: boolean; // Flag to control editing capabilities
 }
 
@@ -39,6 +40,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   selectedDesignId,
   selectedAgentName,
   onAgentUpdated,
+  onClose,
   enableEditing = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -78,6 +80,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
         if (isExpanded && !isPinned) {
           setIsExpanded(false);
+          onClose?.();
         }
       }
     };
@@ -88,7 +91,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [isExpanded, isPinned]);
+  }, [isExpanded, isPinned, onClose]);
 
   // Load schema on component mount
   useEffect(() => {
@@ -390,6 +393,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     setOriginalData(null);
     setError(null);
     setSuccess(null);
+    onClose?.();
   };
 
   return (

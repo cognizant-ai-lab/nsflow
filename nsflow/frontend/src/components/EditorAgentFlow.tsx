@@ -133,6 +133,7 @@ const EditorAgentFlow = ({
   
   // Agent editor state
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
+  const isPanelOpenRef = useRef(false);
 
   // Fetch network connectivity data
   const fetchNetworkData = async (definitionOverride?: Record<string, any>) => {
@@ -208,9 +209,14 @@ const EditorAgentFlow = ({
   const onNodeClick: NodeMouseHandler = useCallback((_, node) => {
     setSelectedNodeId(node.id);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    
+
+    // If the agent editor panel is visually open, update it to show the clicked agent
+    if (isPanelOpenRef.current) {
+      setSelectedAgentName(node.id);
+    }
+
     // Update nodes to show selection
-    setNodes((nds) => 
+    setNodes((nds) =>
       nds.map((n) => ({
         ...n,
         data: {
@@ -223,8 +229,8 @@ const EditorAgentFlow = ({
 
   // Handle node double-click
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
-    // console.log("Double-clicked agent:", node.id);
     setSelectedAgentName(node.id);
+    isPanelOpenRef.current = true;
   }, []);
 
   // Handle node context menu (right-click)
@@ -311,8 +317,8 @@ const EditorAgentFlow = ({
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
-    // console.log("Edit agent:", nodeId);
     setSelectedAgentName(nodeId);
+    isPanelOpenRef.current = true;
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
@@ -968,6 +974,7 @@ const EditorAgentFlow = ({
         selectedDesignId={selectedDesignId}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
+        onClose={() => { setSelectedAgentName(null); isPanelOpenRef.current = false; }}
         enableEditing={pluginManualEditor}
       />
     </Box>
