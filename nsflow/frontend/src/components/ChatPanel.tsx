@@ -29,7 +29,6 @@ import {
   FormControlLabel,
   Chip,
   Stack,
-  Collapse,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -974,7 +973,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     {sampleQueriesExpanded ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
                   </Box>
                 </Box>
-                <Collapse in={sampleQueriesExpanded}>
+                {sampleQueriesExpanded && (
                   <Paper
                     elevation={1}
                     sx={{
@@ -1026,7 +1025,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     </Stack>
                   </Box>
                   </Paper>
-                </Collapse>
+                )}
               </Box>
             )}
 
@@ -1072,6 +1071,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               {/* Message box wrapper with anchored attach icon */}
               <Box sx={{ flexGrow: 1, position: "relative" }}>
                 <TextField
+                  autoFocus
                   multiline
                   minRows={3}
                   placeholder="Type a message..."
