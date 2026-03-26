@@ -74,6 +74,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     activeNetwork,
     targetNetwork,
     chatMessages,
+    slyDataMessages,
     addChatMessage,
     addSlyDataMessage,
     chatWs,
@@ -148,8 +149,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     } catch {}
     return false;
   };
-  // NEW: "Use Sly Data" checkbox state
-  const [useSlyDataChecked, setUseSlyDataChecked] = useState<boolean>(() => readSlyToggle(targetNetwork || activeNetwork));
+  // NEW: "Use Sly Data" checkbox state — always false in editor mode (no cache persistence)
+  const [useSlyDataChecked, setUseSlyDataChecked] = useState<boolean>(() => isEditorMode ? false : readSlyToggle(targetNetwork || activeNetwork));
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -228,23 +229,25 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     fetchSampleQueries();
   }, [targetNetwork, activeNetwork, apiUrl]);
 
-  // Load persisted toggle when network changes (or first mount)
+  // Load persisted toggle when network changes (or first mount) — skip in editor mode
   useEffect(() => {
+    if (isEditorMode) return;
     // when network changes, prefer its stored setting if present
     const network = targetNetwork || activeNetwork;
     const stored = readSlyToggle(network);
     setUseSlyDataChecked(stored);
-  }, [targetNetwork, activeNetwork]);
+  }, [targetNetwork, activeNetwork, isEditorMode]);
 
-  // Persist on change
+  // Persist on change — skip in editor mode
   useEffect(() => {
+    if (isEditorMode) return;
     try {
       if (slyToggleNetworkKey) {
         localStorage.setItem(slyToggleNetworkKey, String(useSlyDataChecked));
       }
       localStorage.setItem(slyToggleGlobalKey, String(useSlyDataChecked));
     } catch {}
-  }, [useSlyDataChecked, slyToggleNetworkKey]);
+  }, [useSlyDataChecked, slyToggleNetworkKey, isEditorMode]);
 
   // Fetch available networks for editor dropdown
   useEffect(() => {
@@ -282,12 +285,14 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
     if (!networkName) {
       // User clicked X to clear — reset to "design from scratch" mode.
-      // Write directly to localStorage (React setState + useEffect won't flush before reload).
-      if (slyToggleNetworkKey) {
-        localStorage.setItem(slyToggleNetworkKey, 'false');
+      if (!isEditorMode) {
+        // Write directly to localStorage (React setState + useEffect won't flush before reload).
+        if (slyToggleNetworkKey) {
+          localStorage.setItem(slyToggleNetworkKey, 'false');
+        }
+        localStorage.setItem(slyToggleGlobalKey, 'false');
+        clearSlyDataCache(network || undefined);
       }
-      localStorage.setItem(slyToggleGlobalKey, 'false');
-      clearSlyDataCache(network || undefined);
       window.location.reload();
       return;
     }
@@ -304,9 +309,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       const payload = await response.json();
       const pretty = JSON.stringify(payload, null, 2);
       addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
-      setUseSlyDataChecked(true);
+      if (!isEditorMode) {
+        setUseSlyDataChecked(true);
+      }
       setSampleQueriesExpanded(false);
-      if (network) {
+      if (network && !isEditorMode) {
         saveSlyDataToCache(payload, network, 1);
       }
     } catch (e) {
@@ -314,7 +321,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     } finally {
       setLoadingDefinition(false);
     }
-  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache, slyToggleNetworkKey]);
+  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache, slyToggleNetworkKey, isEditorMode]);
 
   // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
   const [autoLoadHandled, setAutoLoadHandled] = useState(false);
@@ -362,18 +369,34 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
   }, [chatMessages, shouldAutoPlayNextAgent]);
 
-  // NEW: Build sly_data to send from the editor cache (or {} if none)
+  // Build sly_data to send: editor mode reads from slyDataMessages, home mode reads from cache
   const getSlyDataForSend = useCallback((): Record<string, any> | undefined => {
-    if (!useSlyDataChecked) return undefined; // not requested
-    const network = targetNetwork || activeNetwork;
-    if (!network) return {}; // no network context; still send {}
-    const cached = loadSlyDataFromCache(network);
-    console.log('Cached data:', cached);
-    if (cached && cached.data && typeof cached.data === 'object' && !Array.isArray(cached.data) && Object.keys(cached.data).length > 0) {
-      return cached.data; // cached data is already in JSON format
+    if (isEditorMode) {
+      // In editor mode, always send current sly data from the messages stream (no cache, no checkbox)
+      for (let i = (slyDataMessages ?? []).length - 1; i >= 0; i--) {
+        const msg = slyDataMessages[i];
+        const raw = typeof msg?.text === 'string' ? msg.text : undefined;
+        if (!raw) continue;
+        // Extract JSON from code-fenced or raw string
+        const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const jsonStr = fence?.[1] ?? raw;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+        } catch { /* skip non-JSON messages */ }
+      }
+      return {}; // no sly data yet — still send empty object
     }
-    return {}; // if editor is blank, still send {}
-  }, [useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
+    // Home mode: use checkbox + cache
+    if (!useSlyDataChecked) return undefined;
+    const network = targetNetwork || activeNetwork;
+    if (!network) return {};
+    const cached = loadSlyDataFromCache(network);
+    if (cached && cached.data && typeof cached.data === 'object' && !Array.isArray(cached.data) && Object.keys(cached.data).length > 0) {
+      return cached.data;
+    }
+    return {};
+  }, [isEditorMode, slyDataMessages, useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
 
   const handleFileAttach = () => {
     fileInputRef.current?.click();
@@ -1367,6 +1390,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   </Tooltip>
                 </Box>
               )}
+              {!isEditorMode && (
               <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
                 <FormControlLabel
                   control={
@@ -1396,6 +1420,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   (from SlyData tab or {`{}`} if empty)
                 </Typography>
               </Box>
+              )}
           </Box>
           </Box>
         </Panel>
