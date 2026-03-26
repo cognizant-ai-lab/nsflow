@@ -1240,7 +1240,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
           <Box sx={{ flexShrink: 0, px: 2, pt: 0.5, pb: 0.25, borderTop: `1px solid ${theme.palette.divider}` }}>
               {/* Network loader dropdown (editor mode only) */}
               {isEditorMode && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'calc(80px + 32px)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'calc(80px + 32px)', mb: 0.5, minHeight: 36 }}>
                   <Autocomplete
                     size="small"
                     options={[...availableNetworks].sort((a, b) => {
