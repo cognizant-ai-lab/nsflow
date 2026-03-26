@@ -736,15 +736,17 @@ const EditorAgentFlow = ({
                 <Tooltip title={`Launch ${lastSeenNameRef.current} in Cruse`}>
                   <Button
                     onClick={handleLaunchCruse}
+                    startIcon={<LaunchIcon />}
                     sx={{
-                      minWidth: 48,
+                      minWidth: 100,
                       px: 2.5,
+                      textTransform: 'none',
                       borderTopLeftRadius: '28px',
                       borderBottomLeftRadius: '28px',
                       backgroundColor: theme.palette.primary.main,
                     }}
                   >
-                    <LaunchIcon />
+                    Launch
                   </Button>
                 </Tooltip>
 
@@ -825,11 +827,13 @@ const EditorAgentFlow = ({
               <Button
                 variant="contained"
                 color="primary"
+                startIcon={<LaunchIcon />}
                 onClick={handleLaunchHome}
                 sx={{
                   height: 56,
-                  minWidth: 48,
+                  minWidth: 100,
                   px: 2.5,
+                  textTransform: 'none',
                   borderRadius: '28px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                   backgroundColor: theme.palette.primary.main,
@@ -840,7 +844,7 @@ const EditorAgentFlow = ({
                   }
                 }}
               >
-                <LaunchIcon />
+                Launch
               </Button>
             </Tooltip>
           )}
