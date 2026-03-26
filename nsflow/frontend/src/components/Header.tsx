@@ -45,7 +45,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
-  const { pluginCruse } = getFeatureFlags();
+  const { pluginCruse, pluginExport } = getFeatureFlags();
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
@@ -263,7 +263,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           )}
 
           {/* Export Dropdown */}
-          {!isOnEditorPage && !isCrusePage && (
+          {pluginExport && !isOnEditorPage && !isCrusePage && (
             <>
               <Button
                 variant="outlined"

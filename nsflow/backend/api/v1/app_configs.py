@@ -56,6 +56,7 @@ def get_runtime_config():
             "NSFLOW_PLUGIN_MULTIMEDIACARD": _env_bool("NSFLOW_PLUGIN_MULTIMEDIACARD", False),
             "NSFLOW_PLUGIN_MANUAL_EDITOR": _env_bool("NSFLOW_PLUGIN_MANUAL_EDITOR", False),
             "NSFLOW_PLUGIN_VQA_ENDPOINT": _env_bool("NSFLOW_PLUGIN_VQA_ENDPOINT", False),
+            "NSFLOW_PLUGIN_EXPORT": _env_bool("NSFLOW_PLUGIN_EXPORT", False),
         }
     )
 
