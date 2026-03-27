@@ -96,7 +96,12 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   };
 
   const handleNavigateToHome = () => {
-    window.open("/home", "_blank", "noopener,noreferrer");
+    if (isOnEditorPage || isOnCrusePage) {
+      window.open("/home", "_blank", "noopener,noreferrer");
+    } else {
+      // Navigate to blank home without any network selected
+      window.location.href = "/home";
+    }
   };
 
   return (
@@ -206,21 +211,23 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           )}
 
           {/* Home Button */}
-          <Button
-            variant="outlined"
-            startIcon={<HomeIcon />}
-            onClick={handleNavigateToHome}
-            sx={{
-              ...((!isOnEditorPage && !isOnCrusePage) ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-              borderColor: muiTheme.palette.secondary.main,
-              '&:hover': {
-                backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          <Tooltip title={(isOnEditorPage || isOnCrusePage) ? "Open Home in a new tab" : "Go to App's Home Page"} arrow>
+            <Button
+              variant="outlined"
+              startIcon={<HomeIcon />}
+              onClick={handleNavigateToHome}
+              sx={{
+                ...((!isOnEditorPage && !isOnCrusePage) ? muiTheme.navButton.active : muiTheme.navButton.inactive),
                 borderColor: muiTheme.palette.secondary.main,
-              },
-            }}
-          >
-            Home
-          </Button>
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                  borderColor: muiTheme.palette.secondary.main,
+                },
+              }}
+            >
+              Home
+            </Button>
+          </Tooltip>
 
           {/* New Button - hidden on Editor page */}
           {!isOnEditorPage && (
