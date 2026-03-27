@@ -235,6 +235,18 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       : userExpanded;
   }, [userExpanded, searchExpanded, searchQuery, selectedTags]);
 
+  // Auto-expand tree to show activeNetwork on initial load
+  const hasAutoExpandedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoExpandedRef.current || !activeNetwork || agents.length === 0) return;
+    const agentExists = agents.some(a => a.agent_name === activeNetwork);
+    if (agentExists) {
+      const ancestors = getAncestorDirs(activeNetwork);
+      setUserExpanded(prev => Array.from(new Set([...prev, ...ancestors])));
+      hasAutoExpandedRef.current = true;
+    }
+  }, [activeNetwork, agents]);
+
   // Sorted tag chips: from the global universe, but show current counts (scoped to search)
   const sortedTags = useMemo(() => {
     // collect all tag names from universe (tagCounts) so chips persist even when unavailable
