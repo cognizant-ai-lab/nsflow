@@ -14,13 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useState, useRef } from "react";
-import { Box, Typography, TextField, Button,  Paper, Card, CardContent, Chip, InputAdornment, 
-  useTheme, alpha, Popper, MenuItem, MenuList, ClickAwayListener, Grow } from "@mui/material";
-import { PolylineTwoTone as NetworkIcon, Search as SearchIcon, 
-  SmartToy as RobotIcon, Refresh as RefreshIcon} from "@mui/icons-material";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { Box, Typography, TextField, Button,  Paper, Card, CardContent, Chip, InputAdornment,
+  useTheme, alpha, Popper, MenuItem, MenuList, ClickAwayListener, Grow, Autocomplete, CircularProgress, Tooltip } from "@mui/material";
+import { PolylineTwoTone as NetworkIcon, Search as SearchIcon,
+  SmartToy as RobotIcon, Refresh as RefreshIcon, WarningAmber as WarningAmberIcon, Close as CloseIcon } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { useChatControls } from "../hooks/useChatControls";
+import { useNeuroSan } from "../context/NeuroSanContext";
 import { getFeatureFlags } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
 
@@ -87,11 +89,20 @@ const EditorSidebar = ({
   const [selectedNetworkOption, setSelectedNetworkOption] = useState<NetworkOption | null>(null);
   const [agentNetworkDefinition, setAgentNetworkDefinition] = useState<Record<string, any> | null>(null);
   const { apiUrl, isReady } = useApiPort();
-  const { chatMessages, getLastProgressMessage, getLastSlyDataMessage, 
-    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, targetNetwork } = useChatContext();
+  const { chatMessages, getLastProgressMessage, getLastSlyDataMessage,
+    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, targetNetwork,
+    activeNetwork, addSlyDataMessage, regenerateSessionId, waitingForAgent } = useChatContext();
+  const { host, port, connectionType, isNsReady } = useNeuroSan();
+  const { stopWebSocket, clearChat } = useChatControls();
   const [searchQuery, setSearchQuery] = useState("");
   const [lastChatMessageCount, setLastChatMessageCount] = useState(0);
   const theme = useTheme();
+
+  // Load Existing Agent Network state (view mode)
+  const [availableNetworks, setAvailableNetworks] = useState<string[]>([]);
+  const [loadingNetworks, setLoadingNetworks] = useState(false);
+  const [loadingDefinition, setLoadingDefinition] = useState(false);
+  const [selectedLoadNetwork, setSelectedLoadNetwork] = useState<string | null>(null);
 
   const networksEndRef = useRef<HTMLDivElement>(null);
   
@@ -312,10 +323,75 @@ const EditorSidebar = ({
 
       setSelectedNetworkId(singleOption.id);
       setSelectedNetworkOption(singleOption);
+      setSelectedLoadNetwork(nameFromPayload); // Sync the Autocomplete display
       onSelectNetwork(singleOption.display_name); // no design_id in view-only
       fetchAgents(undefined, payload.agent_network_definition!); // avoid race
     }
   };
+
+  // Fetch available networks for Load Existing dropdown (view mode)
+  useEffect(() => {
+    if (canEdit || !isNsReady || !apiUrl) return;
+    const fetchAvailableNetworks = async () => {
+      setLoadingNetworks(true);
+      try {
+        const params = new URLSearchParams();
+        if (connectionType) params.set("connection_type", connectionType);
+        if (host) params.set("host", host);
+        if (port) params.set("port", String(port));
+        const response = await fetch(`${apiUrl}/api/v1/list?${params.toString()}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const names: string[] = (data.agents || []).map((a: any) => a.agent_name);
+          setAvailableNetworks(names);
+        }
+      } catch (e) {
+        console.error("Failed to fetch network list for editor sidebar:", e);
+      } finally {
+        setLoadingNetworks(false);
+      }
+    };
+    fetchAvailableNetworks();
+  }, [canEdit, isNsReady, apiUrl, connectionType, host, port]);
+
+  // Handler for loading an existing network (view mode)
+  const handleLoadExistingNetwork = useCallback(async (networkName: string | null) => {
+    const network = targetNetwork || activeNetwork;
+
+    setSelectedLoadNetwork(networkName);
+
+    if (!networkName) {
+      window.location.reload();
+      return;
+    }
+
+    if (!apiUrl) return;
+
+    // Clear previous chat session and reconnect with fresh WebSocket
+    stopWebSocket();
+    clearChat();
+    regenerateSessionId(); // Triggers TabbedChatPanel to reconnect WebSocket
+
+    setLoadingDefinition(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error("Failed to load network definition:", errData.detail || response.statusText);
+        return;
+      }
+      const payload = await response.json();
+      const pretty = JSON.stringify(payload, null, 2);
+      addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
+    } catch (e) {
+      console.error("Error loading network definition:", e);
+    } finally {
+      setLoadingDefinition(false);
+    }
+  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage]);
 
   /* -------------------- Effects -------------------- */
   // Reset selection to "none" whenever mode flips or app becomes ready
@@ -411,6 +487,24 @@ const EditorSidebar = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canEdit, agentNetworkDefinition]);
 
+  // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
+  const [autoLoadHandled, setAutoLoadHandled] = useState(false);
+  useEffect(() => {
+    if (autoLoadHandled || canEdit || loadingNetworks || !availableNetworks.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const loadNetwork = params.get('loadNetwork');
+    if (loadNetwork && availableNetworks.includes(loadNetwork)) {
+      setAutoLoadHandled(true);
+      // Clean the URL so reload doesn't re-trigger
+      const url = new URL(window.location.href);
+      url.searchParams.delete('loadNetwork');
+      window.history.replaceState({}, '', url.toString());
+      handleLoadExistingNetwork(loadNetwork);
+    } else {
+      setAutoLoadHandled(true);
+    }
+  }, [canEdit, loadingNetworks, availableNetworks, autoLoadHandled, handleLoadExistingNetwork]);
+
 
   /* -------------------- Render -------------------- */
   return (
@@ -458,15 +552,14 @@ const EditorSidebar = ({
           </Typography>
         )}
 
-        {/* Selection (Edit mode dropdown) or View-only label */}
-        {/* Selection: same dropdown for both modes */}
-        {!loading && (
+        {/* Selection: Edit mode uses custom dropdown, View mode uses Load Existing Autocomplete */}
+        {!loading && canEdit && (
           <Box ref={anchorRef}>
             <TextField
               size="small"
-              label={canEdit ? "Select editing session" : "Agent network"}
-              value={selectedNetworkOption?.display_name || ""} // empty initially in view mode
-              onClick={handleDropdownToggle} // clickable in both modes
+              label="Select editing session"
+              value={selectedNetworkOption?.display_name || ""}
+              onClick={handleDropdownToggle}
               slotProps={{ input: { readOnly: true } }}
               fullWidth
               sx={{
@@ -540,9 +633,9 @@ const EditorSidebar = ({
                                       ({option.agent_count} agents)
                                     </Typography>
                                     <Chip
-                                      label={canEdit ? "Editing" : "View"}
+                                      label="Editing"
                                       size="small"
-                                      color={canEdit ? "secondary" : "default"}
+                                      color="secondary"
                                       sx={{ fontSize: "0.6rem", height: 16 }}
                                     />
                                   </Box>
@@ -557,6 +650,157 @@ const EditorSidebar = ({
                 </Grow>
               )}
             </Popper>
+          </Box>
+        )}
+
+        {/* View mode: Load Existing Agent Network Autocomplete */}
+        {!loading && !canEdit && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Autocomplete
+              size="small"
+              disabled={waitingForAgent}
+              options={(() => {
+                const sorted = [...availableNetworks].sort((a, b) => {
+                  const folderA = a.split('/').slice(0, -1).join('/');
+                  const folderB = b.split('/').slice(0, -1).join('/');
+                  if (folderA !== folderB) return folderA.localeCompare(folderB);
+                  return a.localeCompare(b);
+                });
+                // Include the wand-generated name so the Autocomplete can display it
+                if (selectedLoadNetwork && !sorted.includes(selectedLoadNetwork)) {
+                  sorted.unshift(selectedLoadNetwork);
+                }
+                return sorted;
+              })()}
+              groupBy={(option) => option.split('/').slice(0, -1).join('/') || ''}
+              loading={loadingNetworks || loadingDefinition}
+              value={selectedLoadNetwork}
+              onChange={(_event, value) => handleLoadExistingNetwork(value)}
+              renderGroup={(params) => (
+                <li key={params.key}>
+                  {params.group && (
+                    <Box
+                      component="div"
+                      sx={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        lineHeight: '28px',
+                        minHeight: 28,
+                        pl: 1,
+                        color: theme.palette.text.secondary,
+                        position: 'sticky',
+                        top: -4,
+                        zIndex: 1,
+                        backgroundColor: theme.palette.mode === 'dark' ? '#1a2e1e' : '#e8f5e9',
+                      }}
+                    >
+                      {params.group}
+                    </Box>
+                  )}
+                  <ul style={{ padding: 0 }}>{params.children}</ul>
+                </li>
+              )}
+              clearIcon={
+                <Tooltip title="Clearing this agent-network will reset the Editor to its default state">
+                  <CloseIcon sx={{ fontSize: 18 }} />
+                </Tooltip>
+              }
+              slotProps={{
+                clearIndicator: {
+                  sx: {
+                    color: theme.palette.error.main,
+                    backgroundColor: alpha(theme.palette.error.main, 0.1),
+                    borderRadius: '50%',
+                    width: 22,
+                    height: 22,
+                    transition: 'all 200ms ease',
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.error.main, 0.22),
+                      transform: 'scale(1.1)',
+                      boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.3)}`,
+                    },
+                    '&:active': {
+                      transform: 'scale(0.95)',
+                    },
+                  },
+                },
+                listbox: {
+                  sx: {
+                    py: 0.5,
+                    '& .MuiAutocomplete-option': {
+                      fontSize: 13,
+                      minHeight: 28,
+                      py: '2px',
+                      pl: 3,
+                      pr: 1,
+                      backgroundColor: 'transparent',
+                      '&[aria-selected="true"]': {
+                        backgroundColor: alpha('#4caf50', 0.18),
+                      },
+                      '&.Mui-focused, &:hover': {
+                        backgroundColor: alpha('#4caf50', 0.12),
+                      },
+                    },
+                    '& .MuiAutocomplete-groupLabel': {
+                      display: 'none',
+                    },
+                    '& .MuiAutocomplete-groupUl': {
+                      backgroundColor: 'transparent',
+                    },
+                  },
+                },
+                paper: {
+                  sx: {
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? '#1a2e1e'
+                      : '#e8f5e9',
+                    backdropFilter: 'blur(12px)',
+                    border: `1px solid ${alpha('#4caf50', 0.25)}`,
+                  },
+                },
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Load Existing Agent Network"
+                  variant="outlined"
+                  size="small"
+                  slotProps={{
+                    input: {
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {(loadingNetworks || loadingDefinition) && <CircularProgress size={16} />}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              )}
+              sx={{
+                flex: 1,
+                '& .MuiOutlinedInput-root': {
+                  fontSize: 13,
+                },
+                '& .MuiInputLabel-root': {
+                  fontSize: 11,
+                },
+              }}
+            />
+            <Tooltip
+              title={
+                <>
+                  <strong>Editing existing Agent-Networks is an Experimental feature.</strong><br />
+                  Works best for agent-networks that are &quot;generated&quot; by Agent Network Designer or agent-networks that do not have any python coded-tools.<br />
+                  <strong>Caution!</strong> Editing might change the behavior of an Agent-Network.
+                </>
+              }
+              placement="right"
+              arrow
+            >
+              <WarningAmberIcon sx={{ fontSize: 16, color: '#ed6c02', cursor: 'help', flexShrink: 0 }} />
+            </Tooltip>
           </Box>
         )}
       </Box>

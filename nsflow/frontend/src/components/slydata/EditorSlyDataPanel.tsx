@@ -89,7 +89,7 @@ const getLatestSlyDataFromMessages = (msgs: any[]): any | undefined => {
 /* ---------------- component ---------------- */
 
 const EditorSlyDataPanel: React.FC = () => {
-  const { slyDataMessages, targetNetwork, addSlyDataMessage } = useChatContext();
+  const { slyDataMessages, targetNetwork, addSlyDataMessage, isEditorMode } = useChatContext();
   const { theme } = useTheme();
   const jsonEditorTheme = useJsonEditorTheme();
 
@@ -111,29 +111,31 @@ const EditorSlyDataPanel: React.FC = () => {
 
   useEffect(() => {
     if (!isInitialized && targetNetwork) {
-      setIsLoadingCache(true);
-      const cached = loadSlyDataFromCache(targetNetwork);
-      setJsonData(cached?.data ?? {});
+      if (!isEditorMode) {
+        setIsLoadingCache(true);
+        const cached = loadSlyDataFromCache(targetNetwork);
+        setJsonData(cached?.data ?? {});
+        setIsLoadingCache(false);
+      }
       setHasLocalEdits(false);
       setIsInitialized(true);
-      setIsLoadingCache(false);
     }
-  }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized, isEditorMode]);
 
   useEffect(() => {
-    if (isInitialized && targetNetwork) {
+    if (isInitialized && targetNetwork && !isEditorMode) {
       setIsLoadingCache(true);
       const cached = loadSlyDataFromCache(targetNetwork);
       setJsonData(cached?.data ?? {});
       setHasLocalEdits(false);
       setIsLoadingCache(false);
     }
-  }, [targetNetwork, loadSlyDataFromCache, isInitialized]);
+  }, [targetNetwork, loadSlyDataFromCache, isInitialized, isEditorMode]);
 
   useEffect(() => {
-    if (!isInitialized || !targetNetwork || isLoadingCache) return;
+    if (!isInitialized || !targetNetwork || isLoadingCache || isEditorMode) return;
     saveSlyDataToCache(jsonData, targetNetwork, 1);
-  }, [jsonData, isInitialized, targetNetwork, saveSlyDataToCache, isLoadingCache]);
+  }, [jsonData, isInitialized, targetNetwork, saveSlyDataToCache, isLoadingCache, isEditorMode]);
 
   /* ---- derive editor state from global slyDataMessages ---- */
 
@@ -150,10 +152,10 @@ const EditorSlyDataPanel: React.FC = () => {
     if (latest && isPlainObject(latest)) {
       setJsonData(latest);
       setHasLocalEdits(false);
-      if (targetNetwork) saveSlyDataToCache(latest, targetNetwork, 1);
+      if (targetNetwork && !isEditorMode) saveSlyDataToCache(latest, targetNetwork, 1);
       setEditorVersion(v => v + 1);
     }
-  }, [slyDataMessages, saveSlyDataToCache, targetNetwork]);
+  }, [slyDataMessages, saveSlyDataToCache, targetNetwork, isEditorMode]);
 
   /* ---- actions ---- */
 
@@ -176,21 +178,21 @@ const EditorSlyDataPanel: React.FC = () => {
     const next = update?.newData ?? update?.data ?? {};
     setJsonData(next);
     setHasLocalEdits(true);
-    if (targetNetwork) saveSlyDataToCache(next, targetNetwork, 1);
+    if (targetNetwork && !isEditorMode) saveSlyDataToCache(next, targetNetwork, 1);
     emitUserSlyMessage(next);             // <- key change: send to global stream
     setEditorVersion(v => v + 1);
-  }, [emitUserSlyMessage, saveSlyDataToCache, targetNetwork]);
+  }, [emitUserSlyMessage, saveSlyDataToCache, targetNetwork, isEditorMode]);
 
   const handleAddRootItem = useCallback(() => {
     setJsonData((prev: any) => {
       if (isNonEmptyObject(prev)) return prev;
       const next = { ...prev, new_key: 'new_value' };
       setHasLocalEdits(true);
-      if (targetNetwork) saveSlyDataToCache(next, targetNetwork, 1);
+      if (targetNetwork && !isEditorMode) saveSlyDataToCache(next, targetNetwork, 1);
       emitUserSlyMessage(next);
       return next;
     });
-  }, [emitUserSlyMessage, saveSlyDataToCache, targetNetwork]);
+  }, [emitUserSlyMessage, saveSlyDataToCache, targetNetwork, isEditorMode]);
 
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
@@ -231,7 +233,7 @@ const EditorSlyDataPanel: React.FC = () => {
       const next = importDialog.jsonData;
       setJsonData(next);
       setHasLocalEdits(true);
-      if (targetNetwork) saveSlyDataToCache(next, targetNetwork, 1);
+      if (targetNetwork && !isEditorMode) saveSlyDataToCache(next, targetNetwork, 1);
       emitUserSlyMessage(next);
       setEditorVersion(v => v + 1);
       setImportDialog({ open: false, fileName: '', jsonData: null, hasExistingData: false, validationError: null });

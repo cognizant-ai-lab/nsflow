@@ -29,13 +29,10 @@ import {
   FormControlLabel,
   Chip,
   Stack,
-  Collapse,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Autocomplete,
-  CircularProgress,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -48,14 +45,13 @@ import {
   AttachFile as AttachFileIcon,
   Close as CloseIcon,
   InsertDriveFile as FileIcon,
-  WarningAmber as WarningAmberIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
-import { useNeuroSan } from "../context/NeuroSanContext";
+
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import { Mp3Encoder } from "@breezystack/lamejs";
 
@@ -74,10 +70,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     activeNetwork,
     targetNetwork,
     chatMessages,
+    slyDataMessages,
     addChatMessage,
     addSlyDataMessage,
     chatWs,
     isEditorMode,
+    waitingForAgent,
+    setWaitingForAgent,
   } = useChatContext();
 
   const { stopWebSocket, clearChat } = useChatControls();
@@ -102,20 +101,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     previewUrl?: string;
   } | null>(null);
 
-  // Network loader state (editor mode only)
-  const { connectionType, host, port, isNsReady } = useNeuroSan();
-  const [availableNetworks, setAvailableNetworks] = useState<string[]>([]);
-  const [loadingNetworks, setLoadingNetworks] = useState(false);
-  const [loadingDefinition, setLoadingDefinition] = useState(false);
-  const [waitingForAgent, setWaitingForAgent] = useState(false);
-  const [selectedLoadNetwork, setSelectedLoadNetwork] = useState<string | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
   const messagePanelRef = useRef<ImperativePanelHandle>(null);
 
   // NEW: cache reader to get current editor data
-  const { loadSlyDataFromCache, saveSlyDataToCache, clearSlyDataCache } = useSlyDataCache();
+  const { loadSlyDataFromCache } = useSlyDataCache();
 
   const slyTogglePrefix = isEditorMode ? 'nsflow-editor-use-slydata' : 'nsflow-use-slydata';
   const slyToggleGlobalKey = slyTogglePrefix;
@@ -148,8 +139,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     } catch {}
     return false;
   };
-  // NEW: "Use Sly Data" checkbox state
-  const [useSlyDataChecked, setUseSlyDataChecked] = useState<boolean>(() => readSlyToggle(targetNetwork || activeNetwork));
+  // NEW: "Use Sly Data" checkbox state — always false in editor mode (no cache persistence)
+  const [useSlyDataChecked, setUseSlyDataChecked] = useState<boolean>(() => isEditorMode ? false : readSlyToggle(targetNetwork || activeNetwork));
 
   useEffect(() => {
     // Auto-scroll to latest message
@@ -228,111 +219,27 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     fetchSampleQueries();
   }, [targetNetwork, activeNetwork, apiUrl]);
 
-  // Load persisted toggle when network changes (or first mount)
+  // Load persisted toggle when network changes (or first mount) — skip in editor mode
   useEffect(() => {
+    if (isEditorMode) return;
     // when network changes, prefer its stored setting if present
     const network = targetNetwork || activeNetwork;
     const stored = readSlyToggle(network);
     setUseSlyDataChecked(stored);
-  }, [targetNetwork, activeNetwork]);
+  }, [targetNetwork, activeNetwork, isEditorMode]);
 
-  // Persist on change
+  // Persist on change — skip in editor mode
   useEffect(() => {
+    if (isEditorMode) return;
     try {
       if (slyToggleNetworkKey) {
         localStorage.setItem(slyToggleNetworkKey, String(useSlyDataChecked));
       }
       localStorage.setItem(slyToggleGlobalKey, String(useSlyDataChecked));
     } catch {}
-  }, [useSlyDataChecked, slyToggleNetworkKey]);
+  }, [useSlyDataChecked, slyToggleNetworkKey, isEditorMode]);
 
-  // Fetch available networks for editor dropdown
-  useEffect(() => {
-    if (!isEditorMode || !isNsReady || !apiUrl) return;
-    const fetchNetworks = async () => {
-      setLoadingNetworks(true);
-      try {
-        const params = new URLSearchParams();
-        if (connectionType) params.set("connection_type", connectionType);
-        if (host) params.set("host", host);
-        if (port) params.set("port", String(port));
-        const response = await fetch(`${apiUrl}/api/v1/list?${params.toString()}`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const names: string[] = (data.agents || []).map((a: any) => a.agent_name);
-          setAvailableNetworks(names);
-        }
-      } catch (e) {
-        console.error("Failed to fetch network list for editor:", e);
-      } finally {
-        setLoadingNetworks(false);
-      }
-    };
-    fetchNetworks();
-  }, [isEditorMode, isNsReady, apiUrl, connectionType, host, port]);
-
-  // Handler for loading an existing network into the editor (or clearing on X)
-  const handleLoadNetwork = useCallback(async (networkName: string | null) => {
-    const network = targetNetwork || activeNetwork;
-
-    setSelectedLoadNetwork(networkName);
-
-    if (!networkName) {
-      // User clicked X to clear — reset to "design from scratch" mode.
-      // Write directly to localStorage (React setState + useEffect won't flush before reload).
-      if (slyToggleNetworkKey) {
-        localStorage.setItem(slyToggleNetworkKey, 'false');
-      }
-      localStorage.setItem(slyToggleGlobalKey, 'false');
-      clearSlyDataCache(network || undefined);
-      window.location.reload();
-      return;
-    }
-
-    if (!apiUrl) return;
-    setLoadingDefinition(true);
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.error("Failed to load network definition:", errData.detail || response.statusText);
-        return;
-      }
-      const payload = await response.json();
-      const pretty = JSON.stringify(payload, null, 2);
-      addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
-      setUseSlyDataChecked(true);
-      setSampleQueriesExpanded(false);
-      if (network) {
-        saveSlyDataToCache(payload, network, 1);
-      }
-    } catch (e) {
-      console.error("Error loading network definition:", e);
-    } finally {
-      setLoadingDefinition(false);
-    }
-  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache, slyToggleNetworkKey]);
-
-  // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
-  const [autoLoadHandled, setAutoLoadHandled] = useState(false);
-  useEffect(() => {
-    if (autoLoadHandled || !isEditorMode || loadingNetworks || !availableNetworks.length) return;
-    const params = new URLSearchParams(window.location.search);
-    const loadNetwork = params.get('loadNetwork');
-    if (loadNetwork && availableNetworks.includes(loadNetwork)) {
-      setAutoLoadHandled(true);
-      // Clean the URL so reload doesn't re-trigger
-      const url = new URL(window.location.href);
-      url.searchParams.delete('loadNetwork');
-      window.history.replaceState({}, '', url.toString());
-      handleLoadNetwork(loadNetwork);
-    } else {
-      setAutoLoadHandled(true);
-    }
-  }, [isEditorMode, loadingNetworks, availableNetworks, autoLoadHandled, handleLoadNetwork]);
+  // Network loading and auto-load from URL are now handled by EditorSidebar
 
   // Auto-play agent responses when microphone was used
   useEffect(() => {
@@ -362,18 +269,34 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
   }, [chatMessages, shouldAutoPlayNextAgent]);
 
-  // NEW: Build sly_data to send from the editor cache (or {} if none)
+  // Build sly_data to send: editor mode reads from slyDataMessages, home mode reads from cache
   const getSlyDataForSend = useCallback((): Record<string, any> | undefined => {
-    if (!useSlyDataChecked) return undefined; // not requested
-    const network = targetNetwork || activeNetwork;
-    if (!network) return {}; // no network context; still send {}
-    const cached = loadSlyDataFromCache(network);
-    console.log('Cached data:', cached);
-    if (cached && cached.data && typeof cached.data === 'object' && !Array.isArray(cached.data) && Object.keys(cached.data).length > 0) {
-      return cached.data; // cached data is already in JSON format
+    if (isEditorMode) {
+      // In editor mode, always send current sly data from the messages stream (no cache, no checkbox)
+      for (let i = (slyDataMessages ?? []).length - 1; i >= 0; i--) {
+        const msg = slyDataMessages[i];
+        const raw = typeof msg?.text === 'string' ? msg.text : undefined;
+        if (!raw) continue;
+        // Extract JSON from code-fenced or raw string
+        const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const jsonStr = fence?.[1] ?? raw;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+        } catch { /* skip non-JSON messages */ }
+      }
+      return {}; // no sly data yet — still send empty object
     }
-    return {}; // if editor is blank, still send {}
-  }, [useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
+    // Home mode: use checkbox + cache
+    if (!useSlyDataChecked) return undefined;
+    const network = targetNetwork || activeNetwork;
+    if (!network) return {};
+    const cached = loadSlyDataFromCache(network);
+    if (cached && cached.data && typeof cached.data === 'object' && !Array.isArray(cached.data) && Object.keys(cached.data).length > 0) {
+      return cached.data;
+    }
+    return {};
+  }, [isEditorMode, slyDataMessages, useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
 
   const handleFileAttach = () => {
     fileInputRef.current?.click();
@@ -951,7 +874,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     {sampleQueriesExpanded ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
                   </Box>
                 </Box>
-                <Collapse in={sampleQueriesExpanded}>
+                {sampleQueriesExpanded && (
                   <Paper
                     elevation={1}
                     sx={{
@@ -1003,7 +926,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     </Stack>
                   </Box>
                   </Paper>
-                </Collapse>
+                )}
               </Box>
             )}
 
@@ -1049,6 +972,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
               {/* Message box wrapper with anchored attach icon */}
               <Box sx={{ flexGrow: 1, position: "relative" }}>
                 <TextField
+                  autoFocus
                   multiline
                   minRows={3}
                   placeholder="Type a message..."
@@ -1057,7 +981,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage();
+                      if (!waitingForAgent) sendMessage();
                     }
                   }}
                   sx={{
@@ -1065,7 +989,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     "& .MuiOutlinedInput-root": {
                       backgroundColor: theme.palette.background.paper,
                       color: theme.palette.text.primary,
-                      padding: "8px 12px 8px 8px",
+                      padding: "8px 36px 8px 8px",
                       "&:hover": {
                         "& .MuiOutlinedInput-notchedOutline": {
                           borderColor: theme.palette.primary.main,
@@ -1215,158 +1139,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
           {/* Fixed bottom: network loader + "Use Sly Data" toggle — always visible */}
           <Box sx={{ flexShrink: 0, px: 2, pt: 0.5, pb: 0.25, borderTop: `1px solid ${theme.palette.divider}` }}>
-              {/* Network loader dropdown (editor mode only) */}
-              {isEditorMode && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'calc(80px + 32px)' }}>
-                  <Autocomplete
-                    size="small"
-                    options={[...availableNetworks].sort((a, b) => {
-                      const folderA = a.split('/').slice(0, -1).join('/');
-                      const folderB = b.split('/').slice(0, -1).join('/');
-                      if (folderA !== folderB) return folderA.localeCompare(folderB);
-                      return a.localeCompare(b);
-                    })}
-                    groupBy={(option) => option.split('/').slice(0, -1).join('/') || ''}
-                    loading={loadingNetworks || loadingDefinition}
-                    value={selectedLoadNetwork}
-                    disabled={waitingForAgent}
-                    onChange={(_event, value) => handleLoadNetwork(value)}
-                    renderGroup={(params) => (
-                      <li key={params.key}>
-                        {params.group && (
-                          <Box
-                            component="div"
-                            sx={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              lineHeight: '28px',
-                              minHeight: 28,
-                              pl: 1,
-                              color: theme.palette.text.secondary,
-                              position: 'sticky',
-                              top: -4,
-                              zIndex: 1,
-                              backgroundColor: theme.palette.mode === 'dark' ? '#1a2e1e' : '#e8f5e9',
-                            }}
-                          >
-                            {params.group}
-                          </Box>
-                        )}
-                        <ul style={{ padding: 0 }}>{params.children}</ul>
-                      </li>
-                    )}
-                    clearIcon={
-                      <Tooltip title="Clearing this agent-network will reset the Editor to its default state">
-                        <CloseIcon sx={{ fontSize: 18 }} />
-                      </Tooltip>
-                    }
-                    slotProps={{
-                      clearIndicator: {
-                        sx: {
-                          color: theme.palette.error.main,
-                          backgroundColor: alpha(theme.palette.error.main, 0.1),
-                          borderRadius: '50%',
-                          width: 22,
-                          height: 22,
-                          transition: 'all 200ms ease',
-                          '&:hover': {
-                            backgroundColor: alpha(theme.palette.error.main, 0.22),
-                            transform: 'scale(1.1)',
-                            boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.3)}`,
-                          },
-                          '&:active': {
-                            transform: 'scale(0.95)',
-                          },
-                        },
-                      },
-                      listbox: {
-                        sx: {
-                          py: 0.5,
-                          '& .MuiAutocomplete-option': {
-                            fontSize: 13,
-                            minHeight: 28,
-                            py: '2px',
-                            pl: 3,
-                            pr: 1,
-                            backgroundColor: 'transparent',
-                            '&[aria-selected="true"]': {
-                              backgroundColor: alpha('#4caf50', 0.18),
-                            },
-                            '&.Mui-focused, &:hover': {
-                              backgroundColor: alpha('#4caf50', 0.12),
-                            },
-                          },
-                          '& .MuiAutocomplete-groupLabel': {
-                            display: 'none',
-                          },
-                          '& .MuiAutocomplete-groupUl': {
-                            backgroundColor: 'transparent',
-                          },
-                        },
-                      },
-                      paper: {
-                        sx: {
-                          backgroundColor: theme.palette.mode === 'dark'
-                            ? '#1a2e1e'
-                            : '#e8f5e9',
-                          backdropFilter: 'blur(12px)',
-                          border: `1px solid ${alpha('#4caf50', 0.25)}`,
-                        },
-                      },
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Load Existing Agent Network"
-                        variant="outlined"
-                        size="small"
-                        slotProps={{
-                          input: {
-                            ...params.InputProps,
-                            endAdornment: (
-                              <>
-                                {(loadingNetworks || loadingDefinition) && <CircularProgress size={16} />}
-                                {params.InputProps.endAdornment}
-                              </>
-                            ),
-                          },
-                        }}
-                      />
-                    )}
-                    sx={{
-                      flex: 1,
-                      '& .MuiOutlinedInput-root': {
-                        fontSize: 13,
-                        py: 0,
-                        height: 26,
-                      },
-                      '& .MuiOutlinedInput-input': {
-                        py: '2px !important',
-                      },
-                      '& .MuiInputLabel-root': {
-                        fontSize: 11,
-                        top: -5,
-                      },
-                      '& .MuiInputLabel-shrink': {
-                        top: 0,
-                      },
-                    }}
-                  />
-                  <Tooltip
-                    title={
-                      <>
-                        <strong>Editing existing Agent-Networks is an Experimental feature.</strong><br />
-                        Works best for agent-networks that are "generated" by Agent Network Designer or agent-networks that do not have any python coded-tools.<br />
-                        <strong>Caution!</strong> Editing might change the behavior of an Agent-Network.
-                      </>
-                    }
-                    placement="right"
-                    arrow
-                  >
-                    <WarningAmberIcon sx={{ fontSize: 16, color: '#ed6c02', cursor: 'help', flexShrink: 0 }} />
-                  </Tooltip>
-                </Box>
-              )}
+              {/* Network loader dropdown moved to EditorSidebar for editor mode */}
+              {!isEditorMode && (
               <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
                 <FormControlLabel
                   control={
@@ -1396,6 +1170,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   (from SlyData tab or {`{}`} if empty)
                 </Typography>
               </Box>
+              )}
           </Box>
           </Box>
         </Panel>

@@ -133,6 +133,8 @@ const EditorAgentFlow = ({
   
   // Agent editor state
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
+  const [autoExpandPanel, setAutoExpandPanel] = useState(false);
+  const isPanelOpenRef = useRef(false);
 
   // Fetch network connectivity data
   const fetchNetworkData = async (definitionOverride?: Record<string, any>) => {
@@ -204,13 +206,15 @@ const EditorAgentFlow = ({
     }
   };
 
-  // Handle node click
+  // Handle node click — always populate panel data, but don't auto-expand
   const onNodeClick: NodeMouseHandler = useCallback((_, node) => {
     setSelectedNodeId(node.id);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    
+    setAutoExpandPanel(false);
+    setSelectedAgentName(node.id);
+
     // Update nodes to show selection
-    setNodes((nds) => 
+    setNodes((nds) =>
       nds.map((n) => ({
         ...n,
         data: {
@@ -221,10 +225,11 @@ const EditorAgentFlow = ({
     );
   }, [setNodes]);
 
-  // Handle node double-click
+  // Handle node double-click — expand panel
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
-    // console.log("Double-clicked agent:", node.id);
+    setAutoExpandPanel(true);
     setSelectedAgentName(node.id);
+    isPanelOpenRef.current = true;
   }, []);
 
   // Handle node context menu (right-click)
@@ -311,8 +316,9 @@ const EditorAgentFlow = ({
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
-    // console.log("Edit agent:", nodeId);
+    setAutoExpandPanel(true);
     setSelectedAgentName(nodeId);
+    isPanelOpenRef.current = true;
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
@@ -517,6 +523,8 @@ const EditorAgentFlow = ({
     } else {
       setNodes([]);
       setEdges([]);
+      setShowLaunchButton(false);
+      lastSeenNameRef.current = null;
     }
   }, [selectedNetwork, selectedDesignId, baseRadius, levelSpacing]);
 
@@ -736,15 +744,17 @@ const EditorAgentFlow = ({
                 <Tooltip title={`Launch ${lastSeenNameRef.current} in Cruse`}>
                   <Button
                     onClick={handleLaunchCruse}
+                    startIcon={<LaunchIcon />}
                     sx={{
-                      minWidth: 48,
+                      minWidth: 100,
                       px: 2.5,
+                      textTransform: 'none',
                       borderTopLeftRadius: '28px',
                       borderBottomLeftRadius: '28px',
                       backgroundColor: theme.palette.primary.main,
                     }}
                   >
-                    <LaunchIcon />
+                    Launch
                   </Button>
                 </Tooltip>
 
@@ -825,11 +835,13 @@ const EditorAgentFlow = ({
               <Button
                 variant="contained"
                 color="primary"
+                startIcon={<LaunchIcon />}
                 onClick={handleLaunchHome}
                 sx={{
                   height: 56,
-                  minWidth: 48,
+                  minWidth: 100,
                   px: 2.5,
+                  textTransform: 'none',
                   borderRadius: '28px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                   backgroundColor: theme.palette.primary.main,
@@ -840,7 +852,7 @@ const EditorAgentFlow = ({
                   }
                 }}
               >
-                <LaunchIcon />
+                Launch
               </Button>
             </Tooltip>
           )}
@@ -964,6 +976,8 @@ const EditorAgentFlow = ({
         selectedDesignId={selectedDesignId}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
+        onClose={() => { setSelectedAgentName(null); setAutoExpandPanel(false); isPanelOpenRef.current = false; }}
+        autoExpand={autoExpandPanel}
         enableEditing={pluginManualEditor}
       />
     </Box>

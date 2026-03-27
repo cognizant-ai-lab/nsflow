@@ -265,12 +265,12 @@ export const renderTree = (
           },
           // IMPORTANT: indent ONLY this folder's children (tiny px values)
           [`& > .${treeItemClasses.groupTransition}`]: {
-            marginLeft: "2px",
-            paddingLeft: "1px",
-            borderLeft: `1px dashed ${
+            marginLeft: "14px",
+            paddingLeft: "0px",
+            borderLeft: `2px dashed ${
               theme.palette.mode === "dark"
-                ? alpha(theme.palette.warning.light, 0.5)
-                : alpha(theme.palette.warning.main, 0.5)
+                ? alpha(theme.palette.warning.light, 0.7)
+                : alpha(theme.palette.warning.main, 0.6)
             }`,
           },
         }}

@@ -649,6 +649,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
           {/* Message input */}
           <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
             <TextField
+              autoFocus
               multiline
               minRows={2}
               placeholder={currentThread ? "Type a message..." : "Select or create a thread to start chatting"}
