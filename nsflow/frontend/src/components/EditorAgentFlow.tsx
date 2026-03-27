@@ -523,6 +523,8 @@ const EditorAgentFlow = ({
     } else {
       setNodes([]);
       setEdges([]);
+      setShowLaunchButton(false);
+      lastSeenNameRef.current = null;
     }
   }, [selectedNetwork, selectedDesignId, baseRadius, levelSpacing]);
 
