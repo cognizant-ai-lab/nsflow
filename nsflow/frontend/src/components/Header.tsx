@@ -24,7 +24,7 @@ import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
-  Refresh as RefreshIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
+  Autorenew as AutorenewIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
   KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon
 } from "@mui/icons-material";
 
@@ -177,19 +177,32 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           overflow: 'visible',
         }}>
           {/* Reload */}
-          {!isOnEditorPage && (
-            <IconButton
-              onClick={() => window.location.reload()}
-              sx={{ 
-                color: muiTheme.palette.text.primary,
-                '&:hover': { 
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
-                }
-              }}
-              title="Reload"
-            >
-              <RefreshIcon />
-            </IconButton>
+          {!isOnEditorPage && !isOnCrusePage && (
+            <Tooltip title={activeNetwork ? "Reload selected Agent-Network in-place" : "Select an Agent-Network first"} arrow>
+              <span>
+                <Button
+                  variant="outlined"
+                  startIcon={<AutorenewIcon />}
+                  onClick={() => window.location.reload()}
+                  disabled={!activeNetwork}
+                  sx={{
+                    ...muiTheme.navButton.inactive,
+                    borderColor: muiTheme.palette.secondary.main,
+                    '&:hover': !activeNetwork ? {} : {
+                      backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                      borderColor: muiTheme.palette.secondary.main,
+                    },
+                    '&.Mui-disabled': {
+                      opacity: 0.5,
+                      borderColor: muiTheme.palette.action.disabled,
+                      color: muiTheme.palette.text.disabled,
+                    },
+                  }}
+                >
+                  Reload
+                </Button>
+              </span>
+            </Tooltip>
           )}
 
           {/* Home Button */}
@@ -233,7 +246,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           {/* CRUSE Button - Hide on Editor and Cruse pages, Disable if no agent selected */}
           {pluginCruse && !isOnEditorPage && !isOnCrusePage && (
             <Tooltip
-              title={!activeNetwork ? "Select an agent first" : "Context-Reactive User Experience"}
+              title={!activeNetwork ? "Select an Agent-Network first" : "Context-Reactive User Experience"}
               arrow
             >
               <span>
