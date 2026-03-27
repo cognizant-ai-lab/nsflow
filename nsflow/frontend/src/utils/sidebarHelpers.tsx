@@ -269,8 +269,8 @@ export const renderTree = (
             paddingLeft: "0px",
             borderLeft: `2px dashed ${
               theme.palette.mode === "dark"
-                ? alpha(theme.palette.warning.light, 0.5)
-                : alpha(theme.palette.warning.main, 0.5)
+                ? alpha(theme.palette.warning.light, 0.7)
+                : alpha(theme.palette.warning.main, 0.6)
             }`,
           },
         }}
