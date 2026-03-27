@@ -133,6 +133,7 @@ const EditorAgentFlow = ({
   
   // Agent editor state
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
+  const [autoExpandPanel, setAutoExpandPanel] = useState(false);
   const isPanelOpenRef = useRef(false);
 
   // Fetch network connectivity data
@@ -205,15 +206,12 @@ const EditorAgentFlow = ({
     }
   };
 
-  // Handle node click
+  // Handle node click — always populate panel data, but don't auto-expand
   const onNodeClick: NodeMouseHandler = useCallback((_, node) => {
     setSelectedNodeId(node.id);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-
-    // If the agent editor panel is visually open, update it to show the clicked agent
-    if (isPanelOpenRef.current) {
-      setSelectedAgentName(node.id);
-    }
+    setAutoExpandPanel(false);
+    setSelectedAgentName(node.id);
 
     // Update nodes to show selection
     setNodes((nds) =>
@@ -227,8 +225,9 @@ const EditorAgentFlow = ({
     );
   }, [setNodes]);
 
-  // Handle node double-click
+  // Handle node double-click — expand panel
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
+    setAutoExpandPanel(true);
     setSelectedAgentName(node.id);
     isPanelOpenRef.current = true;
   }, []);
@@ -317,6 +316,7 @@ const EditorAgentFlow = ({
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
+    setAutoExpandPanel(true);
     setSelectedAgentName(nodeId);
     isPanelOpenRef.current = true;
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
@@ -974,7 +974,8 @@ const EditorAgentFlow = ({
         selectedDesignId={selectedDesignId}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
-        onClose={() => { setSelectedAgentName(null); isPanelOpenRef.current = false; }}
+        onClose={() => { setSelectedAgentName(null); setAutoExpandPanel(false); isPanelOpenRef.current = false; }}
+        autoExpand={autoExpandPanel}
         enableEditing={pluginManualEditor}
       />
     </Box>

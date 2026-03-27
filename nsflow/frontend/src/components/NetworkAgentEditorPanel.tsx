@@ -33,6 +33,7 @@ interface NetworkAgentEditorPanelProps {
   selectedAgentName: string | null;
   onAgentUpdated: () => void;
   onClose?: () => void;
+  autoExpand?: boolean; // When true, panel auto-expands on agent selection
   enableEditing?: boolean; // Flag to control editing capabilities
 }
 
@@ -41,6 +42,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   selectedAgentName,
   onAgentUpdated,
   onClose,
+  autoExpand = false,
   enableEditing = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -112,6 +114,13 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setSuccess(null);
     }
   }, [selectedAgentName, selectedDesignId, apiUrl, canEdit]);
+
+  // Expand panel when autoExpand becomes true (e.g. double-click on already-selected agent)
+  useEffect(() => {
+    if (autoExpand && selectedAgentName && !isExpanded) {
+      setIsExpanded(true);
+    }
+  }, [autoExpand, selectedAgentName]);
 
   const loadSchema = async () => {
     if (!apiUrl) return;
@@ -201,8 +210,8 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setOriginalData(agentData);
       setHasChanges(false);
       
-      // Auto-expand the panel when agent is selected
-      if (!isExpanded) setIsExpanded(true);
+      // Auto-expand the panel only when explicitly requested (double-click, right-click → open)
+      if (autoExpand && !isExpanded) setIsExpanded(true);
     } catch (err) {
       console.error('Error loading agent data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
