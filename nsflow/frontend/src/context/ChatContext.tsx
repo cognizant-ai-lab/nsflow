@@ -115,6 +115,9 @@ type ChatContextType = {
   slyDataTick: number;
   lastProgressAt: number;
   lastSlyDataAt: number;
+
+  waitingForAgent: boolean;
+  setWaitingForAgent: (waiting: boolean) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -147,6 +150,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   ]);
   const [activeNetwork, setActiveNetwork] = useState<string>("");
   const [isEditorMode, setIsEditorMode] = useState<boolean>(false);
+  const [waitingForAgent, setWaitingForAgent] = useState<boolean>(false);
 
   const [chatWs, setChatWs] = useState<WebSocket | null>(null);
   const [internalChatWs, setInternalChatWs] = useState<WebSocket | null>(null);
@@ -258,7 +262,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       getLastSlyDataMessage, getLastLogMessage, getLastProgressMessage,
 
       makeSlyDataConnectionId, makeLogConnectionId, makeProgressConnectionId,
-      progressTick, slyDataTick, lastProgressAt, lastSlyDataAt
+      progressTick, slyDataTick, lastProgressAt, lastSlyDataAt,
+      waitingForAgent, setWaitingForAgent
      }}>
       {children}
     </ChatContext.Provider>

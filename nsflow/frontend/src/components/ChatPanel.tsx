@@ -33,8 +33,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Autocomplete,
-  CircularProgress,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -47,14 +45,13 @@ import {
   AttachFile as AttachFileIcon,
   Close as CloseIcon,
   InsertDriveFile as FileIcon,
-  WarningAmber as WarningAmberIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
-import { useNeuroSan } from "../context/NeuroSanContext";
+
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
 import { Mp3Encoder } from "@breezystack/lamejs";
 
@@ -78,6 +75,8 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     addSlyDataMessage,
     chatWs,
     isEditorMode,
+    waitingForAgent,
+    setWaitingForAgent,
   } = useChatContext();
 
   const { stopWebSocket, clearChat } = useChatControls();
@@ -102,20 +101,12 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     previewUrl?: string;
   } | null>(null);
 
-  // Network loader state (editor mode only)
-  const { connectionType, host, port, isNsReady } = useNeuroSan();
-  const [availableNetworks, setAvailableNetworks] = useState<string[]>([]);
-  const [loadingNetworks, setLoadingNetworks] = useState(false);
-  const [loadingDefinition, setLoadingDefinition] = useState(false);
-  const [waitingForAgent, setWaitingForAgent] = useState(false);
-  const [selectedLoadNetwork, setSelectedLoadNetwork] = useState<string | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
   const messagePanelRef = useRef<ImperativePanelHandle>(null);
 
   // NEW: cache reader to get current editor data
-  const { loadSlyDataFromCache, saveSlyDataToCache, clearSlyDataCache } = useSlyDataCache();
+  const { loadSlyDataFromCache } = useSlyDataCache();
 
   const slyTogglePrefix = isEditorMode ? 'nsflow-editor-use-slydata' : 'nsflow-use-slydata';
   const slyToggleGlobalKey = slyTogglePrefix;
@@ -248,81 +239,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     } catch {}
   }, [useSlyDataChecked, slyToggleNetworkKey, isEditorMode]);
 
-  // Fetch available networks for editor dropdown
-  useEffect(() => {
-    if (!isEditorMode || !isNsReady || !apiUrl) return;
-    const fetchNetworks = async () => {
-      setLoadingNetworks(true);
-      try {
-        const params = new URLSearchParams();
-        if (connectionType) params.set("connection_type", connectionType);
-        if (host) params.set("host", host);
-        if (port) params.set("port", String(port));
-        const response = await fetch(`${apiUrl}/api/v1/list?${params.toString()}`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const names: string[] = (data.agents || []).map((a: any) => a.agent_name);
-          setAvailableNetworks(names);
-        }
-      } catch (e) {
-        console.error("Failed to fetch network list for editor:", e);
-      } finally {
-        setLoadingNetworks(false);
-      }
-    };
-    fetchNetworks();
-  }, [isEditorMode, isNsReady, apiUrl, connectionType, host, port]);
-
-  // Handler for loading an existing network into the editor (or clearing on X)
-  const handleLoadNetwork = useCallback(async (networkName: string | null) => {
-    const network = targetNetwork || activeNetwork;
-
-    setSelectedLoadNetwork(networkName);
-
-    if (!networkName) {
-      // User clicked X to clear — reset to "design from scratch" mode.
-      if (!isEditorMode) {
-        // Write directly to localStorage (React setState + useEffect won't flush before reload).
-        if (slyToggleNetworkKey) {
-          localStorage.setItem(slyToggleNetworkKey, 'false');
-        }
-        localStorage.setItem(slyToggleGlobalKey, 'false');
-        clearSlyDataCache(network || undefined);
-      }
-      window.location.reload();
-      return;
-    }
-
-    if (!apiUrl) return;
-    setLoadingDefinition(true);
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.error("Failed to load network definition:", errData.detail || response.statusText);
-        return;
-      }
-      const payload = await response.json();
-      const pretty = JSON.stringify(payload, null, 2);
-      addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
-      if (!isEditorMode) {
-        setUseSlyDataChecked(true);
-      }
-      setSampleQueriesExpanded(false);
-      if (network && !isEditorMode) {
-        saveSlyDataToCache(payload, network, 1);
-      }
-    } catch (e) {
-      console.error("Error loading network definition:", e);
-    } finally {
-      setLoadingDefinition(false);
-    }
-  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, saveSlyDataToCache, clearSlyDataCache, slyToggleNetworkKey, isEditorMode]);
-
-  // Auto-load from URL query param is now handled by EditorSidebar
+  // Network loading and auto-load from URL are now handled by EditorSidebar
 
   // Auto-play agent responses when microphone was used
   useEffect(() => {
@@ -1064,7 +981,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage();
+                      if (!waitingForAgent) sendMessage();
                     }
                   }}
                   sx={{
@@ -1072,7 +989,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                     "& .MuiOutlinedInput-root": {
                       backgroundColor: theme.palette.background.paper,
                       color: theme.palette.text.primary,
-                      padding: "8px 12px 8px 8px",
+                      padding: "8px 36px 8px 8px",
                       "&:hover": {
                         "& .MuiOutlinedInput-notchedOutline": {
                           borderColor: theme.palette.primary.main,

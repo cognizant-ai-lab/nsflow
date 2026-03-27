@@ -91,7 +91,7 @@ const EditorSidebar = ({
   const { apiUrl, isReady } = useApiPort();
   const { chatMessages, getLastProgressMessage, getLastSlyDataMessage,
     progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, targetNetwork,
-    activeNetwork, addSlyDataMessage } = useChatContext();
+    activeNetwork, addSlyDataMessage, regenerateSessionId, waitingForAgent } = useChatContext();
   const { host, port, connectionType, isNsReady } = useNeuroSan();
   const { stopWebSocket, clearChat } = useChatControls();
   const [searchQuery, setSearchQuery] = useState("");
@@ -370,9 +370,10 @@ const EditorSidebar = ({
 
     if (!apiUrl) return;
 
-    // Clear previous chat session before loading new network
+    // Clear previous chat session and reconnect with fresh WebSocket
     stopWebSocket();
     clearChat();
+    regenerateSessionId(); // Triggers TabbedChatPanel to reconnect WebSocket
 
     setLoadingDefinition(true);
     try {
@@ -657,6 +658,7 @@ const EditorSidebar = ({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Autocomplete
               size="small"
+              disabled={waitingForAgent}
               options={(() => {
                 const sorted = [...availableNetworks].sort((a, b) => {
                   const folderA = a.split('/').slice(0, -1).join('/');
