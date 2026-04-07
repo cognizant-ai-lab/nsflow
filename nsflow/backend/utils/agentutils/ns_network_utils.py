@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 # END COPYRIGHT
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -69,6 +70,11 @@ class NsNetworkUtils:
                 for child in origin_to_tools.get(current_node, []):
                     stack.append((child, current_depth + 1))
 
+        # Step 2.5: Calculate radial positions so nodes don't overlap
+        positions = NsNetworkUtils._calculate_radial_positions(
+            all_nodes, depth_map, parent_map, origin_to_tools
+        )
+
         # Step 3: Build node dicts
         for node in all_nodes:
             children = origin_to_tools.get(node, [])
@@ -84,7 +90,7 @@ class NsNetworkUtils:
                         "dropdown_tools": [],
                         "sub_networks": [],
                     },
-                    "position": {"x": 100, "y": 100},
+                    "position": positions.get(node, {"x": 400, "y": 400}),
                 }
             )
 
@@ -234,6 +240,96 @@ class NsNetworkUtils:
     def get_children(data: Dict[str, Any]) -> List[str]:
         """Get down-chain agents for any agent in the network"""
         return list(data.get("tools") or data.get("down_chains") or [])
+
+    # Estimated node dimensions for overlap prevention
+    _NODE_WIDTH = 250
+    _NODE_HEIGHT = 60
+    _PADDING = 80
+
+    @staticmethod
+    def _calculate_radial_positions(
+        all_nodes: set,
+        depth_map: Dict[str, int],
+        parent_map: Dict[str, str],
+        origin_to_tools: Dict[str, List[str]],
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Calculate radial positions for nodes: root at center, children in
+        concentric rings.  Adapts automatically to any number of nodes at each
+        depth level.  All returned coordinates are guaranteed positive.
+        """
+        if not all_nodes:
+            return {}
+
+        positions: Dict[str, Dict[str, int]] = {}
+
+        # Group nodes by depth
+        depth_groups: Dict[int, List[str]] = {}
+        for node in all_nodes:
+            d = depth_map.get(node, 0)
+            depth_groups.setdefault(d, []).append(node)
+
+        # Sort each group for deterministic ordering
+        for d in depth_groups:
+            depth_groups[d].sort()
+
+        max_depth = max(depth_groups.keys()) if depth_groups else 0
+
+        # Calculate radius for each ring so nodes never overlap.
+        # Arc distance between adjacent nodes must be >= NODE_WIDTH.
+        # arc = 2*pi*r / n  =>  r = n * NODE_WIDTH / (2*pi)
+        nw = NsNetworkUtils._NODE_WIDTH
+        nh = NsNetworkUtils._NODE_HEIGHT
+        min_gap = max(nw, nh) + NsNetworkUtils._PADDING  # min arc between nodes
+
+        # Use origin (0, 0); we shift to positive coordinates at the end.
+        cx, cy = 0, 0
+
+        # Place depth-0 nodes (roots) at center
+        roots = depth_groups.get(0, [])
+        if len(roots) == 1:
+            positions[roots[0]] = {"x": cx, "y": cy}
+        else:
+            r = max(200, len(roots) * min_gap / (2 * math.pi))
+            for i, node in enumerate(roots):
+                angle = 2 * math.pi * i / len(roots) - math.pi / 2
+                positions[node] = {
+                    "x": int(cx + r * math.cos(angle)),
+                    "y": int(cy + r * math.sin(angle)),
+                }
+
+        # Place nodes at each subsequent depth in concentric rings
+        base_ring_radius = 350
+        for depth in range(1, max_depth + 1):
+            ring_nodes = depth_groups.get(depth, [])
+            if not ring_nodes:
+                continue
+
+            n = len(ring_nodes)
+            # Radius = max of (base for this depth, minimum to avoid overlap)
+            min_r_for_spacing = n * min_gap / (2 * math.pi)
+            radius = max(base_ring_radius * depth, min_r_for_spacing)
+
+            for i, node in enumerate(ring_nodes):
+                angle = 2 * math.pi * i / n - math.pi / 2
+                positions[node] = {
+                    "x": int(cx + radius * math.cos(angle)),
+                    "y": int(cy + radius * math.sin(angle)),
+                }
+
+        # Shift all positions so every coordinate is positive with padding
+        if positions:
+            min_x = min(p["x"] for p in positions.values())
+            min_y = min(p["y"] for p in positions.values())
+            pad = NsNetworkUtils._PADDING
+            shift_x = -min_x + pad if min_x < pad else 0
+            shift_y = -min_y + pad if min_y < pad else 0
+            if shift_x or shift_y:
+                for p in positions.values():
+                    p["x"] += shift_x
+                    p["y"] += shift_y
+
+        return positions
 
     @staticmethod
     def _calculate_positions(
