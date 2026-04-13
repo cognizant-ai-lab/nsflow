@@ -13,46 +13,16 @@ permissions:
 jobs:
   test:
     if: github.repository == 'cognizant-ai-lab/nsflow'
-    runs-on: ubuntu-latest
-    container:
-      image: python:3.12-slim
-    env:
+    # 1.0.0
+    uses: cognizant-ai-lab/build-common/.github/workflows/_python-quality-gate.yml@455db3cc40e9ed6a0fb9bbaf8188888c1ae315c2
+    with:
+      python-version: '3.12'
+      # No lint or test steps in original workflow
+      lint-command-override: 'true'
+      run-shellcheck: false
+      run-pytest: false
+      check-readme-pypi: true
+    secrets:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-build.txt
-          pip install -r requirements.txt
-
-      - name: Show installed packages
-        run: pip freeze
-
-      - name: Check README renders correctly on PyPI
-        run: |
-          pip install readme_renderer readme_renderer[md]
-          python -m readme_renderer README.md
-
-
-      - name: Notify Slack on success
-        if: success() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          payload: |
-            { 
-              "text": "✅ *Tests Passed* for `${{ github.repository }}` on `${{ github.ref_name }}`"
-            }
-
-      - name: Notify Slack on failure
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          payload: |
-            {
-              "text": "❌ *Tests Failed* for `${{ github.repository }}` on `${{ github.ref_name }}`"
-            }
 
 
