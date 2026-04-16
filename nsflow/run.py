@@ -215,7 +215,11 @@ The type of connection to initiate. Choices are to connect to:
 
     def set_environment_variables(self):
         """Set required environment variables based on active mode."""
-        os.environ["PYTHONPATH"] = self.root_dir
+        existing_pythonpath = os.environ.get("PYTHONPATH", "")
+        if existing_pythonpath:
+            os.environ["PYTHONPATH"] = self.root_dir + os.pathsep + existing_pythonpath
+        else:
+            os.environ["PYTHONPATH"] = self.root_dir
 
         # Common envs
         common_env = {
