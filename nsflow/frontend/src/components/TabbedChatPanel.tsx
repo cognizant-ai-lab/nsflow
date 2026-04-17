@@ -194,6 +194,14 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
               payload = undefined;
             }
           }
+        } else if (typeof msg === "string") {
+          // AGENT_PROGRESS events arrive as a JSON string: '{"progress": {...}}'
+          try {
+            const parsed = JSON.parse(msg);
+            payload = "progress" in parsed ? parsed.progress : parsed;
+          } catch {
+            payload = undefined;
+          }
         }
 
         if (payload) {
