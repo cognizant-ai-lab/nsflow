@@ -69,8 +69,12 @@ async def build_connectivity_from_json(request: Request):
     Accepts ONE of:
       A) connectivity_info: [{ "origin": str, "tools": [str, ...] }, ...]
          -> NsNetworkUtils.build_nodes_and_edges(...)
-      B) agent_network_definition: { "<agent>": { "down_chains": [...], "instructions": str }, ... }
-         + optional agent_network_name
+      B) agent_network_definition: dict or connectivity-style list
+           - dict form:  { "<agent>": { "down_chains": [...], "instructions": str }, ... }
+           - list form:  [{ "origin": str, "tools": [...], "instructions": str, ... }, ...]
+             (entries whose "origin" starts with "/" are treated as external agents and excluded
+             from top-level keys; only "tools", "instructions", and "description" are copied)
+         + optional agent_network_name (str)
          -> NsNetworkUtils.partial_build_nodes_and_edges(...)
     """
     try:

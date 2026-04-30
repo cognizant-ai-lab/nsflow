@@ -14,7 +14,7 @@
 #
 # END COPYRIGHT
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 @dataclass
@@ -108,11 +108,11 @@ class NsNetworkUtils:
         edges: List[Dict] = []
 
         # Extract agent network definition (accept dict or list/connectivity format)
-        raw_definition = state_dict.get("agent_network_definition", {})
+        raw_definition: Union[Dict[str, Any], List[Dict[str, Any]]] = state_dict.get("agent_network_definition", {})
         if isinstance(raw_definition, list):
             raw_definition = NsNetworkUtils.list_def_to_dict(raw_definition)
-        agent_definition = raw_definition
-        network_name = state_dict.get("agent_network_name", "unknown_network")
+        agent_definition: Dict[str, Any] = raw_definition
+        network_name: str = state_dict.get("agent_network_name", "unknown_network")
 
         if not agent_definition:
             return {
@@ -337,13 +337,13 @@ class NsNetworkUtils:
             include_keys = ["tools", "instructions", "description"]
         result: Dict[str, Any] = {}
         for entry in list_def or []:
-            name = entry.get("origin")
+            name: str = entry.get("origin")
             if not name or name.startswith("/"):
                 continue
             value: Dict[str, Any] = {}
             for key in include_keys:
-                if key in entry and entry[key]:
-                    value[key] = entry[key]
+                if key in entry and entry.get(key):
+                    value[key] = entry.get(key)
             result[name] = value
         return result
 
