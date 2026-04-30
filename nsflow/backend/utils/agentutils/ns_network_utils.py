@@ -107,8 +107,11 @@ class NsNetworkUtils:
         nodes: List[Dict] = []
         edges: List[Dict] = []
 
-        # Extract agent network definition
-        agent_definition = state_dict.get("agent_network_definition", {})
+        # Extract agent network definition (accept dict or list/connectivity format)
+        raw_definition = state_dict.get("agent_network_definition", {})
+        if isinstance(raw_definition, list):
+            raw_definition = NsNetworkUtils.list_def_to_dict(raw_definition)
+        agent_definition = raw_definition
         network_name = state_dict.get("agent_network_name", "unknown_network")
 
         if not agent_definition:
@@ -320,10 +323,38 @@ class NsNetworkUtils:
         return components
 
     @staticmethod
-    def normalize_agent_def(agent_def: Dict[str, dict]) -> Dict[str, dict]:
+    def list_def_to_dict(
+        list_def: List[Dict[str, Any]],
+        include_keys: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
-        Canonicalize children under 'down_chains' (accepts 'tools' or 'down_chains').
+        Convert list-format (connectivity-style) agent definition to dict-format.
+        Entries whose 'origin' starts with '/' are external agents — they are
+        referenced inside tools lists but never appear as top-level dict keys.
+        Only keys present in include_keys (and non-empty) are copied.
         """
+        if include_keys is None:
+            include_keys = ["tools", "instructions", "description"]
+        result: Dict[str, Any] = {}
+        for entry in list_def or []:
+            name = entry.get("origin")
+            if not name or name.startswith("/"):
+                continue
+            value: Dict[str, Any] = {}
+            for key in include_keys:
+                if key in entry and entry[key]:
+                    value[key] = entry[key]
+            result[name] = value
+        return result
+
+    @staticmethod
+    def normalize_agent_def(agent_def) -> Dict[str, dict]:
+        """
+        Canonicalize children under 'down_chains'.
+        Accepts dict-format or list-format (connectivity-style with 'origin' keys).
+        """
+        if isinstance(agent_def, list):
+            agent_def = NsNetworkUtils.list_def_to_dict(agent_def)
         normalized: Dict[str, dict] = {}
         for name, data in (agent_def or {}).items():
             d = dict(data or {})

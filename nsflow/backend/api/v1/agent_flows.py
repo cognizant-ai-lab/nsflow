@@ -79,13 +79,16 @@ async def build_connectivity_from_json(request: Request):
         raise HTTPException(status_code=422, detail="Body must be valid JSON") from e
 
     has_conn = isinstance(data.get("connectivity_info"), list)
-    has_state = isinstance(data.get("agent_network_definition"), dict)
+    has_state = isinstance(data.get("agent_network_definition"), (dict, list))
 
     # require exactly one of the two inputs
     if has_conn == has_state:
         raise HTTPException(
             status_code=422,
-            detail="Provide exactly one of 'connectivity_info' (list) or 'agent_network_definition' (dict).",
+            detail=(
+                "Provide exactly one of 'connectivity_info' (list) or "
+                "'agent_network_definition' (dict or connectivity-style list)."
+            ),
         )
 
     try:
@@ -130,10 +133,10 @@ async def get_agent_details_from_json(agent_name: str, request: Request):
         raise HTTPException(status_code=422, detail="Body must be valid JSON") from e
 
     agent_def = data.get("agent_network_definition")
-    if not isinstance(agent_def, dict):
+    if not isinstance(agent_def, (dict, list)):
         raise HTTPException(
             status_code=422,
-            detail="Missing or invalid 'agent_network_definition' (dict required).",
+            detail="Missing or invalid 'agent_network_definition' (dict or connectivity-style list required).",
         )
 
     try:

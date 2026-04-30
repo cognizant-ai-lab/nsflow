@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 export type ProgressPayload = {
-  agent_network_definition?: Record<string, any>;
+  agent_network_definition?: Record<string, any> | Array<Record<string, any>>;
   agent_network_name?: string;
 };
 
@@ -43,12 +43,26 @@ export function asObjectText(text: string | object): Record<string, any> | undef
   return undefined;
 }
 
+/** Normalize an object that may use `connectivity_info` into a ProgressPayload. */
+function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefined {
+  if ("agent_network_definition" in obj || "agent_network_name" in obj) {
+    return obj as ProgressPayload;
+  }
+  if ("connectivity_info" in obj && Array.isArray(obj.connectivity_info)) {
+    return {
+      agent_network_definition: obj.connectivity_info as Array<Record<string, any>>,
+      agent_network_name: obj.agent_network_name,
+    };
+  }
+  return undefined;
+}
+
 /**
  * Extract a { agent_network_definition, agent_network_name } payload from:
  * - a ChatContext Message-like object: { text: string|object }
  * - a raw object
  * - a code-fenced JSON string
- * Also accepts { message: {...} } wrapping.
+ * Also accepts { message: {...} } wrapping and connectivity_info list format.
  */
 export function extractProgressPayload(
   src?: { text: string | object } | string | object
@@ -60,14 +74,12 @@ export function extractProgressPayload(
     const obj = asObjectText((src as any).text);
     if (!obj) return undefined;
 
-    if ("agent_network_definition" in obj || "agent_network_name" in obj) {
-      return obj as ProgressPayload;
-    }
+    const direct = normalizePayloadObj(obj);
+    if (direct) return direct;
+
     if ("message" in obj && typeof (obj as any).message === "object") {
-      const inner = (obj as any).message;
-      if ("agent_network_definition" in inner || "agent_network_name" in inner) {
-        return inner as ProgressPayload;
-      }
+      const inner = normalizePayloadObj((obj as any).message);
+      if (inner) return inner;
     }
     return undefined;
   }
@@ -76,14 +88,12 @@ export function extractProgressPayload(
   const obj = typeof src === "string" ? asObjectText(src) : (src as any);
   if (!obj || typeof obj !== "object") return undefined;
 
-  if ("agent_network_definition" in obj || "agent_network_name" in obj) {
-    return obj as ProgressPayload;
-  }
+  const direct = normalizePayloadObj(obj);
+  if (direct) return direct;
+
   if ("message" in obj && typeof obj.message === "object") {
-    const inner = obj.message;
-    if ("agent_network_definition" in inner || "agent_network_name" in inner) {
-      return inner as ProgressPayload;
-    }
+    const inner = normalizePayloadObj(obj.message);
+    if (inner) return inner;
   }
   return undefined;
 }
