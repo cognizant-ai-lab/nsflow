@@ -33,7 +33,7 @@ class ToolboxService:
     def __init__(self, toolbox_info_file: Optional[str] = None):
         """Initialize toolbox service with optional toolbox info file path"""
         self.toolbox_info_file = toolbox_info_file or os.getenv(
-            "AGENT_TOOLBOX_INFO_FILE", "toolbox/toolbox_info.hocon"
+            "AGENT_TOOLBOX_INFO_FILE", "neuro_san_studio/toolbox/toolbox_info.hocon"
         )
 
     def get_available_tools(self) -> Union[Dict[str, Any], str]:
