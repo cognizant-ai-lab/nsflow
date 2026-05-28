@@ -36,11 +36,31 @@ import {
 import LogsPanel from "./LogsPanel";
 
 export interface EditorLogsPanelProps {
-  /** Optional left offset in pixels. If provided, overrides auto-detection. */
+  /** Optional left offset in pixels. If provided, overrides sidebar auto-detection. */
   leftOffset?: number;
+  /** Override bottom offset in pixels (default 24). */
+  bottom?: number | string;
+  /** Override right offset (mutually exclusive with leftOffset). */
+  right?: number | string;
+  /** Override top offset (mutually exclusive with default bottom). */
+  top?: number | string;
+  /** Width when expanded (default 800). */
+  expandedWidth?: number;
+  /** Height when expanded (default 360). */
+  expandedHeight?: number;
+  /** Skip the MutationObserver that tracks the EditorSidebar width. Use when there's no sidebar (e.g. Zen Mode). */
+  disableSidebarTracking?: boolean;
 }
 
-const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({ leftOffset }) => {
+const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({
+  leftOffset,
+  bottom = 24,
+  right,
+  top,
+  expandedWidth = 800,
+  expandedHeight = 360,
+  disableSidebarTracking = false,
+}) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -53,6 +73,12 @@ const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({ leftOffset }) => {
     // If leftOffset prop is provided, use it and skip auto-detection
     if (leftOffset !== undefined) {
       setSidebarWidth(leftOffset);
+      return;
+    }
+
+    // Caller (e.g. Zen Mode) opted out of sidebar tracking
+    if (disableSidebarTracking) {
+      setSidebarWidth(0);
       return;
     }
 
@@ -95,7 +121,7 @@ const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({ leftOffset }) => {
       window.removeEventListener('resize', updateSidebarWidth);
       observer.disconnect();
     };
-  }, [leftOffset]);
+  }, [leftOffset, disableSidebarTracking]);
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {
@@ -134,15 +160,17 @@ const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({ leftOffset }) => {
       elevation={8}
       sx={{
         position: 'fixed',
-        bottom: 24,
-        left: sidebarWidth + 16, // Position just after sidebar edge with 16px gap
+        // Caller may override bottom/top; default to bottom: 24
+        ...(top !== undefined ? { top } : { bottom }),
+        // Caller may anchor to the right; otherwise anchor on the left after the sidebar
+        ...(right !== undefined ? { right } : { left: sidebarWidth + 16 }),
         zIndex: theme.zIndex.drawer + 1, // Above all drawers and palettes
         backgroundColor: theme.palette.background.paper,
         border: `1px solid ${theme.palette.divider}`,
         borderRadius: 2,
         transition: 'all 0.3s ease-in-out',
-        width: isExpanded ? 800 : 80, // Increased expanded width from 384 to 500
-        height: isExpanded ? 360 : 40, // Slightly increased height too
+        width: isExpanded ? expandedWidth : 80,
+        height: isExpanded ? expandedHeight : 40,
         overflow: 'hidden'
       }}
     >
@@ -235,8 +263,8 @@ const EditorLogsPanel: React.FC<EditorLogsPanelProps> = ({ leftOffset }) => {
 
       {/* Expanded Content */}
       <Collapse in={isExpanded} timeout={300}>
-        <Box sx={{ 
-          height: 312, // 360 - 48 (header height)
+        <Box sx={{
+          height: expandedHeight - 48, // subtract header height so content fits inside the panel
           overflow: 'hidden',
           backgroundColor: theme.palette.background.default
         }}>

@@ -25,11 +25,13 @@ import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Autorenew as AutorenewIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon
+  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon,
+  Fullscreen as FullscreenIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
 import { useTheme } from "../context/ThemeContext";
+import { useZenMode } from "../hooks/useZenMode";
 import { getFeatureFlags } from "../utils/config";
 
 interface HeaderProps {
@@ -45,7 +47,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
-  const { pluginCruse, pluginExport } = getFeatureFlags();
+  const { pluginCruse, pluginExport, pluginZenMode } = getFeatureFlags();
+  const { enterZenMode } = useZenMode();
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
@@ -368,13 +371,34 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           )}
         </Box>
 
-        {/* Right - Theme Toggle + Profile */}
+        {/* Right - Zen Mode + Theme Toggle + Profile */}
         <Box sx={{
           display: 'flex',
           alignItems: 'center',
           gap: 1,
           flex: '0 0 auto'
         }}>
+          {/* Zen Mode Button - only on home page, behind plugin flag */}
+          {pluginZenMode && !isOnEditorPage && !isOnCrusePage && (
+            <Tooltip title="Enter Zen Mode (Presentation View)">
+              <IconButton
+                onClick={enterZenMode}
+                sx={{
+                  color: muiTheme.palette.text.primary,
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                  border: `1px solid ${alpha(muiTheme.palette.primary.main, 0.3)}`,
+                  '&:hover': {
+                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
+                    borderColor: muiTheme.palette.primary.main,
+                    transform: 'scale(1.05)',
+                  },
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <FullscreenIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           <MuiThemeToggle />
           <IconButton
             sx={{ 
