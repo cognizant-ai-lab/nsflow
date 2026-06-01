@@ -166,40 +166,19 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
     setZoomLevel(config.features.defaultZoomLevel);
   }, [config.features.defaultZoomLevel]);
 
-  // Handle keyboard shortcuts in zen mode
+  // Escape exits Zen Mode. Zoom uses the browser's native Ctrl/Cmd +/-/0,
+  // so we don't bind custom zoom shortcuts here.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isZenMode) return;
-
-      // Escape to exit zen mode
       if (event.key === 'Escape') {
         exitZenMode();
-        return;
-      }
-
-      // Zoom controls (only if zoom controls are enabled)
-      if (config.features.enableZoomControls) {
-        // + or = to zoom in
-        if (event.key === '+' || event.key === '=') {
-          event.preventDefault();
-          zoomIn();
-        }
-        // - to zoom out
-        if (event.key === '-') {
-          event.preventDefault();
-          zoomOut();
-        }
-        // 0 to reset zoom
-        if (event.key === '0') {
-          event.preventDefault();
-          resetZoom();
-        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isZenMode, config.features.enableZoomControls, zoomIn, zoomOut, resetZoom, exitZenMode]);
+  }, [isZenMode, exitZenMode]);
 
   const setZoom = useCallback((level: number) => {
     const clampedLevel = Math.max(

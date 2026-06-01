@@ -608,22 +608,6 @@ const ZenModeOverlay = () => {
           >
             Press <strong>Esc</strong> to exit
           </Typography>
-          {config.features.enableZoomControls && (
-            <Typography
-              variant="caption"
-              sx={{ color: alpha(theme.palette.text.secondary, 0.7) }}
-            >
-              •
-            </Typography>
-          )}
-          {config.features.enableZoomControls && (
-            <Typography
-              variant="caption"
-              sx={{ color: alpha(theme.palette.text.secondary, 0.7) }}
-            >
-              <strong>+/-</strong> to zoom
-            </Typography>
-          )}
         </Box>
       </Fade>
 
