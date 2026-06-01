@@ -378,25 +378,37 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           gap: 1,
           flex: '0 0 auto'
         }}>
-          {/* Zen Mode Button - only on home page, behind plugin flag */}
+          {/* Zen Mode Button - only on home page, behind plugin flag.
+              Requires an Agent-Network to be selected first. */}
           {pluginZenMode && !isOnEditorPage && !isOnCrusePage && (
-            <Tooltip title="Enter Zen Mode (Presentation View)">
-              <IconButton
-                onClick={enterZenMode}
-                sx={{
-                  color: muiTheme.palette.text.primary,
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                  border: `1px solid ${alpha(muiTheme.palette.primary.main, 0.3)}`,
-                  '&:hover': {
-                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
-                    borderColor: muiTheme.palette.primary.main,
-                    transform: 'scale(1.05)',
-                  },
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <FullscreenIcon />
-              </IconButton>
+            <Tooltip
+              title={activeNetwork ? "Enter Zen Mode (Presentation View)" : "Select an Agent-Network first"}
+              arrow
+            >
+              {/* Wrapper span lets the Tooltip render over a disabled button. */}
+              <span>
+                <IconButton
+                  onClick={enterZenMode}
+                  disabled={!activeNetwork}
+                  sx={{
+                    color: muiTheme.palette.text.primary,
+                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                    border: `1px solid ${alpha(muiTheme.palette.primary.main, 0.3)}`,
+                    '&:hover': !activeNetwork ? {} : {
+                      backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
+                      borderColor: muiTheme.palette.primary.main,
+                      transform: 'scale(1.05)',
+                    },
+                    '&.Mui-disabled': {
+                      color: alpha(muiTheme.palette.text.primary, 0.3),
+                      borderColor: alpha(muiTheme.palette.primary.main, 0.15),
+                    },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </span>
             </Tooltip>
           )}
           <MuiThemeToggle />
