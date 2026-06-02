@@ -97,11 +97,15 @@ const HomeContent: React.FC = () => {
               </div>
 
               <PanelGroup direction="horizontal">
-                <Panel defaultSize={12} minSize={10} maxSize={25}>
-                  {/* Sidebar */}
-                  <Sidebar onSelectNetwork={setSelectedNetwork} />
-                </Panel>
-                <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
+                {!isZenMode && (
+                  <>
+                    <Panel defaultSize={12} minSize={10} maxSize={25}>
+                      {/* Sidebar */}
+                      <Sidebar onSelectNetwork={setSelectedNetwork} />
+                    </Panel>
+                    <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
+                  </>
+                )}
                 <Panel defaultSize={55} minSize={40}>
                   <PanelGroup direction="vertical">
                     <Panel defaultSize={66} minSize={50} maxSize={85}>

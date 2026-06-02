@@ -35,6 +35,7 @@ export interface ZenModeFeatures {
     showAgentFlow: boolean;
     showChat: boolean;
     showHeader: boolean;
+    showSidebar: boolean;
     
     // Agent Flow features
     showAgentFlowControls: boolean;
@@ -121,6 +122,7 @@ export interface ZenModeFeatures {
       showAgentFlow: true,
       showChat: true,
       showHeader: true,
+      showSidebar: false,
       
       // Agent Flow
       showAgentFlowControls: true,
@@ -219,6 +221,7 @@ export interface ZenModeFeatures {
       showConfigPanel: true,
       showSlyDataPanel: true,
       showLogsPanel: true,
+      showSidebar: true,
       chatPanelWidth: 35,
     },
     theme: {

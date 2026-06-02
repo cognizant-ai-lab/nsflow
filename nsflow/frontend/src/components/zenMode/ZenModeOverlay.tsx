@@ -47,6 +47,7 @@ import InternalChatPanel from "../InternalChatPanel";
 import ConfigPanel from "../ConfigPanel";
 import EditorLogsPanel from "../EditorLogsPanel";
 import SlyDataPanel from "../slydata/EditorSlyDataPanel";
+import Sidebar from "../Sidebar";
 
 // Memoized Tabs component to prevent re-renders on hover
 const ZenModeTabs = memo(({
@@ -494,6 +495,49 @@ const ZenModeOverlay = () => {
         }}
       >
         <PanelGroup direction="horizontal">
+          {config.features.showSidebar && (
+            <>
+              <Panel defaultSize={14} minSize={10} maxSize={25}>
+                <Box
+                  sx={{
+                    height: "100%",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    background: themeAwareColors.chatBackground,
+                    border: `1px solid ${themeAwareColors.chatBorder}`,
+                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+                  }}
+                >
+                  <Sidebar onSelectNetwork={() => { /* selection is mirrored via ChatContext.activeNetwork */ }} />
+                </Box>
+              </Panel>
+              <PanelResizeHandle
+                style={{
+                  width: 8,
+                  background: "transparent",
+                  cursor: "ew-resize",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 40,
+                    borderRadius: 2,
+                    background: alpha(theme.palette.primary.main, 0.3),
+                    transition: "background 0.2s, height 0.2s",
+                    "&:hover": {
+                      background: config.theme.primaryAccent,
+                      height: 60,
+                    },
+                  }}
+                />
+              </PanelResizeHandle>
+            </>
+          )}
+
           {/* Agent Flow Panel */}
           {config.features.showAgentFlow && (
             <>
