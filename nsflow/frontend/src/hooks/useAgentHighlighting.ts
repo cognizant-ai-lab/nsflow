@@ -23,21 +23,21 @@ interface UseAgentHighlightingProps {
 }
 
 /**
- * Hook to manage real-time agent highlighting via WebSocket
- * Tracks active agents and edges based on otrace data from logs
+ * Hook to manage real-time agent highlighting via WebSocket.
+ * Tracks active agents and edges based on otrace data from logs.
+ *
+ * State is per-instance: each caller owns its own `activeAgents` / `activeEdges`
+ * derived from its own message stream. We deliberately do NOT keep a
+ * module-level cache here — when two consumers (e.g. AgentFlow + ZenModeAgentFlow)
+ * are mounted at the same time, a shared cache becomes a last-writer-wins race.
  */
-
-// Shared state outside component to persist across mounts
-let lastActiveAgents: Set<string> = new Set();
-let lastActiveEdges: Set<string> = new Set();
-
 export const useAgentHighlighting = ({
   selectedNetwork,
   wsUrl,
   sessionId,
 }: UseAgentHighlightingProps) => {
-  const [activeAgents, setActiveAgents] = useState<Set<string>>(lastActiveAgents);
-  const [activeEdges, setActiveEdges] = useState<Set<string>>(lastActiveEdges);
+  const [activeAgents, setActiveAgents] = useState<Set<string>>(() => new Set());
+  const [activeEdges, setActiveEdges] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!selectedNetwork) return;
@@ -67,9 +67,7 @@ export const useAgentHighlighting = ({
 
           if (logMessage.otrace && Array.isArray(logMessage.otrace)) {
             // Update active agents from otrace
-            const newActiveAgents = new Set<string>(logMessage.otrace);
-            setActiveAgents(newActiveAgents);
-            lastActiveAgents = newActiveAgents; // Persist to shared state
+            setActiveAgents(new Set<string>(logMessage.otrace));
 
             // Generate active edges from the agent sequence
             if (logMessage.otrace.length > 1) {
@@ -80,11 +78,8 @@ export const useAgentHighlighting = ({
                 );
               }
               setActiveEdges(newActiveEdges);
-              lastActiveEdges = newActiveEdges; // Persist to shared state
             } else {
-              // Clear edges if no sequence
               setActiveEdges(new Set());
-              lastActiveEdges = new Set();
             }
           }
         }
