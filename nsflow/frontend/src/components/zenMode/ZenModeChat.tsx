@@ -536,70 +536,72 @@ const ZenModeChat = () => {
             }}
           />
           
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
-            <Tooltip title="Attach file (PDF, .txt, .md)">
-              <IconButton
-                size="small"
-                onClick={handleFileAttach}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  color: theme.palette.primary.main,
-                  borderRadius: 999,
-                  border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-                  "&:hover": {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                  },
-                }}
-              >
-                <AttachFileIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </Tooltip>
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 0.75 }}>
+            <Box sx={{ display: "flex", gap: 0.75, justifyContent: "center" }}>
+              <Tooltip title="Attach file (PDF, .txt, .md)">
+                <IconButton
+                  size="small"
+                  onClick={handleFileAttach}
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    color: theme.palette.primary.main,
+                    borderRadius: 999,
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                    "&:hover": {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    },
+                  }}
+                >
+                  <AttachFileIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
 
-            {enableSpeechToText && (
-              <Tooltip
-                title={
-                  isProcessing ? "Processing..." : isRecording ? "Recording..." : "Hold to record"
-                }
-              >
-                <span>
-                  <IconButton
-                    size="small"
-                    onMouseDown={startRecording}
-                    onMouseUp={handleStopRecording}
-                    onMouseLeave={handleStopRecording}
-                    onTouchStart={startRecording}
-                    onTouchEnd={handleStopRecording}
-                    disabled={isProcessing}
-                    sx={{
-                      width: 36,
-                      height: 36,
-                      color: isProcessing
-                        ? theme.palette.info.main
-                        : isRecording
-                        ? theme.palette.error.main
-                        : theme.palette.primary.main,
-                      borderRadius: 999,
-                      border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-                      "&:hover": {
-                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                      },
-                    }}
-                  >
-                    <MicIcon
+              {enableSpeechToText && (
+                <Tooltip
+                  title={
+                    isProcessing ? "Processing..." : isRecording ? "Recording..." : "Hold to record"
+                  }
+                >
+                  <span>
+                    <IconButton
+                      size="small"
+                      onMouseDown={startRecording}
+                      onMouseUp={handleStopRecording}
+                      onMouseLeave={handleStopRecording}
+                      onTouchStart={startRecording}
+                      onTouchEnd={handleStopRecording}
+                      disabled={isProcessing}
                       sx={{
-                        fontSize: 20,
-                        animation: isRecording ? "pulse 1s ease-in-out infinite" : "none",
-                        "@keyframes pulse": {
-                          "0%, 100%": { opacity: 1 },
-                          "50%": { opacity: 0.5 },
+                        width: 36,
+                        height: 36,
+                        color: isProcessing
+                          ? theme.palette.info.main
+                          : isRecording
+                          ? theme.palette.error.main
+                          : theme.palette.primary.main,
+                        borderRadius: 999,
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.primary.main, 0.1),
                         },
                       }}
-                    />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            )}
+                    >
+                      <MicIcon
+                        sx={{
+                          fontSize: 20,
+                          animation: isRecording ? "pulse 1s ease-in-out infinite" : "none",
+                          "@keyframes pulse": {
+                            "0%, 100%": { opacity: 1 },
+                            "50%": { opacity: 0.5 },
+                          },
+                        }}
+                      />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+            </Box>
 
             <Button
               variant="contained"
