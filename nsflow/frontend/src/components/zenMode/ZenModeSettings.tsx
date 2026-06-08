@@ -47,6 +47,7 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "showChat", label: "Show Chat Panel", category: "Layout" },
   { key: "showHeader", label: "Show Header", category: "Layout" },
   { key: "showSidebar", label: "Show Sidebar (Switch Networks)", category: "Layout" },
+  { key: "enableFullscreen", label: "Use Browser Fullscreen", category: "Layout" },
   
   // Agent Flow
   { key: "showAgentFlowControls", label: "Flow Controls", category: "Agent Flow" },

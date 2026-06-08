@@ -36,6 +36,7 @@ export interface ZenModeFeatures {
     showChat: boolean;
     showHeader: boolean;
     showSidebar: boolean;
+    enableFullscreen: boolean;
     
     // Agent Flow features
     showAgentFlowControls: boolean;
@@ -123,6 +124,7 @@ export interface ZenModeFeatures {
       showChat: true,
       showHeader: true,
       showSidebar: false,
+      enableFullscreen: false,
       
       // Agent Flow
       showAgentFlowControls: true,

@@ -85,16 +85,17 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
       if (done) return;
       done = true;
       nativeDialogActive.current = false;
-      // Only restore fullscreen if (a) it actually dropped, and (b) the user is
-      // still in Zen Mode. Otherwise we'd re-enter fullscreen the user has just
-      // exited. Must run in the same user-gesture tick as the dialog-close event.
-      if (!document.fullscreenElement && isZenModeRef.current) {
+      if (
+        config.features.enableFullscreen &&
+        !document.fullscreenElement &&
+        isZenModeRef.current
+      ) {
         document.documentElement.requestFullscreen?.().catch(() => {
           // ignore — user may have moved focus elsewhere
         });
       }
     };
-  }, []);
+  }, [config.features.enableFullscreen]);
 
   const enterZenMode = useCallback(() => {
     // Idempotent: skip when we're already in Zen Mode or mid-transition into it.
@@ -108,8 +109,9 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
     //    underlying app fullscreened for ~50ms before the overlay fades in.
     setIsZenMode(true);
 
-    // 2. Now request fullscreen — the overlay is already covering the viewport.
-    if (!document.fullscreenElement) {
+    // 2. Request fullscreen only when the user has opted in via config —
+    //    windowed Zen Mode skips this so the browser stays in its normal window
+    if (config.features.enableFullscreen && !document.fullscreenElement) {
       document.documentElement.requestFullscreen?.().catch((err) => {
         console.warn('Could not enter fullscreen:', err);
       });
@@ -119,15 +121,14 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
     setTimeout(() => {
       setIsTransitioning(false);
     }, config.features.transitionDuration);
-  }, [config.features.transitionDuration, isZenMode, isTransitioning]);
+  }, [config.features.transitionDuration, config.features.enableFullscreen, isZenMode, isTransitioning]);
 
   const exitZenMode = useCallback(() => {
     // Idempotent: skip when we're already out of Zen Mode.
     if (!isZenMode && !isTransitioning) return;
     setIsTransitioning(true);
 
-    // Exit fullscreen
-    if (document.fullscreenElement) {
+    if (config.features.enableFullscreen && document.fullscreenElement) {
       document.exitFullscreen?.().catch((err) => {
         console.warn('Could not exit fullscreen:', err);
       });
@@ -137,7 +138,7 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
       setIsZenMode(false);
       setIsTransitioning(false);
     }, config.features.transitionDuration);
-  }, [config.features.transitionDuration, isZenMode, isTransitioning]);
+  }, [config.features.transitionDuration, config.features.enableFullscreen, isZenMode, isTransitioning]);
 
   const toggleZenMode = useCallback(() => {
     if (isZenMode) {
