@@ -55,7 +55,7 @@ const McpConnectorsPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const popupRef = useRef<Window | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingServerRef = useRef<string | null>(null);
   // Consecutive non-terminal poll failures (transient 5xx / network blips); once
   // this exceeds the cap we give up so a persistently failing poll can't loop
@@ -65,7 +65,7 @@ const McpConnectorsPanel: React.FC = () => {
 
   const clearPolling = useCallback(() => {
     if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
+      clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
   }, []);
@@ -194,11 +194,19 @@ const McpConnectorsPanel: React.FC = () => {
       setError(message);
     };
 
-    pollTimerRef.current = setInterval(async () => {
+    // Self-scheduling loop: the next poll is scheduled only after the current
+    // one finishes, so a slow request can never overlap with the next tick (which
+    // setInterval would allow - causing concurrent in-flight polls and
+    // out-of-order updates).
+    const scheduleNext = () => {
+      pollTimerRef.current = setTimeout(poll, 1500);
+    };
+
+    const poll = async () => {
       try {
         const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/status/${flowId}`);
         // The attempt ended while this fetch was in flight - drop the result and
-        // stop this (now-orphaned) timer without mutating UI state.
+        // stop without mutating UI state or rescheduling.
         if (isStale()) {
           clearPolling();
           return;
@@ -214,6 +222,8 @@ const McpConnectorsPanel: React.FC = () => {
           pollErrorsRef.current += 1;
           if (pollErrorsRef.current >= MAX_POLL_ERRORS) {
             failFlow('Lost contact with the server while authorizing. Please try again.');
+          } else {
+            scheduleNext();
           }
           return;
         }
@@ -228,11 +238,14 @@ const McpConnectorsPanel: React.FC = () => {
           finishSuccess();
         } else if (data.status === 'error') {
           failFlow(data.error || 'Authorization failed. Please try again.');
+        } else {
+          // Still pending - poll again.
+          scheduleNext();
         }
       } catch (err) {
         // Network error reaching the backend: also bounded by MAX_POLL_ERRORS.
         console.error('Error polling OAuth status:', err);
-        // Ignore errors for an attempt that already ended; just stop the timer.
+        // Ignore errors for an attempt that already ended; just stop.
         if (isStale()) {
           clearPolling();
           return;
@@ -240,9 +253,13 @@ const McpConnectorsPanel: React.FC = () => {
         pollErrorsRef.current += 1;
         if (pollErrorsRef.current >= MAX_POLL_ERRORS) {
           failFlow('Lost contact with the server while authorizing. Please try again.');
+        } else {
+          scheduleNext();
         }
       }
-    }, 1500);
+    };
+
+    scheduleNext();
   }, [apiUrl, clearPolling, finishSuccess]);
 
   const handleConnect = useCallback(async () => {
