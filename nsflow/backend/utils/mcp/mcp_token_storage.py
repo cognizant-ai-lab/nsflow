@@ -28,6 +28,7 @@ uses it); all instances read/write their own slice of the shared file.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -36,7 +37,53 @@ from typing import Any, Dict, List, Optional
 
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
+try:
+    import fcntl  # POSIX only
+except ImportError:  # pragma: no cover - non-POSIX (e.g. Windows)
+    fcntl = None
+
 logger = logging.getLogger(__name__)
+
+_warned_no_flock = False
+
+
+@contextlib.contextmanager
+def _interprocess_lock(lock_path: Path):
+    """
+    Hold a cross-process exclusive lock for the duration of a token-file
+    read-modify-write.
+
+    Uvicorn may run multiple workers (see nsflow/backend/main.py), so an
+    in-process asyncio.Lock alone cannot prevent interleaved writes from
+    different worker processes corrupting tokens.json or losing updates. This
+    uses ``fcntl.flock`` where available and degrades to a no-op (with a one-time
+    warning) on platforms without it (e.g. Windows), where deployments should run
+    a single worker.
+
+    The lock is held only around the brief load/modify/write, so blocking here is
+    negligible.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if fcntl is None:
+        global _warned_no_flock
+        if not _warned_no_flock:
+            logger.warning(
+                "fcntl is unavailable on this platform; the MCP token store has no cross-process "
+                "lock. Run a single backend worker if MCP OAuth connections are used."
+            )
+            _warned_no_flock = True
+        yield
+        return
+
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def _default_storage_dir() -> Path:
@@ -73,16 +120,16 @@ class FileTokenStorage:
     restarts.
     """
 
-    # Guards the shared file against concurrent read-modify-write within this
-    # process. nsflow runs single-worker, so a process-wide asyncio lock is
-    # sufficient (a multi-worker deployment would additionally need an OS file
-    # lock such as fcntl.flock).
+    # Serializes read-modify-write within this process (across coroutines). A
+    # cross-process fcntl lock (see _interprocess_lock) additionally guards
+    # against interleaved writes from multiple uvicorn workers.
     _lock = asyncio.Lock()
 
     def __init__(self, server_url: str, storage_dir: Optional[Path] = None):
         self.server_url = server_url
         self._dir = storage_dir or _default_storage_dir()
         self._path = self._dir / "tokens.json"
+        self._lock_path = self._dir / "tokens.json.lock"
 
     # ------------------------------------------------------------------ #
     # TokenStorage protocol
@@ -97,15 +144,16 @@ class FileTokenStorage:
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         async with self._lock:
-            blob = self._load_file()
-            entry = blob.setdefault(self.server_url, {})
-            entry["tokens"] = tokens.model_dump(mode="json")
-            entry["obtained_at"] = int(time.time())
-            if tokens.expires_in is not None:
-                entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
-            else:
-                entry.pop("expires_at", None)
-            self._write_file(blob)
+            with _interprocess_lock(self._lock_path):
+                blob = self._load_file()
+                entry = blob.setdefault(self.server_url, {})
+                entry["tokens"] = tokens.model_dump(mode="json")
+                entry["obtained_at"] = int(time.time())
+                if tokens.expires_in is not None:
+                    entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
+                else:
+                    entry.pop("expires_at", None)
+                self._write_file(blob)
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
         entry = self._read_entry(self.server_url)
@@ -116,10 +164,11 @@ class FileTokenStorage:
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         async with self._lock:
-            blob = self._load_file()
-            entry = blob.setdefault(self.server_url, {})
-            entry["client_info"] = client_info.model_dump(mode="json")
-            self._write_file(blob)
+            with _interprocess_lock(self._lock_path):
+                blob = self._load_file()
+                entry = blob.setdefault(self.server_url, {})
+                entry["client_info"] = client_info.model_dump(mode="json")
+                self._write_file(blob)
 
     # ------------------------------------------------------------------ #
     # Housekeeping helpers (used by the OAuth endpoints, not the protocol)
@@ -152,12 +201,14 @@ class FileTokenStorage:
     @classmethod
     def remove(cls, server_url: str, storage_dir: Optional[Path] = None) -> bool:
         """Delete the stored credentials for a server. Returns True if removed."""
-        path = (storage_dir or _default_storage_dir()) / "tokens.json"
-        blob = cls._load_path(path)
-        if server_url not in blob:
-            return False
-        del blob[server_url]
-        cls._write_path(path, blob)
+        base = storage_dir or _default_storage_dir()
+        path = base / "tokens.json"
+        with _interprocess_lock(base / "tokens.json.lock"):
+            blob = cls._load_path(path)
+            if server_url not in blob:
+                return False
+            del blob[server_url]
+            cls._write_path(path, blob)
         return True
 
     @classmethod
