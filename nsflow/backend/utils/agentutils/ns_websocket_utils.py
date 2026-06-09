@@ -24,10 +24,14 @@ from typing import Any, Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
+from pyhocon import ConfigFactory
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
+from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+from nsflow.backend.utils.mcp.mcp_oauth_manager import mcp_oauth_manager
+from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 # Initialize a lock
@@ -123,6 +127,10 @@ class NsWebsocketUtils:
                 state["user_input"] = user_input
                 # Update sly_data in state based on user input
                 state["sly_data"].update(sly_data)
+                # Inject Authorization headers for any OAuth-connected MCP servers
+                # this network uses, so the agent can call them without the user
+                # having to paste a token. User-supplied http_headers win.
+                await self.inject_mcp_auth_headers(state["sly_data"])
                 # Update chat context in state based on user input
                 if bool(chat_context):
                     state["chat_context"].update(chat_context)
@@ -219,6 +227,99 @@ class NsWebsocketUtils:
                  session with the agent network.
         """
         return AgentSessionFactory()
+
+    async def inject_mcp_auth_headers(self, sly_data: Dict[str, Any]) -> None:
+        """
+        Merge OAuth Bearer tokens for connected MCP servers into sly_data's
+        ``http_headers`` so the agent network can authenticate to them.
+
+        Only servers this network actually references are injected (so a token is
+        never broadcast to an unrelated network). If the network's HOCON cannot be
+        read locally (e.g. it lives on a remote neuro-san server), we fall back to
+        injecting every connected server. Any header the user already supplied for
+        a given URL is left untouched.
+
+        :param sly_data: The sly_data dict to enrich in place.
+        """
+        try:
+            connections = FileTokenStorage.list_connections()
+            if not connections:
+                return
+            connected_urls = {conn["server_url"] for conn in connections}
+
+            referenced = self.get_network_mcp_urls()
+            # referenced is None when the HOCON is not locally readable.
+            target_urls = connected_urls if referenced is None else (connected_urls & referenced)
+            logging.info(
+                "MCP auth injection for network '%s': connected=%s referenced=%s targets=%s",
+                self.agent_name, sorted(connected_urls),
+                "ALL(fallback)" if referenced is None else sorted(referenced), sorted(target_urls),
+            )
+            if not target_urls:
+                return
+
+            http_headers: Dict[str, Any] = sly_data.setdefault("http_headers", {})
+            for url in target_urls:
+                existing = http_headers.get(url)
+                # Respect a user-provided Authorization for this URL.
+                if isinstance(existing, dict) and existing.get("Authorization"):
+                    logging.info("MCP auth: keeping user-supplied Authorization for %s", url)
+                    continue
+                authorization = await mcp_oauth_manager.get_fresh_token(url)
+                if not authorization:
+                    logging.warning("MCP auth: no usable token for %s (connection may need re-auth)", url)
+                    continue
+                headers = existing if isinstance(existing, dict) else {}
+                headers["Authorization"] = authorization
+                http_headers[url] = headers
+                logging.info("MCP auth: injected Authorization header into sly_data for %s", url)
+        except Exception as e:  # noqa: BLE001 - never break chat on auth injection
+            logging.warning("Failed to inject MCP auth headers: %s", e)
+
+    def get_network_mcp_urls(self):
+        """
+        Collect the MCP server URLs referenced by this network's tools.
+
+        :return: A set of URLs, or None if the network HOCON is not readable
+                 locally (signalling the caller to fall back to all connections).
+        """
+        try:
+            file_path = AgentNetworkUtils().get_network_file_path(self.agent_name)
+        except Exception:  # noqa: BLE001 - invalid/remote network name
+            return None
+        if not os.path.exists(file_path):
+            return None
+        try:
+            config = ConfigFactory.parse_file(file_path)
+        except Exception as e:  # noqa: BLE001
+            logging.warning("Could not parse HOCON for network %s: %s", self.agent_name, e)
+            return None
+
+        urls: set = set()
+
+        def _walk(node):
+            if isinstance(node, dict):
+                # Dictionary-reference MCP tool: {"url": "https://.../mcp", ...}.
+                # NOTE: pyhocon ConfigTree.get(key) raises if the key is absent
+                # (unlike dict.get), so always pass an explicit default.
+                url = node.get("url", None)
+                if isinstance(url, str) and url:
+                    urls.add(url)
+                for value in node.values():
+                    _walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _walk(item)
+            elif isinstance(node, str):
+                # String-reference MCP tool: "tools": ["https://.../mcp"].
+                # Bare http(s) references are MCP server URLs (agent-name refs are
+                # not URLs). Safe even if a stray URL appears elsewhere, since the
+                # caller only injects for URLs that match a connected server.
+                if node.startswith(("http://", "https://")):
+                    urls.add(node)
+
+        _walk(config.get("tools", []))
+        return urls
 
     @classmethod
     def get_latest_sly_data(cls, network_name: str, session_id: str = None) -> dict:

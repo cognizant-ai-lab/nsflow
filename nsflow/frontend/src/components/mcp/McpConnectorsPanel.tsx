@@ -1,0 +1,306 @@
+/*
+Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Box, IconButton, List, ListItem, ListItemText, Paper, Tooltip, Typography, alpha, Button, Chip,
+} from '@mui/material';
+import {
+  Hub as HubIcon, Add as AddIcon, Delete as DeleteIcon, Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+} from '@mui/icons-material';
+import { useTheme } from '../../context/ThemeContext';
+import { useApiPort } from '../../context/ApiPortContext';
+import { AddMcpServerDialog } from './AddMcpServerDialog';
+
+interface McpConnection {
+  server_url: string;
+  obtained_at: number | null;
+  expires_at: number | null;
+  has_refresh_token: boolean;
+}
+
+interface OAuthMessage {
+  type: string;
+  status: string;
+  server_url: string;
+  message?: string;
+}
+
+const McpConnectorsPanel: React.FC = () => {
+  const { theme } = useTheme();
+  const { apiUrl, isReady } = useApiPort();
+
+  const [connections, setConnections] = useState<McpConnection[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [serverUrl, setServerUrl] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [redirectUri, setRedirectUri] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [awaitingAuth, setAwaitingAuth] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const popupRef = useRef<Window | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingServerRef = useRef<string | null>(null);
+
+  const clearPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const refreshConnections = useCallback(async () => {
+    if (!isReady || !apiUrl) return;
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/connections`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setConnections(Array.isArray(data?.connections) ? data.connections : []);
+    } catch (err) {
+      console.error('Failed to load MCP connections:', err);
+    }
+  }, [apiUrl, isReady]);
+
+  useEffect(() => { refreshConnections(); }, [refreshConnections]);
+
+  // Fetch the OAuth callback URL once so the dialog can show users the exact
+  // value to register for servers that need manual OAuth app credentials.
+  useEffect(() => {
+    if (!isReady || !apiUrl) return;
+    fetch(`${apiUrl}/api/v1/mcp/oauth/redirect_uri`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.redirect_uri) setRedirectUri(data.redirect_uri); })
+      .catch((err) => console.error('Failed to fetch MCP redirect URI:', err));
+  }, [apiUrl, isReady]);
+
+  const finishSuccess = useCallback(() => {
+    clearPolling();
+    setBusy(false);
+    setAwaitingAuth(false);
+    setDialogOpen(false);
+    setServerUrl('');
+    setClientId('');
+    setClientSecret('');
+    pendingServerRef.current = null;
+    refreshConnections();
+  }, [clearPolling, refreshConnections]);
+
+  // Listen for the postMessage the /callback popup sends on completion.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as OAuthMessage;
+      if (!data || data.type !== 'mcp-oauth') return;
+      if (pendingServerRef.current && data.server_url && data.server_url !== pendingServerRef.current) return;
+      if (data.status === 'ok') {
+        finishSuccess();
+      } else {
+        clearPolling();
+        setBusy(false);
+        setAwaitingAuth(false);
+        setError(data.message || 'Authorization failed or was cancelled. Please try again.');
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [finishSuccess, clearPolling]);
+
+  useEffect(() => () => clearPolling(), [clearPolling]);
+
+  const openDialog = () => {
+    setServerUrl('');
+    setClientId('');
+    setClientSecret('');
+    setError(null);
+    setBusy(false);
+    setAwaitingAuth(false);
+    setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    if (busy) return;
+    clearPolling();
+    setDialogOpen(false);
+    setError(null);
+  };
+
+  // Poll status as a fallback when the popup can't postMessage (e.g. blocked).
+  const startPolling = useCallback((flowId: string) => {
+    clearPolling();
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/status/${flowId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'completed') {
+          finishSuccess();
+        } else if (data.status === 'error') {
+          clearPolling();
+          setBusy(false);
+          setAwaitingAuth(false);
+          setError(data.error || 'Authorization failed. Please try again.');
+        }
+      } catch (err) {
+        console.error('Error polling OAuth status:', err);
+      }
+    }, 1500);
+  }, [apiUrl, clearPolling, finishSuccess]);
+
+  const handleConnect = useCallback(async () => {
+    const url = serverUrl.trim();
+    if (!url) return;
+    setBusy(true);
+    setError(null);
+    pendingServerRef.current = url;
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          server_url: url,
+          ...(clientId.trim() ? { client_id: clientId.trim() } : {}),
+          ...(clientSecret.trim() ? { client_secret: clientSecret.trim() } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBusy(false);
+        setError(data?.detail || 'Could not start the OAuth flow with this server.');
+        return;
+      }
+      if (data.already_connected) {
+        finishSuccess();
+        return;
+      }
+      // Open the provider's consent screen in a popup.
+      popupRef.current = window.open(data.authorization_url, 'mcp-oauth', 'popup,width=560,height=720');
+      setAwaitingAuth(true);
+      if (data.flow_id) startPolling(data.flow_id);
+    } catch (err) {
+      console.error('Failed to start MCP OAuth flow:', err);
+      setBusy(false);
+      setError('Network error starting the OAuth flow.');
+    }
+  }, [serverUrl, clientId, clientSecret, apiUrl, finishSuccess, startPolling]);
+
+  const handleDisconnect = useCallback(async (url: string) => {
+    try {
+      await fetch(`${apiUrl}/api/v1/mcp/oauth/connections?server_url=${encodeURIComponent(url)}`, {
+        method: 'DELETE',
+      });
+      refreshConnections();
+    } catch (err) {
+      console.error('Failed to disconnect MCP server:', err);
+    }
+  }, [apiUrl, refreshConnections]);
+
+  return (
+    <Paper
+      elevation={1}
+      sx={{
+        height: '100%', backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary,
+        display: 'flex', flexDirection: 'column', overflow: 'hidden', border: `1px solid ${theme.palette.divider}`,
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ p: 1.5, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <HubIcon sx={{ color: theme.palette.primary.main, fontSize: '1.25rem' }} />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>MCP Connectors</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Tooltip title="Refresh">
+            <IconButton size="small" onClick={refreshConnections} sx={{ color: theme.palette.text.secondary, p: 0.5 }}>
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={openDialog}
+            sx={{ textTransform: 'none', color: theme.palette.primary.main }}
+          >
+            Add server
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Connections list */}
+      <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1 }}>
+        {connections.length === 0 ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
+            <HubIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
+            <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>No MCP servers connected</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 320 }}>
+              Connect an OAuth-protected MCP server. Its access token is injected into agent networks
+              that use it, so you don't have to paste credentials manually.
+            </Typography>
+          </Box>
+        ) : (
+          <List dense>
+            {connections.map((conn) => (
+              <ListItem
+                key={conn.server_url}
+                sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 1, backgroundColor: theme.palette.background.default }}
+                secondaryAction={
+                  <Tooltip title="Disconnect">
+                    <IconButton edge="end" size="small" onClick={() => handleDisconnect(conn.server_url)} sx={{ color: theme.palette.error.main }}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                }
+              >
+                <CheckCircleIcon sx={{ color: theme.palette.success.main, fontSize: '1.1rem', mr: 1 }} />
+                <ListItemText
+                  primary={conn.server_url}
+                  primaryTypographyProps={{ sx: { wordBreak: 'break-all', fontSize: '0.85rem' } }}
+                  secondary={
+                    <Box component="span" sx={{ display: 'inline-flex', gap: 0.5, mt: 0.5 }}>
+                      <Chip size="small" label="Connected" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.success.main, 0.15), color: theme.palette.success.main }} />
+                      {conn.has_refresh_token && (
+                        <Chip size="small" label="Auto-refresh" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }} />
+                      )}
+                    </Box>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Box>
+
+      <AddMcpServerDialog
+        open={dialogOpen}
+        serverUrl={serverUrl}
+        onServerUrlChange={setServerUrl}
+        clientId={clientId}
+        onClientIdChange={setClientId}
+        clientSecret={clientSecret}
+        onClientSecretChange={setClientSecret}
+        redirectUri={redirectUri}
+        onConnect={handleConnect}
+        onCancel={closeDialog}
+        busy={busy}
+        awaitingAuth={awaitingAuth}
+        error={error}
+      />
+    </Paper>
+  );
+};
+
+export default McpConnectorsPanel;
