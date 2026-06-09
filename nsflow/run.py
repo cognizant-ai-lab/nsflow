@@ -96,6 +96,12 @@ class NsFlowRunner:
             ),
             "agent_tool_path": os.getenv("AGENT_TOOL_PATH", os.path.join(self.root_dir, "coded_tools")),
             "nsflow_log_dir": logs_dir_path,
+            # Allow the browser to call the neuro-san HTTP server cross-origin. neuro-san only
+            # emits Access-Control-* headers when AGENT_ALLOW_CORS_HEADERS is set (see neuro-san
+            # base_request_handler). The nsflow web client talks to neuro-san directly, so enable
+            # it by default for the server we spawn. (Externally-hosted neuro-san servers must set
+            # this themselves — nsflow cannot inject env into a server it does not launch.)
+            "agent_allow_cors_headers": os.getenv("AGENT_ALLOW_CORS_HEADERS", "1"),
         }
 
         # Set up logging
@@ -247,6 +253,7 @@ The type of connection to initiate. Choices are to connect to:
             "AGENT_TOOL_PATH": "agent_tool_path",
             "NSFLOW_SERVER_ONLY": "server_only",
             "DEFAULT_SLY_DATA": "default_sly_data",
+            "AGENT_ALLOW_CORS_HEADERS": "agent_allow_cors_headers",
         }
 
         self.logger.info("\n" + "=" * 50)
