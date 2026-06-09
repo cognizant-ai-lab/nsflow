@@ -308,16 +308,30 @@ const McpConnectorsPanel: React.FC = () => {
         finishSuccess();
         return;
       }
-      // Open the provider's consent screen in a popup.
-      popupRef.current = window.open(data.authorization_url, 'mcp-oauth', 'popup,width=560,height=720');
-      if (!popupRef.current) {
+      // Open a blank popup we control, sever its opener link, then navigate it to
+      // the provider's consent screen. Nulling opener BEFORE the cross-origin
+      // navigation stops the (server-supplied) consent page from reverse-
+      // tabnabbing this window, while still returning a handle - unlike passing
+      // "noopener" to window.open(), which returns null and would defeat the
+      // blocked-popup detection and close-on-cancel below. The trade-off is that
+      // the /callback page can no longer postMessage us, so completion is
+      // detected via status polling (already the fallback).
+      const popup = window.open('about:blank', 'mcp-oauth', 'popup,width=560,height=720');
+      if (!popup) {
         // Popup was blocked by the browser. Without a window there is nothing to
-        // poll/postMessage, so recover the dialog instead of leaving it stuck.
+        // drive the flow, so recover the dialog instead of leaving it stuck.
         setBusy(false);
         setError('Your browser blocked the authorization popup. Please allow popups for this site and try again.');
         pendingServerRef.current = null;
         return;
       }
+      try {
+        popup.opener = null;
+      } catch {
+        // Some browsers make opener read-only; best-effort hardening only.
+      }
+      popup.location.href = data.authorization_url;
+      popupRef.current = popup;
       // Startup is done; we're now waiting on the user in the popup. Clear busy
       // so the dialog can be cancelled/closed during the wait (Connect stays
       // disabled via awaitingAuth) - otherwise the user is stuck until the
