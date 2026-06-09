@@ -313,7 +313,16 @@ class FileTokenStorage:
         # world-readable. os.open honors the mode only on creation.
         fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            # fdopen did not take ownership of fd, so close the raw descriptor
+            # ourselves (a leaked fd can also keep the temp file unremovable on
+            # Windows) before cleaning up and re-raising.
+            os.close(fd)
+            tmp_path.unlink(missing_ok=True)
+            raise
+        try:
+            with handle:  # now owns fd and closes it on exit
                 json.dump(blob, handle, indent=2)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
