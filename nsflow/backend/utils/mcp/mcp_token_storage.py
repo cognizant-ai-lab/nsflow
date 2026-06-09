@@ -120,6 +120,31 @@ def _coerce_timestamp(value: Any) -> Optional[float]:
     return None
 
 
+# Sentinel timestamp meaning "already expired" - used when a stored expires_at is
+# present but unparsable, so a corrupt value is never read as "never expires".
+_EXPIRED = 0.0
+
+
+def _stored_expiry(entry: Dict[str, Any]) -> Optional[float]:
+    """
+    Resolve a stored entry's ``expires_at`` into an expiry timestamp policy:
+
+    * key absent / null  -> None (a genuinely non-expiring token)
+    * valid number/string -> that float
+    * present but unparsable -> ``_EXPIRED`` (treat as already expired)
+
+    The last case ensures a hand-edited/corrupted expires_at forces a refresh or
+    a reconnect rather than injecting a token we can't vouch for.
+    """
+    if not isinstance(entry, dict):
+        return None
+    raw = entry.get("expires_at")
+    if raw is None:
+        return None
+    coerced = _coerce_timestamp(raw)
+    return coerced if coerced is not None else _EXPIRED
+
+
 class FileTokenStorage:
     """
     File-backed implementation of the MCP SDK ``TokenStorage`` protocol.
@@ -248,10 +273,12 @@ class FileTokenStorage:
             return False
         if not tokens.get("access_token"):
             return False
-        # expires_at may be missing or wrong-typed in a hand-edited store; coerce
-        # defensively so a bad value can't raise TypeError here. An unparsable
-        # value becomes None ("no known expiry"), leaving the token usable.
-        expires_at = _coerce_timestamp(entry.get("expires_at"))
+        # expires_at may be missing or wrong-typed in a hand-edited store.
+        # _stored_expiry coerces defensively (so a bad value can't raise here) and
+        # treats a present-but-unparsable value as already expired - consistent
+        # with get_fresh_token, so a corrupt entry isn't shown as connected when
+        # injection would refuse it. A refresh token still makes it usable.
+        expires_at = _stored_expiry(entry)
         if expires_at is not None and time.time() >= expires_at and not tokens.get("refresh_token"):
             return False
         return True

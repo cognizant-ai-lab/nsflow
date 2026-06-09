@@ -58,7 +58,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only on older/newer SDK layouts
     from mcp.shared._httpx_utils import create_mcp_http_client
 
-from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage, _coerce_timestamp
+from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage, _stored_expiry
 
 logger = logging.getLogger(__name__)
 
@@ -504,15 +504,17 @@ class MCPOAuthManager:
         if not meta.get("tokens"):
             return None
 
-        # Coerce defensively: a hand-edited store could carry a non-numeric
-        # expires_at, which would raise on the arithmetic/comparison below.
-        expires_at = _coerce_timestamp(meta.get("expires_at"))
+        # Resolve expires_at defensively: a hand-edited store could carry a
+        # non-numeric value (which would raise on the arithmetic below), and an
+        # unparsable value is treated as already expired so we refresh/reconnect
+        # rather than inject a token we can't vouch for.
+        expires_at = _stored_expiry(meta)
         if expires_at is not None and time.time() >= (expires_at - TOKEN_REFRESH_MARGIN_SECONDS):
             await self._silent_refresh(server_url)
             # Re-read: a successful refresh pushes expires_at into the future and
             # rewrites meta["tokens"] with the new access token.
             meta = await asyncio.to_thread(storage.get_metadata)
-            expires_at = _coerce_timestamp(meta.get("expires_at"))
+            expires_at = _stored_expiry(meta)
 
         # Drop a token that is actually expired (refresh failed / unavailable).
         if expires_at is not None and time.time() >= expires_at:
@@ -522,9 +524,15 @@ class MCPOAuthManager:
             return None
 
         raw = meta.get("tokens")
-        if not raw:
+        if not isinstance(raw, dict):
             return None
-        tokens = OAuthToken.model_validate(raw)
+        try:
+            tokens = OAuthToken.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001 - tolerate a corrupted/hand-edited store
+            logger.warning(
+                "MCP token for %s is unparsable; reconnect required: %s", server_url, exc
+            )
+            return None
         if not tokens.access_token:
             return None
         token_type = (tokens.token_type or "Bearer").strip()
