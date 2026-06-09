@@ -151,6 +151,24 @@ def test_callback_success(monkeypatch):
     assert "Connected" in response.text
 
 
+def test_callback_token_present_but_status_not_completed_is_success(monkeypatch):
+    """A persisted token is the source of truth even if flow.status lags.
+
+    wait_for_completion() can time out and return before the background task
+    records "completed", while the token exchange already stored a token. The
+    callback must report success based on has_connection(), not flow.status.
+    """
+    flow = _flow(status="awaiting_user")  # status never advanced to "completed"
+    monkeypatch.setattr(ep.mcp_oauth_manager, "resolve_callback", MagicMock(return_value=flow))
+    monkeypatch.setattr(ep.mcp_oauth_manager, "wait_for_completion", AsyncMock(return_value=None))
+    monkeypatch.setattr(ep.FileTokenStorage, "has_connection", MagicMock(return_value=True))
+    response = client.get(CALLBACK_URL, params={"state": "abc", "code": "the-code"})
+    assert response.status_code == 200
+    assert "Connected" in response.text
+    # flow.status is reconciled so /status polling agrees.
+    assert flow.status == "completed"
+
+
 def test_callback_completed_without_token_is_error(monkeypatch):
     """If the token never persisted, the callback reports failure (not optimistic success)."""
     monkeypatch.setattr(

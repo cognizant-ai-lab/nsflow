@@ -181,9 +181,14 @@ async def oauth_callback(
     # than an optimistic "connected".
     await mcp_oauth_manager.wait_for_completion(flow)
 
-    if flow.status == "completed" and await asyncio.to_thread(
-        FileTokenStorage.has_connection, flow.server_url
-    ):
+    # A persisted, usable token is the source of truth for success - not
+    # flow.status. wait_for_completion() can time out (returning before the
+    # background task records "completed") even though the token exchange already
+    # succeeded and stored a token; gating on flow.status alone would then report
+    # a false failure. If the token is present, reconcile flow.status so /status
+    # polling agrees.
+    if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
+        flow.status = "completed"
         logger.info("MCP OAuth flow for %s completed successfully.", flow.server_url)
         return HTMLResponse(content=_callback_html("ok", flow.server_url))
 
@@ -221,7 +226,9 @@ async def get_redirect_uri():
 @router.get("/connections")
 async def list_connections():
     """List connected MCP servers (non-secret metadata only)."""
-    return JSONResponse(content={"connections": FileTokenStorage.list_connections()})
+    # Synchronous disk read offloaded to a thread so it doesn't block the loop.
+    connections = await asyncio.to_thread(FileTokenStorage.list_connections)
+    return JSONResponse(content={"connections": connections})
 
 
 @router.delete("/connections")
