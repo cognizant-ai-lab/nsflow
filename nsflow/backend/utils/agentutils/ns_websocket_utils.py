@@ -21,10 +21,10 @@ import os
 import tempfile
 import uuid
 from typing import Any, Dict
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
-from pyhocon import ConfigFactory
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
@@ -245,17 +245,34 @@ class NsWebsocketUtils:
             connections = FileTokenStorage.list_connections()
             if not connections:
                 return
-            connected_urls = {conn["server_url"] for conn in connections}
+            connected_urls = [conn["server_url"] for conn in connections]
 
             referenced = self.get_network_mcp_urls()
-            # referenced is None when the HOCON is not locally readable.
-            target_urls = connected_urls if referenced is None else (connected_urls & referenced)
+            # Build (header_key, token_url) pairs. URLs are matched on a normalized
+            # form so cosmetic differences (trailing slash, host case, default
+            # port) between the stored connection URL and the network's tool URL
+            # don't block injection. But each original string is kept for its real
+            # job: header_key is the URL the network references (what neuro-san's
+            # MCP adapter looks the header up by), and token_url is the stored
+            # connection URL (the key the token store is keyed on).
+            if referenced is None:
+                # HOCON not locally readable: inject every connection, keyed by
+                # its own URL (we have no network-side form to match against).
+                targets = [(url, url) for url in connected_urls]
+            else:
+                connected_by_norm = {self._normalize_mcp_url(url): url for url in connected_urls}
+                targets = []
+                for ref in referenced:
+                    token_url = connected_by_norm.get(self._normalize_mcp_url(ref))
+                    if token_url is not None:
+                        targets.append((ref, token_url))
             logging.info(
                 "MCP auth injection for network '%s': connected=%s referenced=%s targets=%s",
                 self.agent_name, sorted(connected_urls),
-                "ALL(fallback)" if referenced is None else sorted(referenced), sorted(target_urls),
+                "ALL(fallback)" if referenced is None else sorted(referenced),
+                sorted({header_key for header_key, _ in targets}),
             )
-            if not target_urls:
+            if not targets:
                 return
 
             # http_headers comes from user-provided sly_data, so it may be missing
@@ -270,40 +287,76 @@ class NsWebsocketUtils:
                     )
                 http_headers = {}
                 sly_data["http_headers"] = http_headers
-            for url in target_urls:
-                existing = http_headers.get(url)
+            for header_key, token_url in targets:
+                existing = http_headers.get(header_key)
                 # Respect a user-provided Authorization for this URL.
                 if isinstance(existing, dict) and existing.get("Authorization"):
-                    logging.info("MCP auth: keeping user-supplied Authorization for %s", url)
+                    logging.info("MCP auth: keeping user-supplied Authorization for %s", header_key)
                     continue
-                authorization = await mcp_oauth_manager.get_fresh_token(url)
+                authorization = await mcp_oauth_manager.get_fresh_token(token_url)
                 if not authorization:
-                    logging.warning("MCP auth: no usable token for %s (connection may need re-auth)", url)
+                    logging.warning(
+                        "MCP auth: no usable token for %s (connection may need re-auth)", token_url
+                    )
                     continue
                 headers = existing if isinstance(existing, dict) else {}
                 headers["Authorization"] = authorization
-                http_headers[url] = headers
-                logging.info("MCP auth: injected Authorization header into sly_data for %s", url)
+                http_headers[header_key] = headers
+                logging.info("MCP auth: injected Authorization header into sly_data for %s", header_key)
         except Exception as e:  # noqa: BLE001 - never break chat on auth injection
             logging.warning("Failed to inject MCP auth headers: %s", e)
+
+    @staticmethod
+    def _normalize_mcp_url(url: str) -> str:
+        """
+        Canonicalize an MCP URL for equality comparison only - never for storage
+        or token lookup. Folds away cosmetic differences that still address the
+        same endpoint: scheme/host case, a redundant default port, and a trailing
+        slash. On any parse failure, falls back to the stripped original so a
+        weird URL simply matches itself (exact-string behavior).
+        """
+        try:
+            parts = urlsplit(url.strip())
+        except (ValueError, AttributeError):
+            return url.strip()
+        scheme = parts.scheme.lower()
+        host = (parts.hostname or "").lower()
+        port = parts.port
+        # Drop a port only when it is the scheme's well-known default (http:80,
+        # https:443), since e.g. "https://h/mcp" and "https://h:443/mcp" are the
+        # same endpoint written two ways. The default is scheme-dependent, so we
+        # match the (scheme, port) pair explicitly rather than stripping any port:
+        # a non-default port like :8443 genuinely identifies a different endpoint
+        # and must be preserved.
+        if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+            port = None
+        netloc = host if port is None else f"{host}:{port}"
+        path = parts.path.rstrip("/")
+        return urlunsplit((scheme, netloc, path, parts.query, ""))
 
     def get_network_mcp_urls(self):
         """
         Collect the MCP server URLs referenced by this network's tools.
 
-        :return: A set of URLs, or None if the network HOCON is not readable
-                 locally (signalling the caller to fall back to all connections).
+        Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
+        same restore path the rest of the app uses - rather than parsing the
+        HOCON directly. That returns a plain, fully-resolved config dict (its
+        commondefs/defaults filter chain has run, so a ``url`` defined via a
+        commondef is already substituted) and transparently handles missing or
+        remote networks by raising.
+
+        :return: A set of URLs, or None if the network is not readable locally
+                 (e.g. an invalid name or a network that lives on a remote
+                 neuro-san server), signalling the caller to fall back to all
+                 connections.
         """
         try:
-            file_path = AgentNetworkUtils().get_network_file_path(self.agent_name)
-        except Exception:  # noqa: BLE001 - invalid/remote network name
-            return None
-        if not os.path.exists(file_path):
-            return None
-        try:
-            config = ConfigFactory.parse_file(file_path)
-        except Exception as e:  # noqa: BLE001
-            logging.warning("Could not parse HOCON for network %s: %s", self.agent_name, e)
+            agent_network = AgentNetworkUtils().get_agent_network(self.agent_name)
+            if agent_network is None:
+                return None
+            config = agent_network.get_config()
+        except Exception as e:  # noqa: BLE001 - invalid/remote/unreadable network
+            logging.info("MCP auth: network '%s' not readable locally: %s", self.agent_name, e)
             return None
 
         urls: set = set()
@@ -311,8 +364,6 @@ class NsWebsocketUtils:
         def _walk(node):
             if isinstance(node, dict):
                 # Dictionary-reference MCP tool: {"url": "https://.../mcp", ...}.
-                # NOTE: pyhocon ConfigTree.get(key) raises if the key is absent
-                # (unlike dict.get), so always pass an explicit default.
                 url = node.get("url", None)
                 if isinstance(url, str) and url:
                     urls.add(url)
