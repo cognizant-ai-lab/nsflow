@@ -47,7 +47,10 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
   redirectUri, onConnect, onCancel, busy, awaitingAuth, error,
 }) => {
   const { theme } = useTheme();
-  const canConnect = serverUrl.trim().length > 0 && !busy;
+  // Connect is allowed only before/after an attempt, never while starting (busy)
+  // or while waiting on the popup (awaitingAuth). Inputs lock during both phases.
+  const canConnect = serverUrl.trim().length > 0 && !busy && !awaitingAuth;
+  const inputsDisabled = busy || awaitingAuth;
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onCancel} maxWidth="sm" fullWidth>
@@ -66,7 +69,7 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
           size="small"
           label="MCP Server URL"
           value={serverUrl}
-          disabled={busy}
+          disabled={inputsDisabled}
           onChange={(e) => onServerUrlChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && canConnect) onConnect(); }}
           sx={{ mb: 2 }}
@@ -93,7 +96,7 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
           size="small"
           label="Client ID (optional)"
           value={clientId}
-          disabled={busy}
+          disabled={inputsDisabled}
           onChange={(e) => onClientIdChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && canConnect) onConnect(); }}
           sx={{ mb: 2 }}
@@ -104,7 +107,7 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
           type="password"
           label="Client Secret (optional)"
           value={clientSecret}
-          disabled={busy}
+          disabled={inputsDisabled}
           onChange={(e) => onClientSecretChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && canConnect) onConnect(); }}
           autoComplete="new-password"
@@ -128,9 +131,11 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
         )}
       </DialogContent>
       <DialogActions sx={{ backgroundColor: theme.palette.background.paper }}>
-        <Button onClick={onCancel} disabled={busy} sx={{ color: theme.palette.text.secondary }}>Cancel</Button>
+        <Button onClick={onCancel} disabled={busy} sx={{ color: theme.palette.text.secondary }}>
+          {awaitingAuth ? 'Close' : 'Cancel'}
+        </Button>
         <Button onClick={onConnect} disabled={!canConnect} sx={{ color: theme.palette.primary.main }}>
-          {busy ? 'Connecting…' : 'Connect'}
+          {busy ? 'Connecting…' : awaitingAuth ? 'Waiting…' : 'Connect'}
         </Button>
       </DialogActions>
     </Dialog>

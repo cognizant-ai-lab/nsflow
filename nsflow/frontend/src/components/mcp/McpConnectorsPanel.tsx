@@ -160,8 +160,12 @@ const McpConnectorsPanel: React.FC = () => {
     if (busy) return;
     clearPolling();
     // Drop any in-progress attempt so a late postMessage from an earlier popup
-    // can't be treated as relevant to the next attempt.
+    // can't be treated as relevant to the next attempt, and close an orphaned
+    // popup if the user cancels mid-authorization.
     pendingServerRef.current = null;
+    setAwaitingAuth(false);
+    if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+    popupRef.current = null;
     setDialogOpen(false);
     setError(null);
   };
@@ -226,6 +230,7 @@ const McpConnectorsPanel: React.FC = () => {
       return;
     }
     setBusy(true);
+    setAwaitingAuth(false);
     setError(null);
     pendingServerRef.current = url;
     try {
@@ -238,10 +243,25 @@ const McpConnectorsPanel: React.FC = () => {
           ...(clientSecret.trim() ? { client_secret: clientSecret.trim() } : {}),
         }),
       });
-      const data = await res.json();
+      // Parse defensively: a backend/proxy can return a non-JSON error body
+      // (e.g. an HTML 502 from a gateway), which must not surface as a generic
+      // network error that hides the real status.
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
       if (!res.ok) {
         setBusy(false);
-        setError(data?.detail || 'Could not start the OAuth flow with this server.');
+        pendingServerRef.current = null;
+        setError(data?.detail || `Could not start the OAuth flow with this server (HTTP ${res.status}).`);
+        return;
+      }
+      if (!data) {
+        setBusy(false);
+        pendingServerRef.current = null;
+        setError('Received an unexpected (non-JSON) response while starting the OAuth flow.');
         return;
       }
       if (data.already_connected) {
@@ -252,18 +272,24 @@ const McpConnectorsPanel: React.FC = () => {
       popupRef.current = window.open(data.authorization_url, 'mcp-oauth', 'popup,width=560,height=720');
       if (!popupRef.current) {
         // Popup was blocked by the browser. Without a window there is nothing to
-        // poll/postMessage, so recover the dialog instead of leaving it stuck in
-        // a busy state with Cancel disabled.
+        // poll/postMessage, so recover the dialog instead of leaving it stuck.
         setBusy(false);
         setError('Your browser blocked the authorization popup. Please allow popups for this site and try again.');
         pendingServerRef.current = null;
         return;
       }
+      // Startup is done; we're now waiting on the user in the popup. Clear busy
+      // so the dialog can be cancelled/closed during the wait (Connect stays
+      // disabled via awaitingAuth) - otherwise the user is stuck until the
+      // backend TTL if they abandon the popup without completing the redirect.
+      setBusy(false);
       setAwaitingAuth(true);
       if (data.flow_id) startPolling(data.flow_id);
     } catch (err) {
       console.error('Failed to start MCP OAuth flow:', err);
       setBusy(false);
+      setAwaitingAuth(false);
+      pendingServerRef.current = null;
       setError('Network error starting the OAuth flow.');
     }
   }, [serverUrl, clientId, clientSecret, apiUrl, isReady, finishSuccess, startPolling]);
