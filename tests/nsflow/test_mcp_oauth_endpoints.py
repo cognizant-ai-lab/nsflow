@@ -23,6 +23,7 @@ files are involved.
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import urlparse
 
 from fastapi.testclient import TestClient
 
@@ -73,7 +74,9 @@ def test_start_success(monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["flow_id"] == "flow-1"
-    assert data["authorization_url"].startswith("https://auth.example.com")
+    parsed = urlparse(data["authorization_url"])
+    assert parsed.scheme == "https"
+    assert parsed.hostname == "auth.example.com"
 
 
 def test_start_flow_error_returns_502(monkeypatch):
