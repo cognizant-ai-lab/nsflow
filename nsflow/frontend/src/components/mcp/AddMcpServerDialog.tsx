@@ -65,7 +65,6 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
           fullWidth
           size="small"
           label="MCP Server URL"
-          placeholder="https://api.githubcopilot.com/mcp"
           value={serverUrl}
           disabled={busy}
           onChange={(e) => onServerUrlChange(e.target.value)}
@@ -74,7 +73,7 @@ export const AddMcpServerDialog: React.FC<AddMcpServerDialogProps> = ({
         />
 
         <Typography variant="caption" sx={{ display: 'block', mb: 1, color: theme.palette.text.secondary }}>
-          Optional — only for servers that don't support automatic client registration (e.g. GitHub).
+          Optional — only for servers that don't support dynamic client registration (e.g. GitHub).
           Register an OAuth app whose callback / redirect URI is exactly:
         </Typography>
         {redirectUri && (
