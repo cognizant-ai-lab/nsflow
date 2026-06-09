@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
+  Button,
+  CircularProgress,
   MenuItem,
   Paper,
   Select,
@@ -28,111 +30,228 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
   alpha,
   useTheme,
 } from "@mui/material";
+import { Refresh as RefreshIcon } from "@mui/icons-material";
 import Header from "../../components/Header";
-import { useTraceContext } from "../../context/TraceContext";
+import { useApiPort } from "../../context/ApiPortContext";
 import { useChatContext } from "../../context/ChatContext";
 import { styleFor } from "../../components/trace/traceKinds";
 import {
-  byAgent,
-  byModel,
-  byNetwork,
   formatCost,
   formatDuration,
   formatTokens,
-  invocationStats,
+  invocationStatsFromSummaries,
 } from "./analysisRollups";
+import {
+  AgentRollupRow,
+  InvocationSummary,
+  KeyedRollupRow,
+  fetchAgentRollups,
+  fetchInvocations,
+  fetchKeyedRollups,
+} from "./analysisApi";
 import { getInitialTheme } from "../../utils/theme";
+
+const ALL = "__all__";
+
+const toDateInput = (epochSeconds: number | null): string => {
+  if (epochSeconds == null) return "";
+  const d = new Date(epochSeconds * 1000);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const fromDateInput = (value: string, endOfDay = false): number | null => {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  else d.setHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+};
+
+const defaultSince = (): number =>
+  Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
 
 const Analysis = () => {
   const theme = useTheme();
-  const { invocations } = useTraceContext();
+  const { apiUrl } = useApiPort();
   const { activeNetwork } = useChatContext();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", getInitialTheme());
   }, []);
 
-  const networks = useMemo(() => byNetwork(invocations), [invocations]);
+  // Filters
+  const [networkScope, setNetworkScope] = useState<string>(ALL);
+  const [sinceInput, setSinceInput] = useState<string>(toDateInput(defaultSince()));
+  const [untilInput, setUntilInput] = useState<string>("");
 
-  // One shared network filter governs three sections (distribution / agent /
-  // cost-by-model). "All networks combined" averages across networks, which
-  // is fine for cost roll-up but misleading for per-invocation distribution
-  // when network complexity differs.
-  const [networkScope, setNetworkScope] = useState<string>("__all__");
+  // Data
+  const [invocations, setInvocations] = useState<InvocationSummary[]>([]);
+  const [networkRows, setNetworkRows] = useState<KeyedRollupRow[]>([]);
+  const [modelRows, setModelRows] = useState<KeyedRollupRow[]>([]);
+  const [agentRows, setAgentRows] = useState<AgentRollupRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!apiUrl) return;
+    setLoading(true);
+    setError(null);
+    const since = fromDateInput(sinceInput, false);
+    const until = fromDateInput(untilInput, true);
+    const network = networkScope === ALL ? null : networkScope;
+    try {
+      // Network rollup is intentionally unfiltered by `network` so the
+      // table still shows the full breakdown across networks even when
+      // the user has scoped the other sections to one.
+      const [invs, byNet, byMdl, byAgt] = await Promise.all([
+        fetchInvocations(apiUrl, { network, since, until, limit: 500 }),
+        fetchKeyedRollups(apiUrl, "network", { since, until }),
+        fetchKeyedRollups(apiUrl, "model", { network, since, until }),
+        fetchAgentRollups(apiUrl, { network, since, until }),
+      ]);
+      setInvocations(invs);
+      setNetworkRows(byNet);
+      setModelRows(byMdl);
+      setAgentRows(byAgt);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUrl, networkScope, sinceInput, untilInput]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // Keep network filter valid if the chosen network drops out of the rollup.
   useEffect(() => {
     if (
-      networkScope !== "__all__" &&
-      !networks.some((n) => n.network === networkScope)
+      networkScope !== ALL &&
+      !networkRows.some((r) => r.key === networkScope)
     ) {
-      setNetworkScope("__all__");
+      setNetworkScope(ALL);
     }
-  }, [networks, networkScope]);
+  }, [networkRows, networkScope]);
 
-  const scopedInvocations = useMemo(
-    () =>
-      networkScope === "__all__"
-        ? invocations
-        : invocations.filter((inv) => inv.network === networkScope),
-    [invocations, networkScope]
-  );
+  const stats = useMemo(() => invocationStatsFromSummaries(invocations), [invocations]);
 
-  const stats = useMemo(() => invocationStats(scopedInvocations), [scopedInvocations]);
-  const models = useMemo(() => byModel(scopedInvocations), [scopedInvocations]);
-  const agents = useMemo(
-    () => byAgent(invocations, networkScope === "__all__" ? undefined : networkScope),
-    [invocations, networkScope]
-  );
+  // Tile totals come from network_total rows (the frontman's authoritative
+  // aggregate) so they match the Cost-by-network table. When the user has
+  // filtered to one network, we sum that row only; otherwise we sum all.
+  const tileTotals = useMemo(() => {
+    const rows =
+      networkScope === ALL
+        ? networkRows
+        : networkRows.filter((r) => r.key === networkScope);
+    return {
+      invocations: rows.reduce((acc, r) => acc + r.invocations, 0),
+      cost: rows.reduce((acc, r) => acc + r.cost, 0),
+      tokens: rows.reduce((acc, r) => acc + r.tokens, 0),
+      llmCalls: rows.reduce((acc, r) => acc + r.llm_calls, 0),
+    };
+  }, [networkRows, networkScope]);
 
-  const isEmpty = invocations.length === 0;
+  const isEmpty = invocations.length === 0 && networkRows.length === 0;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw" }}>
       <Header selectedNetwork={activeNetwork || ""} />
 
-      <Box sx={{ flex: 1, overflow: "auto", p: 3, backgroundColor: theme.palette.background.default, width: "100%" }}>
+      <Box
+        sx={{
+          flex: 1,
+          overflow: "auto",
+          p: 3,
+          backgroundColor: theme.palette.background.default,
+          width: "100%",
+        }}
+      >
         <Typography variant="h5" sx={{ mb: 0.5, fontWeight: 600 }}>
           Trace Analysis
         </Typography>
         <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
-          Aggregated metrics across all invocations recorded in this browser session.
-          Use the filter on the right to scope every section to a single network.
-          Refresh the page or click Reset in the Trace tab to clear.
+          Aggregated metrics across persisted trace history. Use the filters to scope by
+          network or time range. The live Trace tab remains the source of truth for the
+          current session.
         </Typography>
 
-        {isEmpty && (
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {!error && isEmpty && !loading && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            No invocations recorded yet. Send a chat message on the Home page to
-            start collecting data.
+            No invocations recorded in the selected range. Run an agent network on the
+            Home page, then reload here.
           </Alert>
         )}
 
         <Stack
           direction="row"
           spacing={2}
-          sx={{ mb: 3, alignItems: "center", flexWrap: "wrap", rowGap: 1 }}
+          sx={{ mb: 3, alignItems: "flex-end", flexWrap: "wrap", rowGap: 1 }}
         >
-          <SummaryTile label="Invocations" value={invocations.length.toString()} />
-          <SummaryTile label="Total cost" value={formatCost(stats.totalCost)} />
-          <SummaryTile label="Total tokens" value={formatTokens(stats.totalTokens)} />
-          <SummaryTile label="Total LLM calls" value={stats.totalLlmCalls.toLocaleString()} />
+          <SummaryTile label="Invocations" value={tileTotals.invocations.toString()} />
+          <SummaryTile label="Total cost" value={formatCost(tileTotals.cost)} />
+          <SummaryTile label="Total tokens" value={formatTokens(tileTotals.tokens)} />
+          <SummaryTile label="Total LLM calls" value={tileTotals.llmCalls.toLocaleString()} />
           <Box sx={{ flex: 1 }} />
-          <Box>
-            <Typography
-              variant="caption"
-              sx={{ display: "block", color: theme.palette.text.secondary, mb: 0.5 }}
-            >
-              Filter by network
-            </Typography>
-            <NetworkFilter
-              value={networkScope}
-              onChange={setNetworkScope}
-              networks={networks.map((n) => n.network)}
+
+          <FilterField label="From">
+            <TextField
+              type="date"
+              size="small"
+              value={sinceInput}
+              onChange={(e) => setSinceInput(e.target.value)}
+              sx={{ width: 160 }}
+              slotProps={{ inputLabel: { shrink: true } }}
             />
-          </Box>
+          </FilterField>
+          <FilterField label="To">
+            <TextField
+              type="date"
+              size="small"
+              value={untilInput}
+              onChange={(e) => setUntilInput(e.target.value)}
+              sx={{ width: 160 }}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+          </FilterField>
+          <FilterField label="Network">
+            <Select
+              size="small"
+              value={networkScope}
+              onChange={(e) => setNetworkScope(e.target.value)}
+              sx={{ minWidth: 240, fontSize: 13 }}
+            >
+              <MenuItem value={ALL}>All networks combined</MenuItem>
+              {networkRows.map((r) => (
+                <MenuItem key={r.key ?? ""} value={r.key ?? ""}>
+                  {r.key}
+                </MenuItem>
+              ))}
+            </Select>
+          </FilterField>
+
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
+            onClick={reload}
+            disabled={loading}
+          >
+            Reload
+          </Button>
         </Stack>
 
         <Section title="Cost by network" subtitle="Where the money goes">
@@ -149,21 +268,27 @@ const Analysis = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {networks.length === 0 ? (
+                {networkRows.length === 0 ? (
                   <EmptyRow cols={6} />
                 ) : (
-                  networks.map((r) => (
-                    <TableRow key={r.network}>
-                      <Td>{r.network}</Td>
-                      <Td align="right">{r.invocations}</Td>
-                      <Td align="right">{formatCost(r.cost)}</Td>
-                      <Td align="right">
-                        <PctBar value={r.pctOfTotal} />
-                      </Td>
-                      <Td align="right">{formatTokens(r.tokens)}</Td>
-                      <Td align="right">{r.llmCalls.toLocaleString()}</Td>
-                    </TableRow>
-                  ))
+                  (() => {
+                    const totalCost = networkRows.reduce((acc, r) => acc + r.cost, 0);
+                    return networkRows.map((r) => {
+                      const pct = totalCost > 0 ? (r.cost / totalCost) * 100 : 0;
+                      return (
+                        <TableRow key={r.key ?? ""}>
+                          <Td>{r.key}</Td>
+                          <Td align="right">{r.invocations}</Td>
+                          <Td align="right">{formatCost(r.cost)}</Td>
+                          <Td align="right">
+                            <PctBar value={pct} />
+                          </Td>
+                          <Td align="right">{formatTokens(r.tokens)}</Td>
+                          <Td align="right">{r.llm_calls.toLocaleString()}</Td>
+                        </TableRow>
+                      );
+                    });
+                  })()
                 )}
               </TableBody>
             </Table>
@@ -172,14 +297,53 @@ const Analysis = () => {
 
         <Section
           title="Per-invocation distribution"
-          subtitle="Min / Avg / P50 / P90 / Max. Networks with very different complexity should not be averaged together — use the page filter to scope."
+          subtitle="Min / Avg / P50 / P90 / Max. Filter by network for a fair comparison across complexity."
         >
-          <DistributionTable stats={stats} />
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <Th>Metric</Th>
+                  <Th align="right">Min</Th>
+                  <Th align="right">Avg</Th>
+                  <Th align="right">P50</Th>
+                  <Th align="right">P90</Th>
+                  <Th align="right">Max</Th>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <Td>Cost</Td>
+                  <Td align="right">{formatCost(stats.cost.min)}</Td>
+                  <Td align="right">{formatCost(stats.cost.avg)}</Td>
+                  <Td align="right">{formatCost(stats.cost.p50)}</Td>
+                  <Td align="right">{formatCost(stats.cost.p90)}</Td>
+                  <Td align="right">{formatCost(stats.cost.max)}</Td>
+                </TableRow>
+                <TableRow>
+                  <Td>Tokens</Td>
+                  <Td align="right">{formatTokens(stats.tokens.min)}</Td>
+                  <Td align="right">{formatTokens(stats.tokens.avg)}</Td>
+                  <Td align="right">{formatTokens(stats.tokens.p50)}</Td>
+                  <Td align="right">{formatTokens(stats.tokens.p90)}</Td>
+                  <Td align="right">{formatTokens(stats.tokens.max)}</Td>
+                </TableRow>
+                <TableRow>
+                  <Td>LLM calls</Td>
+                  <Td align="right">{Math.round(stats.llmCalls.min).toLocaleString()}</Td>
+                  <Td align="right">{stats.llmCalls.avg.toFixed(1)}</Td>
+                  <Td align="right">{Math.round(stats.llmCalls.p50).toLocaleString()}</Td>
+                  <Td align="right">{Math.round(stats.llmCalls.p90).toLocaleString()}</Td>
+                  <Td align="right">{Math.round(stats.llmCalls.max).toLocaleString()}</Td>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Section>
 
         <Section
           title="LLM calls by agent"
-          subtitle="Drill down to see which agents burn the most calls/tokens within a network"
+          subtitle="Which agents burn the most calls/tokens within the selected scope"
         >
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">
@@ -195,25 +359,25 @@ const Analysis = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {agents.length === 0 ? (
+                {agentRows.length === 0 ? (
                   <EmptyRow cols={7} />
                 ) : (
-                  agents.map((r) => {
-                    const k = styleFor(r.kind as never, [r.agent]);
+                  agentRows.map((r) => {
+                    const k = styleFor(r.kind, [r.agent ?? ""]);
                     return (
-                      <TableRow key={r.agent}>
+                      <TableRow key={`${r.agent}::${r.kind}`}>
                         <Td>
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                             <Box sx={{ display: "flex", color: k.color }}>{k.icon}</Box>
-                            {r.agent}
+                            {r.agent || "(unknown)"}
                           </Box>
                         </Td>
                         <Td>{k.label}</Td>
                         <Td align="right">{r.hits}</Td>
-                        <Td align="right">{r.llmCalls.toLocaleString()}</Td>
+                        <Td align="right">{r.llm_calls.toLocaleString()}</Td>
                         <Td align="right">{formatTokens(r.tokens)}</Td>
                         <Td align="right">{formatCost(r.cost)}</Td>
-                        <Td align="right">{formatDuration(r.totalDuration)}</Td>
+                        <Td align="right">{formatDuration(r.total_duration_s)}</Td>
                       </TableRow>
                     );
                   })
@@ -225,13 +389,12 @@ const Analysis = () => {
 
         <Section
           title="Cost by model"
-          subtitle="Per-model totals. Only frontman aggregates carry the model name, so this reflects per-invocation primary model."
+          subtitle="Per-model totals. Reflects per-invocation primary model from frontman aggregates."
         >
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <Th>Provider</Th>
                   <Th>Model</Th>
                   <Th align="right">Invocations</Th>
                   <Th align="right">Cost</Th>
@@ -240,17 +403,16 @@ const Analysis = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {models.length === 0 ? (
-                  <EmptyRow cols={6} />
+                {modelRows.length === 0 ? (
+                  <EmptyRow cols={5} />
                 ) : (
-                  models.map((r) => (
-                    <TableRow key={`${r.provider}::${r.model}`}>
-                      <Td>{r.provider || "—"}</Td>
-                      <Td>{r.model}</Td>
+                  modelRows.map((r) => (
+                    <TableRow key={r.key ?? "(unknown)"}>
+                      <Td>{r.key || "(unknown)"}</Td>
                       <Td align="right">{r.invocations}</Td>
                       <Td align="right">{formatCost(r.cost)}</Td>
                       <Td align="right">{formatTokens(r.tokens)}</Td>
-                      <Td align="right">{r.llmCalls.toLocaleString()}</Td>
+                      <Td align="right">{r.llm_calls.toLocaleString()}</Td>
                     </TableRow>
                   ))
                 )}
@@ -258,88 +420,22 @@ const Analysis = () => {
             </Table>
           </TableContainer>
         </Section>
-
-        <Typography variant="caption" sx={{ display: "block", mt: 4, color: theme.palette.text.disabled }}>
-          v1 scope: in-memory, current browser session only. For week-over-week
-          analytics across many runs, traces would need to be persisted to
-          nss_local.db (planned follow-up).
-        </Typography>
       </Box>
     </Box>
   );
 };
 
-const NetworkFilter = ({
-  value,
-  onChange,
-  networks,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  networks: string[];
-}) => (
-  <Select
-    size="small"
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    sx={{ minWidth: 240, fontSize: 13 }}
-  >
-    <MenuItem value="__all__">All networks combined</MenuItem>
-    {networks.map((n) => (
-      <MenuItem key={n} value={n}>
-        {n}
-      </MenuItem>
-    ))}
-  </Select>
-);
-
-const DistributionTable = ({
-  stats,
-}: {
-  stats: import("./analysisRollups").InvocationStats;
-}) => {
+const FilterField = ({ label, children }: { label: string; children: React.ReactNode }) => {
+  const theme = useTheme();
   return (
     <Box>
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <Th>Metric</Th>
-              <Th align="right">Min</Th>
-              <Th align="right">Avg</Th>
-              <Th align="right">P50</Th>
-              <Th align="right">P90</Th>
-              <Th align="right">Max</Th>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <Td>Cost</Td>
-              <Td align="right">{formatCost(stats.cost.min)}</Td>
-              <Td align="right">{formatCost(stats.cost.avg)}</Td>
-              <Td align="right">{formatCost(stats.cost.p50)}</Td>
-              <Td align="right">{formatCost(stats.cost.p90)}</Td>
-              <Td align="right">{formatCost(stats.cost.max)}</Td>
-            </TableRow>
-            <TableRow>
-              <Td>Tokens</Td>
-              <Td align="right">{formatTokens(stats.tokens.min)}</Td>
-              <Td align="right">{formatTokens(stats.tokens.avg)}</Td>
-              <Td align="right">{formatTokens(stats.tokens.p50)}</Td>
-              <Td align="right">{formatTokens(stats.tokens.p90)}</Td>
-              <Td align="right">{formatTokens(stats.tokens.max)}</Td>
-            </TableRow>
-            <TableRow>
-              <Td>LLM calls</Td>
-              <Td align="right">{Math.round(stats.llmCalls.min).toLocaleString()}</Td>
-              <Td align="right">{stats.llmCalls.avg.toFixed(1)}</Td>
-              <Td align="right">{Math.round(stats.llmCalls.p50).toLocaleString()}</Td>
-              <Td align="right">{Math.round(stats.llmCalls.p90).toLocaleString()}</Td>
-              <Td align="right">{Math.round(stats.llmCalls.max).toLocaleString()}</Td>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Typography
+        variant="caption"
+        sx={{ display: "block", color: theme.palette.text.secondary, mb: 0.5 }}
+      >
+        {label}
+      </Typography>
+      {children}
     </Box>
   );
 };
@@ -347,12 +443,10 @@ const DistributionTable = ({
 const Section = ({
   title,
   subtitle,
-  right,
   children,
 }: {
   title: string;
   subtitle?: string;
-  right?: React.ReactNode;
   children: React.ReactNode;
 }) => {
   const theme = useTheme();
@@ -369,7 +463,6 @@ const Section = ({
             </Typography>
           )}
         </Box>
-        {right}
       </Box>
       {children}
     </Box>
@@ -381,7 +474,12 @@ const SummaryTile = ({ label, value }: { label: string; value: string }) => {
   return (
     <Paper
       variant="outlined"
-      sx={{ px: 2, py: 1.5, minWidth: 160, backgroundColor: alpha(theme.palette.background.paper, 0.8) }}
+      sx={{
+        px: 2,
+        py: 1.5,
+        minWidth: 160,
+        backgroundColor: alpha(theme.palette.background.paper, 0.8),
+      }}
     >
       <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
         {label}
@@ -424,7 +522,10 @@ const PctBar = ({ value }: { value: number }) => {
 };
 
 const Th = ({ children, align }: { children: React.ReactNode; align?: "right" }) => (
-  <TableCell align={align} sx={{ fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>
+  <TableCell
+    align={align}
+    sx={{ fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}
+  >
     {children}
   </TableCell>
 );

@@ -101,16 +101,43 @@ export const TraceProvider = ({ children }: { children: ReactNode }) => {
   const [traceWs, setTraceWs] = useState<WebSocket | null>(null);
   const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
   const lastSerializedRef = useRef<string>(JSON.stringify(invocations));
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always points at the latest invocations so the unmount-flush effect can
+  // read fresh state without re-subscribing.
+  const latestInvocationsRef = useRef<Invocation[]>(invocations);
+  latestInvocationsRef.current = invocations;
 
-  // Push local changes to localStorage so other tabs can pick them up.
-  // Skip the write when the serialized payload hasn't actually changed
-  // (e.g. when we just accepted a storage event from another tab).
+  // Mirror local changes to localStorage on a trailing 200ms debounce.
+  // Fast bursts of trace events (many per second during an active run) only
+  // pay one stringify+setItem per quiet window, while occasional updates
+  // still land near-instantly for the Analysis tab.
   useEffect(() => {
-    const serialized = JSON.stringify(invocations);
-    if (serialized === lastSerializedRef.current) return;
-    lastSerializedRef.current = serialized;
-    safeWriteStorage(invocations);
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(() => {
+      flushTimerRef.current = null;
+      const serialized = JSON.stringify(invocations);
+      if (serialized === lastSerializedRef.current) return;
+      lastSerializedRef.current = serialized;
+      safeWriteStorage(invocations);
+    }, 200);
+    // No cleanup here on dep change — we *want* the timer to keep coalescing
+    // across rapid updates. Unmount flush lives in the next effect.
   }, [invocations]);
+
+  // Final flush on unmount so a pending debounce doesn't drop the last batch.
+  useEffect(() => {
+    return () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      const serialized = JSON.stringify(latestInvocationsRef.current);
+      if (serialized !== lastSerializedRef.current) {
+        lastSerializedRef.current = serialized;
+        safeWriteStorage(latestInvocationsRef.current);
+      }
+    };
+  }, []);
 
   // if the incoming payload matches what we already have, skip
   // the setState (which would otherwise create a new array reference,

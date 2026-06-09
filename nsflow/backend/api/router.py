@@ -28,6 +28,7 @@ from .v1 import (
     fastapi_concierge_endpoints,
     oneshot_endpoints,
     pdf_endpoints,
+    trace_history,
     vqa_endpoints,
 )
 
@@ -45,5 +46,6 @@ router.include_router(editor_endpoints.router, tags=["Agent Network Designer"])
 router.include_router(cruse_endpoints.router, prefix="/api/v1", tags=["CRUSE Threads"])
 router.include_router(oneshot_endpoints.router, tags=["One-Shot Chat"])
 router.include_router(pdf_endpoints.router, tags=["PDF Processing"])
+router.include_router(trace_history.router, tags=["Trace History"])
 if NSFLOW_PLUGIN_VQA_ENDPOINT:
     router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])

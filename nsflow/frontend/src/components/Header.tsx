@@ -238,22 +238,35 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           </Tooltip>
 
           {/* Analysis Button - cross-invocation trace analytics */}
-          <Tooltip title="Open Trace Analysis in a new tab" arrow>
-            <Button
-              variant="outlined"
-              startIcon={<AnalysisIcon />}
-              onClick={handleNavigateToAnalysis}
-              sx={{
-                ...(isOnAnalysisPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-                borderColor: muiTheme.palette.secondary.main,
-                '&:hover': {
-                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          <Tooltip
+            title={isOnAnalysisPage ? "You are on the Analysis page" : "Open Trace Analysis in a new tab"}
+            arrow
+          >
+            <span>
+              <Button
+                variant="outlined"
+                startIcon={<AnalysisIcon />}
+                onClick={() => {
+                  if (!isOnAnalysisPage) handleNavigateToAnalysis();
+                }}
+                disabled={isOnAnalysisPage}
+                sx={{
+                  ...(isOnAnalysisPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
                   borderColor: muiTheme.palette.secondary.main,
-                },
-              }}
-            >
-              Analysis
-            </Button>
+                  '&:hover': isOnAnalysisPage ? {} : {
+                    backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                    borderColor: muiTheme.palette.secondary.main,
+                  },
+                  '&.Mui-disabled': {
+                    opacity: 0.6,
+                    borderColor: muiTheme.palette.action.disabled,
+                    color: muiTheme.palette.text.disabled,
+                  },
+                }}
+              >
+                Analysis
+              </Button>
+            </span>
           </Tooltip>
 
           {/* New Button - hidden on Editor page */}

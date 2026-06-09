@@ -82,7 +82,10 @@ const TracePanel = () => {
   const summaryTokens = networkStep?.total_tokens ?? tree.totalTokens;
   const summaryCost = networkStep?.total_cost ?? tree.totalCost;
   const stepCount = (activeInvocation?.steps ?? []).filter(
-    (s) => s.kind !== "invocation_start" && s.kind !== "invocation_end"
+    (s) =>
+      s.kind !== "invocation_start" &&
+      s.kind !== "invocation_end" &&
+      s.kind !== "network_total"
   ).length;
 
   return (

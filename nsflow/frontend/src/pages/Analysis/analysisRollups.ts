@@ -139,6 +139,26 @@ export type InvocationStats = {
   totalLlmCalls: number;
 };
 
+/**
+ * Same distribution stats as `invocationStats` but driven by already-aggregated
+ * invocation summaries from the backend. Used by the persisted Analysis view.
+ */
+export const invocationStatsFromSummaries = (
+  summaries: Array<{ total_cost: number; total_tokens: number; llm_calls: number }>
+): InvocationStats => {
+  const costs = summaries.map((s) => s.total_cost ?? 0);
+  const tokens = summaries.map((s) => s.total_tokens ?? 0);
+  const calls = summaries.map((s) => s.llm_calls ?? 0);
+  return {
+    cost: distribution(costs),
+    tokens: distribution(tokens),
+    llmCalls: distribution(calls),
+    totalCost: costs.reduce((a, b) => a + b, 0),
+    totalTokens: tokens.reduce((a, b) => a + b, 0),
+    totalLlmCalls: calls.reduce((a, b) => a + b, 0),
+  };
+};
+
 export const invocationStats = (invocations: Invocation[]): InvocationStats => {
   const costs: number[] = [];
   const tokens: number[] = [];
@@ -184,7 +204,7 @@ export const invocationStatsByNetwork = (
 
 export type AgentRollup = {
   agent: string;
-  kind: string;
+  kind: NonNullable<TraceStep["kind"]>;
   hits: number;
   llmCalls: number;
   tokens: number;
