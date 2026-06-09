@@ -36,6 +36,7 @@ NORM = nw.NsWebsocketUtils._normalize_mcp_url
 
 
 REDACT = nw.NsWebsocketUtils.redact_sly_data_for_surface
+MERGE = nw.NsWebsocketUtils._merge_user_sly_data
 
 
 def _utils(agent_name="net"):
@@ -328,3 +329,57 @@ def test_redact_tolerates_non_string_header_key():
     out = REDACT(sly)
     assert out["http_headers"][url][1] == "weird"
     assert out["http_headers"][url]["Authorization"] == nw.REDACTED_VALUE
+
+
+# --------------------------- _merge_user_sly_data --------------------------- #
+
+def test_merge_redacted_sentinel_does_not_clobber_real_secret():
+    """A round-tripped ***redacted*** must not overwrite the retained real value."""
+    url = "https://api.example.com/mcp"
+    state = {"http_headers": {url: {"Authorization": "Bearer real", "Cookie": "s=1"}}}
+    incoming = {"http_headers": {url: {"Authorization": nw.REDACTED_VALUE, "Cookie": nw.REDACTED_VALUE}}}
+    MERGE(state, incoming)
+    assert state["http_headers"][url]["Authorization"] == "Bearer real"
+    assert state["http_headers"][url]["Cookie"] == "s=1"
+
+
+def test_merge_real_user_value_overwrites():
+    """A genuine (non-sentinel) user value still updates the stored header."""
+    url = "https://api.example.com/mcp"
+    state = {"http_headers": {url: {"Authorization": "Bearer old"}}}
+    incoming = {"http_headers": {url: {"Authorization": "Bearer new"}}}
+    MERGE(state, incoming)
+    assert state["http_headers"][url]["Authorization"] == "Bearer new"
+
+
+def test_merge_sentinel_not_added_when_no_existing_value():
+    """A redacted sentinel for a header with no stored value is dropped, not added."""
+    url = "https://api.example.com/mcp"
+    state = {"http_headers": {url: {}}}
+    incoming = {"http_headers": {url: {"Authorization": nw.REDACTED_VALUE}}}
+    MERGE(state, incoming)
+    assert "Authorization" not in state["http_headers"][url]
+
+
+def test_merge_preserves_headers_for_other_urls():
+    """Deep-merge: incoming headers for one URL don't wipe another URL's headers."""
+    a, b = "https://a/mcp", "https://b/mcp"
+    state = {"http_headers": {a: {"Authorization": "Bearer a"}}}
+    incoming = {"http_headers": {b: {"X-Custom": "v"}}}
+    MERGE(state, incoming)
+    assert state["http_headers"][a]["Authorization"] == "Bearer a"
+    assert state["http_headers"][b]["X-Custom"] == "v"
+
+
+def test_merge_non_http_headers_keys_replace_as_before():
+    """Non-http_headers keys keep plain shallow-replace semantics."""
+    state = {"user_id": "old", "http_headers": {}}
+    MERGE(state, {"user_id": "new", "extra": 1})
+    assert state["user_id"] == "new"
+    assert state["extra"] == 1
+
+
+def test_merge_ignores_non_dict_incoming():
+    state = {"user_id": "u1"}
+    MERGE(state, "not-a-dict")
+    assert state == {"user_id": "u1"}

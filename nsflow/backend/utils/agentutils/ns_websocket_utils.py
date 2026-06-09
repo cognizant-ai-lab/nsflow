@@ -138,8 +138,12 @@ class NsWebsocketUtils:
                 state = user_session.get("state")
                 # Update user input in state
                 state["user_input"] = user_input
-                # Update sly_data in state based on user input
-                state["sly_data"].update(sly_data)
+                # Merge the client's sly_data into the session state. http_headers
+                # is deep-merged so a round-tripped redaction sentinel (the UI in
+                # editor mode echoes back the last streamed, masked sly_data) can't
+                # clobber the real secrets the backend retains - see
+                # _merge_user_sly_data.
+                self._merge_user_sly_data(state["sly_data"], sly_data)
                 # Inject Authorization headers for any OAuth-connected MCP servers
                 # this network uses, so the agent can call them without the user
                 # having to paste a token. User-supplied http_headers win.
@@ -340,6 +344,54 @@ class NsWebsocketUtils:
                 logging.info("MCP auth: injected Authorization header into sly_data for %s", header_key)
         except Exception as e:  # noqa: BLE001 - never break chat on auth injection
             logging.warning("Failed to inject MCP auth headers: %s", e)
+
+    @staticmethod
+    def _merge_user_sly_data(state_sly_data: Dict[str, Any], incoming: Any) -> None:
+        """
+        Merge the client's ``incoming`` sly_data into ``state_sly_data`` in place.
+
+        Top-level keys are replaced as a plain dict update would, EXCEPT
+        ``http_headers``, which is deep-merged per URL/header. Any incoming header
+        value equal to ``REDACTED_VALUE`` is skipped entirely - never overwriting a
+        real value the backend already holds, and never added as a literal. This
+        is required because the UI (editor mode) round-trips the last streamed
+        sly_data, which we surface with credential headers masked; a plain
+        ``update`` would replace the live tokens/cookies in the session state with
+        ``***redacted***`` and forward that to the agent.
+        """
+        if not isinstance(incoming, dict):
+            return
+        # Non-http_headers keys keep the original shallow-replace behavior.
+        for key, value in incoming.items():
+            if key != "http_headers":
+                state_sly_data[key] = value
+
+        incoming_headers = incoming.get("http_headers")
+        if not isinstance(incoming_headers, dict):
+            # A non-dict http_headers from the client is left to injection-time
+            # coercion; only replace when there is nothing usable to preserve.
+            if "http_headers" in incoming and "http_headers" not in state_sly_data:
+                state_sly_data["http_headers"] = incoming_headers
+            return
+
+        merged = state_sly_data.get("http_headers")
+        if not isinstance(merged, dict):
+            merged = {}
+            state_sly_data["http_headers"] = merged
+        for url, headers in incoming_headers.items():
+            if not isinstance(headers, dict):
+                merged[url] = headers
+                continue
+            target = merged.get(url)
+            if not isinstance(target, dict):
+                target = {}
+                merged[url] = target
+            for name, value in headers.items():
+                # Drop a round-tripped redaction sentinel so it can't clobber a
+                # real secret already stored, or be forwarded to the agent verbatim.
+                if value == REDACTED_VALUE:
+                    continue
+                target[name] = value
 
     @staticmethod
     def _find_header_key(headers: Dict[str, Any], name: str) -> Optional[str]:
