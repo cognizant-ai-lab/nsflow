@@ -174,20 +174,41 @@ class FileTokenStorage:
     # Housekeeping helpers (used by the OAuth endpoints, not the protocol)
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _entry_is_usable(entry: Dict[str, Any]) -> bool:
+        """
+        True if the entry represents a connection that can actually authorize a
+        request: it has an access token, and that token is either not yet expired
+        or can be silently refreshed (a refresh token is present).
+
+        Entries holding only a pre-seeded client_info (no token), or an expired
+        token with no refresh token, are not usable connections - returning them
+        would let ``has_connection`` block re-auth and let the UI show a server as
+        connected when injection can never succeed.
+        """
+        tokens = entry.get("tokens", {}) or {}
+        if not tokens.get("access_token"):
+            return False
+        expires_at = entry.get("expires_at")
+        if expires_at is not None and time.time() >= expires_at and not tokens.get("refresh_token"):
+            return False
+        return True
+
     @classmethod
     def list_connections(cls, storage_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
         """
         Return non-secret metadata for every stored MCP connection that has a
         usable access token. Entries holding only a pre-seeded client_info (no
-        token yet) are not real connections and are skipped.
+        token yet), or an expired token with no refresh token, are not real
+        connections and are skipped.
         """
         path = (storage_dir or _default_storage_dir()) / "tokens.json"
         blob = cls._load_path(path)
         connections: List[Dict[str, Any]] = []
         for server_url, entry in blob.items():
-            tokens = entry.get("tokens", {}) or {}
-            if not tokens.get("access_token"):
+            if not cls._entry_is_usable(entry):
                 continue
+            tokens = entry.get("tokens", {}) or {}
             connections.append(
                 {
                     "server_url": server_url,
@@ -221,10 +242,15 @@ class FileTokenStorage:
 
     @classmethod
     def has_connection(cls, server_url: str, storage_dir: Optional[Path] = None) -> bool:
-        """True only if a usable access token is stored (ignores pre-seeded client_info)."""
+        """
+        True only if a usable access token is stored: present and either unexpired
+        or refreshable. Ignores pre-seeded client_info, and treats an expired
+        non-refreshable token as not connected so ``/start`` won't report
+        ``already_connected`` and block the user from re-authenticating.
+        """
         path = (storage_dir or _default_storage_dir()) / "tokens.json"
         entry = cls._load_path(path).get(server_url, {})
-        return bool((entry.get("tokens", {}) or {}).get("access_token"))
+        return cls._entry_is_usable(entry)
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return this server's stored entry (tokens, client_info, obtained_at, expires_at)."""
