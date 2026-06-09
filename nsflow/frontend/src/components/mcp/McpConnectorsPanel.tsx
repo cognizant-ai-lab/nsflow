@@ -281,7 +281,12 @@ const McpConnectorsPanel: React.FC = () => {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={refreshConnections} sx={{ color: theme.palette.text.secondary, p: 0.5 }}>
+            <IconButton
+              size="small"
+              aria-label="Refresh MCP connections"
+              onClick={refreshConnections}
+              sx={{ color: theme.palette.text.secondary, p: 0.5 }}
+            >
               <RefreshIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -315,7 +320,13 @@ const McpConnectorsPanel: React.FC = () => {
                 sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 1, backgroundColor: theme.palette.background.default }}
                 secondaryAction={
                   <Tooltip title="Disconnect">
-                    <IconButton edge="end" size="small" onClick={() => handleDisconnect(conn.server_url)} sx={{ color: theme.palette.error.main }}>
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      aria-label={`Disconnect ${conn.server_url}`}
+                      onClick={() => handleDisconnect(conn.server_url)}
+                      sx={{ color: theme.palette.error.main }}
+                    >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
