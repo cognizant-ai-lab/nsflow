@@ -21,6 +21,7 @@ import AppRoutes from "./routes";
 import { ApiPortProvider } from "../context/ApiPortContext";
 import { NeuroSanProvider } from "../context/NeuroSanContext";
 import { ChatProvider } from "../context/ChatContext";
+import { TraceProvider } from "../context/TraceContext";
 import { ThemeProvider } from "../context/ThemeContext";
 import { SnackbarProvider } from "../context/SnackbarContext";
 
@@ -29,13 +30,15 @@ const App: React.FC = () => {
     <ThemeProvider>
       <SnackbarProvider>
         <ChatProvider>
-          <ApiPortProvider>
-            <NeuroSanProvider>
-              <BrowserRouter>
-                <AppRoutes />
-              </BrowserRouter>
-            </NeuroSanProvider>
-          </ApiPortProvider>
+          <TraceProvider>
+            <ApiPortProvider>
+              <NeuroSanProvider>
+                <BrowserRouter>
+                  <AppRoutes />
+                </BrowserRouter>
+              </NeuroSanProvider>
+            </ApiPortProvider>
+          </TraceProvider>
         </ChatProvider>
       </SnackbarProvider>
     </ThemeProvider>
