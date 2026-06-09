@@ -242,6 +242,28 @@ def test_inject_preserves_other_existing_headers(monkeypatch):
     assert sly["http_headers"][url]["Authorization"] == "Bearer tok"
 
 
+def test_inject_respects_lowercase_user_authorization(monkeypatch):
+    """A user 'authorization' (any casing) wins; we don't override or duplicate it."""
+    url = "https://api.example.com/mcp"
+    inst, get_token = _patch_injection(monkeypatch, connections=[url], referenced=[url])
+    sly = {"http_headers": {url: {"authorization": "Bearer user-token"}}}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    assert sly["http_headers"][url] == {"authorization": "Bearer user-token"}
+    get_token.assert_not_awaited()
+
+
+def test_inject_replaces_differently_cased_sentinel_without_duplicate(monkeypatch):
+    """A redacted sentinel under odd casing is replaced and not left as a duplicate."""
+    url = "https://api.example.com/mcp"
+    inst, get_token = _patch_injection(monkeypatch, connections=[url], referenced=[url])
+    sly = {"http_headers": {url: {"authorization": nw.REDACTED_VALUE}}}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    headers = sly["http_headers"][url]
+    # Exactly one Authorization header, canonical casing, real token.
+    assert headers == {"Authorization": "Bearer tok"}
+    get_token.assert_awaited_once_with(url)
+
+
 def test_inject_ignores_redaction_sentinel(monkeypatch):
     """A round-tripped redacted Authorization is replaced with a fresh token.
 

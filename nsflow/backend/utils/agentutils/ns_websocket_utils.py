@@ -20,7 +20,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -313,11 +313,15 @@ class NsWebsocketUtils:
                 sly_data["http_headers"] = http_headers
             for header_key, token_url in targets:
                 existing = http_headers.get(header_key)
-                # Respect a user-provided Authorization for this URL - but ignore
-                # our own redaction placeholder, which can come back from a UI that
-                # round-trips a previously surfaced (masked) sly_data. Treating the
-                # sentinel as real would send "***redacted***" to the agent.
-                existing_auth = existing.get("Authorization") if isinstance(existing, dict) else None
+                headers = existing if isinstance(existing, dict) else {}
+                # HTTP header names are case-insensitive, so find any existing
+                # "Authorization" regardless of casing.
+                auth_key = self._find_header_key(headers, "Authorization")
+                existing_auth = headers.get(auth_key) if auth_key else None
+                # Respect a user-provided Authorization for this URL (any casing) -
+                # but ignore our own redaction placeholder, which can come back from
+                # a UI that round-trips a previously surfaced (masked) sly_data.
+                # Treating the sentinel as real would send "***redacted***" to the agent.
                 if existing_auth and existing_auth != REDACTED_VALUE:
                     logging.info("MCP auth: keeping user-supplied Authorization for %s", header_key)
                     continue
@@ -327,12 +331,27 @@ class NsWebsocketUtils:
                         "MCP auth: no usable token for %s (connection may need re-auth)", token_url
                     )
                     continue
-                headers = existing if isinstance(existing, dict) else {}
+                # Drop any differently-cased existing key so we don't end up with
+                # two Authorization headers, then set the canonical casing.
+                if auth_key and auth_key != "Authorization":
+                    headers.pop(auth_key, None)
                 headers["Authorization"] = authorization
                 http_headers[header_key] = headers
                 logging.info("MCP auth: injected Authorization header into sly_data for %s", header_key)
         except Exception as e:  # noqa: BLE001 - never break chat on auth injection
             logging.warning("Failed to inject MCP auth headers: %s", e)
+
+    @staticmethod
+    def _find_header_key(headers: Dict[str, Any], name: str) -> Optional[str]:
+        """
+        Return the actual key in ``headers`` that matches ``name``
+        case-insensitively (HTTP header names are case-insensitive), or None.
+        """
+        target = name.lower()
+        for key in headers:
+            if isinstance(key, str) and key.lower() == target:
+                return key
+        return None
 
     @staticmethod
     def redact_sly_data_for_surface(sly_data: Any) -> Any:
