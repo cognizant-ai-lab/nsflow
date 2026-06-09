@@ -306,6 +306,9 @@ class MCPOAuthManager:
         the (high-entropy, CSRF-protecting) ``state`` value. Returns the flow, or
         ``None`` if ``state`` is unknown.
         """
+        # Also sweep on this read path so stale flows are cleaned up during
+        # normal callback handling, not only when a new flow starts.
+        self._sweep_expired()
         flow = self._by_state.get(state)
         if flow is None:
             return None
@@ -320,6 +323,9 @@ class MCPOAuthManager:
         return flow
 
     def get_flow(self, flow_id: str) -> Optional[PendingFlow]:
+        # Sweep on poll so completed/expired flows don't accumulate when no new
+        # flow is ever started.
+        self._sweep_expired()
         return self._by_flow_id.get(flow_id)
 
     async def wait_for_completion(self, flow: PendingFlow, timeout: float = 45) -> None:
@@ -359,8 +365,13 @@ class MCPOAuthManager:
         """
         Return a ready-to-use ``Authorization`` header value (e.g.
         ``"Bearer <token>"``) for ``server_url``, refreshing silently if the
-        stored token has expired. Returns ``None`` if there is no usable
-        connection (the user must (re)connect).
+        stored token is near expiry.
+
+        Returns ``None`` if there is no usable connection - including the case
+        where the token is past its expiry and the silent refresh could not renew
+        it (no refresh token, or refresh needs re-auth). We never return a token
+        we know to be expired, so the caller injects nothing and the UI/network
+        can prompt a reconnect instead of sending a dead Authorization header.
         """
         storage = FileTokenStorage(server_url)
         meta = storage.get_metadata()
@@ -370,6 +381,16 @@ class MCPOAuthManager:
         expires_at = meta.get("expires_at")
         if expires_at is not None and time.time() >= (expires_at - TOKEN_REFRESH_MARGIN_SECONDS):
             await self._silent_refresh(server_url)
+            # Re-read: a successful refresh pushes expires_at into the future.
+            meta = storage.get_metadata()
+            expires_at = meta.get("expires_at")
+
+        # Drop a token that is actually expired (refresh failed / unavailable).
+        if expires_at is not None and time.time() >= expires_at:
+            logger.warning(
+                "MCP token for %s is expired and could not be refreshed; reconnect required.", server_url
+            )
+            return None
 
         tokens = await storage.get_tokens()
         if not tokens or not tokens.access_token:
