@@ -199,16 +199,24 @@ class FileTokenStorage:
         return connections
 
     @classmethod
-    def remove(cls, server_url: str, storage_dir: Optional[Path] = None) -> bool:
-        """Delete the stored credentials for a server. Returns True if removed."""
+    async def remove(cls, server_url: str, storage_dir: Optional[Path] = None) -> bool:
+        """
+        Delete the stored credentials for a server. Returns True if removed.
+
+        This is a read-modify-write, so it serializes through the same in-process
+        ``_lock`` as set_tokens/set_client_info (and the cross-process file lock),
+        ensuring it cannot race with a concurrent token refresh or connect flow
+        and lose updates or resurrect a deleted entry.
+        """
         base = storage_dir or _default_storage_dir()
         path = base / "tokens.json"
-        with _interprocess_lock(base / "tokens.json.lock"):
-            blob = cls._load_path(path)
-            if server_url not in blob:
-                return False
-            del blob[server_url]
-            cls._write_path(path, blob)
+        async with cls._lock:
+            with _interprocess_lock(base / "tokens.json.lock"):
+                blob = cls._load_path(path)
+                if server_url not in blob:
+                    return False
+                del blob[server_url]
+                cls._write_path(path, blob)
         return True
 
     @classmethod

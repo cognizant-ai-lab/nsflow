@@ -210,5 +210,5 @@ async def list_connections():
 @router.delete("/connections")
 async def delete_connection(server_url: str = Query(...)):
     """Disconnect an MCP server by removing its stored credentials."""
-    removed = FileTokenStorage.remove(server_url.strip())
+    removed = await FileTokenStorage.remove(server_url.strip())
     return JSONResponse(content={"removed": removed, "server_url": server_url})

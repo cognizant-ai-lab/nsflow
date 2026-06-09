@@ -209,7 +209,7 @@ def test_list_connections(monkeypatch):
 
 def test_delete_connection(monkeypatch):
     """Deleting a connection reports whether it was removed."""
-    monkeypatch.setattr(ep.FileTokenStorage, "remove", MagicMock(return_value=True))
+    monkeypatch.setattr(ep.FileTokenStorage, "remove", AsyncMock(return_value=True))
     response = client.delete(CONNECTIONS_URL, params={"server_url": "https://mcp.example.com/mcp"})
     assert response.status_code == 200
     assert response.json()["removed"] is True
