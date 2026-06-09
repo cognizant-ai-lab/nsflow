@@ -138,8 +138,8 @@ class FileTokenStorage:
     async def get_tokens(self) -> Optional[OAuthToken]:
         # Disk read offloaded to a worker thread so it never blocks the event loop.
         entry = await asyncio.to_thread(self._read_entry, self.server_url)
-        raw = entry.get("tokens") if entry else None
-        if not raw:
+        raw = entry.get("tokens")
+        if not isinstance(raw, dict):
             return None
         return OAuthToken.model_validate(raw)
 
@@ -152,7 +152,12 @@ class FileTokenStorage:
     def _sync_set_tokens(self, tokens: OAuthToken) -> None:
         with _interprocess_lock(self._lock_path):
             blob = self._load_file()
-            entry = blob.setdefault(self.server_url, {})
+            entry = blob.get(self.server_url)
+            # Replace a corrupted/non-dict entry so a recovery write can't be
+            # blocked by an unindexable existing value.
+            if not isinstance(entry, dict):
+                entry = {}
+                blob[self.server_url] = entry
             entry["tokens"] = tokens.model_dump(mode="json")
             entry["obtained_at"] = int(time.time())
             if tokens.expires_in is not None:
@@ -163,8 +168,8 @@ class FileTokenStorage:
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
         entry = await asyncio.to_thread(self._read_entry, self.server_url)
-        raw = entry.get("client_info") if entry else None
-        if not raw:
+        raw = entry.get("client_info")
+        if not isinstance(raw, dict):
             return None
         return OAuthClientInformationFull.model_validate(raw)
 
@@ -175,7 +180,10 @@ class FileTokenStorage:
     def _sync_set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         with _interprocess_lock(self._lock_path):
             blob = self._load_file()
-            entry = blob.setdefault(self.server_url, {})
+            entry = blob.get(self.server_url)
+            if not isinstance(entry, dict):
+                entry = {}
+                blob[self.server_url] = entry
             entry["client_info"] = client_info.model_dump(mode="json")
             self._write_file(blob)
 
@@ -201,8 +209,15 @@ class FileTokenStorage:
         token with no refresh token, are not usable connections - returning them
         would let ``has_connection`` block re-auth and let the UI show a server as
         connected when injection can never succeed.
+
+        Tolerates a corrupted/hand-edited store: a non-dict entry or non-dict
+        ``tokens`` field is simply treated as "not usable" rather than raising.
         """
-        tokens = entry.get("tokens", {}) or {}
+        if not isinstance(entry, dict):
+            return False
+        tokens = entry.get("tokens")
+        if not isinstance(tokens, dict):
+            return False
         if not tokens.get("access_token"):
             return False
         expires_at = entry.get("expires_at")
@@ -281,7 +296,11 @@ class FileTokenStorage:
     # ------------------------------------------------------------------ #
 
     def _read_entry(self, server_url: str) -> Dict[str, Any]:
-        return self._load_file().get(server_url, {})
+        # Always hand back a dict so callers (get_tokens/get_client_info/
+        # get_metadata -> get_fresh_token) can index it safely even if the store
+        # was corrupted/hand-edited so this server's entry is not an object.
+        entry = self._load_file().get(server_url, {})
+        return entry if isinstance(entry, dict) else {}
 
     def _load_file(self) -> Dict[str, Any]:
         return self._load_path(self._path)
