@@ -46,8 +46,17 @@ import httpx
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.streamable_http import streamablehttp_client
-from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
+
+# create_mcp_http_client currently lives in the private mcp.shared._httpx_utils
+# (that is where the SDK's own client modules import it from as of mcp 1.27.x).
+# Prefer a public path if a future SDK promotes it (underscore -> public is a
+# common deprecation path), and fall back to the private module for current and
+# older versions.
+try:
+    from mcp.shared.httpx_utils import create_mcp_http_client  # type: ignore
+except ImportError:  # pragma: no cover - exercised only on older/newer SDK layouts
+    from mcp.shared._httpx_utils import create_mcp_http_client
 
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
 
