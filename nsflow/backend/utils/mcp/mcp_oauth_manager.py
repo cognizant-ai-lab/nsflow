@@ -132,15 +132,25 @@ class MCPOAuthManager:
     """
     Process-wide registry and driver for MCP OAuth flows. Use the singleton.
 
-    IMPORTANT - single worker only: pending-flow state (``_by_flow_id`` /
-    ``_by_state``) lives in this process's memory, so the /start, /callback, and
-    /status requests of one authorization MUST be served by the same process. If
-    the backend is ever run with multiple Uvicorn workers, the callback can land
-    on a worker that never saw the /start and will reject a valid state as
-    "Unknown or expired". nsflow launches uvicorn with --reload and no
-    --workers (see nsflow/run.py), which is single-worker; keep it that way for
-    MCP OAuth (the on-disk token store is likewise guarded only by a single
-    cross-process fcntl lock, not a shared coordinator).
+    IMPORTANT - the backend MUST run with a single worker for MCP OAuth.
+    Pending-flow state (``_by_flow_id`` / ``_by_state``) lives only in this
+    process's memory, so the /start, /callback, and /status requests of one
+    authorization MUST all be served by the same process. With more than one
+    Uvicorn worker the callback can land on a worker that never saw the /start
+    and will reject a valid ``state`` as "Unknown or expired", breaking every
+    connection attempt. There is no shared/IPC store; the on-disk token store is
+    likewise coordinated only by a single cross-process fcntl lock, not a
+    cluster-wide coordinator.
+
+    Required configuration: run uvicorn single-worker, i.e. ``--workers 1`` (or
+    ``--reload``, which forces a single worker). The normal launch path,
+    ``nsflow/run.py``, uses ``--reload`` and is therefore single-worker.
+
+    CAVEAT - the ``nsflow.backend.main`` ``__main__`` block passes
+    ``workers=os.cpu_count()``; today that is a no-op because it is paired with
+    ``reload=True`` (Uvicorn ignores ``workers`` in reload mode), but if that
+    block is ever run without reload it WOULD start multiple workers and break
+    MCP OAuth. Keep the backend single-worker.
     """
 
     def __init__(self):
