@@ -62,16 +62,28 @@ def _callback_html(status: str, server_url: str, message: str = "") -> str:
     )
     heading = "Connected!" if status == "ok" else "Connection failed"
     detail = message or ("You can close this window." if status == "ok" else "Please try again.")
+    # Escape EVERY value that reaches the page with html.escape (the sanitizer
+    # CodeQL recognizes). The postMessage payload is carried in a data-attribute
+    # and read back with JSON.parse rather than written into executable <script>
+    # text, so user-controlled values (server_url, OAuth error_description, etc.)
+    # can never break out of the script context. Attribute values are entity-
+    # decoded by the HTML parser, so JSON.parse still receives the original JSON.
     safe_heading = html.escape(heading, quote=True)
     safe_detail = html.escape(detail, quote=True)
+    safe_payload = html.escape(payload, quote=True)
     return f"""<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"><title>MCP OAuth</title></head>
   <body style="font-family: system-ui, sans-serif; padding: 2rem; text-align: center;">
     <h2>{safe_heading}</h2>
     <p>{safe_detail}</p>
+    <div id="mcp-oauth-data" data-payload="{safe_payload}" style="display:none"></div>
     <script>
-      try {{ if (window.opener) window.opener.postMessage({payload}, "*"); }} catch (e) {{}}
+      try {{
+        var el = document.getElementById("mcp-oauth-data");
+        var d = JSON.parse(el.getAttribute("data-payload"));
+        if (window.opener) window.opener.postMessage(d, "*");
+      }} catch (e) {{}}
       setTimeout(function () {{ window.close(); }}, 800);
     </script>
   </body>
