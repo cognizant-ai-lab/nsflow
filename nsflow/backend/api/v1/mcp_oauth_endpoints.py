@@ -141,7 +141,16 @@ async def oauth_callback(
     if not state:
         return HTMLResponse(content=_callback_html("error", "", "Missing state parameter."), status_code=400)
 
-    flow = mcp_oauth_manager.resolve_callback(state=state, code=code, error=error or error_description)
+    # A successful callback must carry an authorization code. If the provider
+    # returned neither a code nor an explicit error, treat the missing code as an
+    # error so the flow resolves as failed (its future is set with an exception)
+    # and the background task unblocks cleanly - rather than passing code=None
+    # into the SDK token exchange, which fails or hangs.
+    flow_error = error or error_description
+    if not flow_error and not code:
+        flow_error = "Authorization server did not return an authorization code."
+
+    flow = mcp_oauth_manager.resolve_callback(state=state, code=code, error=flow_error)
     if flow is None:
         # Unknown state -> reject (CSRF / stale flow protection).
         return HTMLResponse(
@@ -149,9 +158,9 @@ async def oauth_callback(
             status_code=400,
         )
 
-    if error or error_description:
+    if flow_error:
         return HTMLResponse(
-            content=_callback_html("error", flow.server_url, error_description or error),
+            content=_callback_html("error", flow.server_url, flow_error),
             status_code=400,
         )
 
