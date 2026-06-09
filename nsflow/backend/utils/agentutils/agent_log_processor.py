@@ -83,6 +83,7 @@ class AgentLogProcessor(MessageProcessor):
         self._open_spans.clear()
         await self.logs_manager.trace_event({
             "invocation_id": self._invocation_id,
+            "network": self.agent_name,
             "kind": "invocation_start",
             "prompt": user_input,
             "received_at": self._invocation_started_at,
@@ -101,6 +102,7 @@ class AgentLogProcessor(MessageProcessor):
         now = time.time()
         await self.logs_manager.trace_event({
             "invocation_id": self._invocation_id,
+            "network": self.agent_name,
             "kind": "invocation_end",
             "received_at": now,
             "start_s": self._invocation_started_at or now,
@@ -343,8 +345,21 @@ class AgentLogProcessor(MessageProcessor):
             saw_token_accounting=bool(span.get("saw_token_accounting")),
         )
 
+        # Pull provider+model name when available (frontman aggregates carry a
+        # nested `models` map; agent-level dicts don't). Useful for the Analysis
+        # view's "cost by model" rollup.
+        model_name: Optional[str] = None
+        provider_name: Optional[str] = None
+        if token_accounting and isinstance(token_accounting.get("models"), dict):
+            for prov, models in token_accounting["models"].items():
+                if isinstance(models, dict) and models:
+                    provider_name = prov
+                    model_name = next(iter(models.keys()))
+                    break
+
         await self.logs_manager.trace_event({
             "invocation_id": self._invocation_id,
+            "network": self.agent_name,
             "otrace": list(otrace),
             "agent": otrace[-1],
             "depth": max(len(otrace) - 1, 0),
@@ -359,6 +374,8 @@ class AgentLogProcessor(MessageProcessor):
             "successful_requests": token_accounting.get("successful_requests") if token_accounting else None,
             "is_network_total": kind == "network_total",
             "params": span.get("params"),
+            "model": model_name,
+            "provider": provider_name,
         })
 
     def extract_agent_network_definition(self, msg: Dict[str, Any]) -> Optional[Any]:

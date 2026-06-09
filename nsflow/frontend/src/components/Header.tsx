@@ -25,7 +25,8 @@ import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import { Home as HomeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Autorenew as AutorenewIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon
+  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon,
+  Insights as AnalysisIcon,
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
@@ -52,6 +53,13 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
 
   // Determine if we're on CRUSE page based on location or prop
   const isOnCrusePage = isCrusePage || location.pathname.includes('/cruse');
+
+  // Determine if we're on the Analysis page
+  const isOnAnalysisPage = location.pathname.includes('/analysis');
+
+  const handleNavigateToAnalysis = () => {
+    window.open('/analysis', '_blank', 'noopener,noreferrer');
+  };
 
   const handleExportNotebook = async () => {
     if (!selectedNetwork) return alert("Please select an agent network first.");
@@ -226,6 +234,25 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
               }}
             >
               Home
+            </Button>
+          </Tooltip>
+
+          {/* Analysis Button - cross-invocation trace analytics */}
+          <Tooltip title="Open Trace Analysis in a new tab" arrow>
+            <Button
+              variant="outlined"
+              startIcon={<AnalysisIcon />}
+              onClick={handleNavigateToAnalysis}
+              sx={{
+                ...(isOnAnalysisPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
+                borderColor: muiTheme.palette.secondary.main,
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                  borderColor: muiTheme.palette.secondary.main,
+                },
+              }}
+            >
+              Analysis
             </Button>
           </Tooltip>
 

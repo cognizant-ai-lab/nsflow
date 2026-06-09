@@ -14,7 +14,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { createContext, useCallback, useContext, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
+
+// Shared across browser tabs of the same origin. The chat tab writes here
+// on every trace event; the Analysis tab (opened via window.open) reads
+// from it and subscribes to the `storage` event for live updates.
+const STORAGE_KEY = "nsflow:trace:invocations:v1";
+
+const safeReadStorage = (): Invocation[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Invocation[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const safeWriteStorage = (invs: Invocation[]): void => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(invs));
+  } catch {
+    // QuotaExceeded etc.; just skip the mirror for this write.
+  }
+};
 
 export type TraceKind =
   | "agent"
@@ -27,6 +53,7 @@ export type TraceKind =
 
 export type TraceStep = {
   invocation_id?: string | null;
+  network?: string | null;
   otrace: string[];
   agent: string;
   depth: number;
@@ -42,10 +69,13 @@ export type TraceStep = {
   is_network_total?: boolean;
   params?: Record<string, unknown> | null;
   prompt?: string | null;
+  model?: string | null;
+  provider?: string | null;
 };
 
 export type Invocation = {
   id: string;
+  network: string;
   prompt: string;
   startedAt: number;
   endedAt: number | null;
@@ -67,9 +97,39 @@ const TraceContext = createContext<TraceContextType | undefined>(undefined);
 const UNATTACHED_INVOCATION_ID = "__unattached__";
 
 export const TraceProvider = ({ children }: { children: ReactNode }) => {
-  const [invocations, setInvocations] = useState<Invocation[]>([]);
+  // Hydrate from localStorage so a freshly-opened Analysis tab (window.open
+  // from the chat tab) starts with whatever the recording tab already wrote.
+  const [invocations, setInvocations] = useState<Invocation[]>(() => safeReadStorage());
   const [traceWs, setTraceWs] = useState<WebSocket | null>(null);
   const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
+
+  // Track whether the local update originated from this tab; if so, don't
+  // re-process the storage event we just emitted by writing.
+  const lastWrittenRef = useRef<string | null>(null);
+
+  // Push every local change to localStorage so other tabs can pick it up.
+  useEffect(() => {
+    const serialized = JSON.stringify(invocations);
+    lastWrittenRef.current = serialized;
+    safeWriteStorage(invocations);
+  }, [invocations]);
+
+  // Subscribe to writes from other tabs (this tab does not fire its own
+  // `storage` event, so the lastWrittenRef guard is belt-and-suspenders).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY || e.newValue == null) return;
+      if (e.newValue === lastWrittenRef.current) return;
+      try {
+        const next = JSON.parse(e.newValue);
+        if (Array.isArray(next)) setInvocations(next as Invocation[]);
+      } catch {
+        // Ignore malformed payload.
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const addTraceStep = useCallback((step: TraceStep) => {
     setInvocations((prev) => {
@@ -79,6 +139,7 @@ export const TraceProvider = ({ children }: { children: ReactNode }) => {
       if (step.kind === "invocation_start") {
         const fresh: Invocation = {
           id,
+          network: step.network ?? "",
           prompt: step.prompt ?? "",
           startedAt: step.start_s,
           endedAt: null,
@@ -101,6 +162,7 @@ export const TraceProvider = ({ children }: { children: ReactNode }) => {
       if (idx === -1) {
         const synthetic: Invocation = {
           id,
+          network: step.network ?? "",
           prompt: step.prompt ?? "",
           startedAt: step.start_s,
           endedAt: null,

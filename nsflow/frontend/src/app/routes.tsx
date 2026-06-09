@@ -19,6 +19,7 @@ import { Routes, Route } from 'react-router-dom';
 import Home from '../pages/Home/Home';
 import Editor from '../pages/Editor/Editor';
 import Cruse from '../pages/Cruse/Cruse';
+import Analysis from '../pages/Analysis/Analysis';
 import { getFeatureFlags } from '../utils/config';
 
 export default function AppRoutes() {
@@ -29,6 +30,7 @@ export default function AppRoutes() {
       <Route path="/" element={<Home />} /> {/* Serve Home directly at "/" */}
       <Route path="/home" element={<Home />} /> {/* Explicit home route */}
       <Route path="/editor" element={<Editor />} /> {/* Editor page */}
+      <Route path="/analysis" element={<Analysis />} /> {/* Trace analysis */}
       {pluginCruse && <Route path="/cruse" element={<Cruse />} />} {/* CRUSE chat interface */}
       <Route path="*" element={<Home />} /> {/* Optional fallback */}
     </Routes>

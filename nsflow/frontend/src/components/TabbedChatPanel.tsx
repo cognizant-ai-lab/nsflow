@@ -41,7 +41,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
     setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs, chatWs, internalChatWs,
     slyDataWs, progressWs, setNewSlyData, setNewProgress } = useChatContext();
-  const { addTraceStep, clearTrace, traceWs, setTraceWs } = useTraceContext();
+  const { addTraceStep, traceWs, setTraceWs } = useTraceContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
@@ -76,7 +76,9 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
       console.log("Closing previous Trace WebSocket...");
       traceWs.close();
     }
-    clearTrace();
+    // Note: do NOT clearTrace() on network switch. Invocations accumulate
+    // across networks for the Analysis page's cross-network rollups. The
+    // user can reset manually from the Trace tab if needed.
 
     // Send system message for network switch only once
     if (lastActiveNetworkRef.current !== targetNetwork) {
