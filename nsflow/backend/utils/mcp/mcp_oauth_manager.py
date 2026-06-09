@@ -86,10 +86,19 @@ async def _force_json_accept_on_oauth_requests(request: httpx.Request) -> None:
 
 
 def _mcp_http_client_factory(
-    headers=None, timeout=None, auth=None
+    headers=None, timeout=None, auth=None, **kwargs
 ) -> httpx.AsyncClient:
-    """MCP http client factory that adds the OAuth Accept-JSON request hook."""
-    client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth)
+    """
+    MCP http client factory that adds the OAuth Accept-JSON request hook.
+
+    Accepts and forwards any extra keyword arguments so the factory stays
+    compatible if a future MCP SDK passes additional parameters to
+    ``httpx_client_factory`` (a common forward-compat pattern). Forwarding rather
+    than dropping them means new client settings (proxy, TLS verify, etc.) still
+    reach the underlying client - and since we wrap the SDK's own
+    ``create_mcp_http_client``, anything it passes is something it accepts.
+    """
+    client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth, **kwargs)
     client.event_hooks.setdefault("request", []).append(_force_json_accept_on_oauth_requests)
     return client
 
