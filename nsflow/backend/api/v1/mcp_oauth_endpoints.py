@@ -22,6 +22,7 @@ list/remove stored connections. Tokens themselves are persisted on the backend
 and injected into ``sly_data`` at chat time - they are never returned to the UI.
 """
 
+import html
 import logging
 from typing import Optional
 
@@ -61,12 +62,14 @@ def _callback_html(status: str, server_url: str, message: str = "") -> str:
     )
     heading = "Connected!" if status == "ok" else "Connection failed"
     detail = message or ("You can close this window." if status == "ok" else "Please try again.")
+    safe_heading = html.escape(heading, quote=True)
+    safe_detail = html.escape(detail, quote=True)
     return f"""<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"><title>MCP OAuth</title></head>
   <body style="font-family: system-ui, sans-serif; padding: 2rem; text-align: center;">
-    <h2>{heading}</h2>
-    <p>{detail}</p>
+    <h2>{safe_heading}</h2>
+    <p>{safe_detail}</p>
     <script>
       try {{ if (window.opener) window.opener.postMessage({payload}, "*"); }} catch (e) {{}}
       setTimeout(function () {{ window.close(); }}, 800);
