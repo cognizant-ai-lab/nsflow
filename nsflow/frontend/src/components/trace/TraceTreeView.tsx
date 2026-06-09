@@ -20,6 +20,16 @@ import { ChevronRight, ExpandMore } from "@mui/icons-material";
 import { TraceNode, TraceTree, formatCost, formatDuration } from "./traceTree";
 import { KIND_STYLES } from "./traceKinds";
 
+const COL = {
+  chevron: 18,
+  bar: 140,
+  duration: 70,
+  pct: 60,
+  tokens: 70,
+  cost: 70,
+};
+const ROW_GAP = 1; // mui spacing units used in row gap={1}
+
 type Props = {
   tree: TraceTree;
   onSelect?: (node: TraceNode) => void;
@@ -48,6 +58,7 @@ const TraceTreeView = ({ tree, onSelect, selectedKey }: Props) => {
         fontSize: 13,
       }}
     >
+      <TraceTreeHeader />
       {tree.roots.map((root) => (
         <TraceNodeRow
           key={root.key}
@@ -58,6 +69,56 @@ const TraceTreeView = ({ tree, onSelect, selectedKey }: Props) => {
           selectedKey={selectedKey}
         />
       ))}
+    </Box>
+  );
+};
+
+const TraceTreeHeader = () => {
+  const theme = useTheme();
+  const headStyle = {
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    color: theme.palette.text.secondary,
+    fontFamily: theme.typography.fontFamily,
+    fontVariantNumeric: "tabular-nums" as const,
+  };
+  return (
+    <Box
+      sx={{
+        position: "sticky",
+        top: 0,
+        zIndex: 1,
+        backgroundColor: theme.palette.background.paper,
+        display: "flex",
+        alignItems: "center",
+        gap: ROW_GAP,
+        pl: `${COL.chevron + 8}px`,
+        pr: 1,
+        py: 0.75,
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        mb: 0.5,
+      }}
+    >
+      <Typography component="span" sx={{ ...headStyle, flex: 1, minWidth: 0 }}>
+        Agent
+      </Typography>
+      <Typography component="span" sx={{ ...headStyle, width: COL.bar, textAlign: "left" }}>
+        % of root
+      </Typography>
+      <Typography component="span" sx={{ ...headStyle, width: COL.duration, textAlign: "right" }}>
+        Duration
+      </Typography>
+      <Typography component="span" sx={{ ...headStyle, width: COL.pct, textAlign: "right" }}>
+        %
+      </Typography>
+      <Typography component="span" sx={{ ...headStyle, width: COL.tokens, textAlign: "right" }}>
+        Tokens
+      </Typography>
+      <Typography component="span" sx={{ ...headStyle, width: COL.cost, textAlign: "right" }}>
+        Cost
+      </Typography>
     </Box>
   );
 };
@@ -106,7 +167,7 @@ const TraceNodeRow = ({ node, depth, rootDuration, onSelect, selectedKey }: RowP
             }
           }}
           sx={{
-            width: 18,
+            width: COL.chevron,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -153,7 +214,7 @@ const TraceNodeRow = ({ node, depth, rootDuration, onSelect, selectedKey }: RowP
         <Box
           sx={{
             position: "relative",
-            width: 140,
+            width: COL.bar,
             height: 8,
             borderRadius: 1,
             backgroundColor: alpha(theme.palette.text.secondary, 0.12),
@@ -174,7 +235,7 @@ const TraceNodeRow = ({ node, depth, rootDuration, onSelect, selectedKey }: RowP
 
         <Typography
           sx={{
-            width: 70,
+            width: COL.duration,
             textAlign: "right",
             color: theme.palette.text.primary,
             fontVariantNumeric: "tabular-nums",
@@ -185,7 +246,7 @@ const TraceNodeRow = ({ node, depth, rootDuration, onSelect, selectedKey }: RowP
 
         <Typography
           sx={{
-            width: 60,
+            width: COL.pct,
             textAlign: "right",
             color: theme.palette.text.secondary,
             fontVariantNumeric: "tabular-nums",
@@ -197,7 +258,7 @@ const TraceNodeRow = ({ node, depth, rootDuration, onSelect, selectedKey }: RowP
 
         <Typography
           sx={{
-            width: 70,
+            width: COL.tokens,
             textAlign: "right",
             color: theme.palette.text.secondary,
             fontVariantNumeric: "tabular-nums",
@@ -209,7 +270,7 @@ const TraceNodeRow = ({ node, depth, rootDuration, onSelect, selectedKey }: RowP
 
         <Typography
           sx={{
-            width: 70,
+            width: COL.cost,
             textAlign: "right",
             color: theme.palette.text.secondary,
             fontVariantNumeric: "tabular-nums",

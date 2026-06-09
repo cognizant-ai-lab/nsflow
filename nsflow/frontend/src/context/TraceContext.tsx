@@ -97,32 +97,33 @@ const TraceContext = createContext<TraceContextType | undefined>(undefined);
 const UNATTACHED_INVOCATION_ID = "__unattached__";
 
 export const TraceProvider = ({ children }: { children: ReactNode }) => {
-  // Hydrate from localStorage so a freshly-opened Analysis tab (window.open
-  // from the chat tab) starts with whatever the recording tab already wrote.
   const [invocations, setInvocations] = useState<Invocation[]>(() => safeReadStorage());
   const [traceWs, setTraceWs] = useState<WebSocket | null>(null);
   const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
+  const lastSerializedRef = useRef<string>(JSON.stringify(invocations));
 
-  // Track whether the local update originated from this tab; if so, don't
-  // re-process the storage event we just emitted by writing.
-  const lastWrittenRef = useRef<string | null>(null);
-
-  // Push every local change to localStorage so other tabs can pick it up.
+  // Push local changes to localStorage so other tabs can pick them up.
+  // Skip the write when the serialized payload hasn't actually changed
+  // (e.g. when we just accepted a storage event from another tab).
   useEffect(() => {
     const serialized = JSON.stringify(invocations);
-    lastWrittenRef.current = serialized;
+    if (serialized === lastSerializedRef.current) return;
+    lastSerializedRef.current = serialized;
     safeWriteStorage(invocations);
   }, [invocations]);
 
-  // Subscribe to writes from other tabs (this tab does not fire its own
-  // `storage` event, so the lastWrittenRef guard is belt-and-suspenders).
+  // if the incoming payload matches what we already have, skip
+  // the setState (which would otherwise create a new array reference,
+  // trigger the write effect, and bounce the same payload back).
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== STORAGE_KEY || e.newValue == null) return;
-      if (e.newValue === lastWrittenRef.current) return;
+      if (e.newValue === lastSerializedRef.current) return;
       try {
         const next = JSON.parse(e.newValue);
-        if (Array.isArray(next)) setInvocations(next as Invocation[]);
+        if (!Array.isArray(next)) return;
+        lastSerializedRef.current = e.newValue;
+        setInvocations(next as Invocation[]);
       } catch {
         // Ignore malformed payload.
       }
