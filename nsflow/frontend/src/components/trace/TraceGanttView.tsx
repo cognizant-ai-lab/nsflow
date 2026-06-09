@@ -19,6 +19,7 @@ import { Box, Tooltip, Typography, alpha, useTheme } from "@mui/material";
 import { TraceStep } from "../../context/TraceContext";
 import { formatDuration } from "./traceTree";
 import { styleFor } from "./traceKinds";
+import { GANTT_LABEL_COL as LABEL_COL, GANTT_ROW_HEIGHT as ROW_HEIGHT } from "./traceConstants";
 
 type Props = {
   steps: TraceStep[];
@@ -27,9 +28,6 @@ type Props = {
   selectedKey?: string | null;
   onSelect?: (step: TraceStep) => void;
 };
-
-const ROW_HEIGHT = 26;
-const LABEL_COL = 220;
 
 const TraceGanttView = ({ steps, earliestStartS, latestEndS, selectedKey, onSelect }: Props) => {
   const theme = useTheme();

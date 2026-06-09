@@ -54,7 +54,6 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   // Determine if we're on CRUSE page based on location or prop
   const isOnCrusePage = isCrusePage || location.pathname.includes('/cruse');
 
-  // Determine if we're on the Analysis page
   const isOnAnalysisPage = location.pathname.includes('/analysis');
 
   const handleNavigateToAnalysis = () => {
@@ -237,7 +236,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </Button>
           </Tooltip>
 
-          {/* Analysis Button - cross-invocation trace analytics */}
+          {/* Analysis Button */}
           <Tooltip
             title={isOnAnalysisPage ? "You are on the Analysis page" : "Open Trace Analysis in a new tab"}
             arrow

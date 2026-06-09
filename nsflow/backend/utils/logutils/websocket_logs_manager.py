@@ -130,10 +130,7 @@ class WebsocketLogsManager:
             self.trace_buffer.pop(0)
         self.logger.debug(step)
         await self.broadcast_to_websocket(entry, self.active_trace_connections)
-        # Persist on a background task. Failures are swallowed in the writer
-        # so DB I/O can never delay or break the live trace path above.
-        # Imported here to keep this module free of a hard dependency on the
-        # DB layer at import time (matters for tests that stub out persistence).
+        # Persist on a background task so DB I/O cannot delay the broadcast.
         from nsflow.backend.db.trace_event_writer import schedule_persist  # noqa: E402
         schedule_persist(self.session_id, step)
 

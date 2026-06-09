@@ -19,15 +19,8 @@ import { Box, Typography, alpha, useTheme } from "@mui/material";
 import { ChevronRight, ExpandMore } from "@mui/icons-material";
 import { TraceNode, TraceTree, formatCost, formatDuration } from "./traceTree";
 import { KIND_STYLES } from "./traceKinds";
+import { TREE_COL as COL } from "./traceConstants";
 
-const COL = {
-  chevron: 18,
-  bar: 140,
-  duration: 70,
-  pct: 60,
-  tokens: 70,
-  cost: 70,
-};
 const ROW_GAP = 1; // mui spacing units used in row gap={1}
 
 type Props = {

@@ -58,8 +58,7 @@ export const KIND_STYLES: Record<TraceKind, KindStyle> = {
     color: "#9aa0a6",
     icon: <Timeline sx={ICON_SX} />,
   },
-  // Boundary events aren't rendered as rows, but TraceKind is a closed union
-  // so we include them here for completeness.
+  // Boundary kinds are never rendered but are listed to satisfy the union.
   invocation_start: {
     label: "invocation start",
     color: "#9aa0a6",

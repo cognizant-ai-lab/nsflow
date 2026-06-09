@@ -72,12 +72,7 @@ Index("idx_messages_thread_created", Message.thread_id, Message.created_at)
 
 # Trace / Analysis Models
 class TraceEvent(Base):
-    """
-    A single span emitted by AgentLogProcessor. One row per agent/tool/sub-network
-    invocation, plus invocation_start/invocation_end boundary rows. The Analysis
-    page queries roll-ups over this table; the live Trace tab uses the WebSocket
-    stream instead and does not read here.
-    """
+    """One span emitted by AgentLogProcessor; queried by the Analysis page."""
 
     __tablename__ = "trace_events"
 

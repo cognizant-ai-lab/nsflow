@@ -67,8 +67,7 @@ export const buildTraceTree = (steps: TraceStep[]): TraceTree => {
         children: [],
       };
       byKey.set(key, node);
-      // Only register a parent relationship when the parent path is non-empty.
-      // A 1-element path (top-level agent) has no real parent; it's a root.
+      // Top-level paths (length 1) are roots and have no parent to register.
       if (path.length > 1) {
         const parentKey = path.slice(0, -1).join(" / ");
         let kids = childKeysByParent.get(parentKey);
@@ -96,10 +95,7 @@ export const buildTraceTree = (steps: TraceStep[]): TraceTree => {
     }
   }
 
-  // Attach the latest step's stats to its node. If the same path is hit
-  // multiple times in one invocation, accumulate. Skip boundary/aggregate
-  // events: invocation_start/end are markers, and network_total is a
-  // summary row that would double-count the frontman's own time.
+  // Accumulate step stats into each node. Skip markers and summary rows.
   for (const step of steps) {
     if (
       step.kind === "invocation_start" ||
@@ -152,16 +148,9 @@ export const buildTraceTree = (steps: TraceStep[]): TraceTree => {
   return { roots, totalDurationS, totalTokens, totalCost, earliestStartS, latestEndS };
 };
 
-export const formatDuration = (seconds: number): string => {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0 ms";
-  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
-  if (seconds < 60) return `${seconds.toFixed(2)} s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds - m * 60;
-  return `${m}m ${s.toFixed(1)}s`;
-};
+// Trace views render zero cost as "—"; analysis tables use the default "$0.00".
+import { formatCost as sharedFormatCost } from "./formatters";
 
-export const formatCost = (cost: number): string => {
-  if (!Number.isFinite(cost) || cost <= 0) return "—";
-  return `$${cost.toFixed(4)}`;
-};
+export { formatDuration, formatTokens } from "./formatters";
+
+export const formatCost = (cost: number): string => sharedFormatCost(cost, { zero: "—" });

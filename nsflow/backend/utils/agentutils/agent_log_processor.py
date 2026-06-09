@@ -62,12 +62,9 @@ class AgentLogProcessor(MessageProcessor):
         self.logs_manager = LogsRegistry.register(agent_name, self.session_id)
         self.agent_name = agent_name
         self.logger = logging.getLogger(f"{self.agent_name}")
-        # Open spans keyed by " / "-joined otrace. Each value carries the start
-        # timestamp, kind (agent/sub_network/tool/...), and any params from a
-        # tool_start marker so we can close it later with a proper duration.
+        # Open spans keyed by " / "-joined otrace.
         self._open_spans: Dict[str, Dict[str, Any]] = {}
-        # Current invocation (one user turn). Stamped on every emitted trace event
-        # so the frontend can bucket steps per message.
+        # Current invocation_id (one user turn).
         self._invocation_id: Optional[str] = None
         self._invocation_started_at: Optional[float] = None
 
@@ -202,10 +199,7 @@ class AgentLogProcessor(MessageProcessor):
                 token_accounting, self.agent_name, self.session_id
             )
 
-        # Build trace spans from the message stream. Three triggers can close
-        # (or open) a span at the current otrace path; everything funnels into
-        # one helper so we get consistent events for agents, tools, and
-        # sub-network calls.
+        # Build trace spans from the message stream.
         if message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
             await self._update_trace_spans(
                 otrace=otrace,
@@ -230,16 +224,7 @@ class AgentLogProcessor(MessageProcessor):
         token_accounting: Dict[str, Any],
         saw_token_accounting: bool,
     ) -> str:
-        """
-        Classify a span. Authoritative source is the network's HOCON schema;
-        runtime signals are a fallback.
-
-        Priority:
-          1. "network_total"       -> token_accounting carries a "models" map
-          2. HOCON schema lookup   -> declared `class`/`toolbox` -> "tool", else "agent"
-          3. "sub_network"         -> leaf path starts with "/" (external network)
-          4. Runtime heuristic     -> token_accounting present -> "agent", else "tool" on tool_end
-        """
+        """Classify a span. Prefer the HOCON schema; fall back to runtime signals."""
         if token_accounting and "models" in token_accounting:
             return "network_total"
 
@@ -264,26 +249,14 @@ class AgentLogProcessor(MessageProcessor):
         message_type: ChatMessageType,
         tool_result_origin: Optional[list],
     ) -> None:
-        """
-        Maintain open spans keyed by otrace path and emit a `trace_event` when a
-        span closes. A close fires on any of:
-          - token_accounting for that path (LLM-bearing agent done)
-          - `tool_end: True` in structure (coded tool / sub-network done)
-          - an AGENT_TOOL_RESULT message carrying `tool_result_origin`
-        Open fires on:
-          - `invoking_start: True` in structure (pushes a child for invoked_agent_name)
-          - any new otrace we haven't seen before (opportunistic)
-        """
+        """Maintain open spans per otrace path and emit a trace_event on close."""
         if not otrace:
             return
 
         now = time.time()
         key = " / ".join(str(x) for x in otrace)
 
-        # Open: a parent invoked something (sub-agent or coded tool — we can't
-        # tell yet, since neuro-san dispatches both through the same
-        # on_tool_start callback). Just record the start time; classification
-        # happens at close based on whether token_accounting was ever seen.
+        # Open a child span when a parent invokes something.
         if isinstance(structure, dict) and structure.get("invoking_start") is True:
             invoked = structure.get("invoked_agent_name")
             if invoked:
@@ -296,14 +269,14 @@ class AgentLogProcessor(MessageProcessor):
                         "params": structure.get("params"),
                         "saw_token_accounting": False,
                     }
-                # The parent itself is implicitly active too; make sure it has a start.
+                # Make sure the parent also has a recorded start.
                 self._open_spans.setdefault(
                     key,
                     {"otrace": list(otrace), "start_t": now, "saw_token_accounting": False},
                 )
             return
 
-        # Opportunistic open: any otrace we see for the first time gets a start time.
+        # Open any otrace we see for the first time.
         if key not in self._open_spans:
             self._open_spans[key] = {
                 "otrace": list(otrace),
@@ -311,7 +284,7 @@ class AgentLogProcessor(MessageProcessor):
                 "saw_token_accounting": False,
             }
 
-        # Record that this span produced an LLM call (anywhere along the way).
+        # Mark that this span has produced LLM token accounting.
         if token_accounting:
             self._open_spans[key]["saw_token_accounting"] = True
 
@@ -330,7 +303,7 @@ class AgentLogProcessor(MessageProcessor):
             key,
             {"otrace": list(otrace), "start_t": now, "saw_token_accounting": bool(token_accounting)},
         )
-        # Prefer upstream-reported duration when we have it; otherwise wall-clock.
+        # Prefer the upstream duration; otherwise use wall-clock.
         if token_accounting and token_accounting.get("time_taken_in_seconds") is not None:
             duration_s = float(token_accounting.get("time_taken_in_seconds") or 0.0)
             start_s = now - duration_s
@@ -345,9 +318,7 @@ class AgentLogProcessor(MessageProcessor):
             saw_token_accounting=bool(span.get("saw_token_accounting")),
         )
 
-        # Pull provider+model name when available (frontman aggregates carry a
-        # nested `models` map; agent-level dicts don't). Useful for the Analysis
-        # view's "cost by model" rollup.
+        # Pull provider+model from the frontman's `models` aggregate, if present.
         model_name: Optional[str] = None
         provider_name: Optional[str] = None
         if token_accounting and isinstance(token_accounting.get("models"), dict):

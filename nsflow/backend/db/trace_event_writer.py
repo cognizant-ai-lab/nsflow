@@ -14,10 +14,7 @@
 #
 # END COPYRIGHT
 
-"""
-Persist trace events to nss_local.db on a background task so the live WebSocket
-broadcast in WebsocketLogsManager.trace_event is never blocked by DB I/O.
-"""
+"""Background writer that persists trace events to nss_local.db."""
 
 import asyncio
 import logging
@@ -59,8 +56,7 @@ def _do_insert(session_id: str, step: Dict[str, Any]) -> None:
         db.add(row)
         db.commit()
     except Exception as exc:  # pylint: disable=broad-except
-        # Persistence is best-effort: never let a DB failure surface to the
-        # live trace path. The WebSocket broadcast already succeeded.
+        # Best-effort: swallow errors so the live broadcast is unaffected.
         db.rollback()
         _logger.warning("trace_event persistence failed: %s", exc)
     finally:
@@ -68,22 +64,13 @@ def _do_insert(session_id: str, step: Dict[str, Any]) -> None:
 
 
 def schedule_persist(session_id: str, step: Dict[str, Any]) -> Optional[asyncio.Task]:
-    """
-    Fire-and-forget persistence. Returns the scheduled Task (mainly so tests
-    can await it); callers can ignore the return value in production.
-
-    The insert runs in a worker thread so the SQLite I/O doesn't sit on the
-    event loop. Errors are swallowed and logged so they cannot affect the
-    in-flight WebSocket broadcast.
-    """
+    """Fire-and-forget persistence on a worker thread."""
     if NssSessionLocal is None:
         return None
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        # No loop (e.g. called from a sync context); do the write inline as a
-        # last-resort. Should not happen in the WS handler, but keeps the
-        # contract safe.
+        # Sync fallback when there is no running loop.
         try:
             _do_insert(session_id, step)
         except Exception as exc:  # pylint: disable=broad-except

@@ -14,11 +14,7 @@
 #
 # END COPYRIGHT
 
-"""
-Read-side endpoints over the trace_events table. Used by the Analysis page to
-roll up cost / tokens / calls across many invocations. The live Trace tab does
-not call these; it consumes the WebSocket stream directly.
-"""
+"""Read-side endpoints over the trace_events table for the Analysis page."""
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -53,13 +49,8 @@ def list_invocations(
     limit: int = Query(default=200, ge=1, le=2000),
     db: Session = Depends(get_nss_db),
 ) -> JSONResponse:
-    """
-    Return one row per invocation_id with totals. Prefers the network_total
-    summary row when present (carries the authoritative aggregate); otherwise
-    sums agent/sub_network rows for that invocation.
-    """
+    """Return one row per invocation_id with totals, newest first."""
     try:
-        # First pull the (invocation_id, network) pairs in scope, ordered most-recent first.
         scope_q = db.query(
             TraceEvent.invocation_id,
             TraceEvent.network,
@@ -78,7 +69,7 @@ def list_invocations(
         if not ids:
             return JSONResponse(content={"invocations": []})
 
-        # Prompt comes from invocation_start rows.
+        # Prompt is recorded on invocation_start rows.
         prompt_rows = (
             db.query(TraceEvent.invocation_id, TraceEvent.prompt)
             .filter(TraceEvent.invocation_id.in_(ids))
@@ -87,10 +78,7 @@ def list_invocations(
         )
         prompts = {r.invocation_id: (r.prompt or "") for r in prompt_rows}
 
-        # A single user invocation can span the top-level network plus any
-        # sub-networks it dispatches via "/foo/bar". Each of those emits its
-        # own network_total row. The full cost of one invocation is the sum
-        # of all those network_total rows for that invocation_id.
+        # Sum every network_total row per invocation (top-level + sub-networks).
         total_rows = (
             db.query(
                 TraceEvent.invocation_id,
@@ -105,7 +93,7 @@ def list_invocations(
         )
         totals = {r.invocation_id: r for r in total_rows}
 
-        # Fallback aggregate for invocations that never emitted a network_total.
+        # Fallback for invocations with no network_total.
         fallback_rows = (
             db.query(
                 TraceEvent.invocation_id,
@@ -120,9 +108,7 @@ def list_invocations(
         )
         fallbacks = {r.invocation_id: r for r in fallback_rows}
 
-        # Model/provider come from the top-level network_total (the one whose
-        # `agent` equals the user-invoked network). Summed totals across
-        # sub-networks may mix providers; we report the top-level for display.
+        # Use the top-level network_total's model/provider for display.
         top_rows = (
             db.query(TraceEvent.invocation_id, TraceEvent.model, TraceEvent.provider)
             .filter(TraceEvent.invocation_id.in_(ids))
@@ -177,20 +163,9 @@ def rollups(
     until: Optional[float] = Query(default=None),
     db: Session = Depends(get_nss_db),
 ) -> JSONResponse:
-    """
-    Server-side aggregations. `group_by=network` and `group_by=model` use
-    network_total rows so the cost is the authoritative network-level number.
-    `group_by=agent` rolls up per-agent rows so it reflects within-network
-    activity (use the `network` filter to scope to one network).
-    """
+    """Server-side aggregations grouped by network, model, or agent."""
     try:
         if group_by in ("network", "model"):
-            # A single user invocation can include sub-network calls that each
-            # emit their own network_total row. The total cost of that
-            # invocation is the SUM of those rows. We aggregate at network /
-            # model granularity by summing every network_total in scope; the
-            # invocations count uses DISTINCT invocation_id so it stays right
-            # even with multiple network_total rows per invocation.
             if group_by == "network":
                 col = TraceEvent.network
             else:

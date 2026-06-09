@@ -15,11 +15,13 @@ limitations under the License.
 */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import {
+  STORAGE_DEBOUNCE_MS,
+  STORAGE_KEY,
+  UNATTACHED_INVOCATION_ID,
+} from "../components/trace/traceConstants";
 
-// Shared across browser tabs of the same origin. The chat tab writes here
-// on every trace event; the Analysis tab (opened via window.open) reads
-// from it and subscribes to the `storage` event for live updates.
-const STORAGE_KEY = "nsflow:trace:invocations:v1";
+// Mirrors invocations to localStorage so a second tab (e.g. Analysis) stays in sync.
 
 const safeReadStorage = (): Invocation[] => {
   if (typeof window === "undefined") return [];
@@ -38,49 +40,13 @@ const safeWriteStorage = (invs: Invocation[]): void => {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(invs));
   } catch {
-    // QuotaExceeded etc.; just skip the mirror for this write.
+    // Skip on quota/serialization errors.
   }
 };
 
-export type TraceKind =
-  | "agent"
-  | "sub_network"
-  | "tool"
-  | "external_agent"
-  | "network_total"
-  | "invocation_start"
-  | "invocation_end";
-
-export type TraceStep = {
-  invocation_id?: string | null;
-  network?: string | null;
-  otrace: string[];
-  agent: string;
-  depth: number;
-  kind?: TraceKind;
-  duration_s: number;
-  received_at: number;
-  start_s: number;
-  total_tokens?: number | null;
-  prompt_tokens?: number | null;
-  completion_tokens?: number | null;
-  total_cost?: number | null;
-  successful_requests?: number | null;
-  is_network_total?: boolean;
-  params?: Record<string, unknown> | null;
-  prompt?: string | null;
-  model?: string | null;
-  provider?: string | null;
-};
-
-export type Invocation = {
-  id: string;
-  network: string;
-  prompt: string;
-  startedAt: number;
-  endedAt: number | null;
-  steps: TraceStep[];
-};
+// Re-export shared types so consumers of useTraceContext keep their imports here.
+export type { Invocation, TraceKind, TraceStep } from "../components/trace/traceTypes";
+import type { Invocation, TraceStep } from "../components/trace/traceTypes";
 
 type TraceContextType = {
   invocations: Invocation[];
@@ -94,23 +60,16 @@ type TraceContextType = {
 
 const TraceContext = createContext<TraceContextType | undefined>(undefined);
 
-const UNATTACHED_INVOCATION_ID = "__unattached__";
-
 export const TraceProvider = ({ children }: { children: ReactNode }) => {
   const [invocations, setInvocations] = useState<Invocation[]>(() => safeReadStorage());
   const [traceWs, setTraceWs] = useState<WebSocket | null>(null);
   const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
   const lastSerializedRef = useRef<string>(JSON.stringify(invocations));
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Always points at the latest invocations so the unmount-flush effect can
-  // read fresh state without re-subscribing.
   const latestInvocationsRef = useRef<Invocation[]>(invocations);
   latestInvocationsRef.current = invocations;
 
-  // Mirror local changes to localStorage on a trailing 200ms debounce.
-  // Fast bursts of trace events (many per second during an active run) only
-  // pay one stringify+setItem per quiet window, while occasional updates
-  // still land near-instantly for the Analysis tab.
+  // Trailing-debounce writes so bursts of trace events coalesce into one setItem.
   useEffect(() => {
     if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
     flushTimerRef.current = setTimeout(() => {
@@ -119,12 +78,10 @@ export const TraceProvider = ({ children }: { children: ReactNode }) => {
       if (serialized === lastSerializedRef.current) return;
       lastSerializedRef.current = serialized;
       safeWriteStorage(invocations);
-    }, 200);
-    // No cleanup here on dep change — we *want* the timer to keep coalescing
-    // across rapid updates. Unmount flush lives in the next effect.
+    }, STORAGE_DEBOUNCE_MS);
   }, [invocations]);
 
-  // Final flush on unmount so a pending debounce doesn't drop the last batch.
+  // Flush any pending batch on unmount.
   useEffect(() => {
     return () => {
       if (flushTimerRef.current) {
@@ -139,9 +96,7 @@ export const TraceProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // if the incoming payload matches what we already have, skip
-  // the setState (which would otherwise create a new array reference,
-  // trigger the write effect, and bounce the same payload back).
+  // Apply writes from other tabs; equality check prevents a write-bounce loop.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== STORAGE_KEY || e.newValue == null) return;

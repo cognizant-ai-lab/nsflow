@@ -55,17 +55,13 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   useEffect(() => {
     if (!targetNetwork) return;
 
-    // Close any sockets still attached from a previous render of this effect
-    // (network switch). The cleanup below handles unmount; this branch handles
-    // the in-place re-run case.
+    // Close any sockets from the previous render before opening new ones.
     chatWs?.close();
     internalChatWs?.close();
     slyDataWs?.close();
     progressWs?.close();
     traceWs?.close();
-    // Note: do NOT clearTrace() on network switch. Invocations accumulate
-    // across networks for the Analysis page's cross-network rollups. The
-    // user can reset manually from the Trace tab if needed.
+    // Trace data is kept across network switches for the Analysis page.
 
     // Send system message for network switch only once
     if (lastActiveNetworkRef.current !== targetNetwork) {
@@ -202,7 +198,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
 
     setProgressWs(newProgressWs);
 
-    // Setup WebSocket for Trace (per-step timing + tokens)
+    // Setup WebSocket for Trace
     const traceWsUrl = `${wsUrl}/api/v1/ws/trace/${targetNetwork}/${sessionId}`;
     const newTraceWs = new WebSocket(traceWsUrl);
 
@@ -220,9 +216,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
 
     setTraceWs(newTraceWs);
 
-    // Cleanup: close every socket created in this run so unmount / re-render
-    // doesn't leak open connections. Captures the locals from this closure so
-    // we don't accidentally close a different generation of sockets from state.
+    // Close every socket opened by this effect run on unmount or re-render.
     return () => {
       newChatWs.close();
       newInternalWs?.close();

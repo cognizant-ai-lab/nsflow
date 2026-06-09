@@ -26,15 +26,13 @@ import {
   Stack,
   Table,
   TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
-  alpha,
-  useTheme,
 } from "@mui/material";
+import { useTheme as useAppTheme } from "../../context/ThemeContext";
 import { Refresh as RefreshIcon } from "@mui/icons-material";
 import Header from "../../components/Header";
 import { useApiPort } from "../../context/ApiPortContext";
@@ -54,37 +52,22 @@ import {
   fetchInvocations,
   fetchKeyedRollups,
 } from "./analysisApi";
-import { getInitialTheme } from "../../utils/theme";
-
-const ALL = "__all__";
-
-const toDateInput = (epochSeconds: number | null): string => {
-  if (epochSeconds == null) return "";
-  const d = new Date(epochSeconds * 1000);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-const fromDateInput = (value: string, endOfDay = false): number | null => {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  if (endOfDay) d.setHours(23, 59, 59, 999);
-  else d.setHours(0, 0, 0, 0);
-  return Math.floor(d.getTime() / 1000);
-};
-
-const defaultSince = (): number =>
-  Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+import Section from "./components/Section";
+import SummaryTile from "./components/SummaryTile";
+import PctBar from "./components/PctBar";
+import FilterField from "./components/FilterField";
+import { EmptyRow, Td, Th } from "./components/tableAtoms";
+import { ALL, defaultSince, fromDateInput, toDateInput } from "./analysisFilters";
 
 const Analysis = () => {
-  const theme = useTheme();
+  const { theme, isDarkMode } = useAppTheme();
   const { apiUrl } = useApiPort();
   const { activeNetwork } = useChatContext();
 
+  // Sync the global data-theme attribute so CSS variables match the MUI theme.
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", getInitialTheme());
-  }, []);
+    document.documentElement.setAttribute("data-theme", isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
 
   // Filters
   const [networkScope, setNetworkScope] = useState<string>(ALL);
@@ -107,9 +90,7 @@ const Analysis = () => {
     const until = fromDateInput(untilInput, true);
     const network = networkScope === ALL ? null : networkScope;
     try {
-      // Network rollup is intentionally unfiltered by `network` so the
-      // table still shows the full breakdown across networks even when
-      // the user has scoped the other sections to one.
+      // Network rollup stays unfiltered so the breakdown shows every network.
       const [invs, byNet, byMdl, byAgt] = await Promise.all([
         fetchInvocations(apiUrl, { network, since, until, limit: 500 }),
         fetchKeyedRollups(apiUrl, "network", { since, until }),
@@ -143,9 +124,7 @@ const Analysis = () => {
 
   const stats = useMemo(() => invocationStatsFromSummaries(invocations), [invocations]);
 
-  // Tile totals come from network_total rows (the frontman's authoritative
-  // aggregate) so they match the Cost-by-network table. When the user has
-  // filtered to one network, we sum that row only; otherwise we sum all.
+  // Tile totals come from the network rollup so they match the Cost-by-network table.
   const tileTotals = useMemo(() => {
     const rows =
       networkScope === ALL
@@ -174,7 +153,7 @@ const Analysis = () => {
           width: "100%",
         }}
       >
-        <Typography variant="h5" sx={{ mb: 0.5, fontWeight: 600 }}>
+        <Typography variant="h5" sx={{ mb: 0.5, fontWeight: 600, color: "text.primary" }}>
           Trace Analysis
         </Typography>
         <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
@@ -424,129 +403,5 @@ const Analysis = () => {
   );
 };
 
-const FilterField = ({ label, children }: { label: string; children: React.ReactNode }) => {
-  const theme = useTheme();
-  return (
-    <Box>
-      <Typography
-        variant="caption"
-        sx={{ display: "block", color: theme.palette.text.secondary, mb: 0.5 }}
-      >
-        {label}
-      </Typography>
-      {children}
-    </Box>
-  );
-};
-
-const Section = ({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) => {
-  const theme = useTheme();
-  return (
-    <Box sx={{ mb: 4 }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Box>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            {title}
-          </Typography>
-          {subtitle && (
-            <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-              {subtitle}
-            </Typography>
-          )}
-        </Box>
-      </Box>
-      {children}
-    </Box>
-  );
-};
-
-const SummaryTile = ({ label, value }: { label: string; value: string }) => {
-  const theme = useTheme();
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        px: 2,
-        py: 1.5,
-        minWidth: 160,
-        backgroundColor: alpha(theme.palette.background.paper, 0.8),
-      }}
-    >
-      <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-        {label}
-      </Typography>
-      <Typography variant="h6" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-        {value}
-      </Typography>
-    </Paper>
-  );
-};
-
-const PctBar = ({ value }: { value: number }) => {
-  const theme = useTheme();
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, justifyContent: "flex-end" }}>
-      <Box
-        sx={{
-          width: 80,
-          height: 6,
-          borderRadius: 1,
-          backgroundColor: alpha(theme.palette.text.secondary, 0.15),
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            inset: 0,
-            width: `${Math.min(Math.max(value, 0), 100)}%`,
-            backgroundColor: theme.palette.primary.main,
-          }}
-        />
-      </Box>
-      <Box sx={{ width: 50, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {value.toFixed(1)}%
-      </Box>
-    </Box>
-  );
-};
-
-const Th = ({ children, align }: { children: React.ReactNode; align?: "right" }) => (
-  <TableCell
-    align={align}
-    sx={{ fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}
-  >
-    {children}
-  </TableCell>
-);
-
-const Td = ({ children, align }: { children: React.ReactNode; align?: "right" }) => (
-  <TableCell align={align} sx={{ fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
-    {children}
-  </TableCell>
-);
-
-const EmptyRow = ({ cols }: { cols: number }) => {
-  const theme = useTheme();
-  return (
-    <TableRow>
-      <TableCell
-        colSpan={cols}
-        sx={{ textAlign: "center", color: theme.palette.text.disabled, py: 3, fontSize: 13 }}
-      >
-        No data
-      </TableCell>
-    </TableRow>
-  );
-};
 
 export default Analysis;

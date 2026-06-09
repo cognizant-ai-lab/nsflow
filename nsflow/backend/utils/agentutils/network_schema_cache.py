@@ -14,12 +14,7 @@
 #
 # END COPYRIGHT
 
-"""
-Per-network schema cache: maps each agent/tool name declared in a HOCON
-network to its kind (agent / sub_network / tool). This lets the trace UI
-classify steps from authoritative configuration instead of guessing from
-runtime signals.
-"""
+"""Per-network HOCON schema cache that maps each entry name to its kind."""
 
 import logging
 import threading
@@ -38,15 +33,7 @@ _cache: Dict[str, Dict[str, str]] = {}
 
 
 def _classify_entry(entry: Dict[str, object]) -> str:
-    """
-    Decide what a single top-level HOCON `tools[...]` entry represents.
-
-    A coded function/tool is anything that delegates execution outside the
-    LLM loop: it carries either a `class` (Python module path) or a
-    `toolbox` key. Everything else with a `function` block is an LLM-backed
-    agent. External-network references (leaf names like "/industry/macys")
-    are not entries in this list; they're handled at lookup time.
-    """
+    """Classify a HOCON `tools[...]` entry: entries with class/toolbox are tools."""
     if "class" in entry or "toolbox" in entry:
         return KIND_TOOL
     return KIND_AGENT
@@ -72,16 +59,11 @@ def _load_schema(network_name: str) -> Dict[str, str]:
 
 
 def get_kind(network_name: str, agent_name: str) -> Optional[str]:
-    """
-    Return the kind for `agent_name` within `network_name`, loading and
-    caching the network schema on first miss. Returns None if the name is
-    not in the network (e.g. an external sub-network reference or a
-    runtime-generated agent).
-    """
+    """Return the kind for `agent_name` within `network_name`, or None if unknown."""
     if not network_name or not agent_name:
         return None
 
-    # External agent network references are always shaped as "/foo/bar".
+    # External network references look like "/foo/bar".
     if isinstance(agent_name, str) and agent_name.startswith("/"):
         return KIND_SUB_NETWORK
 
@@ -94,10 +76,7 @@ def get_kind(network_name: str, agent_name: str) -> Optional[str]:
 
 
 def invalidate(network_name: Optional[str] = None) -> None:
-    """
-    Drop the cache for `network_name` (or all networks). Useful for the
-    agent_network_designer flow where HOCONs are rewritten in-place.
-    """
+    """Drop the cached schema for `network_name`, or all networks if None."""
     with _cache_lock:
         if network_name is None:
             _cache.clear()
