@@ -204,8 +204,20 @@ class MCPOAuthManager:
         except asyncio.TimeoutError as exc:
             flow.status = "error"
             flow.error = "Timed out building the authorization URL."
+            # The /start request has failed; don't leave the background task
+            # running (and generating network activity) until the TTL sweep.
+            # Cancel it and deregister the flow now.
+            self._discard_flow(flow)
             raise TimeoutError(flow.error) from exc
         return flow
+
+    def _discard_flow(self, flow: PendingFlow) -> None:
+        """Cancel a flow's background task and remove it from both registries."""
+        if flow.task and not flow.task.done():
+            flow.task.cancel()
+        self._by_flow_id.pop(flow.flow_id, None)
+        if flow.state:
+            self._by_state.pop(flow.state, None)
 
     async def _run_oauth_flow(self, flow: PendingFlow, scope: Optional[str], auth_method: str = "none") -> None:
         """Background task: drive the SDK auth flow to completion."""
