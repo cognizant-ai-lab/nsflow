@@ -242,12 +242,16 @@ class NsWebsocketUtils:
         :param sly_data: The sly_data dict to enrich in place.
         """
         try:
-            connections = FileTokenStorage.list_connections()
+            # Both of these do synchronous disk I/O (reading tokens.json and
+            # restoring/parsing the network HOCON) and run on every chat message,
+            # so offload them to a worker thread to keep the websocket handler's
+            # event loop responsive. get_fresh_token below is already async.
+            connections = await asyncio.to_thread(FileTokenStorage.list_connections)
             if not connections:
                 return
             connected_urls = [conn["server_url"] for conn in connections]
 
-            referenced = self.get_network_mcp_urls()
+            referenced = await asyncio.to_thread(self.get_network_mcp_urls)
             # Build (header_key, token_url) pairs. URLs are matched on a normalized
             # form so cosmetic differences (trailing slash, host case, default
             # port) between the stored connection URL and the network's tool URL
