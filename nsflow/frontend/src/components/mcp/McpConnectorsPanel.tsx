@@ -103,7 +103,18 @@ const McpConnectorsPanel: React.FC = () => {
 
   // Listen for the postMessage the /callback popup sends on completion.
   useEffect(() => {
+    // The popup is served by our backend, so a trustworthy mcp-oauth message
+    // can only originate from the backend's own origin. Reject anything else so
+    // another page can't forge a payload that prematurely closes the dialog or
+    // clears polling.
+    let backendOrigin: string | null = null;
+    try {
+      if (apiUrl) backendOrigin = new URL(apiUrl).origin;
+    } catch {
+      backendOrigin = null;
+    }
     const onMessage = (event: MessageEvent) => {
+      if (!backendOrigin || event.origin !== backendOrigin) return;
       const data = event.data as OAuthMessage;
       if (!data || data.type !== 'mcp-oauth') return;
       if (pendingServerRef.current && data.server_url && data.server_url !== pendingServerRef.current) return;
@@ -118,7 +129,7 @@ const McpConnectorsPanel: React.FC = () => {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [finishSuccess, clearPolling]);
+  }, [finishSuccess, clearPolling, apiUrl]);
 
   useEffect(() => () => clearPolling(), [clearPolling]);
 
@@ -164,6 +175,10 @@ const McpConnectorsPanel: React.FC = () => {
   const handleConnect = useCallback(async () => {
     const url = serverUrl.trim();
     if (!url) return;
+    if (!isReady || !apiUrl) {
+      setError('Backend is not ready yet. Please wait a moment and try again.');
+      return;
+    }
     setBusy(true);
     setError(null);
     pendingServerRef.current = url;
@@ -196,7 +211,7 @@ const McpConnectorsPanel: React.FC = () => {
       setBusy(false);
       setError('Network error starting the OAuth flow.');
     }
-  }, [serverUrl, clientId, clientSecret, apiUrl, finishSuccess, startPolling]);
+  }, [serverUrl, clientId, clientSecret, apiUrl, isReady, finishSuccess, startPolling]);
 
   const handleDisconnect = useCallback(async (url: string) => {
     try {
