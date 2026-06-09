@@ -178,9 +178,8 @@ const Analysis = () => {
           Trace Analysis
         </Typography>
         <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
-          Aggregated metrics across persisted trace history. Use the filters to scope by
-          network or time range. The live Trace tab remains the source of truth for the
-          current session.
+          Aggregated metrics across all recorded invocations. Use the filters to scope by
+          network or time range.
         </Typography>
 
         {error && (
