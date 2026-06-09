@@ -100,6 +100,17 @@ def test_start_timeout_returns_504(monkeypatch):
     assert response.status_code == 504
 
 
+def test_start_unexpected_error_returns_502(monkeypatch):
+    """An unexpected failure (e.g. disk write / SDK error) maps to a clean 502."""
+    monkeypatch.setattr(ep.FileTokenStorage, "has_connection", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        ep.mcp_oauth_manager, "start_flow", AsyncMock(side_effect=OSError("disk full"))
+    )
+    response = client.post(START_URL, json={"server_url": "https://mcp.example.com/mcp"})
+    assert response.status_code == 502
+    assert "disk full" in response.json()["detail"]
+
+
 # --------------------------- /callback --------------------------- #
 
 def test_callback_missing_state():

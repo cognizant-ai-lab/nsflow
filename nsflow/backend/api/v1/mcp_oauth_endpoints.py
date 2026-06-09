@@ -123,6 +123,16 @@ async def start_oauth_flow(body: StartFlowRequest):
     except TimeoutError as exc:
         logger.warning("MCP OAuth flow for %s timed out building the authorization URL.", server_url)
         raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 - map any other failure to a clean 502
+        # e.g. a disk write failure persisting pre-seeded client_info, or an
+        # unexpected SDK error. Log the stack trace and return a consistent
+        # error to the UI instead of a bare 500.
+        logger.exception("MCP OAuth flow for %s failed to start.", server_url)
+        raise HTTPException(
+            status_code=502, detail=f"Could not start OAuth flow with the MCP server: {exc}"
+        ) from exc
 
     if flow.status == "error" or not flow.authorization_url:
         logger.warning("MCP OAuth flow for %s could not start: %s", server_url, flow.error)
