@@ -126,6 +126,19 @@ class MCPOAuthManager:
         that serves ``/callback``, so it is computed in one place. OAuth 2.1 for
         public/native clients requires a loopback redirect, so a wildcard or
         bind-all host is rewritten to the loopback IP (RFC 8252).
+
+        Resolution order:
+          1. ``NSFLOW_PUBLIC_BASE_URL`` - full base URL override (proxied/HTTPS
+             deployments); used verbatim.
+          2. Otherwise ``http://<host>:<port>/...`` where ``port`` is
+             ``NSFLOW_OAUTH_REDIRECT_PORT`` if set, else ``NSFLOW_PORT``.
+
+        The default port is ``NSFLOW_PORT`` because ``/callback`` is a route on
+        the FastAPI backend, which binds ``NSFLOW_PORT`` (8005 in dev, 4173 when
+        that same process also serves the built frontend). The dedicated
+        ``NSFLOW_OAUTH_REDIRECT_PORT`` knob exists for topologies where the
+        browser must reach the callback on a different port (e.g. a reverse
+        proxy) - it must still resolve to wherever ``/callback`` is served.
         """
         override = os.getenv("NSFLOW_PUBLIC_BASE_URL")
         if override:
@@ -134,7 +147,10 @@ class MCPOAuthManager:
         host = os.getenv("NSFLOW_HOST", "127.0.0.1")
         if host in ("0.0.0.0", "::", "", "localhost"):
             host = "127.0.0.1"
-        port = os.getenv("NSFLOW_PORT", "4173")
+        # Fallback "4173" matches main.py's backend-bind fallback when NSFLOW_PORT
+        # is unset; in practice run.py/main.py export NSFLOW_PORT (8005 in dev),
+        # so this literal only applies to a bare, non-dev launch.
+        port = os.getenv("NSFLOW_OAUTH_REDIRECT_PORT") or os.getenv("NSFLOW_PORT", "4173")
         return f"http://{host}:{port}/api/v1/mcp/oauth/callback"
 
     def _build_client_metadata(
