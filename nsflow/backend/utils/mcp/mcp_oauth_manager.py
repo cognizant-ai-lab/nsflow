@@ -156,6 +156,9 @@ class MCPOAuthManager:
     def __init__(self):
         self._by_flow_id: Dict[str, PendingFlow] = {}
         self._by_state: Dict[str, PendingFlow] = {}
+        # Strong refs to in-flight best-effort cleanup tasks scheduled from the
+        # (sync) sweep, so they aren't garbage-collected before they finish.
+        self._cleanup_tasks: set = set()
 
     # ------------------------------------------------------------------ #
     # Configuration helpers
@@ -458,6 +461,24 @@ class MCPOAuthManager:
                 self._by_state.pop(flow.state, None)
             if flow.task and not flow.task.done():
                 flow.task.cancel()
+            # If a manual client_info was pre-seeded for this flow and it never
+            # produced a usable token, remove it so it doesn't linger invisibly in
+            # tokens.json (hidden by /connections) and block future connection
+            # attempts. The work is async I/O, so schedule it (the sweep runs on
+            # sync paths) and keep a reference so the best-effort task isn't
+            # garbage-collected before it finishes.
+            if flow.preseeded_client_info:
+                self._schedule_preseed_cleanup(flow)
+
+    def _schedule_preseed_cleanup(self, flow: PendingFlow) -> None:
+        """Schedule _cleanup_failed_preseed as a background task (sweep is sync)."""
+        try:
+            task = asyncio.ensure_future(self._cleanup_failed_preseed(flow))
+        except RuntimeError:
+            # No running event loop (e.g. a synchronous test); skip best-effort cleanup.
+            return
+        self._cleanup_tasks.add(task)
+        task.add_done_callback(self._cleanup_tasks.discard)
 
     # ------------------------------------------------------------------ #
     # Token retrieval for sly_data injection
