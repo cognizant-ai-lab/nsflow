@@ -42,6 +42,19 @@ user_sessions = {}
 # Key format: "agent_name:session_id"
 latest_sly_data_storage: Dict[str, Any] = {}
 
+# http_headers entries whose values are credentials and must never leave the
+# backend (logs, the sly_data websocket stream, or the persisted /slydata store).
+# We inject Authorization for OAuth-connected MCP servers; the others are masked
+# defensively in case a user put them in http_headers themselves.
+_SENSITIVE_HEADER_NAMES = frozenset(
+    {"authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "api-key", "x-auth-token"}
+)
+# Placeholder shown in place of a credential header value in any surfaced
+# (logged / streamed / persisted) sly_data. inject_mcp_auth_headers treats this
+# exact value as "no real token" so a round-tripped redacted header is replaced
+# with a fresh token rather than sent to the agent verbatim.
+REDACTED_VALUE = "***redacted***"
+
 
 # pylint: disable=too-many-instance-attributes
 class NsWebsocketUtils:
@@ -136,7 +149,14 @@ class NsWebsocketUtils:
                     state["chat_context"].update(chat_context)
                 # Update the state
                 state = await input_processor.async_process_once(state)
-                await self.logs_manager.log_event(f"state after process_once: {state}", "nsflow")
+                # The live sly_data still carries any MCP Authorization tokens we
+                # injected. Keep the real values only in the request path and the
+                # backend-only session state; everything that leaves the backend
+                # (logs, the sly_data stream, the persisted /slydata store) uses a
+                # redacted copy so tokens never surface.
+                surfaced_sly_data = self.redact_sly_data_for_surface(state.get("sly_data"))
+                loggable_state = {**state, "sly_data": surfaced_sly_data}
+                await self.logs_manager.log_event(f"state after process_once: {loggable_state}", "nsflow")
                 user_session["state"] = state
                 last_chat_response = state.get("last_chat_response")
 
@@ -144,16 +164,16 @@ class NsWebsocketUtils:
                 if last_chat_response:
                     # try:
                     response_str = json.dumps({"message": {"type": "AI", "text": last_chat_response}})
-                    sly_data_str = {"text": state["sly_data"]}
+                    sly_data_str = {"text": surfaced_sly_data}
                     await websocket.send_text(response_str)
                     await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
                     await self.logs_manager.sly_data_event(sly_data_str)
 
-                # Store the latest sly_data for this network and session
+                # Store the latest sly_data for this network and session (redacted;
+                # this is served verbatim by GET /slydata).
                 if state.get("sly_data") is not None:
                     storage_key = f"{self.agent_name}:{self.session_id}"
-                    latest_sly_data_storage[storage_key] = state["sly_data"]
-                    # logging.info("Updated latest sly_data for network %s session %s", self.agent_name, self.session_id)
+                    latest_sly_data_storage[storage_key] = surfaced_sly_data
 
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {self.session_id}", "nsflow")
 
@@ -293,8 +313,12 @@ class NsWebsocketUtils:
                 sly_data["http_headers"] = http_headers
             for header_key, token_url in targets:
                 existing = http_headers.get(header_key)
-                # Respect a user-provided Authorization for this URL.
-                if isinstance(existing, dict) and existing.get("Authorization"):
+                # Respect a user-provided Authorization for this URL - but ignore
+                # our own redaction placeholder, which can come back from a UI that
+                # round-trips a previously surfaced (masked) sly_data. Treating the
+                # sentinel as real would send "***redacted***" to the agent.
+                existing_auth = existing.get("Authorization") if isinstance(existing, dict) else None
+                if existing_auth and existing_auth != REDACTED_VALUE:
                     logging.info("MCP auth: keeping user-supplied Authorization for %s", header_key)
                     continue
                 authorization = await mcp_oauth_manager.get_fresh_token(token_url)
@@ -309,6 +333,43 @@ class NsWebsocketUtils:
                 logging.info("MCP auth: injected Authorization header into sly_data for %s", header_key)
         except Exception as e:  # noqa: BLE001 - never break chat on auth injection
             logging.warning("Failed to inject MCP auth headers: %s", e)
+
+    @staticmethod
+    def redact_sly_data_for_surface(sly_data: Any) -> Any:
+        """
+        Return a copy of sly_data safe to log, stream to the UI, or persist, with
+        credential header values inside ``http_headers`` masked.
+
+        The MCP Authorization tokens we inject (and any auth headers a user put in
+        http_headers) must reach the agent but never leave the backend. The real
+        values stay in the request path and the backend-only session state; only
+        this surfaced copy is masked. Masking (rather than dropping the key) keeps
+        the SlyData panel showing that a header exists without revealing the
+        secret, and ``inject_mcp_auth_headers`` ignores the mask sentinel so a
+        round-tripped redacted value is never mistaken for a real token.
+
+        Only http_headers is touched - all other sly_data is returned unchanged.
+        """
+        if not isinstance(sly_data, dict):
+            return sly_data
+        http_headers = sly_data.get("http_headers")
+        if not isinstance(http_headers, dict):
+            return sly_data
+        # Shallow-copy sly_data; rewrite only the http_headers subtree so the
+        # original (with live tokens) is left untouched.
+        redacted = dict(sly_data)
+        redacted["http_headers"] = {
+            url: (
+                {
+                    name: (REDACTED_VALUE if name.lower() in _SENSITIVE_HEADER_NAMES else value)
+                    for name, value in headers.items()
+                }
+                if isinstance(headers, dict)
+                else headers
+            )
+            for url, headers in http_headers.items()
+        }
+        return redacted
 
     @staticmethod
     def _normalize_mcp_url(url: str) -> str:

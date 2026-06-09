@@ -35,6 +35,9 @@ import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
 NORM = nw.NsWebsocketUtils._normalize_mcp_url
 
 
+REDACT = nw.NsWebsocketUtils.redact_sly_data_for_surface
+
+
 def _utils(agent_name="net"):
     """Build a NsWebsocketUtils without running its heavy constructor."""
     inst = nw.NsWebsocketUtils.__new__(nw.NsWebsocketUtils)
@@ -237,3 +240,60 @@ def test_inject_preserves_other_existing_headers(monkeypatch):
     asyncio.run(inst.inject_mcp_auth_headers(sly))
     assert sly["http_headers"][url]["X-Custom"] == "keep-me"
     assert sly["http_headers"][url]["Authorization"] == "Bearer tok"
+
+
+def test_inject_ignores_redaction_sentinel(monkeypatch):
+    """A round-tripped redacted Authorization is replaced with a fresh token.
+
+    The UI can echo back a previously surfaced (masked) sly_data. The sentinel
+    must not be treated as a real user-supplied token and sent to the agent.
+    """
+    url = "https://api.example.com/mcp"
+    inst, get_token = _patch_injection(monkeypatch, connections=[url], referenced=[url])
+    sly = {"http_headers": {url: {"Authorization": nw.REDACTED_VALUE}}}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    assert sly["http_headers"][url]["Authorization"] == "Bearer tok"
+    get_token.assert_awaited_once_with(url)
+
+
+# --------------------------- redact_sly_data_for_surface --------------------------- #
+
+def test_redact_masks_authorization():
+    url = "https://api.example.com/mcp"
+    sly = {"http_headers": {url: {"Authorization": "Bearer secret-tok", "X-Custom": "ok"}}}
+    out = REDACT(sly)
+    assert out["http_headers"][url]["Authorization"] == nw.REDACTED_VALUE
+    # Non-sensitive headers are left intact.
+    assert out["http_headers"][url]["X-Custom"] == "ok"
+
+
+def test_redact_masks_other_credential_headers():
+    url = "https://api.example.com/mcp"
+    sly = {"http_headers": {url: {"Cookie": "s=1", "X-Api-Key": "k", "Accept": "application/json"}}}
+    out = REDACT(sly)
+    assert out["http_headers"][url]["Cookie"] == nw.REDACTED_VALUE
+    assert out["http_headers"][url]["X-Api-Key"] == nw.REDACTED_VALUE
+    assert out["http_headers"][url]["Accept"] == "application/json"
+
+
+def test_redact_does_not_mutate_original():
+    url = "https://api.example.com/mcp"
+    sly = {"http_headers": {url: {"Authorization": "Bearer secret-tok"}}, "other": 1}
+    out = REDACT(sly)
+    # Original still holds the live token (it stays in the backend request path).
+    assert sly["http_headers"][url]["Authorization"] == "Bearer secret-tok"
+    assert out is not sly
+    assert out["other"] == 1
+
+
+def test_redact_leaves_non_header_sly_data_unchanged():
+    sly = {"user_id": "u1", "config": {"k": "v"}}
+    out = REDACT(sly)
+    assert out == sly
+
+
+def test_redact_handles_missing_or_bad_http_headers():
+    assert REDACT({"user_id": "u1"}) == {"user_id": "u1"}
+    # Non-dict http_headers is returned as-is (coercion happens during injection).
+    assert REDACT({"http_headers": "oops"}) == {"http_headers": "oops"}
+    assert REDACT("not-a-dict") == "not-a-dict"
