@@ -174,6 +174,13 @@ const McpConnectorsPanel: React.FC = () => {
   const startPolling = useCallback((flowId: string) => {
     clearPolling();
     pollErrorsRef.current = 0;
+    // The server this poll belongs to. A poll's fetch may resolve after the
+    // attempt has ended (cancel/close, success, or a new attempt started); if
+    // the pending server no longer matches, the result is stale and must not
+    // touch UI state - otherwise it could overwrite a successful connect with an
+    // error or re-disable the dialog after cancel.
+    const polledServer = pendingServerRef.current;
+    const isStale = () => pendingServerRef.current !== polledServer;
 
     // Stop polling and re-enable the dialog with an error so the flow can never
     // be left stuck in a busy/awaiting state with Cancel disabled.
@@ -190,6 +197,12 @@ const McpConnectorsPanel: React.FC = () => {
     pollTimerRef.current = setInterval(async () => {
       try {
         const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/status/${flowId}`);
+        // The attempt ended while this fetch was in flight - drop the result and
+        // stop this (now-orphaned) timer without mutating UI state.
+        if (isStale()) {
+          clearPolling();
+          return;
+        }
         if (res.status === 404) {
           // The flow is gone (expired/swept, or the backend restarted). It will
           // never complete, so treat it as terminal instead of polling forever.
@@ -206,6 +219,11 @@ const McpConnectorsPanel: React.FC = () => {
         }
         pollErrorsRef.current = 0;
         const data = await res.json();
+        // Re-check: the attempt may have ended while res.json() awaited.
+        if (isStale()) {
+          clearPolling();
+          return;
+        }
         if (data.status === 'completed') {
           finishSuccess();
         } else if (data.status === 'error') {
@@ -214,6 +232,11 @@ const McpConnectorsPanel: React.FC = () => {
       } catch (err) {
         // Network error reaching the backend: also bounded by MAX_POLL_ERRORS.
         console.error('Error polling OAuth status:', err);
+        // Ignore errors for an attempt that already ended; just stop the timer.
+        if (isStale()) {
+          clearPolling();
+          return;
+        }
         pollErrorsRef.current += 1;
         if (pollErrorsRef.current >= MAX_POLL_ERRORS) {
           failFlow('Lost contact with the server while authorizing. Please try again.');
