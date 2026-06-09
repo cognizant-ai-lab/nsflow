@@ -82,7 +82,13 @@ def _callback_html(status: str, server_url: str, message: str = "") -> str:
       try {{
         var el = document.getElementById("mcp-oauth-data");
         var d = JSON.parse(el.getAttribute("data-payload"));
-        if (window.opener) window.opener.postMessage(d, "*");
+        // Post only to our own origin rather than "*". In production the opener
+        // (the nsflow UI) is served by this same backend, so the message is
+        // delivered; if the opener is a different origin (e.g. the Vite dev
+        // server), the browser drops the message and the opener's status polling
+        // completes the flow instead. This prevents leaking the status/message
+        // to an arbitrary opener if the callback URL is opened directly.
+        if (window.opener) window.opener.postMessage(d, window.location.origin);
       }} catch (e) {{}}
       setTimeout(function () {{ window.close(); }}, 800);
     </script>
@@ -105,6 +111,7 @@ async def start_oauth_flow(body: StartFlowRequest):
     if FileTokenStorage.has_connection(server_url):
         return JSONResponse(content={"already_connected": True, "server_url": server_url})
 
+    logger.info("Starting MCP OAuth flow for %s", server_url)
     try:
         flow = await mcp_oauth_manager.start_flow(
             server_url,
@@ -113,9 +120,11 @@ async def start_oauth_flow(body: StartFlowRequest):
             client_secret=(body.client_secret or "").strip() or None,
         )
     except TimeoutError as exc:
+        logger.warning("MCP OAuth flow for %s timed out building the authorization URL.", server_url)
         raise HTTPException(status_code=504, detail=str(exc)) from exc
 
     if flow.status == "error" or not flow.authorization_url:
+        logger.warning("MCP OAuth flow for %s could not start: %s", server_url, flow.error)
         raise HTTPException(
             status_code=502,
             detail=flow.error or "Could not start OAuth flow with the MCP server.",
@@ -153,12 +162,14 @@ async def oauth_callback(
     flow = mcp_oauth_manager.resolve_callback(state=state, code=code, error=flow_error)
     if flow is None:
         # Unknown state -> reject (CSRF / stale flow protection).
+        logger.warning("MCP OAuth callback with unknown or expired state.")
         return HTMLResponse(
             content=_callback_html("error", "", "Unknown or expired authorization request."),
             status_code=400,
         )
 
     if flow_error:
+        logger.warning("MCP OAuth callback for %s returned an error: %s", flow.server_url, flow_error)
         return HTMLResponse(
             content=_callback_html("error", flow.server_url, flow_error),
             status_code=400,
@@ -170,7 +181,10 @@ async def oauth_callback(
     await mcp_oauth_manager.wait_for_completion(flow)
 
     if flow.status == "completed" and FileTokenStorage.has_connection(flow.server_url):
+        logger.info("MCP OAuth flow for %s completed successfully.", flow.server_url)
         return HTMLResponse(content=_callback_html("ok", flow.server_url))
+
+    logger.warning("MCP OAuth flow for %s did not complete: %s", flow.server_url, flow.error)
 
     return HTMLResponse(
         content=_callback_html(
