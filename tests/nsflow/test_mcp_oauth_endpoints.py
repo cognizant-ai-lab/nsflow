@@ -218,6 +218,15 @@ def test_delete_connection(monkeypatch):
     assert response.json()["removed"] is True
 
 
+def test_delete_connection_blank_server_url(monkeypatch):
+    """A whitespace-only server_url is rejected, not treated as remove("")."""
+    remove = AsyncMock(return_value=False)
+    monkeypatch.setattr(ep.FileTokenStorage, "remove", remove)
+    response = client.delete(CONNECTIONS_URL, params={"server_url": "   "})
+    assert response.status_code == 400
+    remove.assert_not_awaited()
+
+
 def test_redirect_uri(monkeypatch):
     """The redirect URI endpoint returns the manager's computed callback URL."""
     uri = "http://127.0.0.1:8005/api/v1/mcp/oauth/callback"

@@ -210,5 +210,9 @@ async def list_connections():
 @router.delete("/connections")
 async def delete_connection(server_url: str = Query(...)):
     """Disconnect an MCP server by removing its stored credentials."""
-    removed = await FileTokenStorage.remove(server_url.strip())
-    return JSONResponse(content={"removed": removed, "server_url": server_url})
+    normalized = server_url.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="server_url is required.")
+    removed = await FileTokenStorage.remove(normalized)
+    # Echo back the normalized value actually used for deletion, not the raw query.
+    return JSONResponse(content={"removed": removed, "server_url": normalized})
