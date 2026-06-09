@@ -58,7 +58,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only on older/newer SDK layouts
     from mcp.shared._httpx_utils import create_mcp_http_client
 
-from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
+from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage, _coerce_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -504,13 +504,15 @@ class MCPOAuthManager:
         if not meta.get("tokens"):
             return None
 
-        expires_at = meta.get("expires_at")
+        # Coerce defensively: a hand-edited store could carry a non-numeric
+        # expires_at, which would raise on the arithmetic/comparison below.
+        expires_at = _coerce_timestamp(meta.get("expires_at"))
         if expires_at is not None and time.time() >= (expires_at - TOKEN_REFRESH_MARGIN_SECONDS):
             await self._silent_refresh(server_url)
             # Re-read: a successful refresh pushes expires_at into the future and
             # rewrites meta["tokens"] with the new access token.
             meta = await asyncio.to_thread(storage.get_metadata)
-            expires_at = meta.get("expires_at")
+            expires_at = _coerce_timestamp(meta.get("expires_at"))
 
         # Drop a token that is actually expired (refresh failed / unavailable).
         if expires_at is not None and time.time() >= expires_at:

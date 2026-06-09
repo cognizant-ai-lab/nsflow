@@ -100,6 +100,26 @@ def _default_storage_dir() -> Path:
     return Path.home() / ".nsflow" / "mcp_oauth"
 
 
+def _coerce_timestamp(value: Any) -> Optional[float]:
+    """
+    Coerce a stored ``expires_at`` to a float, or None if absent/unparsable.
+
+    The store may be hand-edited/corrupted, so a missing, wrong-typed, or
+    non-numeric-string value must not raise when compared against time.time();
+    treat anything we can't parse as "no known expiry".
+    """
+    if isinstance(value, bool):  # bool is an int subclass; not a real timestamp
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 class FileTokenStorage:
     """
     File-backed implementation of the MCP SDK ``TokenStorage`` protocol.
@@ -141,7 +161,11 @@ class FileTokenStorage:
         raw = entry.get("tokens")
         if not isinstance(raw, dict):
             return None
-        return OAuthToken.model_validate(raw)
+        try:
+            return OAuthToken.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001 - tolerate a corrupted/hand-edited store
+            logger.warning("Ignoring unparsable stored MCP tokens for %s: %s", self.server_url, exc)
+            return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         # asyncio.Lock serializes coroutines in-process; the blocking
@@ -171,7 +195,11 @@ class FileTokenStorage:
         raw = entry.get("client_info")
         if not isinstance(raw, dict):
             return None
-        return OAuthClientInformationFull.model_validate(raw)
+        try:
+            return OAuthClientInformationFull.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001 - tolerate a corrupted/hand-edited store
+            logger.warning("Ignoring unparsable stored MCP client_info for %s: %s", self.server_url, exc)
+            return None
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         async with self._lock:
@@ -220,7 +248,10 @@ class FileTokenStorage:
             return False
         if not tokens.get("access_token"):
             return False
-        expires_at = entry.get("expires_at")
+        # expires_at may be missing or wrong-typed in a hand-edited store; coerce
+        # defensively so a bad value can't raise TypeError here. An unparsable
+        # value becomes None ("no known expiry"), leaving the token usable.
+        expires_at = _coerce_timestamp(entry.get("expires_at"))
         if expires_at is not None and time.time() >= expires_at and not tokens.get("refresh_token"):
             return False
         return True
