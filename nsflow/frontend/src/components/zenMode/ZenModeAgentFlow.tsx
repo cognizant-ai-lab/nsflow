@@ -80,7 +80,7 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
     levelSpacing,
     onNodesChange,
     setNodes,
-    enableDragging: config.features.enableNodeDragging,
+    enableDragging: true,
   });
 
   // Use agent highlighting hook
@@ -130,48 +130,44 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
         height: "100%",
         width: "100%",
         position: "relative",
-        backgroundColor: config.features.showAgentFlowBackground
-          ? theme.palette.background.default
-          : "transparent",
+        backgroundColor: theme.palette.background.default,
       }}
     >
-      {/* Top Controls (if enabled) */}
-      {config.features.showAgentFlowControls && (
-        <Box
-          sx={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            zIndex: 20,
-            display: "flex",
-            gap: 1,
-          }}
-        >
-          <Tooltip title="Auto arrange nodes">
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<AutoArrangeIcon />}
-              onClick={handleAutoArrange}
-              sx={{
-                backgroundColor: alpha(theme.palette.primary.main, 0.9),
-                backdropFilter: "blur(8px)",
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.main,
-                },
-                fontSize: "0.7rem",
-                textTransform: "none",
-                px: 1.5,
-              }}
-            >
-              Auto Arrange
-            </Button>
-          </Tooltip>
-        </Box>
-      )}
+      {/* Top Controls */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 12,
+          left: 12,
+          zIndex: 20,
+          display: "flex",
+          gap: 1,
+        }}
+      >
+        <Tooltip title="Auto arrange nodes">
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<AutoArrangeIcon />}
+            onClick={handleAutoArrange}
+            sx={{
+              backgroundColor: alpha(theme.palette.primary.main, 0.9),
+              backdropFilter: "blur(8px)",
+              "&:hover": {
+                backgroundColor: theme.palette.primary.main,
+              },
+              fontSize: "0.7rem",
+              textTransform: "none",
+              px: 1.5,
+            }}
+          >
+            Auto Arrange
+          </Button>
+        </Tooltip>
+      </Box>
 
       {/* Active Agent Indicator */}
-      {config.features.showActiveAgentIndicator && activeAgents.size > 0 && (
+      {activeAgents.size > 0 && (
         <Paper
           elevation={0}
           sx={{
@@ -257,32 +253,28 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
         edgeTypes={edgeTypes}
         minZoom={0.01}
         maxZoom={3}
-        nodesDraggable={config.features.enableNodeDragging}
+        nodesDraggable={true}
         proOptions={{ hideAttribution: true }}
       >
-        {/* Background */}
-        {config.features.showAgentFlowBackground && (
-          <Background
-            color={alpha(theme.palette.primary.main, 0.1)}
-            gap={20}
-            size={1}
-          />
-        )}
+        {/* Grid background */}
+        <Background
+          color={alpha(theme.palette.primary.main, 0.1)}
+          gap={20}
+          size={1}
+        />
 
-        {/* Controls (if enabled) */}
-        {config.features.showAgentFlowControls && (
-          <Controls
-            showZoom={true}
-            showFitView={true}
-            showInteractive={false}
-            style={{
-              background: alpha(theme.palette.background.paper, 0.8),
-              backdropFilter: "blur(8px)",
-              borderRadius: 8,
-              border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-            }}
-          />
-        )}
+        {/* ReactFlow Controls (zoom / fit view) */}
+        <Controls
+          showZoom={true}
+          showFitView={true}
+          showInteractive={false}
+          style={{
+            background: alpha(theme.palette.background.paper, 0.8),
+            backdropFilter: "blur(8px)",
+            borderRadius: 8,
+            border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+          }}
+        />
 
         {/* MiniMap (if enabled) */}
         {config.features.showMinimap && (

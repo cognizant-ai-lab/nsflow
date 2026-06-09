@@ -320,8 +320,7 @@ const ZenModeOverlay = () => {
       />
 
       {/* Header */}
-      {config.features.showHeader && (
-        <Fade in={isZenMode && !isTransitioning} timeout={config.features.fadeInDuration}>
+      <Fade in={isZenMode && !isTransitioning} timeout={config.features.fadeInDuration}>
           <Box
             sx={{
               position: "absolute",
@@ -371,7 +370,7 @@ const ZenModeOverlay = () => {
                 </Typography>
               </Box>
 
-              {config.features.showConnectionStatus && activeNetwork && (
+              {activeNetwork && (
                 <Chip
                   size="small"
                   label="Connected"
@@ -401,22 +400,20 @@ const ZenModeOverlay = () => {
             </Box>
 
             {/* Center - Title */}
-            {config.features.showNetworkTitle && (
-              <Typography
-                variant="h5"
-                sx={{
-                  fontWeight: 300,
-                  color: alpha(theme.palette.text.primary, 0.7),
-                  letterSpacing: "2px",
-                  textTransform: "uppercase",
-                  position: "absolute",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                }}
-              >
-                Zen Mode
-              </Typography>
-            )}
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 300,
+                color: alpha(theme.palette.text.primary, 0.7),
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                position: "absolute",
+                left: "50%",
+                transform: "translateX(-50%)",
+              }}
+            >
+              Zen Mode
+            </Typography>
 
             {/* Right - Controls */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -446,48 +443,12 @@ const ZenModeOverlay = () => {
             </Box>
           </Box>
         </Fade>
-      )}
-
-      {/* Floating Controls - Always visible when header is hidden */}
-      {!config.features.showHeader && (
-        <Box
-          sx={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            zIndex: 10,
-            display: "flex",
-            gap: 1,
-            background: alpha(theme.palette.background.paper, 0.9),
-            backdropFilter: "blur(8px)",
-            borderRadius: 2,
-            p: 0.5,
-            border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-          }}
-        >
-          <ZenModeSettings />
-          <Tooltip title="Exit Zen Mode (Esc)">
-            <IconButton
-              size="small"
-              onClick={exitZenMode}
-              sx={{
-                color: theme.palette.error.main,
-                "&:hover": {
-                  background: alpha(theme.palette.error.main, 0.1),
-                },
-              }}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )}
 
       {/* Main Content */}
       <Box
         sx={{
           position: "absolute",
-          top: config.features.showHeader ? config.theme.headerHeight : 0,
+          top: config.theme.headerHeight,
           left: 0,
           right: 0,
           bottom: 0,
@@ -539,71 +500,66 @@ const ZenModeOverlay = () => {
           )}
 
           {/* Agent Flow Panel */}
-          {config.features.showAgentFlow && (
-            <>
-              <Panel
-                defaultSize={100 - config.features.chatPanelWidth}
-                minSize={30}
-              >
-                <Box
-                  sx={{
-                    height: "100%",
-                    borderRadius: 3,
-                    overflow: "hidden",
-                    background: themeAwareColors.agentFlowBackground,
-                    border: `1px solid ${themeAwareColors.agentFlowBorder}`,
-                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
-                  }}
-                >
-                  <ReactFlowProvider>
-                    <ZenModeAgentFlow zoomLevel={zoomLevel} />
-                  </ReactFlowProvider>
-                </Box>
-              </Panel>
-              <PanelResizeHandle
-                style={{
-                  width: 8,
-                  background: "transparent",
-                  cursor: "ew-resize",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 4,
-                    height: 40,
-                    borderRadius: 2,
-                    background: alpha(theme.palette.primary.main, 0.3),
-                    transition: "background 0.2s, height 0.2s",
-                    "&:hover": {
-                      background: config.theme.primaryAccent,
-                      height: 60,
-                    },
-                  }}
-                />
-              </PanelResizeHandle>
-            </>
-          )}
+          <Panel
+            defaultSize={100 - config.features.chatPanelWidth}
+            minSize={30}
+          >
+            <Box
+              sx={{
+                height: "100%",
+                borderRadius: 3,
+                overflow: "hidden",
+                background: themeAwareColors.agentFlowBackground,
+                border: `1px solid ${themeAwareColors.agentFlowBorder}`,
+                boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+              }}
+            >
+              <ReactFlowProvider>
+                <ZenModeAgentFlow zoomLevel={zoomLevel} />
+              </ReactFlowProvider>
+            </Box>
+          </Panel>
+          <PanelResizeHandle
+            style={{
+              width: 8,
+              background: "transparent",
+              cursor: "ew-resize",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Box
+              sx={{
+                width: 4,
+                height: 40,
+                borderRadius: 2,
+                background: alpha(theme.palette.primary.main, 0.3),
+                transition: "background 0.2s, height 0.2s",
+                "&:hover": {
+                  background: config.theme.primaryAccent,
+                  height: 60,
+                },
+              }}
+            />
+          </PanelResizeHandle>
 
           {/* Chat Panel */}
-          {config.features.showChat && (
-            <Panel
-              defaultSize={config.features.chatPanelWidth}
-              minSize={15}
-              maxSize={50}
-            >
-                <Box
-                  sx={{
-                    height: "100%",
-                    borderRadius: 3,
-                    overflow: "hidden",
-                    background: themeAwareColors.chatBackground,
-                    border: `1px solid ${themeAwareColors.chatBorder}`,
-                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
-                    display: "flex",
-                    flexDirection: "column",
+          <Panel
+            defaultSize={config.features.chatPanelWidth}
+            minSize={15}
+            maxSize={50}
+          >
+            <Box
+              sx={{
+                height: "100%",
+                borderRadius: 3,
+                overflow: "hidden",
+                background: themeAwareColors.chatBackground,
+                border: `1px solid ${themeAwareColors.chatBorder}`,
+                boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+                display: "flex",
+                flexDirection: "column",
                   }}
                 >
                 {/* Tabs for Chat and Advanced Panels */}
@@ -622,9 +578,8 @@ const ZenModeOverlay = () => {
                 <Box sx={{ flex: 1, overflow: "hidden" }}>
                   {tabContent}
                 </Box>
-              </Box>
-            </Panel>
-          )}
+            </Box>
+          </Panel>
         </PanelGroup>
       </Box>
 

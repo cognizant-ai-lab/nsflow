@@ -25,22 +25,12 @@ export interface ZenModeContextType {
   
   // Configuration
   config: ZenModeConfig;
-  currentPreset: string;
-  availablePresets: string[];
-  
+
   // Actions
   enterZenMode: () => void;
   exitZenMode: () => void;
   toggleZenMode: () => void;
 
-  /**
-   * Signal that a native OS dialog (file picker, alert, etc.) is about to open.
-   * Native dialogs force-exit browser fullscreen; this tells the provider not to
-   * tear down Zen Mode and to re-request fullscreen when the dialog closes.
-   * Returns a "done" function to call when the dialog has closed.
-   */
-  beginNativeDialog: () => () => void;
-  
   // Zoom controls
   zoomIn: () => void;
   zoomOut: () => void;
@@ -48,7 +38,6 @@ export interface ZenModeContextType {
   setZoom: (level: number) => void;
   
   // Config management
-  setPreset: (presetName: string) => void;
   updateConfig: (updates: Partial<ZenModeConfig>) => void;
   resetConfig: () => void;
 }

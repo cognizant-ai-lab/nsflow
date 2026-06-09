@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -43,7 +43,6 @@ import {
 import { useApiPort } from "../../context/ApiPortContext";
 import { useChatContext } from "../../context/ChatContext";
 import { useChatControls } from "../../hooks/useChatControls";
-import { useZenMode } from "../../hooks/useZenMode";
 import { useTheme } from "../../context/ThemeContext";
 import { getFeatureFlags } from "../../utils/config";
 import ScrollableMessageContainer from "../ScrollableMessageContainer";
@@ -56,11 +55,11 @@ import { useFileAttachments } from "../../hooks/useFileAttachments";
 
 const ZenModeChat = () => {
   const { theme } = useTheme();
-  const { config, beginNativeDialog } = useZenMode();
   const { apiUrl } = useApiPort();
+
   const { viteUseSpeech } = getFeatureFlags();
-  const enableSpeechToText = config.features.showSpeechToText && !!viteUseSpeech;
-  const enableTextToSpeech = config.features.showTextToSpeech && !!viteUseSpeech;
+  const enableSpeechToText = !!viteUseSpeech;
+  const enableTextToSpeech = !!viteUseSpeech;
 
   const {
     activeNetwork,
@@ -83,33 +82,10 @@ const ZenModeChat = () => {
   } = useFileAttachments(apiUrl);
   const [viewingFile, setViewingFile] = useState<ViewableFile | null>(null);
 
-  // Native file picker forces browsers to exit fullscreen; keep Zen Mode alive
-  // and re-enter fullscreen when the picker closes (either via selection or cancel).
-  const dialogCleanupRef = useRef<(() => void) | null>(null);
-  const handleFileAttach = () => {
-    dialogCleanupRef.current = beginNativeDialog();
-    openPicker();
-  };
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Restore fullscreen IMMEDIATELY — this must happen in the same user-gesture
-    // tick as the change event, before any await runs (awaits lose the gesture).
-    dialogCleanupRef.current?.();
-    dialogCleanupRef.current = null;
-    await rawHandleFileSelected(e);
-  };
-  const handleFileCancel = useCallback(() => {
-    dialogCleanupRef.current?.();
-    dialogCleanupRef.current = null;
-  }, []);
+  const handleFileAttach = () => openPicker();
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) =>
+    rawHandleFileSelected(e);
 
-  // Browsers fire a 'cancel' event when the user dismisses the file picker without selecting.
-  // React doesn't expose this via JSX yet, so attach it to the DOM node directly.
-  useEffect(() => {
-    const node = fileInputRef.current;
-    if (!node) return;
-    node.addEventListener("cancel", handleFileCancel);
-    return () => node.removeEventListener("cancel", handleFileCancel);
-  }, [handleFileCancel, fileInputRef]);
   const { textToSpeech, audioRef } = useTextToSpeechHook();
   const { isRecording, isProcessing, startRecording, stopRecording, processRecording } = useSpeechToTextHook();
   const sampleQueries = useSampleQueries(activeNetwork);
@@ -261,8 +237,6 @@ const ZenModeChat = () => {
         </Typography>
 
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-        {config.features.enableZoomControls && (
-        <>
           {/* Chat Zoom Controls */}
           <Tooltip title="Zoom In">
             <IconButton
@@ -292,37 +266,33 @@ const ZenModeChat = () => {
               <ZoomOutIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-            <Tooltip title={`Reset Zoom (${Math.round(chatZoomLevel * 100)}%)`}>
-              <IconButton
-                size="small"
-                onClick={chatZoomReset}
-                sx={{
-                  color: theme.palette.text.secondary,
-                  "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
-                  fontSize: '0.7rem',
-                  minWidth: 'auto',
-                  px: 0.5,
-                }}
-              >
-                {Math.round(chatZoomLevel * 100)}%
-              </IconButton>
-            </Tooltip>
-            </>
-          )}
-          {config.features.showClearChat && (
-            <Tooltip title="Clear Chat">
-              <IconButton
-                size="small"
-                onClick={() => clearChat()}
-                sx={{
-                  color: theme.palette.warning.main,
-                  "&:hover": { backgroundColor: alpha(theme.palette.warning.main, 0.1) },
-                }}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
+          <Tooltip title={`Reset Zoom (${Math.round(chatZoomLevel * 100)}%)`}>
+            <IconButton
+              size="small"
+              onClick={chatZoomReset}
+              sx={{
+                color: theme.palette.text.secondary,
+                "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                fontSize: '0.7rem',
+                minWidth: 'auto',
+                px: 0.5,
+              }}
+            >
+              {Math.round(chatZoomLevel * 100)}%
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Clear Chat">
+            <IconButton
+              size="small"
+              onClick={() => clearChat()}
+              sx={{
+                color: theme.palette.warning.main,
+                "&:hover": { backgroundColor: alpha(theme.palette.warning.main, 0.1) },
+              }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Stop">
             <IconButton
               size="small"
@@ -395,7 +365,7 @@ const ZenModeChat = () => {
         }}
       >
         {/* Sample Queries */}
-        {config.features.showSampleQueries && sampleQueries.length > 0 && (
+        {sampleQueries.length > 0 && (
           <Fade in={true}>
             <Box sx={{ mb: 1.5 }}>
               <Box

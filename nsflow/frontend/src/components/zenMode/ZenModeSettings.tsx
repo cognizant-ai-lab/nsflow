@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   IconButton,
   Popover,
@@ -23,7 +23,6 @@ import {
   FormControlLabel,
   Checkbox,
   Divider,
-  Button,
   alpha,
   useTheme,
   Tooltip,
@@ -41,51 +40,24 @@ interface FeatureToggle {
   category: string;
 }
 
+// User-toggleable Zen Mode features. Everything else either renders
+// unconditionally (header, chat controls, animations) or is governed by
+// ReactFlow's own Controls panel (node dragging, grid background).
 const FEATURE_TOGGLES: FeatureToggle[] = [
-  // Layout
-  { key: "showAgentFlow", label: "Show Agent Flow", category: "Layout" },
-  { key: "showChat", label: "Show Chat Panel", category: "Layout" },
-  { key: "showHeader", label: "Show Header", category: "Layout" },
   { key: "showSidebar", label: "Show Sidebar (Switch Networks)", category: "Layout" },
-  { key: "enableFullscreen", label: "Use Browser Fullscreen (Need to relaunch ZenMode)", category: "Layout" },
-  
-  // Agent Flow
-  { key: "showAgentFlowControls", label: "Flow Controls", category: "Agent Flow" },
-  { key: "showAgentFlowBackground", label: "Grid Background", category: "Agent Flow" },
+
   { key: "showMinimap", label: "Minimap", category: "Agent Flow" },
-  { key: "enableNodeDragging", label: "Node Dragging", category: "Agent Flow" },
-  
-  // Chat
-  { key: "showSampleQueries", label: "Sample Queries", category: "Chat" },
-  { key: "showSpeechToText", label: "Speech to Text", category: "Chat" },
-  { key: "showTextToSpeech", label: "Text to Speech", category: "Chat" },
-  { key: "showClearChat", label: "Clear Chat Button", category: "Chat" },
-  
-  // Advanced Panels
+
   { key: "showInternalChat", label: "Internal Chat", category: "Advanced Panels" },
   { key: "showConfigPanel", label: "Config Panel", category: "Advanced Panels" },
   { key: "showSlyDataPanel", label: "Sly Data Panel", category: "Advanced Panels" },
   { key: "showLogsPanel", label: "Logs Panel", category: "Advanced Panels" },
-  
-  // Visual
-  { key: "enableAnimations", label: "Animations", category: "Visual" },
-  { key: "showNetworkTitle", label: "Network Title", category: "Visual" },
-  { key: "showConnectionStatus", label: "Connection Status", category: "Visual" },
-  { key: "showActiveAgentIndicator", label: "Active Agent Indicator", category: "Visual" },
-  
-  // Zoom
-  { key: "enableZoomControls", label: "Chat Zoom Controls", category: "Zoom" },
 ];
 
 const ZenModeSettings: React.FC = () => {
   const theme = useTheme();
-  const { config, updateConfig, resetConfig, currentPreset, setPreset, availablePresets } = useZenMode();
+  const { config, updateConfig, resetConfig } = useZenMode();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
-
-  // Ensure we always have at least default preset
-  const effectivePresets = useMemo(() => {
-    return availablePresets.length > 0 ? availablePresets : ['default'];
-  }, [availablePresets]);
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -107,18 +79,12 @@ const ZenModeSettings: React.FC = () => {
     }
   };
 
-  const handlePresetChange = (presetName: string) => {
-    setPreset(presetName);
-  };
-
   const open = Boolean(anchorEl);
   const id = open ? "zen-mode-settings-popover" : undefined;
 
-  // Group features by category
+  // Group toggles by category for the rendered sections.
   const categories = FEATURE_TOGGLES.reduce((acc, toggle) => {
-    if (!acc[toggle.category]) {
-      acc[toggle.category] = [];
-    }
+    if (!acc[toggle.category]) acc[toggle.category] = [];
     acc[toggle.category].push(toggle);
     return acc;
   }, {} as Record<string, FeatureToggle[]>);
@@ -145,17 +111,9 @@ const ZenModeSettings: React.FC = () => {
         open={open}
         anchorEl={anchorEl}
         onClose={handleClose}
-        anchorOrigin={{
-          vertical: "bottom",
-          horizontal: "right",
-        }}
-        transformOrigin={{
-          vertical: "top",
-          horizontal: "right",
-        }}
-        sx={{
-          zIndex: 10001, // Higher than Zen Mode overlay (9999)
-        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        sx={{ zIndex: 10001 }}
         PaperProps={{
           sx: {
             width: 320,
@@ -179,87 +137,8 @@ const ZenModeSettings: React.FC = () => {
           </Tooltip>
         </Box>
 
-        {/* Preset Selector */}
-        <Box sx={{ mb: 2 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              color: theme.palette.text.secondary,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-              display: "block",
-              mb: 1,
-            }}
-          >
-            Preset
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            {effectivePresets.map((preset) => {
-              const displayName = preset.charAt(0).toUpperCase() + preset.slice(1).replace(/-/g, " ").replace(/_/g, " ");
-              const isSelected = currentPreset === preset;
-              return (
-                <Button
-                  key={preset}
-                  size="small"
-                  variant={isSelected ? "contained" : "outlined"}
-                  onClick={() => handlePresetChange(preset)}
-                  sx={{
-                    minWidth: "auto",
-                    px: 1.5,
-                    py: 0.5,
-                    fontSize: "0.75rem",
-                    textTransform: "none",
-                    ...(isSelected && {
-                      backgroundColor: theme.palette.primary.main,
-                      color: theme.palette.primary.contrastText,
-                      "&:hover": {
-                        backgroundColor: theme.palette.primary.dark,
-                      },
-                    }),
-                    ...(!isSelected && {
-                      borderColor: alpha(theme.palette.primary.main, 0.3),
-                      color: theme.palette.text.primary,
-                      "&:hover": {
-                        borderColor: theme.palette.primary.main,
-                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                        color: theme.palette.primary.main,
-                      },
-                    }),
-                  }}
-                >
-                  {displayName}
-                </Button>
-              );
-            })}
-            {/* Show Custom button if current preset is custom */}
-            {currentPreset === 'custom' && !effectivePresets.includes('custom') && (
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => handlePresetChange('custom')}
-                sx={{
-                  minWidth: "auto",
-                  px: 1.5,
-                  py: 0.5,
-                  fontSize: "0.75rem",
-                  textTransform: "none",
-                  backgroundColor: theme.palette.primary.main,
-                  color: theme.palette.primary.contrastText,
-                  "&:hover": {
-                    backgroundColor: theme.palette.primary.dark,
-                  },
-                }}
-              >
-                Custom (Modified)
-              </Button>
-            )}
-          </Box>
-        </Box>
-
         <Divider sx={{ my: 1 }} />
 
-        {/* Feature Toggles by Category */}
         {Object.entries(categories).map(([category, toggles]) => (
           <Box key={category} sx={{ mb: 2 }}>
             <Typography
@@ -279,7 +158,6 @@ const ZenModeSettings: React.FC = () => {
               {toggles.map((toggle) => {
                 const value = config.features[toggle.key];
                 if (typeof value !== "boolean") return null;
-                
                 return (
                   <FormControlLabel
                     key={toggle.key}
@@ -290,9 +168,7 @@ const ZenModeSettings: React.FC = () => {
                         size="small"
                         sx={{
                           color: theme.palette.text.secondary,
-                          "&.Mui-checked": {
-                            color: theme.palette.primary.main,
-                          },
+                          "&.Mui-checked": { color: theme.palette.primary.main },
                         }}
                       />
                     }
@@ -314,4 +190,3 @@ const ZenModeSettings: React.FC = () => {
 };
 
 export default ZenModeSettings;
-
