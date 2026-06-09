@@ -136,27 +136,33 @@ class FileTokenStorage:
     # ------------------------------------------------------------------ #
 
     async def get_tokens(self) -> Optional[OAuthToken]:
-        entry = self._read_entry(self.server_url)
+        # Disk read offloaded to a worker thread so it never blocks the event loop.
+        entry = await asyncio.to_thread(self._read_entry, self.server_url)
         raw = entry.get("tokens") if entry else None
         if not raw:
             return None
         return OAuthToken.model_validate(raw)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
+        # asyncio.Lock serializes coroutines in-process; the blocking
+        # read-modify-write (and the cross-process fcntl lock) runs in a thread.
         async with self._lock:
-            with _interprocess_lock(self._lock_path):
-                blob = self._load_file()
-                entry = blob.setdefault(self.server_url, {})
-                entry["tokens"] = tokens.model_dump(mode="json")
-                entry["obtained_at"] = int(time.time())
-                if tokens.expires_in is not None:
-                    entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
-                else:
-                    entry.pop("expires_at", None)
-                self._write_file(blob)
+            await asyncio.to_thread(self._sync_set_tokens, tokens)
+
+    def _sync_set_tokens(self, tokens: OAuthToken) -> None:
+        with _interprocess_lock(self._lock_path):
+            blob = self._load_file()
+            entry = blob.setdefault(self.server_url, {})
+            entry["tokens"] = tokens.model_dump(mode="json")
+            entry["obtained_at"] = int(time.time())
+            if tokens.expires_in is not None:
+                entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
+            else:
+                entry.pop("expires_at", None)
+            self._write_file(blob)
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
-        entry = self._read_entry(self.server_url)
+        entry = await asyncio.to_thread(self._read_entry, self.server_url)
         raw = entry.get("client_info") if entry else None
         if not raw:
             return None
@@ -164,14 +170,24 @@ class FileTokenStorage:
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         async with self._lock:
-            with _interprocess_lock(self._lock_path):
-                blob = self._load_file()
-                entry = blob.setdefault(self.server_url, {})
-                entry["client_info"] = client_info.model_dump(mode="json")
-                self._write_file(blob)
+            await asyncio.to_thread(self._sync_set_client_info, client_info)
+
+    def _sync_set_client_info(self, client_info: OAuthClientInformationFull) -> None:
+        with _interprocess_lock(self._lock_path):
+            blob = self._load_file()
+            entry = blob.setdefault(self.server_url, {})
+            entry["client_info"] = client_info.model_dump(mode="json")
+            self._write_file(blob)
 
     # ------------------------------------------------------------------ #
     # Housekeeping helpers (used by the OAuth endpoints, not the protocol)
+    #
+    # list_connections / has_connection / get_metadata are synchronous: they do
+    # blocking disk reads. They stay sync because they are also handy from sync
+    # contexts, and a single atomic-replace write makes torn reads impossible so
+    # they need no lock. Async callers MUST offload them with asyncio.to_thread
+    # so they never block the event loop (see inject_mcp_auth_headers,
+    # get_fresh_token, and the OAuth endpoints, which all do).
     # ------------------------------------------------------------------ #
 
     @staticmethod
@@ -230,14 +246,18 @@ class FileTokenStorage:
         and lose updates or resurrect a deleted entry.
         """
         base = storage_dir or _default_storage_dir()
-        path = base / "tokens.json"
         async with cls._lock:
-            with _interprocess_lock(base / "tokens.json.lock"):
-                blob = cls._load_path(path)
-                if server_url not in blob:
-                    return False
-                del blob[server_url]
-                cls._write_path(path, blob)
+            return await asyncio.to_thread(cls._sync_remove, server_url, base)
+
+    @classmethod
+    def _sync_remove(cls, server_url: str, base: Path) -> bool:
+        path = base / "tokens.json"
+        with _interprocess_lock(base / "tokens.json.lock"):
+            blob = cls._load_path(path)
+            if server_url not in blob:
+                return False
+            del blob[server_url]
+            cls._write_path(path, blob)
         return True
 
     @classmethod

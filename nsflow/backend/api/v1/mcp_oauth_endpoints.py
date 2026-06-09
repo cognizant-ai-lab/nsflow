@@ -22,6 +22,7 @@ list/remove stored connections. Tokens themselves are persisted on the backend
 and injected into ``sly_data`` at chat time - they are never returned to the UI.
 """
 
+import asyncio
 import html
 import logging
 from typing import Optional
@@ -108,7 +109,7 @@ async def start_oauth_flow(body: StartFlowRequest):
     if not server_url:
         raise HTTPException(status_code=400, detail="server_url is required.")
 
-    if FileTokenStorage.has_connection(server_url):
+    if await asyncio.to_thread(FileTokenStorage.has_connection, server_url):
         return JSONResponse(content={"already_connected": True, "server_url": server_url})
 
     logger.info("Starting MCP OAuth flow for %s", server_url)
@@ -180,7 +181,9 @@ async def oauth_callback(
     # than an optimistic "connected".
     await mcp_oauth_manager.wait_for_completion(flow)
 
-    if flow.status == "completed" and FileTokenStorage.has_connection(flow.server_url):
+    if flow.status == "completed" and await asyncio.to_thread(
+        FileTokenStorage.has_connection, flow.server_url
+    ):
         logger.info("MCP OAuth flow for %s completed successfully.", flow.server_url)
         return HTMLResponse(content=_callback_html("ok", flow.server_url))
 

@@ -46,7 +46,7 @@ import httpx
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.streamable_http import streamablehttp_client
-from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
+from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 
 # create_mcp_http_client currently lives in the private mcp.shared._httpx_utils
 # (that is where the SDK's own client modules import it from as of mcp 1.27.x).
@@ -420,15 +420,19 @@ class MCPOAuthManager:
         can prompt a reconnect instead of sending a dead Authorization header.
         """
         storage = FileTokenStorage(server_url)
-        meta = storage.get_metadata()
+        # Read the whole entry once, off the event loop. The token itself lives in
+        # this same blob (meta["tokens"]), so we parse it from here rather than
+        # doing a second file read via storage.get_tokens().
+        meta = await asyncio.to_thread(storage.get_metadata)
         if not meta.get("tokens"):
             return None
 
         expires_at = meta.get("expires_at")
         if expires_at is not None and time.time() >= (expires_at - TOKEN_REFRESH_MARGIN_SECONDS):
             await self._silent_refresh(server_url)
-            # Re-read: a successful refresh pushes expires_at into the future.
-            meta = storage.get_metadata()
+            # Re-read: a successful refresh pushes expires_at into the future and
+            # rewrites meta["tokens"] with the new access token.
+            meta = await asyncio.to_thread(storage.get_metadata)
             expires_at = meta.get("expires_at")
 
         # Drop a token that is actually expired (refresh failed / unavailable).
@@ -438,8 +442,11 @@ class MCPOAuthManager:
             )
             return None
 
-        tokens = await storage.get_tokens()
-        if not tokens or not tokens.access_token:
+        raw = meta.get("tokens")
+        if not raw:
+            return None
+        tokens = OAuthToken.model_validate(raw)
+        if not tokens.access_token:
             return None
         token_type = (tokens.token_type or "Bearer").strip()
         if token_type.lower() == "bearer":
