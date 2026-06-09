@@ -380,7 +380,11 @@ class NsWebsocketUtils:
         redacted["http_headers"] = {
             url: (
                 {
-                    name: (REDACTED_VALUE if name.lower() in _SENSITIVE_HEADER_NAMES else value)
+                    name: (
+                        REDACTED_VALUE
+                        if isinstance(name, str) and name.lower() in _SENSITIVE_HEADER_NAMES
+                        else value
+                    )
                     for name, value in headers.items()
                 }
                 if isinstance(headers, dict)

@@ -319,3 +319,12 @@ def test_redact_handles_missing_or_bad_http_headers():
     # Non-dict http_headers is returned as-is (coercion happens during injection).
     assert REDACT({"http_headers": "oops"}) == {"http_headers": "oops"}
     assert REDACT("not-a-dict") == "not-a-dict"
+
+
+def test_redact_tolerates_non_string_header_key():
+    """A non-string header key must not raise (.lower()); its value is left as-is."""
+    url = "https://api.example.com/mcp"
+    sly = {"http_headers": {url: {1: "weird", "Authorization": "Bearer secret"}}}
+    out = REDACT(sly)
+    assert out["http_headers"][url][1] == "weird"
+    assert out["http_headers"][url]["Authorization"] == nw.REDACTED_VALUE
