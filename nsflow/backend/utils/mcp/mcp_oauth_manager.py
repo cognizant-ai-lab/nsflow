@@ -318,7 +318,7 @@ class MCPOAuthManager:
                 async with ClientSession(read, write) as session:
                     await session.initialize()
             # Reached here without the provider needing to authorize.
-            if FileTokenStorage.has_connection(flow.server_url):
+            if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
                 flow.status = "completed"
             else:
                 flow.status = "error"
@@ -333,7 +333,7 @@ class MCPOAuthManager:
         except Exception as exc:  # noqa: BLE001 - report any failure back to the UI
             # If tokens were actually obtained, treat it as success even if a
             # later handshake step failed - the goal is to acquire credentials.
-            if FileTokenStorage.has_connection(flow.server_url):
+            if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
                 flow.status = "completed"
             else:
                 flow.status = "error"
