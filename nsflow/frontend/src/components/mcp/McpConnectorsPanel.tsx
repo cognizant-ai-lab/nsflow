@@ -57,6 +57,11 @@ const McpConnectorsPanel: React.FC = () => {
   const popupRef = useRef<Window | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingServerRef = useRef<string | null>(null);
+  // Consecutive non-terminal poll failures (transient 5xx / network blips); once
+  // this exceeds the cap we give up so a persistently failing poll can't loop
+  // forever with the dialog stuck busy.
+  const pollErrorsRef = useRef(0);
+  const MAX_POLL_ERRORS = 5;
 
   const clearPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -153,21 +158,48 @@ const McpConnectorsPanel: React.FC = () => {
   // Poll status as a fallback when the popup can't postMessage (e.g. blocked).
   const startPolling = useCallback((flowId: string) => {
     clearPolling();
+    pollErrorsRef.current = 0;
+
+    // Stop polling and re-enable the dialog with an error so the flow can never
+    // be left stuck in a busy/awaiting state with Cancel disabled.
+    const failFlow = (message: string) => {
+      clearPolling();
+      setBusy(false);
+      setAwaitingAuth(false);
+      setError(message);
+    };
+
     pollTimerRef.current = setInterval(async () => {
       try {
         const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/status/${flowId}`);
-        if (!res.ok) return;
+        if (res.status === 404) {
+          // The flow is gone (expired/swept, or the backend restarted). It will
+          // never complete, so treat it as terminal instead of polling forever.
+          failFlow('The authorization session expired or was lost. Please try connecting again.');
+          return;
+        }
+        if (!res.ok) {
+          // Transient server error: tolerate a few, then give up.
+          pollErrorsRef.current += 1;
+          if (pollErrorsRef.current >= MAX_POLL_ERRORS) {
+            failFlow('Lost contact with the server while authorizing. Please try again.');
+          }
+          return;
+        }
+        pollErrorsRef.current = 0;
         const data = await res.json();
         if (data.status === 'completed') {
           finishSuccess();
         } else if (data.status === 'error') {
-          clearPolling();
-          setBusy(false);
-          setAwaitingAuth(false);
-          setError(data.error || 'Authorization failed. Please try again.');
+          failFlow(data.error || 'Authorization failed. Please try again.');
         }
       } catch (err) {
+        // Network error reaching the backend: also bounded by MAX_POLL_ERRORS.
         console.error('Error polling OAuth status:', err);
+        pollErrorsRef.current += 1;
+        if (pollErrorsRef.current >= MAX_POLL_ERRORS) {
+          failFlow('Lost contact with the server while authorizing. Please try again.');
+        }
       }
     }, 1500);
   }, [apiUrl, clearPolling, finishSuccess]);
