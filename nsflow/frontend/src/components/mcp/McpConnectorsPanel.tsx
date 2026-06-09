@@ -122,13 +122,21 @@ const McpConnectorsPanel: React.FC = () => {
       if (!backendOrigin || event.origin !== backendOrigin) return;
       const data = event.data as OAuthMessage;
       if (!data || data.type !== 'mcp-oauth') return;
-      if (pendingServerRef.current && data.server_url && data.server_url !== pendingServerRef.current) return;
+      // Only accept a message for the connect attempt currently in progress, and
+      // only when its server_url matches exactly. This drops messages from a
+      // directly-opened callback page, an unknown/expired-state callback (which
+      // carries an empty server_url), or a late popup from a previous attempt -
+      // none of which should disturb the current dialog/polling state.
+      if (!pendingServerRef.current || data.server_url !== pendingServerRef.current) return;
       if (data.status === 'ok') {
         finishSuccess();
       } else {
         clearPolling();
         setBusy(false);
         setAwaitingAuth(false);
+        // Clear the pending server so a late message from this attempt can't be
+        // mistaken for a subsequent one (especially when retrying the same URL).
+        pendingServerRef.current = null;
         setError(data.message || 'Authorization failed or was cancelled. Please try again.');
       }
     };
@@ -151,6 +159,9 @@ const McpConnectorsPanel: React.FC = () => {
   const closeDialog = () => {
     if (busy) return;
     clearPolling();
+    // Drop any in-progress attempt so a late postMessage from an earlier popup
+    // can't be treated as relevant to the next attempt.
+    pendingServerRef.current = null;
     setDialogOpen(false);
     setError(null);
   };
@@ -166,6 +177,9 @@ const McpConnectorsPanel: React.FC = () => {
       clearPolling();
       setBusy(false);
       setAwaitingAuth(false);
+      // Clear the pending server so a late postMessage from this (now-failed)
+      // flow can't be accepted as belonging to a later attempt.
+      pendingServerRef.current = null;
       setError(message);
     };
 
