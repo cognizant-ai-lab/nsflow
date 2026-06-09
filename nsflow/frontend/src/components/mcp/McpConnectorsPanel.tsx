@@ -204,6 +204,15 @@ const McpConnectorsPanel: React.FC = () => {
       }
       // Open the provider's consent screen in a popup.
       popupRef.current = window.open(data.authorization_url, 'mcp-oauth', 'popup,width=560,height=720');
+      if (!popupRef.current) {
+        // Popup was blocked by the browser. Without a window there is nothing to
+        // poll/postMessage, so recover the dialog instead of leaving it stuck in
+        // a busy state with Cancel disabled.
+        setBusy(false);
+        setError('Your browser blocked the authorization popup. Please allow popups for this site and try again.');
+        pendingServerRef.current = null;
+        return;
+      }
       setAwaitingAuth(true);
       if (data.flow_id) startPolling(data.flow_id);
     } catch (err) {
