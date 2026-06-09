@@ -122,10 +122,26 @@ class PendingFlow:
     status: str = "pending"  # pending | awaiting_user | completed | error
     error: Optional[str] = None
     task: Optional[asyncio.Task] = None
+    # True if start_flow() wrote a manual client_info to disk for this flow (a
+    # server without DCR). Used to clean it up if the flow fails before a token
+    # is stored, so a stale, invisible registration doesn't linger.
+    preseeded_client_info: bool = False
 
 
 class MCPOAuthManager:
-    """Process-wide registry and driver for MCP OAuth flows. Use the singleton."""
+    """
+    Process-wide registry and driver for MCP OAuth flows. Use the singleton.
+
+    IMPORTANT - single worker only: pending-flow state (``_by_flow_id`` /
+    ``_by_state``) lives in this process's memory, so the /start, /callback, and
+    /status requests of one authorization MUST be served by the same process. If
+    the backend is ever run with multiple Uvicorn workers, the callback can land
+    on a worker that never saw the /start and will reject a valid state as
+    "Unknown or expired". nsflow launches uvicorn with --reload and no
+    --workers (see nsflow/run.py), which is single-worker; keep it that way for
+    MCP OAuth (the on-disk token store is likewise guarded only by a single
+    cross-process fcntl lock, not a shared coordinator).
+    """
 
     def __init__(self):
         self._by_flow_id: Dict[str, PendingFlow] = {}
@@ -228,6 +244,7 @@ class MCPOAuthManager:
             )
 
         flow = PendingFlow(flow_id=uuid.uuid4().hex, server_url=server_url, created_at=time.time())
+        flow.preseeded_client_info = bool(client_id)
         flow.code_future = asyncio.get_running_loop().create_future()
         self._by_flow_id[flow.flow_id] = flow
         flow.task = asyncio.create_task(self._run_oauth_flow(flow, scope, auth_method))
@@ -242,8 +259,35 @@ class MCPOAuthManager:
             # running (and generating network activity) until the TTL sweep.
             # Cancel it and deregister the flow now.
             self._discard_flow(flow)
+            await self._cleanup_failed_preseed(flow)
             raise TimeoutError(flow.error) from exc
         return flow
+
+    async def _cleanup_failed_preseed(self, flow: PendingFlow) -> None:
+        """
+        Remove a manually pre-seeded client_info that never produced a token.
+
+        When the user supplies a client_id (a server without DCR), start_flow
+        writes that client_info to disk before the flow runs. If the flow then
+        fails before any token is stored, that entry lingers in tokens.json but
+        is hidden from /connections (which only lists usable tokens), so the user
+        can't delete it or fall back to DCR from the UI. Remove it here - but only
+        if we pre-seeded it AND no usable token exists (so we never delete a real,
+        token-bearing connection, e.g. a re-auth that failed over an existing one).
+        """
+        if not flow.preseeded_client_info:
+            return
+        if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
+            return
+        try:
+            removed = await FileTokenStorage.remove(flow.server_url)
+        except Exception as exc:  # noqa: BLE001 - cleanup is best effort
+            logger.info("Could not clean up stale client_info for %s: %s", flow.server_url, exc)
+            return
+        if removed:
+            logger.info(
+                "Removed stale pre-seeded client_info for %s after a failed OAuth flow.", flow.server_url
+            )
 
     def _discard_flow(self, flow: PendingFlow) -> None:
         """Cancel a flow's background task and remove it from both registries."""
@@ -285,6 +329,7 @@ class MCPOAuthManager:
                     "credentials."
                 )
                 logger.warning("MCP OAuth flow for %s: %s", flow.server_url, flow.error)
+                await self._cleanup_failed_preseed(flow)
         except Exception as exc:  # noqa: BLE001 - report any failure back to the UI
             # If tokens were actually obtained, treat it as success even if a
             # later handshake step failed - the goal is to acquire credentials.
@@ -296,6 +341,7 @@ class MCPOAuthManager:
                 logger.warning(
                     "MCP OAuth flow for %s failed: %s", flow.server_url, flow.error, exc_info=True
                 )
+                await self._cleanup_failed_preseed(flow)
         finally:
             # Make sure a /start caller is never left blocked.
             if not flow.url_event.is_set():
