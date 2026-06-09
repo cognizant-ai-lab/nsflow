@@ -258,7 +258,18 @@ class NsWebsocketUtils:
             if not target_urls:
                 return
 
-            http_headers: Dict[str, Any] = sly_data.setdefault("http_headers", {})
+            # http_headers comes from user-provided sly_data, so it may be missing
+            # or not a dict. Coerce anything non-dict to an empty object before we
+            # index into it, so a malformed value can't crash injection.
+            http_headers = sly_data.get("http_headers")
+            if not isinstance(http_headers, dict):
+                if http_headers is not None:
+                    logging.warning(
+                        "MCP auth: sly_data.http_headers is %s, not a dict; overwriting it.",
+                        type(http_headers).__name__,
+                    )
+                http_headers = {}
+                sly_data["http_headers"] = http_headers
             for url in target_urls:
                 existing = http_headers.get(url)
                 # Respect a user-provided Authorization for this URL.
