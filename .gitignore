@@ -28,6 +28,11 @@ mcp/
 skills/
 middleware/
 
+# The unanchored "mcp/" rule above matches any directory named "mcp" at any
+# depth. Re-include the MCP OAuth source directories, which are real source code.
+!nsflow/backend/utils/mcp/
+!nsflow/frontend/src/components/mcp/
+
 # Virtual environments
 .venv
 
