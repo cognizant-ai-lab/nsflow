@@ -28,12 +28,20 @@ export const toDateInput = (epochSeconds: number | null): string => {
 };
 
 // endOfDay biases the time to 23:59:59 so "until" filters include the chosen day.
+// Parses the YYYY-MM-DD parts into a local Date to avoid the UTC interpretation
+// new Date(string) applies, which would shift the day for non-UTC users.
 export const fromDateInput = (value: string, endOfDay = false): number | null => {
   if (!value) return null;
-  const d = new Date(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, y, m, day] = match;
+  const year = Number(y);
+  const month = Number(m) - 1;
+  const date = Number(day);
+  const d = endOfDay
+    ? new Date(year, month, date, 23, 59, 59, 999)
+    : new Date(year, month, date, 0, 0, 0, 0);
   if (Number.isNaN(d.getTime())) return null;
-  if (endOfDay) d.setHours(23, 59, 59, 999);
-  else d.setHours(0, 0, 0, 0);
   return Math.floor(d.getTime() / 1000);
 };
 
