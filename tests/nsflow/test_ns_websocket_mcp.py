@@ -316,9 +316,12 @@ def test_redact_leaves_non_header_sly_data_unchanged():
 
 
 def test_redact_handles_missing_or_bad_http_headers():
+    # No http_headers key -> returned unchanged.
     assert REDACT({"user_id": "u1"}) == {"user_id": "u1"}
-    # Non-dict http_headers is returned as-is (coercion happens during injection).
-    assert REDACT({"http_headers": "oops"}) == {"http_headers": "oops"}
+    # A non-dict (malformed) http_headers could itself be/contain a secret, so the
+    # whole value is masked rather than surfaced verbatim.
+    assert REDACT({"http_headers": "oops"}) == {"http_headers": nw.REDACTED_VALUE}
+    # Non-dict sly_data is returned as-is.
     assert REDACT("not-a-dict") == "not-a-dict"
 
 

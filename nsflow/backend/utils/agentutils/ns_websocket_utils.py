@@ -423,12 +423,17 @@ class NsWebsocketUtils:
         """
         if not isinstance(sly_data, dict):
             return sly_data
-        http_headers = sly_data.get("http_headers")
-        if not isinstance(http_headers, dict):
+        if "http_headers" not in sly_data:
             return sly_data
+        http_headers = sly_data.get("http_headers")
         # Shallow-copy sly_data; rewrite only the http_headers subtree so the
         # original (with live tokens) is left untouched.
         redacted = dict(sly_data)
+        if not isinstance(http_headers, dict):
+            # A malformed http_headers (e.g. a string or list) could itself be or
+            # contain a secret; never surface it verbatim - mask the whole value.
+            redacted["http_headers"] = REDACTED_VALUE
+            return redacted
         redacted["http_headers"] = {
             url: (
                 {
