@@ -17,11 +17,28 @@ limitations under the License.
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ui-common (@cognizant-ai-lab/ui-common) only exposes its barrel ("." -> dist/index.js)
+// and "./const" in its package `exports`, so deep subpath imports are blocked. We consume
+// ONLY the framework-agnostic neuro-san controller (Agent.ts: sendChatQuery, getConnectivity,
+// sendNetworkDesignerUpdate, ...) — not the visual components — by aliasing a stable
+// specifier straight to the built controller module. This keeps the bundle free of the
+// package's Next/MUI-coupled modules (verified: controller pulls no React/MUI/Next/node).
+const uiCommonDist = path.resolve(dirname, "node_modules/@cognizant-ai-lab/ui-common/dist");
 
 export default defineConfig(() => {
   return {
     plugins: [react()],
     base: "/",
+    resolve: {
+      alias: {
+        "@ui-common/agent": path.join(uiCommonDist, "controller/agent/Agent.js"),
+      },
+    },
     build: {
       outDir: "dist",
       assetsDir: "assets",

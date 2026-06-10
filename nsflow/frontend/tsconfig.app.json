@@ -15,6 +15,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* ui-common controller alias — mirrors the Vite resolve.alias so `tsc` can
+       type the neuro-san controller import. We alias straight to dist because the
+       package `exports` only exposes "." and "./const" (deep imports are blocked). */
+    "baseUrl": ".",
+    "paths": {
+      "@ui-common/agent": ["./node_modules/@cognizant-ai-lab/ui-common/dist/controller/agent/Agent.d.ts"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

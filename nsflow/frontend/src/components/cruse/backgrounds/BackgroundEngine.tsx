@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import { Box } from '@mui/material';
 import { CssDoodleBackground } from './CssDoodleBackground';
 import { GradientBackground } from './GradientBackground';
