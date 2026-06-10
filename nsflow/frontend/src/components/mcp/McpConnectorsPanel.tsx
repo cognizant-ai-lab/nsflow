@@ -349,6 +349,9 @@ const McpConnectorsPanel: React.FC = () => {
   }, [serverUrl, clientId, clientSecret, apiUrl, isReady, finishSuccess, startPolling]);
 
   const handleDisconnect = useCallback(async (url: string) => {
+    // Guard like refreshConnections: without a resolved backend URL this would
+    // fetch "undefined/api/..." - noisy and guaranteed to fail.
+    if (!isReady || !apiUrl) return;
     try {
       await fetch(`${apiUrl}/api/v1/mcp/oauth/connections?server_url=${encodeURIComponent(url)}`, {
         method: 'DELETE',
@@ -357,7 +360,7 @@ const McpConnectorsPanel: React.FC = () => {
     } catch (err) {
       console.error('Failed to disconnect MCP server:', err);
     }
-  }, [apiUrl, refreshConnections]);
+  }, [apiUrl, isReady, refreshConnections]);
 
   return (
     <Paper
