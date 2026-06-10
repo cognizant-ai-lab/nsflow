@@ -26,6 +26,22 @@ import { ExpandMore as ExpandMoreIcon, CheckBox as CheckBoxIcon,
   ContentCopy as CopyIcon } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 
+// Renders an llm_config dict inline. Arrays (e.g. `fallbacks`) become a comma-joined
+// "provider / model" list; other nested objects fall back to JSON. Prevents "[object Object]".
+const LlmConfigDisplay: React.FC<{ config: Record<string, unknown> }> = ({ config }) => {
+  const theme = useTheme();
+  const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object";
+  const summarize = (f: Record<string, unknown>) =>
+    [f.class ?? f.provider, f.model_name ?? f.model].filter(Boolean).join(" / ") || JSON.stringify(f);
+  const renderValue = (v: unknown): string =>
+    Array.isArray(v) ? v.map((i) => (isObj(i) ? summarize(i) : String(i))).join(", ")
+    : isObj(v) ? JSON.stringify(v)
+    : String(v);
+
+  const text = Object.entries(config).map(([k, v]) => `${k}: ${renderValue(v)}`).join(", ");
+  return <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>{text}</Typography>;
+};
+
 // Define the structure of the `data` prop
 interface AgentNodeData {
   id: string;
@@ -335,17 +351,13 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
             <Box>
               {agentDetails.llm_config && (
                 <Box sx={{ mb: 1 }}>
-                  <Typography variant="caption" sx={{ 
-                    fontWeight: 600, 
-                    color: theme.palette.text.primary 
+                  <Typography variant="caption" sx={{
+                    fontWeight: 600,
+                    color: theme.palette.text.primary
                   }}>
                     LLM Config:{" "}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-                    {Object.entries(agentDetails.llm_config)
-                      .map(([key, val]) => `${key}: ${val}`)
-                      .join(", ")}
-                  </Typography>
+                  <LlmConfigDisplay config={agentDetails.llm_config} />
                 </Box>
               )}
               {agentDetails.function && (
