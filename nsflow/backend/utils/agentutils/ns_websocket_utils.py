@@ -481,17 +481,26 @@ class NsWebsocketUtils:
 
     def get_network_mcp_urls(self):
         """
-        Collect the MCP server URLs referenced by this network's tools.
+        Collect the MCP server URLs this network expects auth headers for.
+
+        Two signals are combined:
+
+        1. The network's declared ``sly_data_schema`` - the MCP URLs listed under
+           ``tools[].function.sly_data_schema.properties.http_headers.properties``.
+           This is the explicit contract: a network that requires authenticated
+           MCP access advertises exactly which URLs need ``http_headers`` (see
+           neuro-san ``mcp_github.hocon``). We check this first.
+        2. The MCP URLs the tools actually reference (a dict tool's ``url`` or a
+           bare ``http(s)`` string in a ``tools`` list), so networks that don't
+           spell out a schema are still covered.
 
         Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
-        same restore path the rest of the app uses - rather than parsing the
-        HOCON directly. That returns a plain, fully-resolved config dict (its
-        commondefs/defaults filter chain has run, so a ``url`` defined via a
-        commondef is already substituted) and transparently handles missing or
-        remote networks by raising.
+        same restore path the rest of the app uses - so the config is plain and
+        fully resolved (commondefs/defaults applied), and missing/remote networks
+        raise.
 
-        :return: A set of URLs, or None if the network is not readable locally
-                 (e.g. an invalid name or a network that lives on a remote
+        :return: The union of URLs from both signals, or None if the network is
+                 not readable locally (invalid name, or a network on a remote
                  neuro-san server), signalling the caller to fall back to all
                  connections.
         """
@@ -506,6 +515,10 @@ class NsWebsocketUtils:
 
         urls: set = set()
 
+        # 1) Schema-declared URLs (the explicit auth contract).
+        self._collect_schema_http_header_urls(config, urls)
+
+        # 2) URLs the tools reference, combined with the above.
         def _walk(node):
             if isinstance(node, dict):
                 # Dictionary-reference MCP tool: {"url": "https://.../mcp", ...}.
@@ -527,6 +540,33 @@ class NsWebsocketUtils:
 
         _walk(config.get("tools", []))
         return urls
+
+    @staticmethod
+    def _collect_schema_http_header_urls(config: Any, urls: set) -> None:
+        """
+        Add MCP URLs declared in any tool's ``sly_data_schema`` to ``urls``.
+
+        Reads ``tools[].function.sly_data_schema.properties.http_headers.properties``
+        - each key there is an MCP URL the network advertises it needs an
+        ``http_headers`` entry for. Every level is type-guarded so a partial or
+        unconventional schema is simply skipped rather than raising.
+        """
+        tools = config.get("tools") if isinstance(config, dict) else None
+        if not isinstance(tools, list):
+            return
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            function = tool.get("function")
+            schema = function.get("sly_data_schema") if isinstance(function, dict) else None
+            props = schema.get("properties") if isinstance(schema, dict) else None
+            http_headers = props.get("http_headers") if isinstance(props, dict) else None
+            header_props = http_headers.get("properties") if isinstance(http_headers, dict) else None
+            if not isinstance(header_props, dict):
+                continue
+            for url in header_props:
+                if isinstance(url, str) and url.startswith(("http://", "https://")):
+                    urls.add(url)
 
     @classmethod
     def get_latest_sly_data(cls, network_name: str, session_id: str = None) -> dict:

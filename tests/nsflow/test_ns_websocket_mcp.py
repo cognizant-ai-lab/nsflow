@@ -128,6 +128,52 @@ def test_get_urls_multiple(monkeypatch):
     }
 
 
+def _schema_tool(url):
+    """A front-man tool declaring an http_headers sly_data_schema for `url`."""
+    return {
+        "name": "front",
+        "function": {
+            "sly_data_schema": {
+                "type": "object",
+                "properties": {
+                    "http_headers": {
+                        "type": "object",
+                        "properties": {url: {"type": "object"}},
+                    }
+                },
+            }
+        },
+    }
+
+
+def test_get_urls_from_sly_data_schema(monkeypatch):
+    # The schema's http_headers properties keys are collected as MCP URLs.
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    assert _utils().get_network_mcp_urls() == {"https://api.githubcopilot.com/mcp"}
+
+
+def test_get_urls_unions_schema_and_tool_refs(monkeypatch):
+    # Schema-declared URL + a separate tool url-reference are combined.
+    schema = _schema_tool("https://api.githubcopilot.com/mcp")
+    config = {"tools": [schema, {"name": "getter", "url": "https://other.example.com/mcp"}]}
+    _patch_network(monkeypatch, config=config)
+    assert _utils().get_network_mcp_urls() == {
+        "https://api.githubcopilot.com/mcp", "https://other.example.com/mcp",
+    }
+
+
+def test_get_urls_tolerates_partial_schema(monkeypatch):
+    # A malformed/partial sly_data_schema is skipped, not raised on.
+    config = {"tools": [
+        {"name": "a", "function": {"sly_data_schema": "not-a-dict"}},
+        {"name": "b", "function": {"sly_data_schema": {"properties": {"http_headers": 5}}}},
+        {"name": "c", "function": {}},
+    ]}
+    _patch_network(monkeypatch, config=config)
+    assert _utils().get_network_mcp_urls() == set()
+
+
 def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
     # get_agent_network raising (invalid/remote/unreadable) -> None (caller fallback).
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("not local"))
