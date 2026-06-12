@@ -20,11 +20,12 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
+from neuro_san.internals.run_context.utils.external_agent_parsing import ExternalAgentParsing
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
@@ -480,8 +481,14 @@ class NsWebsocketUtils:
         return urlunsplit((scheme, netloc, path, parts.query, ""))
 
     def get_network_mcp_urls(self):
+        """Instance convenience for this connection's network. See
+        :meth:`collect_network_mcp_urls`."""
+        return self.collect_network_mcp_urls(self.agent_name)
+
+    @classmethod
+    def collect_network_mcp_urls(cls, agent_name: str):
         """
-        Collect the MCP server URLs this network expects auth headers for.
+        Collect the MCP server URLs a network expects auth headers for.
 
         Two signals are combined:
 
@@ -505,41 +512,71 @@ class NsWebsocketUtils:
                  connections.
         """
         try:
-            agent_network = AgentNetworkUtils().get_agent_network(self.agent_name)
+            agent_network = AgentNetworkUtils().get_agent_network(agent_name)
             if agent_network is None:
                 return None
             config = agent_network.get_config()
         except Exception as e:  # noqa: BLE001 - invalid/remote/unreadable network
-            logging.info("MCP auth: network '%s' not readable locally: %s", self.agent_name, e)
+            logging.info("MCP auth: network '%s' not readable locally: %s", agent_name, e)
             return None
 
         urls: set = set()
 
         # 1) Schema-declared URLs (the explicit auth contract).
-        self._collect_schema_http_header_urls(config, urls)
+        cls._collect_schema_http_header_urls(config, urls)
 
-        # 2) URLs the tools reference, combined with the above.
-        def _walk(node):
-            if isinstance(node, dict):
-                # Dictionary-reference MCP tool: {"url": "https://.../mcp", ...}.
-                url = node.get("url", None)
-                if isinstance(url, str) and url:
-                    urls.add(url)
-                for value in node.values():
-                    _walk(value)
-            elif isinstance(node, list):
-                for item in node:
-                    _walk(item)
-            elif isinstance(node, str):
-                # String-reference MCP tool: "tools": ["https://.../mcp"].
-                # Bare http(s) references are MCP server URLs (agent-name refs are
-                # not URLs). Safe even if a stray URL appears elsewhere, since the
-                # caller only injects for URLs that match a connected server.
-                if node.startswith(("http://", "https://")):
-                    urls.add(node)
-
-        _walk(config.get("tools", []))
+        # 2) URLs the tools actually reference, combined with the above.
+        cls._collect_tool_ref_urls(config.get("tools"), urls)
         return urls
+
+    @classmethod
+    def _collect_tool_ref_urls(cls, tools: Any, urls: set) -> None:
+        """
+        Add MCP server URLs referenced through a node's ``tools`` list.
+
+        Each entry in a ``tools`` list is either an agent-name string, an MCP
+        server URL string, or a dict MCP tool ``{"url": ...}`` that may itself
+        carry a nested ``tools`` list. We follow only the ``tools`` chain - never
+        sibling fields such as ``function`` or ``sly_data_schema`` (handled by
+        :meth:`_collect_schema_http_header_urls`) - so a schema's ``required``
+        entries or example URLs in descriptions are not mistaken for tool refs.
+
+        ``ExternalAgentParsing.is_mcp_tool`` is neuro-san's own classifier; it
+        distinguishes an MCP server URI from a neuro-san external-agent URL (both
+        are ``http(s)``), which a bare scheme check cannot.
+        """
+        if not isinstance(tools, list):
+            return
+        for entry in tools:
+            if isinstance(entry, str):
+                if ExternalAgentParsing.is_mcp_tool(entry):
+                    urls.add(entry)
+            elif isinstance(entry, dict):
+                url = entry.get("url")
+                if isinstance(url, str) and ExternalAgentParsing.is_mcp_tool(url):
+                    urls.add(url)
+                # A node or MCP tool entry can nest its own "tools" list.
+                cls._collect_tool_ref_urls(entry.get("tools"), urls)
+
+    @classmethod
+    def missing_mcp_connections(cls, agent_name: str) -> Optional[List[str]]:
+        """
+        MCP URLs the network requires (schema + tool refs) that have no usable
+        stored connection yet - i.e. the servers the user still needs to connect
+        in the Connectors tab before this network can authenticate.
+
+        Matching is normalized (trailing slash / host case / default port).
+
+        :return: A sorted list of unconnected required URLs (possibly empty), or
+                 None if the network is not locally readable (we can't determine
+                 requirements, so the caller should not block on it).
+        """
+        required = cls.collect_network_mcp_urls(agent_name)
+        if required is None:
+            return None
+        connections = FileTokenStorage.list_connections()
+        connected = {cls._normalize_mcp_url(conn["server_url"]) for conn in connections}
+        return sorted(url for url in required if cls._normalize_mcp_url(url) not in connected)
 
     @staticmethod
     def _collect_schema_http_header_urls(config: Any, urls: set) -> None:
@@ -550,6 +587,11 @@ class NsWebsocketUtils:
         - each key there is an MCP URL the network advertises it needs an
         ``http_headers`` entry for. Every level is type-guarded so a partial or
         unconventional schema is simply skipped rather than raising.
+
+        A URL key must be quoted in HOCON (it contains ``:`` and ``/``), and
+        neuro-san's restorer preserves those surrounding quotes in the parsed
+        key (e.g. ``'"https://api.githubcopilot.com/mcp"'``), so each key is
+        unquoted before the ``http(s)`` check.
         """
         tools = config.get("tools") if isinstance(config, dict) else None
         if not isinstance(tools, list):
@@ -565,7 +607,10 @@ class NsWebsocketUtils:
             if not isinstance(header_props, dict):
                 continue
             for url in header_props:
-                if isinstance(url, str) and url.startswith(("http://", "https://")):
+                if not isinstance(url, str):
+                    continue
+                url = url.strip().strip('"').strip("'").strip()
+                if url.startswith(("http://", "https://")):
                     urls.add(url)
 
     @classmethod

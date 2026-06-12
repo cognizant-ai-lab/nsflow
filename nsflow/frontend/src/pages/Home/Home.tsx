@@ -22,6 +22,7 @@ import AgentFlow from "../../components/AgentFlow";
 import Sidebar from "../../components/Sidebar";
 // import ChatPanel from "./components/ChatPanel";
 import TabbedChatPanel from "../../components/TabbedChatPanel";
+import McpAuthGate from "../../components/mcp/McpAuthGate";
 import LogsPanel from "../../components/LogsPanel";
 import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
@@ -63,12 +64,26 @@ const HomeContent: React.FC = () => {
     }
   }, [selectedNetwork]);
 
+  // Soft reset to a clean home view (no network selected) without reloading the
+  // app, so the proxied WebSocket isn't torn down. Used by the MCP auth gate.
+  const handleGoHome = () => {
+    setSelectedNetwork("");
+    setActiveNetwork("");
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has("network")) {
+      currentUrl.searchParams.delete("network");
+      window.history.replaceState({}, "", currentUrl.toString());
+    }
+  };
+
   return (
     <ReactFlowProvider>
       <ApiPortProvider>
         <NeuroSanProvider>
           {/* NeuroSanProvider is used to manage the host and port for the NeuroSan server */}
           <div className="h-screen w-screen bg-gray-900 flex flex-col">
+            {/* Prompts to connect required MCP servers before chatting; no layout footprint. */}
+            <McpAuthGate onGoHome={handleGoHome} />
             <div className="h-14">
               <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
             </div>

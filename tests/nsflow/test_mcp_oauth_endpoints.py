@@ -256,6 +256,29 @@ def test_delete_connection_blank_server_url(monkeypatch):
     remove.assert_not_awaited()
 
 
+def test_required_reports_missing(monkeypatch):
+    """/required surfaces the unconnected MCP URLs a network needs."""
+    import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
+    monkeypatch.setattr(
+        nw.NsWebsocketUtils, "missing_mcp_connections",
+        MagicMock(return_value=["https://api.githubcopilot.com/mcp"]),
+    )
+    response = client.get("/api/v1/mcp/oauth/required/my_net")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["network"] == "my_net"
+    assert body["missing"] == ["https://api.githubcopilot.com/mcp"]
+
+
+def test_required_none_reports_empty(monkeypatch):
+    """A non-locally-readable network (None) reports nothing missing, not an error."""
+    import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
+    monkeypatch.setattr(nw.NsWebsocketUtils, "missing_mcp_connections", MagicMock(return_value=None))
+    response = client.get("/api/v1/mcp/oauth/required/remote_net")
+    assert response.status_code == 200
+    assert response.json()["missing"] == []
+
+
 def test_redirect_uri(monkeypatch):
     """The redirect URI endpoint returns the manager's computed callback URL."""
     uri = "http://127.0.0.1:8005/api/v1/mcp/oauth/callback"
