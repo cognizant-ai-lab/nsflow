@@ -255,10 +255,10 @@ async def delete_connection(server_url: str = Query(...)):
 @router.get("/required/{network_name:path}")
 async def required_mcp_connections(network_name: str):
     """
-    Report the MCP servers a network requires (declared in its sly_data_schema or
-    referenced by its tools) that the user has not yet connected. The frontend
-    uses this to prompt the user to authenticate in the Connectors tab before
-    chatting with a network that needs MCP auth.
+    Report the MCP server URLs a network declares it needs auth headers for (via its
+    ``sly_data_schema`` http_headers properties) that the user has not yet connected.
+    The frontend uses this to prompt the user to authenticate in the Connectors tab
+    before chatting with a network that needs MCP auth.
     """
     # Imported here to avoid pulling the (heavy) websocket utils at module import.
     from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
