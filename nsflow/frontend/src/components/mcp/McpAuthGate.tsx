@@ -19,23 +19,13 @@ import { useApiPort } from '../../context/ApiPortContext';
 import { useChatContext } from '../../context/ChatContext';
 import { McpAuthRequiredDialog } from './McpAuthRequiredDialog';
 
-export interface McpAuthGateProps {
-  /**
-   * Called when the user acknowledges the dialog, to return them to a clean
-   * home view. The host should clear the selected/active network and the
-   * `?network=` URL param. If omitted, the gate falls back to a full reload of
-   * `/home` (which also resets that state, at the cost of reloading the app).
-   */
-  onGoHome?: () => void;
-}
-
 /**
  * Renders nothing until a selected network requires MCP servers the user hasn't
  * connected. When the active network changes, it asks the backend which required
  * MCP URLs are unconnected; if any, it shows a dialog telling the user to connect
  * them in the Connectors tab. Acknowledging returns to the nsflow home.
  */
-const McpAuthGate: React.FC<McpAuthGateProps> = ({ onGoHome }) => {
+const McpAuthGate: React.FC = () => {
   const { apiUrl, isReady } = useApiPort();
   const { activeNetwork } = useChatContext();
 
@@ -77,13 +67,10 @@ const McpAuthGate: React.FC<McpAuthGateProps> = ({ onGoHome }) => {
     if (gatedNetwork) acknowledgedRef.current.add(gatedNetwork);
     setOpen(false);
     // Return to the nsflow home (no network selected) where the Connectors tab
-    // is available so the user can authenticate the required server(s). Prefer a
-    // soft in-app reset (no full reload) so the proxied WebSocket isn't torn down.
-    if (onGoHome) {
-      onGoHome();
-    } else {
-      window.location.href = '/home';
-    }
+    // is available so the user can authenticate the required server(s). A full
+    // navigation cleanly resets all network-dependent views and the acknowledged
+    // set, so re-selecting a still-unconnected network prompts again.
+    window.location.href = '/home';
   };
 
   if (!open) return null;

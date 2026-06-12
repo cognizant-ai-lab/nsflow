@@ -25,7 +25,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import WebSocket, WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
-from neuro_san.internals.run_context.utils.external_agent_parsing import ExternalAgentParsing
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
@@ -258,11 +257,12 @@ class NsWebsocketUtils:
         Merge OAuth Bearer tokens for connected MCP servers into sly_data's
         ``http_headers`` so the agent network can authenticate to them.
 
-        Only servers this network actually references are injected (so a token is
-        never broadcast to an unrelated network). If the network's HOCON cannot be
-        read locally (e.g. it lives on a remote neuro-san server), we fall back to
-        injecting every connected server. Any header the user already supplied for
-        a given URL is left untouched.
+        Only servers this network declares it needs auth for (in its
+        ``sly_data_schema``) are injected, so a token is never broadcast to an
+        unrelated network or to an MCP server that needs no auth. If the network's
+        HOCON cannot be read locally (e.g. it lives on a remote neuro-san server),
+        we fall back to injecting every connected server. Any header the user
+        already supplied for a given URL is left untouched.
 
         :param sly_data: The sly_data dict to enrich in place.
         """
@@ -279,11 +279,11 @@ class NsWebsocketUtils:
             referenced = await asyncio.to_thread(self.get_network_mcp_urls)
             # Build (header_key, token_url) pairs. URLs are matched on a normalized
             # form so cosmetic differences (trailing slash, host case, default
-            # port) between the stored connection URL and the network's tool URL
-            # don't block injection. But each original string is kept for its real
-            # job: header_key is the URL the network references (what neuro-san's
-            # MCP adapter looks the header up by), and token_url is the stored
-            # connection URL (the key the token store is keyed on).
+            # port) between the stored connection URL and the network's declared
+            # URL don't block injection. But each original string is kept for its
+            # real job: header_key is the URL the network declares in its schema
+            # (what neuro-san's MCP adapter looks the header up by), and token_url
+            # is the stored connection URL (the key the token store is keyed on).
             if referenced is None:
                 # HOCON not locally readable: inject every connection, keyed by
                 # its own URL (we have no network-side form to match against).
@@ -490,26 +490,25 @@ class NsWebsocketUtils:
         """
         Collect the MCP server URLs a network expects auth headers for.
 
-        Two signals are combined:
-
-        1. The network's declared ``sly_data_schema`` - the MCP URLs listed under
-           ``tools[].function.sly_data_schema.properties.http_headers.properties``.
-           This is the explicit contract: a network that requires authenticated
-           MCP access advertises exactly which URLs need ``http_headers`` (see
-           neuro-san ``mcp_github.hocon``). We check this first.
-        2. The MCP URLs the tools actually reference (a dict tool's ``url`` or a
-           bare ``http(s)`` string in a ``tools`` list), so networks that don't
-           spell out a schema are still covered.
+        These come solely from the network's declared ``sly_data_schema`` - the
+        MCP URLs listed under
+        ``tools[].function.sly_data_schema.properties.http_headers.properties``.
+        This is the explicit contract: a network that requires authenticated MCP
+        access advertises exactly which URLs need ``http_headers`` (see neuro-san
+        ``mcp_github.hocon``). We deliberately do NOT also harvest every MCP URL
+        the tools reference, because a network may call MCP servers that need no
+        auth at all - those must not be flagged as a missing connection nor have
+        a token injected for them.
 
         Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
         same restore path the rest of the app uses - so the config is plain and
         fully resolved (commondefs/defaults applied), and missing/remote networks
         raise.
 
-        :return: The union of URLs from both signals, or None if the network is
-                 not readable locally (invalid name, or a network on a remote
-                 neuro-san server), signalling the caller to fall back to all
-                 connections.
+        :return: The set of schema-declared URLs (possibly empty), or None if the
+                 network is not readable locally (invalid name, or a network on a
+                 remote neuro-san server), signalling the caller to fall back to
+                 all connections.
         """
         try:
             agent_network = AgentNetworkUtils().get_agent_network(agent_name)
@@ -520,50 +519,18 @@ class NsWebsocketUtils:
             logging.info("MCP auth: network '%s' not readable locally: %s", agent_name, e)
             return None
 
+        # Schema-declared URLs are the explicit auth contract.
         urls: set = set()
-
-        # 1) Schema-declared URLs (the explicit auth contract).
         cls._collect_schema_http_header_urls(config, urls)
-
-        # 2) URLs the tools actually reference, combined with the above.
-        cls._collect_tool_ref_urls(config.get("tools"), urls)
         return urls
-
-    @classmethod
-    def _collect_tool_ref_urls(cls, tools: Any, urls: set) -> None:
-        """
-        Add MCP server URLs referenced through a node's ``tools`` list.
-
-        Each entry in a ``tools`` list is either an agent-name string, an MCP
-        server URL string, or a dict MCP tool ``{"url": ...}`` that may itself
-        carry a nested ``tools`` list. We follow only the ``tools`` chain - never
-        sibling fields such as ``function`` or ``sly_data_schema`` (handled by
-        :meth:`_collect_schema_http_header_urls`) - so a schema's ``required``
-        entries or example URLs in descriptions are not mistaken for tool refs.
-
-        ``ExternalAgentParsing.is_mcp_tool`` is neuro-san's own classifier; it
-        distinguishes an MCP server URI from a neuro-san external-agent URL (both
-        are ``http(s)``), which a bare scheme check cannot.
-        """
-        if not isinstance(tools, list):
-            return
-        for entry in tools:
-            if isinstance(entry, str):
-                if ExternalAgentParsing.is_mcp_tool(entry):
-                    urls.add(entry)
-            elif isinstance(entry, dict):
-                url = entry.get("url")
-                if isinstance(url, str) and ExternalAgentParsing.is_mcp_tool(url):
-                    urls.add(url)
-                # A node or MCP tool entry can nest its own "tools" list.
-                cls._collect_tool_ref_urls(entry.get("tools"), urls)
 
     @classmethod
     def missing_mcp_connections(cls, agent_name: str) -> Optional[List[str]]:
         """
-        MCP URLs the network requires (schema + tool refs) that have no usable
-        stored connection yet - i.e. the servers the user still needs to connect
-        in the Connectors tab before this network can authenticate.
+        MCP URLs the network declares it needs auth for (in its ``sly_data_schema``)
+        that have no usable stored connection yet - i.e. the servers the user
+        still needs to connect in the Connectors tab before this network can
+        authenticate.
 
         Matching is normalized (trailing slash / host case / default port).
 

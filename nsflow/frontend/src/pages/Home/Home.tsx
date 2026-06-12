@@ -64,18 +64,6 @@ const HomeContent: React.FC = () => {
     }
   }, [selectedNetwork]);
 
-  // Soft reset to a clean home view (no network selected) without reloading the
-  // app, so the proxied WebSocket isn't torn down. Used by the MCP auth gate.
-  const handleGoHome = () => {
-    setSelectedNetwork("");
-    setActiveNetwork("");
-    const currentUrl = new URL(window.location.href);
-    if (currentUrl.searchParams.has("network")) {
-      currentUrl.searchParams.delete("network");
-      window.history.replaceState({}, "", currentUrl.toString());
-    }
-  };
-
   return (
     <ReactFlowProvider>
       <ApiPortProvider>
@@ -83,7 +71,7 @@ const HomeContent: React.FC = () => {
           {/* NeuroSanProvider is used to manage the host and port for the NeuroSan server */}
           <div className="h-screen w-screen bg-gray-900 flex flex-col">
             {/* Prompts to connect required MCP servers before chatting; no layout footprint. */}
-            <McpAuthGate onGoHome={handleGoHome} />
+            <McpAuthGate />
             <div className="h-14">
               <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
             </div>

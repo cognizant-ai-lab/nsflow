@@ -97,35 +97,16 @@ def _patch_network(monkeypatch, *, config=None, raise_exc=None, network_none=Fal
     monkeypatch.setattr(nw, "AgentNetworkUtils", fake_anu)
 
 
-def test_get_urls_dict_reference_tool(monkeypatch):
-    config = {"tools": [{"name": "front", "url": "https://api.example.com/mcp"}]}
-    _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {"https://api.example.com/mcp"}
-
-
-def test_get_urls_string_reference_tool(monkeypatch):
-    # A bare http(s) string in a tools list is an MCP server reference.
-    config = {"tools": [{"name": "front", "tools": ["https://api.example.com/mcp", "helper"]}]}
-    _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {"https://api.example.com/mcp"}
-
-
-def test_get_urls_ignores_agent_name_refs(monkeypatch):
-    # Non-URL tool references (agent names) are not collected.
-    config = {"tools": [{"name": "front", "tools": ["helper_a", "helper_b"]}]}
-    _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == set()
-
-
-def test_get_urls_multiple(monkeypatch):
+def test_get_urls_ignores_tool_refs_without_schema(monkeypatch):
+    # MCP servers a network merely references (dict `url` or a bare string in a
+    # `tools` list) but does NOT declare in its sly_data_schema need no auth, so
+    # they are not collected - only the schema is the auth contract.
     config = {"tools": [
-        {"name": "a", "url": "https://one.example.com/mcp"},
-        {"name": "b", "tools": ["https://two.example.com/mcp"]},
+        {"name": "a", "url": "https://no-auth.example.com/mcp"},
+        {"name": "b", "tools": ["https://also-no-auth.example.com/mcp", "helper"]},
     ]}
     _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {
-        "https://one.example.com/mcp", "https://two.example.com/mcp",
-    }
+    assert _utils().get_network_mcp_urls() == set()
 
 
 def _schema_tool(url):
@@ -153,14 +134,13 @@ def test_get_urls_from_sly_data_schema(monkeypatch):
     assert _utils().get_network_mcp_urls() == {"https://api.githubcopilot.com/mcp"}
 
 
-def test_get_urls_unions_schema_and_tool_refs(monkeypatch):
-    # Schema-declared URL + a separate tool url-reference are combined.
+def test_get_urls_only_from_schema_not_tool_refs(monkeypatch):
+    # Only the schema-declared URL is collected; a separate MCP url merely
+    # referenced by a tool (and absent from the schema) is not.
     schema = _schema_tool("https://api.githubcopilot.com/mcp")
     config = {"tools": [schema, {"name": "getter", "url": "https://other.example.com/mcp"}]}
     _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {
-        "https://api.githubcopilot.com/mcp", "https://other.example.com/mcp",
-    }
+    assert _utils().get_network_mcp_urls() == {"https://api.githubcopilot.com/mcp"}
 
 
 def test_get_urls_tolerates_partial_schema(monkeypatch):
@@ -183,23 +163,14 @@ def test_get_urls_schema_key_with_preserved_hocon_quotes(monkeypatch):
 
 
 def test_get_urls_ignores_schema_required_array(monkeypatch):
-    # Tool-ref discovery follows only the `tools` chain - it must NOT harvest URLs
-    # from sibling schema fields such as `required` (a JSON-schema constraint, not
-    # a tool reference). Only the property key is the declared URL here.
+    # Discovery collects the http_headers property keys, NOT URLs that only
+    # appear in a sibling JSON-schema `required` array.
     tool = _schema_tool("https://declared.example.com/mcp")
     tool["function"]["sly_data_schema"]["properties"]["http_headers"]["required"] = [
         "https://only-in-required.example.com/mcp",
     ]
     _patch_network(monkeypatch, config={"tools": [tool]})
     assert _utils().get_network_mcp_urls() == {"https://declared.example.com/mcp"}
-
-
-def test_get_urls_ignores_external_agent_url(monkeypatch):
-    # An http(s) tool ref that is a neuro-san external-agent URL (no "mcp" label)
-    # is not an MCP server and must not be collected.
-    config = {"tools": [{"name": "front", "tools": ["http://localhost:8080/api/v1/agent"]}]}
-    _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == set()
 
 
 def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
