@@ -189,12 +189,10 @@ def _patch_connections(monkeypatch, urls):
 
 
 def test_missing_mcp_connections_reports_unconnected(monkeypatch):
-    # github required via schema + a connected tool url; only github is missing.
-    config = {"tools": [
-        _schema_tool("https://api.githubcopilot.com/mcp"),
-        {"name": "x", "url": "https://connected.example.com/mcp"},
-    ]}
-    _patch_network(monkeypatch, config=config)
+    # One required MCP URL is connected and one is not; only the unconnected one is reported.
+    tool = _schema_tool("https://api.githubcopilot.com/mcp")
+    tool["function"]["sly_data_schema"]["properties"]["http_headers"]["properties"]["https://connected.example.com/mcp"] = {"type": "object"}
+    _patch_network(monkeypatch, config={"tools": [tool]})
     _patch_connections(monkeypatch, ["https://connected.example.com/mcp"])
     assert nw.NsWebsocketUtils.missing_mcp_connections("net") == ["https://api.githubcopilot.com/mcp"]
 
