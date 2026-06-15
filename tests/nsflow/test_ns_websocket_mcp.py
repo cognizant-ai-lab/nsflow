@@ -97,41 +97,117 @@ def _patch_network(monkeypatch, *, config=None, raise_exc=None, network_none=Fal
     monkeypatch.setattr(nw, "AgentNetworkUtils", fake_anu)
 
 
-def test_get_urls_dict_reference_tool(monkeypatch):
-    config = {"tools": [{"name": "front", "url": "https://api.example.com/mcp"}]}
-    _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {"https://api.example.com/mcp"}
-
-
-def test_get_urls_string_reference_tool(monkeypatch):
-    # A bare http(s) string in a tools list is an MCP server reference.
-    config = {"tools": [{"name": "front", "tools": ["https://api.example.com/mcp", "helper"]}]}
-    _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {"https://api.example.com/mcp"}
-
-
-def test_get_urls_ignores_agent_name_refs(monkeypatch):
-    # Non-URL tool references (agent names) are not collected.
-    config = {"tools": [{"name": "front", "tools": ["helper_a", "helper_b"]}]}
+def test_get_urls_ignores_tool_refs_without_schema(monkeypatch):
+    # MCP servers a network merely references (dict `url` or a bare string in a
+    # `tools` list) but does NOT declare in its sly_data_schema need no auth, so
+    # they are not collected - only the schema is the auth contract.
+    config = {"tools": [
+        {"name": "a", "url": "https://no-auth.example.com/mcp"},
+        {"name": "b", "tools": ["https://also-no-auth.example.com/mcp", "helper"]},
+    ]}
     _patch_network(monkeypatch, config=config)
     assert _utils().get_network_mcp_urls() == set()
 
 
-def test_get_urls_multiple(monkeypatch):
+def _schema_tool(url):
+    """A front-man tool declaring an http_headers sly_data_schema for `url`."""
+    return {
+        "name": "front",
+        "function": {
+            "sly_data_schema": {
+                "type": "object",
+                "properties": {
+                    "http_headers": {
+                        "type": "object",
+                        "properties": {url: {"type": "object"}},
+                    }
+                },
+            }
+        },
+    }
+
+
+def test_get_urls_from_sly_data_schema(monkeypatch):
+    # The schema's http_headers properties keys are collected as MCP URLs.
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    assert _utils().get_network_mcp_urls() == {"https://api.githubcopilot.com/mcp"}
+
+
+def test_get_urls_only_from_schema_not_tool_refs(monkeypatch):
+    # Only the schema-declared URL is collected; a separate MCP url merely
+    # referenced by a tool (and absent from the schema) is not.
+    schema = _schema_tool("https://api.githubcopilot.com/mcp")
+    config = {"tools": [schema, {"name": "getter", "url": "https://other.example.com/mcp"}]}
+    _patch_network(monkeypatch, config=config)
+    assert _utils().get_network_mcp_urls() == {"https://api.githubcopilot.com/mcp"}
+
+
+def test_get_urls_tolerates_partial_schema(monkeypatch):
+    # A malformed/partial sly_data_schema is skipped, not raised on.
     config = {"tools": [
-        {"name": "a", "url": "https://one.example.com/mcp"},
-        {"name": "b", "tools": ["https://two.example.com/mcp"]},
+        {"name": "a", "function": {"sly_data_schema": "not-a-dict"}},
+        {"name": "b", "function": {"sly_data_schema": {"properties": {"http_headers": 5}}}},
+        {"name": "c", "function": {}},
     ]}
     _patch_network(monkeypatch, config=config)
-    assert _utils().get_network_mcp_urls() == {
-        "https://one.example.com/mcp", "https://two.example.com/mcp",
-    }
+    assert _utils().get_network_mcp_urls() == set()
+
+
+def test_get_urls_schema_key_with_preserved_hocon_quotes(monkeypatch):
+    # neuro-san's HOCON restorer preserves the surrounding quotes a URL key must
+    # carry, so the parsed key is '"https://.../mcp"'. It must still be collected.
+    config = {"tools": [_schema_tool('"https://api.githubcopilot.com/mcp"')]}
+    _patch_network(monkeypatch, config=config)
+    assert _utils().get_network_mcp_urls() == {"https://api.githubcopilot.com/mcp"}
+
+
+def test_get_urls_ignores_schema_required_array(monkeypatch):
+    # Discovery collects the http_headers property keys, NOT URLs that only
+    # appear in a sibling JSON-schema `required` array.
+    tool = _schema_tool("https://declared.example.com/mcp")
+    tool["function"]["sly_data_schema"]["properties"]["http_headers"]["required"] = [
+        "https://only-in-required.example.com/mcp",
+    ]
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    assert _utils().get_network_mcp_urls() == {"https://declared.example.com/mcp"}
 
 
 def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
     # get_agent_network raising (invalid/remote/unreadable) -> None (caller fallback).
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("not local"))
     assert _utils().get_network_mcp_urls() is None
+
+
+# --------------------------- missing_mcp_connections --------------------------- #
+
+def _patch_connections(monkeypatch, urls):
+    monkeypatch.setattr(
+        nw.FileTokenStorage, "list_connections",
+        MagicMock(return_value=[{"server_url": u} for u in urls]),
+    )
+
+
+def test_missing_mcp_connections_reports_unconnected(monkeypatch):
+    # One required MCP URL is connected and one is not; only the unconnected one is reported.
+    tool = _schema_tool("https://api.githubcopilot.com/mcp")
+    tool["function"]["sly_data_schema"]["properties"]["http_headers"]["properties"]["https://connected.example.com/mcp"] = {"type": "object"}
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    _patch_connections(monkeypatch, ["https://connected.example.com/mcp"])
+    assert nw.NsWebsocketUtils.missing_mcp_connections("net") == ["https://api.githubcopilot.com/mcp"]
+
+
+def test_missing_mcp_connections_matches_normalized(monkeypatch):
+    # A connection stored with a trailing slash still satisfies the requirement.
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    _patch_connections(monkeypatch, ["https://api.githubcopilot.com/mcp/"])
+    assert nw.NsWebsocketUtils.missing_mcp_connections("net") == []
+
+
+def test_missing_mcp_connections_none_when_network_unreadable(monkeypatch):
+    _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))
+    assert nw.NsWebsocketUtils.missing_mcp_connections("net") is None
 
 
 def test_get_urls_network_none_returns_none(monkeypatch):

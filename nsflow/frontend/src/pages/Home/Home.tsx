@@ -22,6 +22,7 @@ import AgentFlow from "../../components/AgentFlow";
 import Sidebar from "../../components/Sidebar";
 // import ChatPanel from "./components/ChatPanel";
 import TabbedChatPanel from "../../components/TabbedChatPanel";
+import McpAuthGate from "../../components/mcp/McpAuthGate";
 import LogsPanel from "../../components/LogsPanel";
 import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
@@ -69,6 +70,8 @@ const HomeContent: React.FC = () => {
         <NeuroSanProvider>
           {/* NeuroSanProvider is used to manage the host and port for the NeuroSan server */}
           <div className="h-screen w-screen bg-gray-900 flex flex-col">
+            {/* Prompts to connect required MCP servers before chatting; no layout footprint. */}
+            <McpAuthGate />
             <div className="h-14">
               <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
             </div>
