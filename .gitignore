@@ -27,6 +27,7 @@ draft_states/
 mcp/
 skills/
 middleware/
+config/
 
 # The unanchored "mcp/" rule above matches any directory named "mcp" at any
 # depth. Re-include the MCP OAuth source directories, which are real source code.
