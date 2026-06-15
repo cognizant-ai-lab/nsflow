@@ -250,3 +250,25 @@ async def delete_connection(server_url: str = Query(...)):
     removed = await FileTokenStorage.remove(normalized)
     # Echo back the normalized value actually used for deletion, not the raw query.
     return JSONResponse(content={"removed": removed, "server_url": normalized})
+
+
+@router.get("/required/{network_name:path}")
+async def required_mcp_connections(network_name: str):
+    """
+    Report the MCP server URLs a network declares it needs auth headers for (via its
+    ``sly_data_schema`` http_headers properties) that the user has not yet connected.
+    The frontend uses this to prompt the user to authenticate in the Connectors tab
+    before chatting with a network that needs MCP auth.
+    """
+    # Imported here to avoid pulling the (heavy) websocket utils at module import.
+    from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
+
+    name = network_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="network_name is required.")
+    # Network parse + token-store read are synchronous; offload off the loop.
+    missing = await asyncio.to_thread(NsWebsocketUtils.missing_mcp_connections, name)
+    # missing is None when the network HOCON is not locally readable (e.g. a
+    # remote network); we can't determine requirements, so report none missing
+    # rather than blocking the user.
+    return JSONResponse(content={"network": name, "missing": missing or []})

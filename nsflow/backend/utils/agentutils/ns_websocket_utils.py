@@ -20,7 +20,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -257,11 +257,12 @@ class NsWebsocketUtils:
         Merge OAuth Bearer tokens for connected MCP servers into sly_data's
         ``http_headers`` so the agent network can authenticate to them.
 
-        Only servers this network actually references are injected (so a token is
-        never broadcast to an unrelated network). If the network's HOCON cannot be
-        read locally (e.g. it lives on a remote neuro-san server), we fall back to
-        injecting every connected server. Any header the user already supplied for
-        a given URL is left untouched.
+        Only servers this network declares it needs auth for (in its
+        ``sly_data_schema``) are injected, so a token is never broadcast to an
+        unrelated network or to an MCP server that needs no auth. If the network's
+        HOCON cannot be read locally (e.g. it lives on a remote neuro-san server),
+        we fall back to injecting every connected server. Any header the user
+        already supplied for a given URL is left untouched.
 
         :param sly_data: The sly_data dict to enrich in place.
         """
@@ -278,11 +279,11 @@ class NsWebsocketUtils:
             referenced = await asyncio.to_thread(self.get_network_mcp_urls)
             # Build (header_key, token_url) pairs. URLs are matched on a normalized
             # form so cosmetic differences (trailing slash, host case, default
-            # port) between the stored connection URL and the network's tool URL
-            # don't block injection. But each original string is kept for its real
-            # job: header_key is the URL the network references (what neuro-san's
-            # MCP adapter looks the header up by), and token_url is the stored
-            # connection URL (the key the token store is keyed on).
+            # port) between the stored connection URL and the network's declared
+            # URL don't block injection. But each original string is kept for its
+            # real job: header_key is the URL the network declares in its schema
+            # (what neuro-san's MCP adapter looks the header up by), and token_url
+            # is the stored connection URL (the key the token store is keyed on).
             if referenced is None:
                 # HOCON not locally readable: inject every connection, keyed by
                 # its own URL (we have no network-side form to match against).
@@ -480,53 +481,104 @@ class NsWebsocketUtils:
         return urlunsplit((scheme, netloc, path, parts.query, ""))
 
     def get_network_mcp_urls(self):
+        """Instance convenience for this connection's network. See
+        :meth:`collect_network_mcp_urls`."""
+        return self.collect_network_mcp_urls(self.agent_name)
+
+    @classmethod
+    def collect_network_mcp_urls(cls, agent_name: str):
         """
-        Collect the MCP server URLs referenced by this network's tools.
+        Collect the MCP server URLs a network expects auth headers for.
+
+        These come solely from the network's declared ``sly_data_schema`` - the
+        MCP URLs listed under
+        ``tools[].function.sly_data_schema.properties.http_headers.properties``.
+        This is the explicit contract: a network that requires authenticated MCP
+        access advertises exactly which URLs need ``http_headers`` (see neuro-san
+        ``mcp_github.hocon``). We deliberately do NOT also harvest every MCP URL
+        the tools reference, because a network may call MCP servers that need no
+        auth at all - those must not be flagged as a missing connection nor have
+        a token injected for them.
 
         Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
-        same restore path the rest of the app uses - rather than parsing the
-        HOCON directly. That returns a plain, fully-resolved config dict (its
-        commondefs/defaults filter chain has run, so a ``url`` defined via a
-        commondef is already substituted) and transparently handles missing or
-        remote networks by raising.
+        same restore path the rest of the app uses - so the config is plain and
+        fully resolved (commondefs/defaults applied), and missing/remote networks
+        raise.
 
-        :return: A set of URLs, or None if the network is not readable locally
-                 (e.g. an invalid name or a network that lives on a remote
-                 neuro-san server), signalling the caller to fall back to all
-                 connections.
+        :return: The set of schema-declared URLs (possibly empty), or None if the
+                 network is not readable locally (invalid name, or a network on a
+                 remote neuro-san server), signalling the caller to fall back to
+                 all connections.
         """
         try:
-            agent_network = AgentNetworkUtils().get_agent_network(self.agent_name)
+            agent_network = AgentNetworkUtils().get_agent_network(agent_name)
             if agent_network is None:
                 return None
             config = agent_network.get_config()
         except Exception as e:  # noqa: BLE001 - invalid/remote/unreadable network
-            logging.info("MCP auth: network '%s' not readable locally: %s", self.agent_name, e)
+            logging.info("MCP auth: network '%s' not readable locally: %s", agent_name, e)
             return None
 
+        # Schema-declared URLs are the explicit auth contract.
         urls: set = set()
-
-        def _walk(node):
-            if isinstance(node, dict):
-                # Dictionary-reference MCP tool: {"url": "https://.../mcp", ...}.
-                url = node.get("url", None)
-                if isinstance(url, str) and url:
-                    urls.add(url)
-                for value in node.values():
-                    _walk(value)
-            elif isinstance(node, list):
-                for item in node:
-                    _walk(item)
-            elif isinstance(node, str):
-                # String-reference MCP tool: "tools": ["https://.../mcp"].
-                # Bare http(s) references are MCP server URLs (agent-name refs are
-                # not URLs). Safe even if a stray URL appears elsewhere, since the
-                # caller only injects for URLs that match a connected server.
-                if node.startswith(("http://", "https://")):
-                    urls.add(node)
-
-        _walk(config.get("tools", []))
+        cls._collect_schema_http_header_urls(config, urls)
         return urls
+
+    @classmethod
+    def missing_mcp_connections(cls, agent_name: str) -> Optional[List[str]]:
+        """
+        MCP URLs the network declares it needs auth for (in its ``sly_data_schema``)
+        that have no usable stored connection yet - i.e. the servers the user
+        still needs to connect in the Connectors tab before this network can
+        authenticate.
+
+        Matching is normalized (trailing slash / host case / default port).
+
+        :return: A sorted list of unconnected required URLs (possibly empty), or
+                 None if the network is not locally readable (we can't determine
+                 requirements, so the caller should not block on it).
+        """
+        required = cls.collect_network_mcp_urls(agent_name)
+        if required is None:
+            return None
+        connections = FileTokenStorage.list_connections()
+        connected = {cls._normalize_mcp_url(conn["server_url"]) for conn in connections}
+        return sorted(url for url in required if cls._normalize_mcp_url(url) not in connected)
+
+    @staticmethod
+    def _collect_schema_http_header_urls(config: Any, urls: set) -> None:
+        """
+        Add MCP URLs declared in any tool's ``sly_data_schema`` to ``urls``.
+
+        Reads ``tools[].function.sly_data_schema.properties.http_headers.properties``
+        - each key there is an MCP URL the network advertises it needs an
+        ``http_headers`` entry for. Every level is type-guarded so a partial or
+        unconventional schema is simply skipped rather than raising.
+
+        A URL key must be quoted in HOCON (it contains ``:`` and ``/``), and
+        neuro-san's restorer preserves those surrounding quotes in the parsed
+        key (e.g. ``'"https://api.githubcopilot.com/mcp"'``), so each key is
+        unquoted before the ``http(s)`` check.
+        """
+        tools = config.get("tools") if isinstance(config, dict) else None
+        if not isinstance(tools, list):
+            return
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            function = tool.get("function")
+            schema = function.get("sly_data_schema") if isinstance(function, dict) else None
+            props = schema.get("properties") if isinstance(schema, dict) else None
+            http_headers = props.get("http_headers") if isinstance(props, dict) else None
+            header_props = http_headers.get("properties") if isinstance(http_headers, dict) else None
+            if not isinstance(header_props, dict):
+                continue
+            for url in header_props:
+                if not isinstance(url, str):
+                    continue
+                url = url.strip().strip('"').strip("'").strip()
+                if url.startswith(("http://", "https://")):
+                    urls.add(url)
 
     @classmethod
     def get_latest_sly_data(cls, network_name: str, session_id: str = None) -> dict:
