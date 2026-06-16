@@ -375,6 +375,11 @@ const McpConnectorsPanel: React.FC = () => {
   // (which handleConnect reads) and clears any leftover credentials/state so the
   // shared OAuth machinery runs a clean DCR flow.
   const openKnownConnect = (server: KnownMcpServer) => {
+    // Don't switch servers mid-flow: a previous attempt may still have a popup
+    // open / poll running, and resetting state without cancelling it lets a late
+    // poll or postMessage close or error the newly opened dialog. (Today the
+    // modal backdrop already blocks this; the guard protects the invariant.)
+    if (busy || awaitingAuth || pendingServerRef.current) return;
     setError(null);
     setBusy(false);
     setAwaitingAuth(false);
@@ -400,6 +405,9 @@ const McpConnectorsPanel: React.FC = () => {
   // openKnownConnect, but the user will supply a Client ID / Secret which
   // handleConnect passes to /start.
   const openPreRegConnect = (server: KnownMcpServer) => {
+    // Same mid-flow guard as openKnownConnect: never reset state on top of an
+    // in-flight attempt, or its late poll/postMessage can corrupt this dialog.
+    if (busy || awaitingAuth || pendingServerRef.current) return;
     setError(null);
     setBusy(false);
     setAwaitingAuth(false);
