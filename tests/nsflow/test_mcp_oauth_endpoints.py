@@ -23,7 +23,7 @@ files are involved.
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
@@ -286,3 +286,28 @@ def test_redirect_uri(monkeypatch):
     response = client.get("/api/v1/mcp/oauth/redirect_uri")
     assert response.status_code == 200
     assert response.json()["redirect_uri"] == uri
+
+
+# --------------------- _normalize_authorization_url --------------------- #
+
+def test_normalize_auth_url_fixes_double_question_mark():
+    """An authorization_endpoint that already had a query (e.g. Microsoft's
+    ?prompt=select_account) must not produce a second '?'; later '?' -> '&'."""
+    from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
+    bad = (
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+        "?prompt=select_account?response_type=code&client_id=abc&state=xyz"
+    )
+    fixed = MCPOAuthManager._normalize_authorization_url(bad)
+    assert fixed.count("?") == 1
+    q = parse_qs(urlparse(fixed).query)
+    assert q["prompt"] == ["select_account"]
+    assert q["response_type"] == ["code"]
+    assert q["state"] == ["xyz"]
+
+
+def test_normalize_auth_url_leaves_normal_url_untouched():
+    """A normal authorization URL (single query separator) is returned as-is."""
+    from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
+    normal = "https://idp.example.com/authorize?response_type=code&client_id=abc&state=xyz"
+    assert MCPOAuthManager._normalize_authorization_url(normal) == normal
