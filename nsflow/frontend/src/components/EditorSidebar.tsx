@@ -23,7 +23,7 @@ import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
-import { getFeatureFlags } from "../utils/config";
+import { getFeatureFlags, toServedNetworkPath } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
 
 
@@ -296,7 +296,13 @@ const EditorSidebar = ({
       ];
       designPlaceholderRef.current = placeholders[Math.floor(Math.random() * placeholders.length)];
     }
-    const nameFromPayload = payload.agent_network_name || lastSeenNameRef.current || designPlaceholderRef.current!;
+    // For a real generated-network name, show the path it is actually served under
+    // (e.g. "generated/foo") so the sidebar, the "Editing:" card, and the launch URL all
+    // agree and match /api/v1/list. The placeholder and the last-seen fallback are left
+    // untouched (the placeholder must never be prefixed).
+    const nameFromPayload = payload.agent_network_name
+      ? toServedNetworkPath(payload.agent_network_name)
+      : (lastSeenNameRef.current || designPlaceholderRef.current!);
 
     // Ensure dropdown has exactly one option (view-only)
     const singleOption: NetworkOption = {
