@@ -42,6 +42,13 @@ export default defineConfig(() => {
     build: {
       outDir: "dist",
       assetsDir: "assets",
+      // Vite's default build target is [es2020, edge88, firefox78, chrome87, safari14].
+      // esbuild >= 0.28 has a regression where it tries to transform destructuring for
+      // safari14 (and then errors, since that transform isn't implemented), which breaks
+      // the build. Only the safari14 floor trips it; the rest of the default list is fine.
+      // We bump just the Safari floor to safari16 and keep every other default target, so
+      // browser support is unchanged except for dropping Safari 14/15 (Safari 16: 2022).
+      target: ["es2020", "edge88", "firefox78", "chrome87", "safari16"],
       rollupOptions: {
         output: {
           entryFileNames: "assets/index.js",
