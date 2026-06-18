@@ -16,7 +16,7 @@ limitations under the License.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Box, IconButton, List, ListItem, ListItemText, Paper, Tooltip, Typography, alpha, Button, Chip,
+  Avatar, Box, IconButton, List, ListItem, ListItemText, Paper, Tooltip, Typography, alpha, Button, Chip,
 } from '@mui/material';
 import {
   Hub as HubIcon, Add as AddIcon, Delete as DeleteIcon, Refresh as RefreshIcon,
@@ -25,6 +25,9 @@ import {
 import { useTheme } from '../../context/ThemeContext';
 import { useApiPort } from '../../context/ApiPortContext';
 import { AddMcpServerDialog } from './AddMcpServerDialog';
+import { ConnectKnownServerDialog } from './ConnectKnownServerDialog';
+import { ConnectPreRegisteredServerDialog } from './ConnectPreRegisteredServerDialog';
+import { KNOWN_MCP_SERVERS, KnownMcpServer } from './knownMcpServers';
 
 interface McpConnection {
   server_url: string;
@@ -53,6 +56,10 @@ const McpConnectorsPanel: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [awaitingAuth, setAwaitingAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The known DCR server being connected via the one-click dialog (null = closed).
+  const [knownServer, setKnownServer] = useState<KnownMcpServer | null>(null);
+  // The known pre-registered server being connected via the credentials dialog (null = closed).
+  const [preRegServer, setPreRegServer] = useState<KnownMcpServer | null>(null);
 
   const popupRef = useRef<Window | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,6 +106,8 @@ const McpConnectorsPanel: React.FC = () => {
     setBusy(false);
     setAwaitingAuth(false);
     setDialogOpen(false);
+    setKnownServer(null);
+    setPreRegServer(null);
     setServerUrl('');
     setClientId('');
     setClientSecret('');
@@ -362,6 +371,115 @@ const McpConnectorsPanel: React.FC = () => {
     }
   }, [apiUrl, isReady, refreshConnections]);
 
+  // Open the one-click connect dialog for a known DCR server. Seeds serverUrl
+  // (which handleConnect reads) and clears any leftover credentials/state so the
+  // shared OAuth machinery runs a clean DCR flow.
+  const openKnownConnect = (server: KnownMcpServer) => {
+    // Don't switch servers mid-flow: a previous attempt may still have a popup
+    // open / poll running, and resetting state without cancelling it lets a late
+    // poll or postMessage close or error the newly opened dialog. (Today the
+    // modal backdrop already blocks this; the guard protects the invariant.)
+    if (busy || awaitingAuth || pendingServerRef.current) return;
+    setError(null);
+    setBusy(false);
+    setAwaitingAuth(false);
+    setClientId('');
+    setClientSecret('');
+    setServerUrl(server.url);
+    setKnownServer(server);
+  };
+
+  const closeKnownConnect = () => {
+    if (busy) return;
+    clearPolling();
+    // Drop any in-progress attempt and close an orphaned popup, mirroring closeDialog.
+    pendingServerRef.current = null;
+    setAwaitingAuth(false);
+    if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+    popupRef.current = null;
+    setKnownServer(null);
+    setError(null);
+  };
+
+  // Open the credentials dialog for a known server without DCR. Like
+  // openKnownConnect, but the user will supply a Client ID / Secret which
+  // handleConnect passes to /start.
+  const openPreRegConnect = (server: KnownMcpServer) => {
+    // Same mid-flow guard as openKnownConnect: never reset state on top of an
+    // in-flight attempt, or its late poll/postMessage can corrupt this dialog.
+    if (busy || awaitingAuth || pendingServerRef.current) return;
+    setError(null);
+    setBusy(false);
+    setAwaitingAuth(false);
+    setClientId('');
+    setClientSecret('');
+    setServerUrl(server.url);
+    setPreRegServer(server);
+  };
+
+  const closePreRegConnect = () => {
+    if (busy) return;
+    clearPolling();
+    pendingServerRef.current = null;
+    setAwaitingAuth(false);
+    if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+    popupRef.current = null;
+    setPreRegServer(null);
+    setError(null);
+  };
+
+  // Known servers the user hasn't connected yet (matched on a normalized URL so
+  // a trailing slash / host case difference doesn't show an already-connected
+  // server as still suggested), split by connection method.
+  const normalizeUrl = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
+  const connectedUrls = new Set(connections.map((c) => normalizeUrl(c.server_url)));
+  const unconnected = KNOWN_MCP_SERVERS.filter((s) => !connectedUrls.has(normalizeUrl(s.url)));
+  const dcrSuggestions = unconnected.filter((s) => s.auth !== 'pre_registered');
+  const preRegSuggestions = unconnected.filter((s) => s.auth === 'pre_registered');
+  // Look up a known server (for its icon) by a connection's normalized URL.
+  const knownByUrl = new Map(KNOWN_MCP_SERVERS.map((s) => [normalizeUrl(s.url), s]));
+
+  // A titled row of clickable connector tiles; `onPick` opens the right dialog.
+  const renderSuggestionGroup = (title: string, servers: KnownMcpServer[], onPick: (s: KnownMcpServer) => void) => {
+    if (servers.length === 0) return null;
+    return (
+      <Box sx={{ p: 1.5, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
+        <Typography variant="caption" sx={{ display: 'block', mb: 1, color: theme.palette.text.secondary }}>
+          {title}
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          {servers.map((s) => (
+            <Tooltip key={s.id} title={`Connect ${s.name} — ${s.url}`}>
+              <Box
+                role="button"
+                tabIndex={0}
+                aria-label={`Connect ${s.name}`}
+                onClick={() => onPick(s)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(s); }
+                }}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, cursor: 'pointer',
+                  border: `1px solid ${theme.palette.divider}`, borderRadius: 1,
+                  backgroundColor: theme.palette.background.default,
+                  '&:hover': { borderColor: theme.palette.primary.main, backgroundColor: alpha(theme.palette.primary.main, 0.06) },
+                }}
+              >
+                <Avatar
+                  src={s.iconUrl}
+                  sx={{ width: 22, height: 22, fontSize: '0.7rem', p: '2px', bgcolor: '#fff', color: theme.palette.primary.main, '& img': { objectFit: 'contain' } }}
+                >
+                  {s.name.charAt(0)}
+                </Avatar>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.text.primary }}>{s.name}</Typography>
+              </Box>
+            </Tooltip>
+          ))}
+        </Box>
+      </Box>
+    );
+  };
+
   return (
     <Paper
       elevation={1}
@@ -374,7 +492,7 @@ const McpConnectorsPanel: React.FC = () => {
       <Box sx={{ p: 1.5, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <HubIcon sx={{ color: theme.palette.primary.main, fontSize: '1.25rem' }} />
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>MCP Connectors</Typography>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>MCP Connectors</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Tooltip title="Refresh">
@@ -398,6 +516,11 @@ const McpConnectorsPanel: React.FC = () => {
         </Box>
       </Box>
 
+      {/* DCR servers connect in one click; pre-registered servers need the user
+          to supply a Client ID / Secret from an OAuth app they register. */}
+      {renderSuggestionGroup('Quick Connect', dcrSuggestions, openKnownConnect)}
+      {renderSuggestionGroup('Client ID/Secret', preRegSuggestions, openPreRegConnect)}
+
       {/* Connections list */}
       <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1 }}>
         {connections.length === 0 ? (
@@ -411,7 +534,9 @@ const McpConnectorsPanel: React.FC = () => {
           </Box>
         ) : (
           <List dense>
-            {connections.map((conn) => (
+            {connections.map((conn) => {
+              const known = knownByUrl.get(normalizeUrl(conn.server_url));
+              return (
               <ListItem
                 key={conn.server_url}
                 sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 1, backgroundColor: theme.palette.background.default }}
@@ -429,7 +554,18 @@ const McpConnectorsPanel: React.FC = () => {
                   </Tooltip>
                 }
               >
-                <CheckCircleIcon sx={{ color: theme.palette.success.main, fontSize: '1.1rem', mr: 1 }} />
+                {known ? (
+                  <Tooltip title="Connected">
+                    <Avatar
+                      src={known.iconUrl}
+                      sx={{ width: 22, height: 22, mr: 1, fontSize: '0.7rem', p: '2px', bgcolor: '#fff', color: theme.palette.primary.main, '& img': { objectFit: 'contain' } }}
+                    >
+                      {known.name.charAt(0)}
+                    </Avatar>
+                  </Tooltip>
+                ) : (
+                  <CheckCircleIcon sx={{ color: theme.palette.success.main, fontSize: '1.1rem', mr: 1 }} />
+                )}
                 <ListItemText
                   primary={conn.server_url}
                   primaryTypographyProps={{ sx: { wordBreak: 'break-all', fontSize: '0.85rem' } }}
@@ -443,7 +579,8 @@ const McpConnectorsPanel: React.FC = () => {
                   }
                 />
               </ListItem>
-            ))}
+              );
+            })}
           </List>
         )}
       </Box>
@@ -459,6 +596,29 @@ const McpConnectorsPanel: React.FC = () => {
         redirectUri={redirectUri}
         onConnect={handleConnect}
         onCancel={closeDialog}
+        busy={busy}
+        awaitingAuth={awaitingAuth}
+        error={error}
+      />
+
+      <ConnectKnownServerDialog
+        server={knownServer}
+        onConnect={handleConnect}
+        onCancel={closeKnownConnect}
+        busy={busy}
+        awaitingAuth={awaitingAuth}
+        error={error}
+      />
+
+      <ConnectPreRegisteredServerDialog
+        server={preRegServer}
+        redirectUri={redirectUri}
+        clientId={clientId}
+        onClientIdChange={setClientId}
+        clientSecret={clientSecret}
+        onClientSecretChange={setClientSecret}
+        onConnect={handleConnect}
+        onCancel={closePreRegConnect}
         busy={busy}
         awaitingAuth={awaitingAuth}
         error={error}

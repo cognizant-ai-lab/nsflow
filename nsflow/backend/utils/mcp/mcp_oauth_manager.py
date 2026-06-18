@@ -384,8 +384,28 @@ class MCPOAuthManager:
         _collect(exc)
         return " | ".join(parts) if parts else f"{type(exc).__name__}"
 
+    @staticmethod
+    def _normalize_authorization_url(url: str) -> str:
+        """
+        Repair an authorization URL that ended up with two query separators.
+
+        When a server's discovered ``authorization_endpoint`` already carries a
+        query (e.g. Microsoft's ``.../authorize?prompt=select_account``), the MCP
+        SDK appends its own OAuth params with another ``?``, producing an invalid
+        URL with two ``?`` (``...?prompt=select_account?response_type=code&...``)
+        that the IdP rejects. RFC 6749 §3.1 allows a query on the endpoint and
+        requires clients to append with ``&``. Keep the first ``?`` as the
+        separator and turn any later *literal* ``?`` in the query into ``&``
+        (encoded ``%3F`` values are untouched).
+        """
+        head, sep, tail = url.partition("?")
+        if not sep:
+            return url
+        return f"{head}?{tail.replace('?', '&')}"
+
     def _make_redirect_handler(self, flow: PendingFlow):
         async def redirect_handler(authorization_url: str) -> None:
+            authorization_url = self._normalize_authorization_url(authorization_url)
             flow.authorization_url = authorization_url
             params = parse_qs(urlparse(authorization_url).query)
             state_values = params.get("state")
