@@ -55,3 +55,8 @@ TopicMemory.json
 # keep the dist for prebuilt_frontend
 !nsflow/prebuilt_frontend/dist/
 !nsflow/prebuilt_frontend/dist/**
+
+# local tooling and dev artifacts
+uv.lock
+.claude/
+docs/observability-plugin-proposal.md
