@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import AgentFlow from "../../components/AgentFlow";
@@ -39,8 +39,6 @@ const HomeContent: React.FC = () => {
   const { setActiveNetwork } = useChatContext();
   const { pluginZenMode } = getFeatureFlags();
   const { isZenMode } = useZenMode();
-  const [agentFlowKey, setAgentFlowKey] = useState(0);
-  const prevZenModeRef = useRef(isZenMode);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", getInitialTheme());
@@ -55,14 +53,6 @@ const HomeContent: React.FC = () => {
       setActiveNetwork(networkParam);
     }
   }, [setActiveNetwork]);
-
-  // Force AgentFlow to re-render when exiting Zen Mode to load cached positions
-  useEffect(() => {
-    if (prevZenModeRef.current === true && isZenMode === false) {
-      setAgentFlowKey(prev => prev + 1);
-    }
-    prevZenModeRef.current = isZenMode;
-  }, [isZenMode]);
 
   // Update URL when selectedNetwork changes (user selects from sidebar)
   useEffect(() => {
@@ -110,7 +100,7 @@ const HomeContent: React.FC = () => {
                   <PanelGroup direction="vertical">
                     <Panel defaultSize={66} minSize={50} maxSize={85}>
                       {/* AgentFlow */}
-                      <AgentFlow key={agentFlowKey} selectedNetwork={selectedNetwork} />
+                      <AgentFlow selectedNetwork={selectedNetwork} />
                     </Panel>
                     <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
 

@@ -29,6 +29,10 @@ import {
   FormControlLabel,
   Chip,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -39,6 +43,8 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   AttachFile as AttachFileIcon,
+  Close as CloseIcon,
+  InsertDriveFile as FileIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatControls } from "../hooks/useChatControls";
@@ -47,11 +53,7 @@ import { getFeatureFlags } from "../utils/config";
 import { useTheme } from "../context/ThemeContext";
 
 import ScrollableMessageContainer from "./ScrollableMessageContainer";
-import AttachmentsPreview from "./AttachmentsPreview";
-import FileViewerDialog, { type ViewableFile } from "./FileViewerDialog";
-import { useSampleQueries } from "../hooks/useSampleQueries";
-import { useFileAttachments } from "../hooks/useFileAttachments";
-import { convertToMp3 } from "../utils/audioUtils";
+import { Mp3Encoder } from "@breezystack/lamejs";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
@@ -82,22 +84,22 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const [newMessage, setNewMessage] = useState("");
   const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sampleQueries, setSampleQueries] = useState<string[]>([]);
   const [sampleQueriesExpanded, setSampleQueriesExpanded] = useState(true);
 
-  // Use the shared hook for sample queries — preserves targetNetwork (Editor) || activeNetwork (Home) logic
-  const sampleQueries = useSampleQueries(targetNetwork || activeNetwork);
-
-  // File attachments — state, picker, PDF processing all live in the shared hook.
-  const {
-    attachedFiles,
-    fileInputRef,
-    openPicker: handleFileAttach,
-    handleFileSelected,
-    removeAttachedFile,
-    clearAttachments,
-    prepareForSend: prepareAttachmentsForSend,
-  } = useFileAttachments(apiUrl);
-  const [viewingFile, setViewingFile] = useState<ViewableFile | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<{ 
+    file: File; 
+    content: string; 
+    isPdf: boolean;
+    previewUrl?: string; // Blob URL for PDF preview
+  }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [viewingFile, setViewingFile] = useState<{ 
+    file: File; 
+    content: string; 
+    isPdf?: boolean;
+    previewUrl?: string;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<ImperativePanelHandle>(null);
@@ -172,9 +174,50 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     };
   }, [waitingForAgent, chatWs]);
 
-  // Blob-URL cleanup is handled inside useFileAttachments on unmount.
+  // Cleanup blob URLs only when component unmounts (not on every file change)
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount only
+      attachedFiles.forEach(af => {
+        if (af.previewUrl) {
+          URL.revokeObjectURL(af.previewUrl);
+        }
+      });
+    };
+  }, []);
 
-  // Sample queries are now provided by useSampleQueries hook above.
+  // Fetch connectivity info and extract sample queries when network changes
+  // Use targetNetwork (Editor page) or activeNetwork (Home page)
+  useEffect(() => {
+    const fetchSampleQueries = async () => {
+      const network = targetNetwork || activeNetwork;
+      if (!network || !apiUrl) {
+        setSampleQueries([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/connectivity/${network}`);
+        if (!response.ok) {
+          console.error("Failed to fetch connectivity info:", response.statusText);
+          setSampleQueries(["What all can you help us with?"]);
+          return;
+        }
+
+        const data = await response.json();
+        const queries = data?.metadata?.sample_queries || [];
+
+        // Always append the default query
+        const allQueries = [...queries, "What all can you help us with?"];
+        setSampleQueries(allQueries);
+      } catch (error) {
+        console.error("Error fetching sample queries:", error);
+        setSampleQueries(["What all can you help us with?"]);
+      }
+    };
+
+    fetchSampleQueries();
+  }, [targetNetwork, activeNetwork, apiUrl]);
 
   // Load persisted toggle when network changes (or first mount) — skip in editor mode
   useEffect(() => {
@@ -255,9 +298,60 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     return {};
   }, [isEditorMode, slyDataMessages, useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
 
-  // File-picker logic + chip remove + blob-URL cleanup are all provided by useFileAttachments above.
-  const openFileViewer = (fileData: ViewableFile) => setViewingFile(fileData);
-  const closeFileViewer = () => setViewingFile(null);
+  const handleFileAttach = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      try {
+        const isPdf = file.name.toLowerCase().endsWith(".pdf");
+        
+        if (isPdf) {
+          // For PDFs, create a blob URL for preview (no text content needed)
+          const previewUrl = URL.createObjectURL(file);
+          setAttachedFiles((prev) => [...prev, { 
+            file, 
+            content: "", // Empty content since we'll show PDF preview
+            isPdf: true,
+            previewUrl 
+          }]);
+        } else {
+          // For text files (.txt, .md), read the content
+          const text = await file.text();
+          setAttachedFiles((prev) => [...prev, { 
+            file, 
+            content: text, 
+            isPdf: false 
+          }]);
+        }
+      } catch (err) {
+        console.error(`Failed to read file ${file.name}:`, err);
+      }
+    }
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removeAttachedFile = (index: number) => {
+    // Revoke blob URL before removing
+    const fileToRemove = attachedFiles[index];
+    if (fileToRemove?.previewUrl) {
+      URL.revokeObjectURL(fileToRemove.previewUrl);
+    }
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const openFileViewer = (fileData: { file: File; content: string; isPdf?: boolean; previewUrl?: string }) => {
+    setViewingFile(fileData);
+  };
+
+  const closeFileViewer = () => {
+    setViewingFile(null);
+  };
 
   const sendMessage = () => {
     if (!newMessage.trim() && attachedFiles.length === 0) return;
@@ -276,11 +370,67 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     const slyDataToSend = getSlyDataForSend();
     const network = targetNetwork || activeNetwork;
 
-    // Build the message for backend — useFileAttachments handles text inlining + PDF extraction.
-    const { appendText, filesForStorage } = await prepareAttachmentsForSend();
-    const fullMessageForBackend = appendText
-      ? (messageText.trim() ? `${messageText}\n\n${appendText}` : appendText)
-      : messageText;
+    // Build the message for backend
+    let fullMessageForBackend = messageText;
+    
+    // For text files, include content inline
+    const textFiles = attachedFiles.filter(af => !af.isPdf);
+    if (textFiles.length > 0) {
+      const fileContents = textFiles
+        .map((af) => `--- ${af.file.name} ---\n${af.content}`)
+        .join("\n\n");
+      fullMessageForBackend = fullMessageForBackend.trim()
+        ? `${fullMessageForBackend}\n\n${fileContents}`
+        : fileContents;
+    }
+
+    // For PDFs, we'll need to send them via an API endpoint first
+    const pdfFiles = attachedFiles.filter(af => af.isPdf);
+    if (pdfFiles.length > 0) {
+      try {
+        // Send PDFs to backend for processing
+        const formData = new FormData();
+        pdfFiles.forEach((af) => {
+          formData.append('files', af.file);
+        });
+
+        const response = await fetch(`${apiUrl}/api/v1/process_pdfs`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          // Append extracted PDF text to the message
+          if (result.extracted_texts && Array.isArray(result.extracted_texts)) {
+            const pdfContents = result.extracted_texts
+              .map((text: string, idx: number) => `--- ${pdfFiles[idx].file.name} ---\n${text}`)
+              .join("\n\n");
+            fullMessageForBackend = fullMessageForBackend.trim()
+              ? `${fullMessageForBackend}\n\n${pdfContents}`
+              : pdfContents;
+          }
+        } else {
+          console.error("Failed to process PDFs:", response.statusText);
+          // Fallback: mention the PDF files without content
+          const pdfNames = pdfFiles
+            .map((af) => `--- ${af.file.name} (PDF processing failed) ---`)
+            .join("\n");
+          fullMessageForBackend = fullMessageForBackend.trim()
+            ? `${fullMessageForBackend}\n\n${pdfNames}`
+            : pdfNames;
+        }
+      } catch (error) {
+        console.error("Error processing PDFs:", error);
+      }
+    }
+
+    // Store attached files WITH previewUrl so PDFs can be viewed later
+    const filesForStorage = attachedFiles.map(af => ({
+      file: af.file,
+      content: af.content,
+      previewUrl: af.previewUrl  // Keep the blob URL for viewing later
+    }));
 
     addChatMessage({
       sender: "user",
@@ -309,7 +459,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     // Blob URLs will be cleaned up when component unmounts
     
     setNewMessage("");
-    clearAttachments();
+    setAttachedFiles([]);
     setWaitingForAgent(true);
 
     // Collapse sample queries section after sending message
@@ -484,7 +634,35 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
   };
 
-  // convertToMp3 moved to utils/audioUtils.ts and shared with ZenMode.
+  const convertToMp3 = async (audioBuffer: AudioBuffer): Promise<Blob> => {
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const left = audioBuffer.getChannelData(0);
+    const right = numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
+
+    const leftInt16 = new Int16Array(left.length);
+    const rightInt16 = new Int16Array(right.length);
+    for (let i = 0; i < left.length; i++) {
+      leftInt16[i] = Math.max(-32768, Math.min(32767, left[i] * 32768));
+      rightInt16[i] = Math.max(-32768, Math.min(32767, right[i] * 32768));
+    }
+
+    const mp3encoder = new Mp3Encoder(numberOfChannels, sampleRate, 128);
+    const mp3Data: Uint8Array[] = [];
+    const sampleBlockSize = 1152;
+
+    for (let i = 0; i < leftInt16.length; i += sampleBlockSize) {
+      const leftChunk = leftInt16.subarray(i, i + sampleBlockSize);
+      const rightChunk = rightInt16.subarray(i, i + sampleBlockSize);
+      const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+      if (mp3buf.length > 0) mp3Data.push(mp3buf);
+    }
+
+    const mp3buf = mp3encoder.flush();
+    if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+    return new Blob(mp3Data.map((c) => new Uint8Array(c)), { type: "audio/mp3" });
+    };
 
   const downloadMessages = () => {
     const logText = chatMessages.map((msg) => `${msg.sender}: ${msg.text}`).join("\n");
@@ -753,11 +931,31 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             )}
 
             {/* Attached files display */}
-            <AttachmentsPreview
-              files={attachedFiles}
-              onOpen={openFileViewer}
-              onRemove={removeAttachedFile}
-            />
+            {attachedFiles.length > 0 && (
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                {attachedFiles.map((af, index) => (
+                  <Chip
+                    key={`${af.file.name}-${index}`}
+                    icon={<AttachFileIcon sx={{ fontSize: 14 }} />}
+                    label={af.file.name}
+                    size="small"
+                    onClick={() => openFileViewer(af)}
+                    onDelete={() => removeAttachedFile(index)}
+                    deleteIcon={<CloseIcon sx={{ fontSize: 14 }} />}
+                    variant="outlined"
+                    sx={{
+                      height: 22,
+                      "& .MuiChip-label": { fontSize: "0.7rem", px: 0.5, cursor: "pointer" },
+                      borderColor: theme.palette.primary.main,
+                      color: theme.palette.text.primary,
+                      "&:hover": {
+                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                      },
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
 
             {/* Hidden file input */}
             <input
@@ -978,8 +1176,83 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
         </Panel>
       </PanelGroup>
 
-      {/* File Viewer Dialog — shared between ChatPanel and ZenModeChat. */}
-      <FileViewerDialog file={viewingFile} onClose={closeFileViewer} />
+      {/* File Viewer Dialog - with PDF iframe preview */}
+      <Dialog
+        open={!!viewingFile}
+        onClose={closeFileViewer}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            maxHeight: "90vh",
+            height: viewingFile?.isPdf ? "90vh" : "auto",
+            backgroundColor: theme.palette.background.paper,
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 1,
+          pb: 1,
+          borderBottom: `1px solid ${theme.palette.divider}`
+        }}>
+          <FileIcon sx={{ color: theme.palette.primary.main }} />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            {viewingFile?.file.name}
+          </Typography>
+          <IconButton onClick={closeFileViewer} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, pb: 2, height: viewingFile?.isPdf ? "calc(90vh - 120px)" : "auto" }}>
+          {viewingFile?.isPdf ? (
+            <Box sx={{ 
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <iframe
+                src={viewingFile.previewUrl}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  borderRadius: '4px',
+                }}
+                title={`PDF Preview: ${viewingFile.file.name}`}
+              />
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: alpha(theme.palette.background.default, 0.5),
+                borderRadius: 1,
+                maxHeight: "60vh",
+                overflowY: "auto",
+                fontFamily: "monospace",
+                fontSize: "0.875rem",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                "&::-webkit-scrollbar": { width: 8 },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: alpha(theme.palette.text.primary, 0.2),
+                  borderRadius: 8
+                },
+              }}
+            >
+              {viewingFile?.content}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeFileViewer} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };

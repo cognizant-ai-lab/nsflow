@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { useEffect } from "react";
-import { Node, Edge, EdgeMarkerType, FitViewOptions } from "reactflow";
+import { Node, Edge, EdgeMarkerType, FitViewOptions, useStore } from "reactflow";
 
 interface UseAgentFlowDataProps {
   selectedNetwork: string | null;
@@ -58,49 +58,81 @@ export const useAgentFlowData = ({
     fitViewDuration: 800,
   },
 }: UseAgentFlowDataProps) => {
+  const containerWidth = useStore((s) => s.width);
+  const containerHeight = useStore((s) => s.height);
+  const containerReady = containerWidth > 0 && containerHeight > 0;
+
   useEffect(() => {
     if (!selectedNetwork) return;
+    if (!containerReady) return;
+
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
     const endpoint = useCompactMode ? "connectivity" : "compact_connectivity";
 
     fetch(`${apiUrl}/api/v1/${endpoint}/${selectedNetwork}`)
       .then((res) => res.json())
       .then((data) => {
-        // Transform edges with floating type and animation
-        const transformedEdges: Edge[] = (data.edges as Edge[]).map((edge) => ({
+        if (cancelled) return;
+
+        const rawEdges = Array.isArray(data?.edges) ? (data.edges as Edge[]) : [];
+        const rawNodes = Array.isArray(data?.nodes) ? (data.nodes as Node[]) : [];
+
+        if (rawNodes.length === 0) return;
+
+        const transformedEdges: Edge[] = rawEdges.map((edge) => ({
           ...edge,
           type: "floating",
           animated: true,
           markerEnd: "arrowclosed" as EdgeMarkerType,
         }));
 
-        // Get raw nodes from API
-        const rawNodes: Node[] = data.nodes as Node[];
-
-        // Apply layout (handles caching and positioning)
-        const finalNodes = applyLayout(rawNodes, transformedEdges);
+        const finalNodes = applyLayout(rawNodes, transformedEdges).map((node) => {
+          const px = node.position?.x;
+          const py = node.position?.y;
+          if (Number.isFinite(px) && Number.isFinite(py)) return node;
+          return {
+            ...node,
+            position: {
+              x: Number.isFinite(px) ? px : 0,
+              y: Number.isFinite(py) ? py : 0,
+            },
+          };
+        });
 
         setNodes(finalNodes);
         setEdges(transformedEdges);
 
-        // Fit view with optional padding
-        if (viewportConfig.padding !== undefined) {
-          setTimeout(() => {
-            fitView({ padding: viewportConfig.padding, duration: viewportConfig.fitViewDuration });
-          }, 300);
-        } else {
-          fitView();
-        }
+        const { x, y, zoom, padding } = viewportConfig;
+        const targetFinite = Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(zoom);
 
-        // Set viewport with animation
-        setTimeout(() => {
-          setViewport(
-            { x: viewportConfig.x, y: viewportConfig.y, zoom: viewportConfig.zoom },
-            { duration: viewportConfig.duration }
-          );
-        }, 100);
+        timers.push(
+          setTimeout(() => {
+            if (cancelled) return;
+            if (padding !== undefined) {
+              fitView({ padding, duration: 0 });
+            } else {
+              fitView({ duration: 0 });
+            }
+
+            if (!targetFinite) return;
+
+            timers.push(
+              setTimeout(() => {
+                if (cancelled) return;
+                setViewport({ x, y, zoom }, { duration: 0 });
+              }, 50)
+            );
+          }, 300)
+        );
       })
       .catch((err) => console.error("[useAgentFlowData] Error loading network:", err));
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
   }, [
     selectedNetwork,
     apiUrl,
@@ -110,6 +142,7 @@ export const useAgentFlowData = ({
     setEdges,
     fitView,
     setViewport,
+    containerReady,
     viewportConfig.x,
     viewportConfig.y,
     viewportConfig.zoom,
