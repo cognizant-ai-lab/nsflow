@@ -336,6 +336,7 @@ const ZenModeChat = () => {
             onCopy={copyToClipboard}
             onTextToSpeech={(text) => textToSpeech(text)}
             useSpeech={enableTextToSpeech}
+            onFileClick={(f) => setViewingFile({ file: f.file, content: f.content, isPdf: !!f.isPdf, previewUrl: f.previewUrl })}
           />
         </Box>
       </Box>

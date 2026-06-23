@@ -51,6 +51,7 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "showInternalChat", label: "Internal Chat", category: "Advanced Panels" },
   { key: "showConfigPanel", label: "Config Panel", category: "Advanced Panels" },
   { key: "showSlyDataPanel", label: "Sly Data Panel", category: "Advanced Panels" },
+  { key: "showConnectorsPanel", label: "Connectors Panel", category: "Advanced Panels" },
   { key: "showLogsPanel", label: "Logs Panel", category: "Advanced Panels" },
 ];
 

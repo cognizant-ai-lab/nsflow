@@ -28,6 +28,7 @@ import {
   Tabs,
   Tab,
   Theme,
+  GlobalStyles,
 } from "@mui/material";
 import {
   Close as CloseIcon,
@@ -36,6 +37,7 @@ import {
   BugReport as InternalIcon,
   DataObject as SlyDataIcon,
   Settings as ConfigIcon,
+  Cable as ConnectorsIcon,
 } from "@mui/icons-material";
 import { useZenMode } from "../../hooks/useZenMode";
 import { useChatContext } from "../../context/ChatContext";
@@ -47,6 +49,7 @@ import InternalChatPanel from "../InternalChatPanel";
 import ConfigPanel from "../ConfigPanel";
 import EditorLogsPanel from "../EditorLogsPanel";
 import SlyDataPanel from "../slydata/EditorSlyDataPanel";
+import McpConnectorsPanel from "../mcp/McpConnectorsPanel";
 import Sidebar from "../Sidebar";
 
 // Memoized Tabs component to prevent re-renders on hover
@@ -56,6 +59,7 @@ const ZenModeTabs = memo(({
   showInternalChat,
   showConfigPanel,
   showSlyDataPanel,
+  showConnectorsPanel,
   theme
 }: {
   activeTab: number;
@@ -63,6 +67,7 @@ const ZenModeTabs = memo(({
   showInternalChat: boolean;
   showConfigPanel: boolean;
   showSlyDataPanel: boolean;
+  showConnectorsPanel: boolean;
   theme: Theme;
 }) => {
   // Per-tab sx — match the icon sizing/spacing used in TabbedChatPanel.
@@ -115,6 +120,9 @@ const ZenModeTabs = memo(({
       {showSlyDataPanel && (
         <Tab icon={<SlyDataIcon />} iconPosition="start" label="SlyData" sx={tabSx} />
       )}
+      {showConnectorsPanel && (
+        <Tab icon={<ConnectorsIcon />} iconPosition="start" label="Connectors" sx={tabSx} />
+      )}
       {/* Logs are rendered as a floating EditorLogsPanel below, not as a tab */}
     </Tabs>
   );
@@ -139,14 +147,9 @@ const ZenModeOverlay = () => {
   const hasAdvancedPanels =
     config.features.showInternalChat ||
     config.features.showConfigPanel ||
-    config.features.showSlyDataPanel;
+    config.features.showSlyDataPanel ||
+    config.features.showConnectorsPanel;
 
-  // Reset to Chat tab when all advanced panels are disabled
-  useEffect(() => {
-    if (!hasAdvancedPanels && activeTab !== 0) {
-      setActiveTab(0);
-    }
-  }, [hasAdvancedPanels, activeTab]);
 
   // Memoize tab change handler
   const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: number) => {
@@ -160,9 +163,18 @@ const ZenModeOverlay = () => {
     if (config.features.showInternalChat) indices.internal = index++;
     if (config.features.showConfigPanel) indices.config = index++;
     if (config.features.showSlyDataPanel) indices.slydata = index++;
+    if (config.features.showConnectorsPanel) indices.connectors = index++;
     // Logs are rendered as a floating EditorLogsPanel, not a tab
     return indices;
   }, [config.features]);
+
+  // Clamp activeTab whenever the enabled tab set changes so it always points to a valid index
+  useEffect(() => {
+    const maxTab = Object.keys(tabIndices).length - 1;
+    if (activeTab > maxTab) {
+      setActiveTab(maxTab);
+    }
+  }, [tabIndices, activeTab]);
 
   // Render all panels but keep them mounted - use CSS to show/hide
   const tabContent = useMemo(() => {
@@ -219,6 +231,20 @@ const ZenModeOverlay = () => {
             }}
           >
             <SlyDataPanel />
+          </Box>
+        )}
+
+        {/* Connectors Panel */}
+        {config.features.showConnectorsPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.connectors ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <McpConnectorsPanel />
           </Box>
         )}
 
@@ -288,6 +314,14 @@ const ZenModeOverlay = () => {
         ...transitionStyle,
       }}
     >
+      {/*
+        MUI modals/popovers portal to document.body at zIndex 1300, below the
+        overlay (9999). Raise them above the overlay so connector dialogs and
+        menus opened from within Zen Mode are visible. Scoped to while the
+        overlay is mounted.
+      */}
+      <GlobalStyles styles={{ ".MuiModal-root": { zIndex: "10000 !important" } }} />
+
       {/* Ambient Background Effects */}
       <Box
         sx={{
@@ -570,6 +604,7 @@ const ZenModeOverlay = () => {
                     showInternalChat={config.features.showInternalChat}
                     showConfigPanel={config.features.showConfigPanel}
                     showSlyDataPanel={config.features.showSlyDataPanel}
+                    showConnectorsPanel={config.features.showConnectorsPanel}
                     theme={theme}
                   />
                 )}

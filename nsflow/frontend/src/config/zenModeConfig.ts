@@ -34,6 +34,7 @@ export interface ZenModeFeatures {
   showInternalChat: boolean;
   showConfigPanel: boolean;
   showSlyDataPanel: boolean;
+  showConnectorsPanel: boolean;
   showLogsPanel: boolean;
 
   // Chat panel sizing
@@ -100,6 +101,7 @@ const DEFAULT_CONFIG: ZenModeConfig = {
     showInternalChat: true,
     showConfigPanel: true,
     showSlyDataPanel: true,
+    showConnectorsPanel: false,
     showLogsPanel: true,
 
     // Chat sizing
