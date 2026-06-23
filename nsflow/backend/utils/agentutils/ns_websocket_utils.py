@@ -27,6 +27,7 @@ from neuro_san.client.agent_session_factory import AgentSessionFactory
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
+from nsflow.backend.utils.logutils.websocket_logs_manager import trace_plugin_enabled
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
@@ -127,9 +128,9 @@ class NsWebsocketUtils:
                 if bool(chat_context):
                     state["chat_context"].update(chat_context)
                 # Mark the start of this invocation so per-message traces can
-                # be bucketed in the UI.
+                # be bucketed in the UI. Skipped entirely when the Trace plugin is off.
                 trace_processor: AgentLogProcessor = user_session.get("agent_log_processor")
-                if trace_processor is not None:
+                if trace_processor is not None and trace_plugin_enabled():
                     await trace_processor.begin_invocation(user_input)
                 # Update the state
                 state = await input_processor.async_process_once(state)
@@ -153,7 +154,7 @@ class NsWebsocketUtils:
                     # logging.info("Updated latest sly_data for network %s session %s", self.agent_name, self.session_id)
 
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {self.session_id}", "nsflow")
-                if trace_processor is not None:
+                if trace_processor is not None and trace_plugin_enabled():
                     await trace_processor.end_invocation()
 
         except WebSocketDisconnect:

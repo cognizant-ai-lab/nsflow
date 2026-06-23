@@ -46,7 +46,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
-  const { pluginCruse, pluginExport } = getFeatureFlags();
+  const { pluginCruse, pluginExport, pluginTrace } = getFeatureFlags();
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
@@ -236,37 +236,39 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </Button>
           </Tooltip>
 
-          {/* Analysis Button */}
-          <Tooltip
-            title={isOnAnalysisPage ? "You are on the Analysis page" : "Open Trace Analysis in a new tab"}
-            arrow
-          >
-            <span>
-              <Button
-                variant="outlined"
-                startIcon={<AnalysisIcon />}
-                onClick={() => {
-                  if (!isOnAnalysisPage) handleNavigateToAnalysis();
-                }}
-                disabled={isOnAnalysisPage}
-                sx={{
-                  ...(isOnAnalysisPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
-                  borderColor: muiTheme.palette.secondary.main,
-                  '&:hover': isOnAnalysisPage ? {} : {
-                    backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+          {/* Analysis Button - plugin-gated (Trace/Analysis) */}
+          {pluginTrace && (
+            <Tooltip
+              title={isOnAnalysisPage ? "You are on the Analysis page" : "Open Trace Analysis in a new tab"}
+              arrow
+            >
+              <span>
+                <Button
+                  variant="outlined"
+                  startIcon={<AnalysisIcon />}
+                  onClick={() => {
+                    if (!isOnAnalysisPage) handleNavigateToAnalysis();
+                  }}
+                  disabled={isOnAnalysisPage}
+                  sx={{
+                    ...(isOnAnalysisPage ? muiTheme.navButton.active : muiTheme.navButton.inactive),
                     borderColor: muiTheme.palette.secondary.main,
-                  },
-                  '&.Mui-disabled': {
-                    opacity: 0.6,
-                    borderColor: muiTheme.palette.action.disabled,
-                    color: muiTheme.palette.text.disabled,
-                  },
-                }}
-              >
-                Analysis
-              </Button>
-            </span>
-          </Tooltip>
+                    '&:hover': isOnAnalysisPage ? {} : {
+                      backgroundColor: alpha(muiTheme.palette.secondary.main, 0.15),
+                      borderColor: muiTheme.palette.secondary.main,
+                    },
+                    '&.Mui-disabled': {
+                      opacity: 0.6,
+                      borderColor: muiTheme.palette.action.disabled,
+                      color: muiTheme.palette.text.disabled,
+                    },
+                  }}
+                >
+                  Analysis
+                </Button>
+              </span>
+            </Tooltip>
+          )}
 
           {/* New Button - hidden on Editor page */}
           {!isOnEditorPage && (

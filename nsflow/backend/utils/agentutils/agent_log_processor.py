@@ -27,6 +27,7 @@ from neuro_san.message_processing.message_processor import MessageProcessor
 from nsflow.backend.trust.rai_service import RaiService
 from nsflow.backend.utils.agentutils import network_schema_cache
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
+from nsflow.backend.utils.logutils.websocket_logs_manager import trace_plugin_enabled
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 EDITOR_TOOLS = {
@@ -199,8 +200,8 @@ class AgentLogProcessor(MessageProcessor):
                 token_accounting, self.agent_name, self.session_id
             )
 
-        # Build trace spans from the message stream.
-        if message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
+        # Build trace spans from the message stream. Skipped when the Trace plugin is off.
+        if trace_plugin_enabled() and message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
             await self._update_trace_spans(
                 otrace=otrace,
                 structure=structure,

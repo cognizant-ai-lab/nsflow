@@ -29,6 +29,7 @@ import { useTraceContext } from "../context/TraceContext";
 import { useTheme } from '../context/ThemeContext';
 import TracePanel from "./trace/TracePanel";
 import { Timeline as TraceIcon } from "@mui/icons-material";
+import { getFeatureFlags } from "../utils/config";
 interface TabbedChatPanelProps {
   isEditorMode?: boolean;
 }
@@ -37,6 +38,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "trace" | "slydata" | "config">("chat");
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
+  const { pluginTrace } = getFeatureFlags();
   const { sessionId, activeNetwork, targetNetwork, isEditorMode: contextIsEditorMode, setIsEditorMode,
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
     setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs, chatWs, internalChatWs,
@@ -55,13 +57,27 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   useEffect(() => {
     if (!targetNetwork) return;
 
-    // Close any sockets from the previous render before opening new ones.
-    chatWs?.close();
-    internalChatWs?.close();
-    slyDataWs?.close();
-    progressWs?.close();
-    traceWs?.close();
-    // Trace data is kept across network switches for the Analysis page.
+    // Close old WebSockets before creating new ones
+    if (chatWs) {
+      console.log("Closing previous Chat WebSocket...");
+      chatWs.close();
+    }
+    if (internalChatWs) {
+      console.log("Closing previous Internal Chat WebSocket...");
+      internalChatWs.close();
+    }
+    if (slyDataWs) {
+      console.log("Closing previous Sly Data WebSocket...");
+      slyDataWs.close();
+    }
+    if (progressWs) {
+      console.log("Closing previous Progress WebSocket...");
+      progressWs.close();
+    }
+    if (traceWs) {
+      console.log("Closing previous Trace WebSocket...");
+      traceWs.close();
+    }
 
     // Send system message for network switch only once
     if (lastActiveNetworkRef.current !== targetNetwork) {
@@ -75,6 +91,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
 
     // Setup WebSocket for Chat Panel
     const chatWsUrl = `${wsUrl}/api/v1/ws/chat/${targetNetwork}/${sessionId}`;
+    console.log("Connecting Chat WebSocket:", chatWsUrl);
     const newChatWs = new WebSocket(chatWsUrl);
 
     newChatWs.onmessage = (event) => {
@@ -88,13 +105,15 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
       }
     };
 
+    newChatWs.onopen = () => console.log(">> Chat WebSocket Connected");
+    newChatWs.onclose = () => console.log(">> Chat WebSocket Disconnected");
     setChatWs(newChatWs);
 
     // Setup WebSocket for Internal Chat Panel (skip in editor mode)
-    let newInternalWs: WebSocket | null = null;
     if (!isEditorMode) {
       const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${targetNetwork}/${sessionId}`;
-      newInternalWs = new WebSocket(internalWsUrl);
+      console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
+      const newInternalWs = new WebSocket(internalWsUrl);
 
       newInternalWs.onmessage = (event) => {
         try {
@@ -104,6 +123,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
             const chatText = data.message.text?.trim();
             if (!chatText || !otrace.length) return;
             if (lastMessageRef.current === chatText) {
+              console.log("Duplicate message ignored");
               return;
             }
             lastMessageRef.current = chatText;
@@ -114,17 +134,21 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
         }
       };
 
+      newInternalWs.onopen = () => console.log(">> Internal Chat WebSocket Connected");
+      newInternalWs.onclose = () => console.log(">> Internal Chat WebSocket Disconnected");
       setInternalChatWs(newInternalWs);
     }
 
     // Setup WebSocket for Sly Data Panel
     const slyDataWsUrl = `${wsUrl}/api/v1/ws/slydata/${targetNetwork}/${sessionId}`;
+    console.log("Connecting Sly Data WebSocket:", slyDataWsUrl);
     const newSlyDataWs = new WebSocket(slyDataWsUrl);
 
     newSlyDataWs.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.message && typeof data.message === "object") {
+          // const otrace = data.message.otrace;
           const chatTextRaw = data.message.text;
           // Check if it's a non-empty object
           const isEmptyObject =
@@ -133,7 +157,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
             Object.keys(chatTextRaw).length === 0;
 
             let slyText = "";
-
+            
             if (typeof chatTextRaw === "string") {
               slyText = chatTextRaw;
             } else if (!isEmptyObject) {
@@ -141,6 +165,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
               slyText = `\`\`\`json\n${JSON.stringify(chatTextRaw, null, 2)}\n\`\`\``;
             }
           if (slyText.trim().length > 0) {
+            // lastMessageRef.current = chatText;
             addSlyDataMessage({ sender: targetNetwork, text: slyText, network: targetNetwork });
             setNewSlyData(String(Date.now())); // tick for listeners
           }
@@ -150,10 +175,13 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
       }
     };
 
+    newSlyDataWs.onopen = () => console.log(">>Sly Data WebSocket Connected");
+    newSlyDataWs.onclose = () => console.log(">> Sly Data WebSocket Disconnected");
     setSlyDataWs(newSlyDataWs);
 
     // Setup WebSocket for Progress
     const progressWsUrl = `${wsUrl}/api/v1/ws/progress/${targetNetwork}/${sessionId}`;
+    console.log("Connecting Progress WebSocket:", progressWsUrl);
     const newProgressWs = new WebSocket(progressWsUrl);
 
     newProgressWs.onmessage = (event) => {
@@ -189,6 +217,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
         if (payload) {
           // Store RAW object for robust downstream parsing
           addProgressMessage({ sender: targetNetwork, text: payload, network: targetNetwork });
+          console.log("progress text: ", payload)
           setNewProgress(String(Date.now())); // tick for listeners
         }
       } catch (err) {
@@ -196,40 +225,41 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
       }
     };
 
+    newProgressWs.onopen = () => console.log(">> Progress WebSocket Connected");
+    newProgressWs.onclose = () => console.log(">> Progress WebSocket Disconnected");
     setProgressWs(newProgressWs);
 
-    // Setup WebSocket for Trace
-    const traceWsUrl = `${wsUrl}/api/v1/ws/trace/${targetNetwork}/${sessionId}`;
-    const newTraceWs = new WebSocket(traceWsUrl);
+    // Setup WebSocket for Trace — only when the Trace plugin is enabled.
+    if (pluginTrace) {
+      const traceWsUrl = `${wsUrl}/api/v1/ws/trace/${targetNetwork}/${sessionId}`;
+      const newTraceWs = new WebSocket(traceWsUrl);
 
-    newTraceWs.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const step = data?.message;
-        if (step && typeof step === "object" && Array.isArray(step.otrace)) {
-          addTraceStep(step);
+      newTraceWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const step = data?.message;
+          if (step && typeof step === "object" && Array.isArray(step.otrace)) {
+            addTraceStep(step);
+          }
+        } catch (err) {
+          console.error("Error parsing Trace WebSocket message:", err);
         }
-      } catch (err) {
-        console.error("Error parsing Trace WebSocket message:", err);
-      }
-    };
+      };
 
-    setTraceWs(newTraceWs);
+      newTraceWs.onopen = () => console.log(">> Trace WebSocket Connected");
+      newTraceWs.onclose = () => console.log(">> Trace WebSocket Disconnected");
+      setTraceWs(newTraceWs);
+    }
 
-    // Close every socket opened by this effect run on unmount or re-render.
     return () => {
-      newChatWs.close();
-      newInternalWs?.close();
-      newSlyDataWs.close();
-      newProgressWs.close();
-      newTraceWs.close();
+      console.log("WebSockets for old network are closed.");
     };
   }, [targetNetwork, wsUrl, sessionId]);
 
   const tabConfig = [
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },
     ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
-    ...(!isEditorMode ? [{ id: "trace", label: "Trace", icon: <TraceIcon />, component: <TracePanel /> }] : []),
+    ...(!isEditorMode && pluginTrace ? [{ id: "trace", label: "Trace", icon: <TraceIcon />, component: <TracePanel /> }] : []),
     { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
   ];

@@ -35,6 +35,14 @@ from fastapi import WebSocket, WebSocketDisconnect
 # Configuration
 ASYNCIO_SLEEP_INTERVAL = 0.5
 
+_TRUTH_VALUES = {"1", "true", "yes", "on"}
+
+
+def trace_plugin_enabled() -> bool:
+    """Whether the Trace/Analysis plugin is enabled (NSFLOW_PLUGIN_TRACE). Off by default."""
+    val = os.getenv("NSFLOW_PLUGIN_TRACE")
+    return val is not None and val.strip().lower() in _TRUTH_VALUES
+
 
 class WebsocketLogsManager:
     """
@@ -124,6 +132,8 @@ class WebsocketLogsManager:
             otrace, agent, duration_s, total_tokens, total_cost,
             received_at, message_type.
         """
+        if not trace_plugin_enabled():
+            return
         entry = {"message": step}
         self.trace_buffer.append(step)
         if len(self.trace_buffer) > self.TRACE_BUFFER_SIZE:
