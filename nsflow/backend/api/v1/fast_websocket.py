@@ -66,6 +66,13 @@ async def websocket_progress(websocket: WebSocket, agent_name: str, session_id: 
     await manager.handle_progress_websocket(websocket)
 
 
+@router.websocket("/trace/{agent_name:path}/{session_id}")
+async def websocket_trace(websocket: WebSocket, agent_name: str, session_id: str):
+    """WebSocket route for per-step trace streaming (timing + tokens per agent hop)."""
+    manager = LogsRegistry.register(agent_name, session_id)
+    await manager.handle_trace_websocket(websocket)
+
+
 @router.websocket("/sustainability/{agent_name:path}/{session_id}")
 async def websocket_sustainability(websocket: WebSocket, agent_name: str, session_id: str):
     """WebSocket endpoint for real-time sustainability metrics updates"""

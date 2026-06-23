@@ -17,7 +17,7 @@
 from datetime import datetime
 from datetime import timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text
 
 from nsflow.backend.db.database import Base
 
@@ -68,3 +68,40 @@ class Message(Base):
     created_at = Column(DateTime, default=_get_utc_now, index=True)
 
 Index("idx_messages_thread_created", Message.thread_id, Message.created_at)
+
+
+# Trace / Analysis Models
+class TraceEvent(Base):
+    """One span emitted by AgentLogProcessor; queried by the Analysis page."""
+
+    __tablename__ = "trace_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    invocation_id = Column(String, nullable=False, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    network = Column(String, nullable=False, index=True)
+    agent = Column(String, nullable=True)
+    kind = Column(String, nullable=False)
+    otrace = Column(JSON, nullable=True)
+    depth = Column(Integer, nullable=True)
+
+    duration_s = Column(Float, nullable=True)
+    start_s = Column(Float, nullable=True)
+    received_at = Column(Float, nullable=False, index=True)
+
+    total_tokens = Column(Integer, nullable=True)
+    prompt_tokens = Column(Integer, nullable=True)
+    completion_tokens = Column(Integer, nullable=True)
+    total_cost = Column(Float, nullable=True)
+    successful_requests = Column(Integer, nullable=True)
+    is_network_total = Column(Boolean, nullable=True)
+
+    model = Column(String, nullable=True)
+    provider = Column(String, nullable=True)
+    prompt = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=_get_utc_now)
+
+
+Index("idx_trace_events_network_received", TraceEvent.network, TraceEvent.received_at)
+Index("idx_trace_events_invocation", TraceEvent.invocation_id)

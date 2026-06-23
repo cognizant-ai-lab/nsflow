@@ -29,6 +29,7 @@ from neuro_san.client.agent_session_factory import AgentSessionFactory
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
+from nsflow.backend.utils.logutils.websocket_logs_manager import trace_plugin_enabled
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.mcp.mcp_oauth_manager import mcp_oauth_manager
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
@@ -151,6 +152,11 @@ class NsWebsocketUtils:
                 # Update chat context in state based on user input
                 if bool(chat_context):
                     state["chat_context"].update(chat_context)
+                # Mark the start of this invocation so per-message traces can
+                # be bucketed in the UI. Skipped entirely when the Trace plugin is off.
+                trace_processor: AgentLogProcessor = user_session.get("agent_log_processor")
+                if trace_processor is not None and trace_plugin_enabled():
+                    await trace_processor.begin_invocation(user_input)
                 # Update the state
                 state = await input_processor.async_process_once(state)
                 # The live sly_data still carries any MCP Authorization tokens we
@@ -180,6 +186,8 @@ class NsWebsocketUtils:
                     latest_sly_data_storage[storage_key] = surfaced_sly_data
 
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {self.session_id}", "nsflow")
+                if trace_processor is not None and trace_plugin_enabled():
+                    await trace_processor.end_invocation()
 
         except WebSocketDisconnect:
             await self.logs_manager.log_event(f"WebSocket chat client disconnected: {self.session_id}", "nsflow")
@@ -224,7 +232,12 @@ class NsWebsocketUtils:
         #       end user will not care about and not appreciate the extra
         #       data charges on their cell phone.
 
-        user_session = {"input_processor": input_processor, "state": state, "sid": sid}
+        user_session = {
+            "input_processor": input_processor,
+            "state": state,
+            "sid": sid,
+            "agent_log_processor": agent_log_processor,
+        }
         return user_session
 
     def create_agent_session(self):

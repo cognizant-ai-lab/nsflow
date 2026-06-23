@@ -17,13 +17,17 @@
 import json
 import logging
 import os
+import time
+import uuid
 from typing import Any, Dict, Optional
 
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
 
 from nsflow.backend.trust.rai_service import RaiService
+from nsflow.backend.utils.agentutils import network_schema_cache
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
+from nsflow.backend.utils.logutils.websocket_logs_manager import trace_plugin_enabled
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 EDITOR_TOOLS = {
@@ -59,6 +63,55 @@ class AgentLogProcessor(MessageProcessor):
         self.logs_manager = LogsRegistry.register(agent_name, self.session_id)
         self.agent_name = agent_name
         self.logger = logging.getLogger(f"{self.agent_name}")
+        # Open spans keyed by " / "-joined otrace.
+        self._open_spans: Dict[str, Dict[str, Any]] = {}
+        # Current invocation_id (one user turn).
+        self._invocation_id: Optional[str] = None
+        self._invocation_started_at: Optional[float] = None
+
+    async def begin_invocation(self, user_input: str) -> str:
+        """
+        Start a new invocation (user turn). Emits an `invocation_start` trace event
+        and returns the new invocation_id so the caller can correlate the end.
+        Any previously-open spans are cleared so a new turn doesn't inherit
+        dangling state from the prior one.
+        """
+        self._invocation_id = uuid.uuid4().hex
+        self._invocation_started_at = time.time()
+        self._open_spans.clear()
+        await self.logs_manager.trace_event({
+            "invocation_id": self._invocation_id,
+            "network": self.agent_name,
+            "kind": "invocation_start",
+            "prompt": user_input,
+            "received_at": self._invocation_started_at,
+            "start_s": self._invocation_started_at,
+            "duration_s": 0.0,
+            "otrace": [],
+            "agent": "",
+            "depth": 0,
+        })
+        return self._invocation_id
+
+    async def end_invocation(self) -> None:
+        """Emit an `invocation_end` event closing the current turn."""
+        if not self._invocation_id:
+            return
+        now = time.time()
+        await self.logs_manager.trace_event({
+            "invocation_id": self._invocation_id,
+            "network": self.agent_name,
+            "kind": "invocation_end",
+            "received_at": now,
+            "start_s": self._invocation_started_at or now,
+            "duration_s": max(now - (self._invocation_started_at or now), 0.0),
+            "otrace": [],
+            "agent": "",
+            "depth": 0,
+        })
+        self._invocation_id = None
+        self._invocation_started_at = None
+        self._open_spans.clear()
 
     async def async_process_message(self, chat_message_dict: Dict[str, Any], message_type: ChatMessageType):
         """
@@ -147,6 +200,16 @@ class AgentLogProcessor(MessageProcessor):
                 token_accounting, self.agent_name, self.session_id
             )
 
+        # Build trace spans from the message stream. Skipped when the Trace plugin is off.
+        if trace_plugin_enabled() and message_type in (ChatMessageType.AGENT, ChatMessageType.AGENT_TOOL_RESULT):
+            await self._update_trace_spans(
+                otrace=otrace,
+                structure=structure,
+                token_accounting=token_accounting,
+                message_type=message_type,
+                tool_result_origin=chat_message_dict.get("tool_result_origin"),
+            )
+
     def _last_origin_tool(self, msg: Dict[str, Any]) -> Optional[str]:
         """Return the last tool in origin list"""
         origin = msg.get("origin")
@@ -154,6 +217,138 @@ class AgentLogProcessor(MessageProcessor):
             return None
         last = origin[-1]
         return last.get("tool") if isinstance(last, dict) else None
+
+    def _classify_kind(
+        self,
+        otrace: list,
+        structure: Dict[str, Any],
+        token_accounting: Dict[str, Any],
+        saw_token_accounting: bool,
+    ) -> str:
+        """Classify a span. Prefer the HOCON schema; fall back to runtime signals."""
+        if token_accounting and "models" in token_accounting:
+            return "network_total"
+
+        leaf = otrace[-1] if otrace else ""
+        schema_kind = network_schema_cache.get_kind(self.agent_name, leaf)
+        if schema_kind:
+            return schema_kind
+
+        if isinstance(leaf, str) and leaf.startswith("/"):
+            return "sub_network"
+        if token_accounting or saw_token_accounting:
+            return "agent"
+        if isinstance(structure, dict) and structure.get("tool_end") is True:
+            return "tool"
+        return "agent"
+
+    async def _update_trace_spans(
+        self,
+        otrace: list,
+        structure: Dict[str, Any],
+        token_accounting: Dict[str, Any],
+        message_type: ChatMessageType,
+        tool_result_origin: Optional[list],
+    ) -> None:
+        """Maintain open spans per otrace path and emit a trace_event on close."""
+        if not otrace:
+            return
+
+        now = time.time()
+        key = " / ".join(str(x) for x in otrace)
+
+        # Open a child span when a parent invokes something.
+        if isinstance(structure, dict) and structure.get("invoking_start") is True:
+            invoked = structure.get("invoked_agent_name")
+            if invoked:
+                child_path = list(otrace) + [invoked]
+                child_key = " / ".join(str(x) for x in child_path)
+                if child_key not in self._open_spans:
+                    self._open_spans[child_key] = {
+                        "otrace": child_path,
+                        "start_t": now,
+                        "params": structure.get("params"),
+                        "saw_token_accounting": False,
+                    }
+                # Make sure the parent also has a recorded start.
+                self._open_spans.setdefault(
+                    key,
+                    {"otrace": list(otrace), "start_t": now, "saw_token_accounting": False},
+                )
+            return
+
+        # Open any otrace we see for the first time.
+        if key not in self._open_spans:
+            self._open_spans[key] = {
+                "otrace": list(otrace),
+                "start_t": now,
+                "saw_token_accounting": False,
+            }
+
+        # Mark that this span has produced LLM token accounting.
+        if token_accounting:
+            self._open_spans[key]["saw_token_accounting"] = True
+
+        close_now = False
+        if token_accounting:
+            close_now = True
+        elif isinstance(structure, dict) and structure.get("tool_end") is True:
+            close_now = True
+        elif message_type == ChatMessageType.AGENT_TOOL_RESULT and tool_result_origin:
+            close_now = True
+
+        if not close_now:
+            return
+
+        span = self._open_spans.pop(
+            key,
+            {"otrace": list(otrace), "start_t": now, "saw_token_accounting": bool(token_accounting)},
+        )
+        # Prefer the upstream duration; otherwise use wall-clock.
+        if token_accounting and token_accounting.get("time_taken_in_seconds") is not None:
+            duration_s = float(token_accounting.get("time_taken_in_seconds") or 0.0)
+            start_s = now - duration_s
+        else:
+            start_s = span.get("start_t", now)
+            duration_s = max(now - start_s, 0.0)
+
+        kind = self._classify_kind(
+            otrace,
+            structure,
+            token_accounting,
+            saw_token_accounting=bool(span.get("saw_token_accounting")),
+        )
+
+        # Pull provider+model from the frontman's `models` aggregate, if present.
+        model_name: Optional[str] = None
+        provider_name: Optional[str] = None
+        if token_accounting and isinstance(token_accounting.get("models"), dict):
+            for prov, models in token_accounting["models"].items():
+                if isinstance(models, dict) and models:
+                    provider_name = prov
+                    model_name = next(iter(models.keys()))
+                    break
+
+        await self.logs_manager.trace_event({
+            "invocation_id": self._invocation_id,
+            "network": self.agent_name,
+            "otrace": list(otrace),
+            "agent": otrace[-1],
+            "depth": max(len(otrace) - 1, 0),
+            "kind": kind,
+            "duration_s": duration_s,
+            "received_at": now,
+            "start_s": start_s,
+            "total_tokens": token_accounting.get("total_tokens") if token_accounting else None,
+            "prompt_tokens": token_accounting.get("prompt_tokens") if token_accounting else None,
+            "completion_tokens": token_accounting.get("completion_tokens") if token_accounting else None,
+            "total_cost": token_accounting.get("total_cost") if token_accounting else None,
+            "successful_requests": token_accounting.get("successful_requests") if token_accounting else None,
+            "is_network_total": kind == "network_total",
+            "params": span.get("params"),
+            "model": model_name,
+            "provider": provider_name,
+        })
 
     def extract_agent_network_definition(self, msg: Dict[str, Any]) -> Optional[Any]:
         """

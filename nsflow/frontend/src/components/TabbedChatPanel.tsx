@@ -26,19 +26,25 @@ import McpConnectorsPanel from "./mcp/McpConnectorsPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { useTraceContext } from "../context/TraceContext";
 import { useTheme } from '../context/ThemeContext';
+import TracePanel from "./trace/TracePanel";
+import { Timeline as TraceIcon } from "@mui/icons-material";
+import { getFeatureFlags } from "../utils/config";
 interface TabbedChatPanelProps {
   isEditorMode?: boolean;
 }
 
 const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
-  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "connectors" | "config">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "trace" | "slydata" | "connectors" | "config">("chat");
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
+  const { pluginTrace } = getFeatureFlags();
   const { sessionId, activeNetwork, targetNetwork, isEditorMode: contextIsEditorMode, setIsEditorMode,
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
     setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs, chatWs, internalChatWs,
     slyDataWs, progressWs, setNewSlyData, setNewProgress } = useChatContext();
+  const { addTraceStep, traceWs, setTraceWs } = useTraceContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
@@ -68,6 +74,10 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     if (progressWs) {
       console.log("Closing previous Progress WebSocket...");
       progressWs.close();
+    }
+    if (traceWs) {
+      console.log("Closing previous Trace WebSocket...");
+      traceWs.close();
     }
 
     // Send system message for network switch only once
@@ -220,6 +230,28 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     newProgressWs.onclose = () => console.log(">> Progress WebSocket Disconnected");
     setProgressWs(newProgressWs);
 
+    // Setup WebSocket for Trace — only when the Trace plugin is enabled.
+    if (pluginTrace) {
+      const traceWsUrl = `${wsUrl}/api/v1/ws/trace/${targetNetwork}/${sessionId}`;
+      const newTraceWs = new WebSocket(traceWsUrl);
+
+      newTraceWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const step = data?.message;
+          if (step && typeof step === "object" && Array.isArray(step.otrace)) {
+            addTraceStep(step);
+          }
+        } catch (err) {
+          console.error("Error parsing Trace WebSocket message:", err);
+        }
+      };
+
+      newTraceWs.onopen = () => console.log(">> Trace WebSocket Connected");
+      newTraceWs.onclose = () => console.log(">> Trace WebSocket Disconnected");
+      setTraceWs(newTraceWs);
+    }
+
     return () => {
       console.log("WebSockets for old network are closed.");
     };
@@ -228,6 +260,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const tabConfig = [
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },
     ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
+    ...(!isEditorMode && pluginTrace ? [{ id: "trace", label: "Trace", icon: <TraceIcon />, component: <TracePanel /> }] : []),
     { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
     { id: "connectors", label: "Connectors", icon: <HubIcon />, component: <McpConnectorsPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),

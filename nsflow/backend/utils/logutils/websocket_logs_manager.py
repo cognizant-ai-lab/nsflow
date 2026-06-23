@@ -35,6 +35,14 @@ from fastapi import WebSocket, WebSocketDisconnect
 # Configuration
 ASYNCIO_SLEEP_INTERVAL = 0.5
 
+_TRUTH_VALUES = {"1", "true", "yes", "on"}
+
+
+def trace_plugin_enabled() -> bool:
+    """Whether the Trace/Analysis plugin is enabled (NSFLOW_PLUGIN_TRACE). Off by default."""
+    val = os.getenv("NSFLOW_PLUGIN_TRACE")
+    return val is not None and val.strip().lower() in _TRUTH_VALUES
+
 
 class WebsocketLogsManager:
     """
@@ -58,8 +66,10 @@ class WebsocketLogsManager:
         self.active_internal_chat_connections: List[WebSocket] = []
         self.active_sly_data_connections: List[WebSocket] = []
         self.active_progress_connections: List[WebSocket] = []
+        self.active_trace_connections: List[WebSocket] = []
         self.logger = logging.getLogger(f"{self.agent_name}")
         self.log_buffer: List[Dict] = []
+        self.trace_buffer: List[Dict[str, Any]] = []
 
     def get_timestamp(self):
         """
@@ -107,6 +117,32 @@ class WebsocketLogsManager:
         entry = {"message": message}
         self.logger.info(message)
         await self.broadcast_to_websocket(entry, self.active_internal_chat_connections)
+
+    TRACE_BUFFER_SIZE = 500
+
+    async def trace_event(self, step: Dict[str, Any]):
+        """
+        Send a per-step trace event to all connected trace clients.
+
+        Each step pairs the agent path (otrace) with the upstream-emitted
+        per-agent timing/tokens so the UI can render a durations tree
+        and a Gantt view of an invocation.
+
+        :param step: A dictionary describing one step. Expected keys:
+            otrace, agent, duration_s, total_tokens, total_cost,
+            received_at, message_type.
+        """
+        if not trace_plugin_enabled():
+            return
+        entry = {"message": step}
+        self.trace_buffer.append(step)
+        if len(self.trace_buffer) > self.TRACE_BUFFER_SIZE:
+            self.trace_buffer.pop(0)
+        self.logger.debug(step)
+        await self.broadcast_to_websocket(entry, self.active_trace_connections)
+        # Persist on a background task so DB I/O cannot delay the broadcast.
+        from nsflow.backend.db.trace_event_writer import schedule_persist  # noqa: E402
+        schedule_persist(self.session_id, step)
 
     async def sly_data_event(self, message: Dict[str, Any]):
         """
@@ -176,6 +212,27 @@ class WebsocketLogsManager:
         except WebSocketDisconnect:
             self.active_sly_data_connections.remove(websocket)
             await self.sly_data_event(f"Sly Data disconnected: {self.agent_name}")
+
+    async def handle_trace_websocket(self, websocket: WebSocket):
+        """
+        Handle a new WebSocket connection for receiving per-step trace events.
+        Replays the current trace buffer on connect so a client joining
+        mid-invocation sees the steps that already occurred.
+        :param websocket: The connected WebSocket instance.
+        """
+        await websocket.accept()
+        self.active_trace_connections.append(websocket)
+        for step in self.trace_buffer:
+            try:
+                await websocket.send_text(json.dumps({"message": step}))
+            except WebSocketDisconnect:
+                self.active_trace_connections.remove(websocket)
+                return
+        try:
+            while True:
+                await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
+        except WebSocketDisconnect:
+            self.active_trace_connections.remove(websocket)
 
     async def handle_progress_websocket(self, websocket: WebSocket):
         """
