@@ -22,6 +22,7 @@ import AgentFlow from "../../components/AgentFlow";
 import Sidebar from "../../components/Sidebar";
 // import ChatPanel from "./components/ChatPanel";
 import TabbedChatPanel from "../../components/TabbedChatPanel";
+import McpAuthGate from "../../components/mcp/McpAuthGate";
 import LogsPanel from "../../components/LogsPanel";
 import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
@@ -79,6 +80,8 @@ const HomeContent: React.FC = () => {
               state are preserved), but we hide them while Zen Mode is active so the browser's
               fullscreen scale doesn't briefly blow up the normal layout under the overlay.
             */}
+            {/* Prompts to connect required MCP servers before chatting; no layout footprint. */}
+            <McpAuthGate />
             <div
               style={{ display: isZenMode ? "none" : "flex", flexDirection: "column", height: "100%" }}
             >
@@ -121,7 +124,6 @@ const HomeContent: React.FC = () => {
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 <Panel defaultSize={33} minSize={15} maxSize={40}>
-                  {/* Pass selectedNetwork to ChatPanel */}
                   {/* TabbedChatPanel */}
                   <TabbedChatPanel />
                 </Panel>

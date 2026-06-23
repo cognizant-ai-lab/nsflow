@@ -4,6 +4,11 @@
 # Neuro SAN library
 neuro-san>=0.6.32,<0.7
 
+# MCP client SDK - used to perform the OAuth 2.1 (auth-code + PKCE + dynamic
+# client registration) flow when connecting nsflow to OAuth-protected MCP servers.
+# Pin matches the sibling neuro-san library so the two stay compatible.
+mcp>=1.23.0,<2.0
+
 # These are needed to run this app
 fastapi-cors>=0.0.6
 fastapi>=0.115.8
