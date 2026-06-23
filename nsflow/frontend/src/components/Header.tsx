@@ -27,10 +27,12 @@ import { Home as HomeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
   Autorenew as AutorenewIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
   KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon,
   Insights as AnalysisIcon,
+  Fullscreen as FullscreenIcon
 } from "@mui/icons-material";
 
 import MuiThemeToggle from "./MuiThemeToggle";
 import { useTheme } from "../context/ThemeContext";
+import { useZenMode } from "../hooks/useZenMode";
 import { getFeatureFlags } from "../utils/config";
 
 interface HeaderProps {
@@ -46,7 +48,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
-  const { pluginCruse, pluginExport, pluginTrace } = getFeatureFlags();
+  const { pluginCruse, pluginExport, pluginTrace, pluginZenMode } = getFeatureFlags();
+  const { enterZenMode } = useZenMode();
 
   // Determine if we're on editor page based on location or prop
   const isOnEditorPage = isEditorPage || location.pathname.includes('/editor');
@@ -409,13 +412,46 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
           )}
         </Box>
 
-        {/* Right - Theme Toggle + Profile */}
+        {/* Right - Zen Mode + Theme Toggle + Profile */}
         <Box sx={{
           display: 'flex',
           alignItems: 'center',
           gap: 1,
           flex: '0 0 auto'
         }}>
+          {/* Zen Mode Button - only on home page, behind plugin flag.
+              Requires an Agent-Network to be selected first. */}
+          {pluginZenMode && !isOnEditorPage && !isOnCrusePage && (
+            <Tooltip
+              title={activeNetwork ? "Enter Zen Mode (Presentation View)" : "Select an Agent-Network first"}
+              arrow
+            >
+              {/* Wrapper span lets the Tooltip render over a disabled button. */}
+              <span>
+                <IconButton
+                  onClick={enterZenMode}
+                  disabled={!activeNetwork}
+                  sx={{
+                    color: muiTheme.palette.text.primary,
+                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
+                    border: `1px solid ${alpha(muiTheme.palette.primary.main, 0.3)}`,
+                    '&:hover': !activeNetwork ? {} : {
+                      backgroundColor: alpha(muiTheme.palette.primary.main, 0.2),
+                      borderColor: muiTheme.palette.primary.main,
+                      transform: 'scale(1.05)',
+                    },
+                    '&.Mui-disabled': {
+                      color: alpha(muiTheme.palette.text.primary, 0.3),
+                      borderColor: alpha(muiTheme.palette.primary.main, 0.15),
+                    },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
           <MuiThemeToggle />
           <IconButton
             sx={{ 

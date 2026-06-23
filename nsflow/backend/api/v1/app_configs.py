@@ -66,6 +66,7 @@ def get_runtime_config():
             "NSFLOW_PLUGIN_VQA_ENDPOINT": _env_bool("NSFLOW_PLUGIN_VQA_ENDPOINT", False),
             "NSFLOW_PLUGIN_EXPORT": _env_bool("NSFLOW_PLUGIN_EXPORT", False),
             "NSFLOW_PLUGIN_TRACE": _env_bool("NSFLOW_PLUGIN_TRACE", False),
+            "NSFLOW_PLUGIN_ZENMODE": _env_bool("NSFLOW_PLUGIN_ZENMODE", False),
         }
     )
 
