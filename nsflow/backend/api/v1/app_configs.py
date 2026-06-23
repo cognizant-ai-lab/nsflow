@@ -48,6 +48,14 @@ def get_runtime_config():
             "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
             "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),
             "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
+            # Subdirectory under registries/ where the Agent Network Designer persists
+            # generated networks. Mirrors neuro-san-studio's AGENT_NETWORK_DESIGNER_SUBDIRECTORY
+            # so the Editor can build the served agent path (e.g. "generated/<name>") for launch.
+            "AGENT_NETWORK_DESIGNER_SUBDIRECTORY": os.getenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "generated"),
+            # Seconds the neuro-san server takes to reload its registries. The Editor uses this
+            # to delay enabling the launch button after generation finishes, so the freshly
+            # generated network has time to register and become discoverable via /api/v1/list.
+            "AGENT_MANIFEST_UPDATE_PERIOD_SECONDS": os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "2"),
             "NSFLOW_CRUSE_WIDGET_AGENT_NAME": os.getenv("NSFLOW_CRUSE_WIDGET_AGENT_NAME", "experimental/cruse_widget_agent"),
             "NSFLOW_CRUSE_THEME_AGENT_NAME": os.getenv("NSFLOW_CRUSE_THEME_AGENT_NAME", "experimental/cruse_theme_agent"),
             # NEW: feature flags (booleans)

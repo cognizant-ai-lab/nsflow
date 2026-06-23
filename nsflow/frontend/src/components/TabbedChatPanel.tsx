@@ -18,10 +18,11 @@ limitations under the License.
 import { useState, useRef, useEffect } from "react";
 import { Box, Tabs, Tab, Paper, alpha } from "@mui/material";
 import { Chat as ChatIcon, BugReport as InternalIcon,
-  DataObject as SlyDataIcon, Settings as ConfigIcon } from "@mui/icons-material";
+  DataObject as SlyDataIcon, Settings as ConfigIcon, Hub as HubIcon } from "@mui/icons-material";
 import ChatPanel from "./ChatPanel";
 import InternalChatPanel from "./InternalChatPanel";
 import EditorSlyDataPanel from "./slydata/EditorSlyDataPanel";
+import McpConnectorsPanel from "./mcp/McpConnectorsPanel";
 import ConfigPanel from "./ConfigPanel";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
@@ -35,7 +36,7 @@ interface TabbedChatPanelProps {
 }
 
 const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
-  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "trace" | "slydata" | "config">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "trace" | "slydata" | "connectors" | "config">("chat");
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
   const { pluginTrace } = getFeatureFlags();
@@ -261,6 +262,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
     ...(!isEditorMode && pluginTrace ? [{ id: "trace", label: "Trace", icon: <TraceIcon />, component: <TracePanel /> }] : []),
     { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
+    { id: "connectors", label: "Connectors", icon: <HubIcon />, component: <McpConnectorsPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
   ];
 

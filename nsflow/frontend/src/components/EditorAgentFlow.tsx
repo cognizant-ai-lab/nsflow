@@ -33,7 +33,7 @@ import {
   Home as HomeIcon
 } from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
-import { getFeatureFlags } from "../utils/config";
+import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
 import {extractProgressPayload } from "../utils/progressHelper";
 
 export const nodeTypes = Object.freeze({
@@ -88,8 +88,35 @@ const EditorAgentFlow = ({
   const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
-  const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork, 
-    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt } = useChatContext();
+  const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork,
+    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, waitingForAgent } = useChatContext();
+
+  // The launch button becomes visible as soon as the designer reports a network name,
+  // but a freshly-generated network isn't actually finished/registered until the agent
+  // completes its turn. Disable launch while we're still waiting on the agent so users
+  // can't launch a half-built network. `waitingForAgent` is true from message-send until
+  // the final agent chat message arrives (or the chat socket closes); it's the same
+  // signal the "Load Existing" dropdown already gates on. It is never true for loaded
+  // existing networks, so those stay launchable immediately.
+  //
+  // Even after the agent finishes, the neuro-san server needs a couple of seconds to
+  // reload its registries before the new network is discoverable via /api/v1/list. We
+  // hold the button disabled for one manifest-reload period after generation completes
+  // (the `waitingForAgent` true->false transition) so launching can't race that refresh.
+  const [registryReloadPending, setRegistryReloadPending] = useState(false);
+  const prevWaitingRef = useRef(waitingForAgent);
+  useEffect(() => {
+    const wasWaiting = prevWaitingRef.current;
+    prevWaitingRef.current = waitingForAgent;
+    // A generation cycle just finished: start the registry-reload grace period.
+    if (wasWaiting && !waitingForAgent) {
+      setRegistryReloadPending(true);
+      const timer = setTimeout(() => setRegistryReloadPending(false), getManifestUpdatePeriodMs());
+      return () => clearTimeout(timer);
+    }
+  }, [waitingForAgent]);
+
+  const launchDisabled = waitingForAgent || registryReloadPending;
 
   // latest definition for view-mode
   const getViewDefinition = useCallback(() => {
@@ -394,7 +421,11 @@ const EditorAgentFlow = ({
   const handleLaunchCruse = useCallback(() => {
     const agentNetworkName = getLatestAgentNetworkName();
     if (agentNetworkName) {
-      const cruseUrl = `${window.location.origin}/cruse?network=${encodeURIComponent(agentNetworkName)}`;
+      // The designer reports the raw name (e.g. "foo"); neuro-san serves generated
+      // networks under the configured subdirectory (e.g. "generated/foo"), which is
+      // what Cruse matches against /api/v1/list. Map to the served path before launch.
+      const servedName = toServedNetworkPath(agentNetworkName);
+      const cruseUrl = `${window.location.origin}/cruse?network=${encodeURIComponent(servedName)}`;
       window.open(cruseUrl, '_blank');
     }
   }, [getLatestAgentNetworkName]);
@@ -403,7 +434,8 @@ const EditorAgentFlow = ({
   const handleLaunchHome = useCallback(() => {
     const agentNetworkName = getLatestAgentNetworkName();
     if (agentNetworkName) {
-      const homeUrl = `${window.location.origin}/home?network=${encodeURIComponent(agentNetworkName)}`;
+      const servedName = toServedNetworkPath(agentNetworkName);
+      const homeUrl = `${window.location.origin}/home?network=${encodeURIComponent(servedName)}`;
       window.open(homeUrl, '_blank');
     }
     setLaunchMenuOpen(false);
@@ -741,39 +773,48 @@ const EditorAgentFlow = ({
                 }}
               >
                 {/* Main Launch Button - Cruse */}
-                <Tooltip title={`Launch ${lastSeenNameRef.current} in Cruse`}>
-                  <Button
-                    onClick={handleLaunchCruse}
-                    startIcon={<LaunchIcon />}
-                    sx={{
-                      minWidth: 100,
-                      px: 2.5,
-                      textTransform: 'none',
-                      borderTopLeftRadius: '28px',
-                      borderBottomLeftRadius: '28px',
-                      backgroundColor: theme.palette.primary.main,
-                    }}
-                  >
-                    Launch
-                  </Button>
+                <Tooltip title={launchDisabled
+                  ? "Waiting for the agent network to finish generating..."
+                  : `Launch ${selectedNetwork || lastSeenNameRef.current} in Cruse`}>
+                  {/* span wrapper so the tooltip still shows while the button is disabled */}
+                  <span>
+                    <Button
+                      onClick={handleLaunchCruse}
+                      disabled={launchDisabled}
+                      startIcon={<LaunchIcon />}
+                      sx={{
+                        minWidth: 100,
+                        px: 2.5,
+                        textTransform: 'none',
+                        borderTopLeftRadius: '28px',
+                        borderBottomLeftRadius: '28px',
+                        backgroundColor: theme.palette.primary.main,
+                      }}
+                    >
+                      Launch
+                    </Button>
+                  </span>
                 </Tooltip>
 
                 {/* Dropdown Arrow */}
                 <Tooltip title="More launch options">
-                  <Button
-                    size="small"
-                    onClick={handleToggleLaunchMenu}
-                    sx={{
-                      px: 0.5,
-                      minWidth: 32,
-                      borderTopRightRadius: '28px',
-                      borderBottomRightRadius: '28px',
-                      borderLeft: `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
-                      backgroundColor: theme.palette.primary.main,
-                    }}
-                  >
-                    <ArrowDropDownIcon />
-                  </Button>
+                  <span>
+                    <Button
+                      size="small"
+                      onClick={handleToggleLaunchMenu}
+                      disabled={launchDisabled}
+                      sx={{
+                        px: 0.5,
+                        minWidth: 32,
+                        borderTopRightRadius: '28px',
+                        borderBottomRightRadius: '28px',
+                        borderLeft: `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
+                        backgroundColor: theme.palette.primary.main,
+                      }}
+                    >
+                      <ArrowDropDownIcon />
+                    </Button>
+                  </span>
                 </Tooltip>
               </ButtonGroup>
 
@@ -831,29 +872,35 @@ const EditorAgentFlow = ({
             </>
           ) : (
             // Cruse disabled: Show simple Launch to Home button
-            <Tooltip title={`Launch ${lastSeenNameRef.current} in Home`}>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<LaunchIcon />}
-                onClick={handleLaunchHome}
-                sx={{
-                  height: 56,
-                  minWidth: 100,
-                  px: 2.5,
-                  textTransform: 'none',
-                  borderRadius: '28px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                  backgroundColor: theme.palette.primary.main,
-                  '&:hover': {
-                    backgroundColor: theme.palette.primary.dark,
-                    transform: 'scale(1.02)',
-                    transition: 'all 0.2s ease-in-out'
-                  }
-                }}
-              >
-                Launch
-              </Button>
+            <Tooltip title={launchDisabled
+              ? "Waiting for the agent network to finish generating..."
+              : `Launch ${selectedNetwork || lastSeenNameRef.current} in Home`}>
+              {/* span wrapper so the tooltip still shows while the button is disabled */}
+              <span>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<LaunchIcon />}
+                  onClick={handleLaunchHome}
+                  disabled={launchDisabled}
+                  sx={{
+                    height: 56,
+                    minWidth: 100,
+                    px: 2.5,
+                    textTransform: 'none',
+                    borderRadius: '28px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    backgroundColor: theme.palette.primary.main,
+                    '&:hover': {
+                      backgroundColor: theme.palette.primary.dark,
+                      transform: 'scale(1.02)',
+                      transition: 'all 0.2s ease-in-out'
+                    }
+                  }}
+                >
+                  Launch
+                </Button>
+              </span>
             </Tooltip>
           )}
         </Box>

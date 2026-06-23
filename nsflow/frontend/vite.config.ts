@@ -17,14 +17,38 @@ limitations under the License.
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ui-common (@cognizant-ai-lab/ui-common) only exposes its barrel ("." -> dist/index.js)
+// and "./const" in its package `exports`, so deep subpath imports are blocked. We consume
+// ONLY the framework-agnostic neuro-san controller (Agent.ts: sendChatQuery, getConnectivity,
+// sendNetworkDesignerUpdate, ...) — not the visual components — by aliasing a stable
+// specifier straight to the built controller module. This keeps the bundle free of the
+// package's Next/MUI-coupled modules (verified: controller pulls no React/MUI/Next/node).
+const uiCommonDist = path.resolve(dirname, "node_modules/@cognizant-ai-lab/ui-common/dist");
 
 export default defineConfig(() => {
   return {
     plugins: [react()],
     base: "/",
+    resolve: {
+      alias: {
+        "@ui-common/agent": path.join(uiCommonDist, "controller/agent/Agent.js"),
+      },
+    },
     build: {
       outDir: "dist",
       assetsDir: "assets",
+      // Vite's default build target is [es2020, edge88, firefox78, chrome87, safari14].
+      // esbuild >= 0.28 has a regression where it tries to transform destructuring for
+      // safari14 (and then errors, since that transform isn't implemented), which breaks
+      // the build. Only the safari14 floor trips it; the rest of the default list is fine.
+      // We bump just the Safari floor to safari16 and keep every other default target, so
+      // browser support is unchanged except for dropping Safari 14/15 (Safari 16: 2022).
+      target: ["es2020", "edge88", "firefox78", "chrome87", "safari16"],
       rollupOptions: {
         output: {
           entryFileNames: "assets/index.js",
