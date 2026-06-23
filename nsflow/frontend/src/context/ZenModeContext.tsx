@@ -56,8 +56,9 @@ export const ZenModeProvider = ({ children }: ZenModeProviderProps) => {
   }, [config.features.transitionDuration, isZenMode, isTransitioning]);
 
   const exitZenMode = useCallback(() => {
-    // Idempotent: skip when we're already out of Zen Mode.
-    if (!isZenMode && !isTransitioning) return;
+    // Idempotent: skip when we're already out of Zen Mode or mid-transition,
+    // so rapid clicks (or StrictMode re-invokes) can't stack timers.
+    if (!isZenMode || isTransitioning) return;
     setIsTransitioning(true);
     setTimeout(() => {
       setIsZenMode(false);

@@ -29,6 +29,8 @@ export interface ZenModeFeatures {
   // Agent Flow
   /** Render the minimap inside the agent-flow panel. */
   showMinimap: boolean;
+  /** Show the floating "Active Agents" list overlaid on the agent-flow panel. */
+  showActiveAgents: boolean;
 
   // Advanced panels (default ON — they share the ChatPanel real estate).
   showInternalChat: boolean;
@@ -96,6 +98,7 @@ const DEFAULT_CONFIG: ZenModeConfig = {
 
     // Agent Flow
     showMinimap: false,
+    showActiveAgents: false,
 
     // Advanced panels — default ON; they share the ChatPanel real estate.
     showInternalChat: true,

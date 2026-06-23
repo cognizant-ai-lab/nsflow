@@ -278,15 +278,17 @@ const ZenModeOverlay = () => {
     }
   }, [isDark, theme, config.theme]);
 
-  // Handle visibility with animation timing
+  // Handle visibility. exitZenMode already holds isZenMode true for the full
+  // transitionDuration while the overlay fades out, so by the time isZenMode
+  // flips false the fade is done — unmount immediately rather than keeping an
+  // invisible zIndex:9999 layer around that would swallow clicks.
   useEffect(() => {
     if (isZenMode) {
       setIsVisible(true);
     } else if (!isTransitioning) {
-      const timer = setTimeout(() => setIsVisible(false), config.features.transitionDuration);
-      return () => clearTimeout(timer);
+      setIsVisible(false);
     }
-  }, [isZenMode, isTransitioning, config.features.transitionDuration]);
+  }, [isZenMode, isTransitioning]);
 
   if (!isVisible && !isZenMode) return null;
 
@@ -489,10 +491,10 @@ const ZenModeOverlay = () => {
           p: 2,
         }}
       >
-        <PanelGroup direction="horizontal">
+        <PanelGroup direction="horizontal" id="zen-main-group">
           {config.features.showSidebar && (
             <>
-              <Panel defaultSize={14} minSize={10} maxSize={25}>
+              <Panel id="zen-sidebar" order={1} defaultSize={14} minSize={10} maxSize={25}>
                 <Box
                   sx={{
                     height: "100%",
@@ -533,9 +535,14 @@ const ZenModeOverlay = () => {
             </>
           )}
 
-          {/* Agent Flow Panel */}
+          {/* Agent Flow Panel — fills the space left by the sidebar (when shown) and chat,
+              so the three panels' defaultSize values sum to 100 and resizing stays stable. */}
           <Panel
-            defaultSize={100 - config.features.chatPanelWidth}
+            id="zen-agentflow"
+            order={2}
+            defaultSize={
+              100 - config.features.chatPanelWidth - (config.features.showSidebar ? 14 : 0)
+            }
             minSize={30}
           >
             <Box
@@ -580,6 +587,8 @@ const ZenModeOverlay = () => {
 
           {/* Chat Panel */}
           <Panel
+            id="zen-chat"
+            order={3}
             defaultSize={config.features.chatPanelWidth}
             minSize={15}
             maxSize={50}

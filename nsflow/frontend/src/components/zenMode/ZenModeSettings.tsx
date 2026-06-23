@@ -47,6 +47,7 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "showSidebar", label: "Show Sidebar (Switch Networks)", category: "Layout" },
 
   { key: "showMinimap", label: "Minimap", category: "Agent Flow" },
+  { key: "showActiveAgents", label: "Active Agents List", category: "Agent Flow" },
 
   { key: "showInternalChat", label: "Internal Chat", category: "Advanced Panels" },
   { key: "showConfigPanel", label: "Config Panel", category: "Advanced Panels" },

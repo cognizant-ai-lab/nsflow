@@ -104,16 +104,18 @@ export const useAgentFlowData = ({
         setNodes(finalNodes);
         setEdges(transformedEdges);
 
-        const { x, y, zoom, padding } = viewportConfig;
+        const { x, y, zoom, duration, padding, fitViewDuration } = viewportConfig;
         const targetFinite = Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(zoom);
 
         timers.push(
           setTimeout(() => {
             if (cancelled) return;
+            // Safe to animate: containerReady gates this effect, so the ReactFlow
+            // container is measured before fitView/setViewport run (no NaN viewport).
             if (padding !== undefined) {
-              fitView({ padding, duration: 0 });
+              fitView({ padding, duration: fitViewDuration });
             } else {
-              fitView({ duration: 0 });
+              fitView();
             }
 
             if (!targetFinite) return;
@@ -121,8 +123,8 @@ export const useAgentFlowData = ({
             timers.push(
               setTimeout(() => {
                 if (cancelled) return;
-                setViewport({ x, y, zoom }, { duration: 0 });
-              }, 50)
+                setViewport({ x, y, zoom }, { duration });
+              }, (fitViewDuration ?? 0) + 50)
             );
           }, 300)
         );

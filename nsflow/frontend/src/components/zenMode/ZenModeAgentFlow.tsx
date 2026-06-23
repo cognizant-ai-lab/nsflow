@@ -26,7 +26,7 @@ import ReactFlow, {
   Edge,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Box, Paper, Typography, alpha, Tooltip, Button } from "@mui/material";
+import { Box, Typography, alpha, Tooltip, Button } from "@mui/material";
 import { AutoFixHigh as AutoArrangeIcon } from "@mui/icons-material";
 import AgentNode from "../AgentNode";
 import FloatingEdge from "../FloatingEdge";
@@ -166,62 +166,47 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
         </Tooltip>
       </Box>
 
-      {/* Active Agent Indicator */}
-      {activeAgents.size > 0 && (
-        <Paper
-          elevation={0}
+      {/* Active Agent Indicator — optional; names stacked vertically as plain accent text. */}
+      {config.features.showActiveAgents && activeAgents.size > 0 && (
+        <Box
           sx={{
             position: "absolute",
             top: 12,
             right: 12,
             zIndex: 20,
-            px: 2,
-            py: 1,
-            backgroundColor: alpha(theme.palette.background.paper, 0.85),
-            backdropFilter: "blur(8px)",
-            borderRadius: 2,
-            border: `1px solid ${alpha(config.theme.activeAgentBorder, 0.3)}`,
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.25,
+            alignItems: "flex-end",
           }}
         >
           <Typography
             variant="caption"
             sx={{
               color: theme.palette.text.secondary,
-              display: "block",
-              mb: 0.5,
               fontSize: "0.65rem",
               textTransform: "uppercase",
               letterSpacing: "0.5px",
+              mb: 0.25,
             }}
           >
             Active Agents
           </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            {Array.from(activeAgents).map((agent) => (
-              <Box
-                key={agent}
-                sx={{
-                  px: 1,
-                  py: 0.25,
-                  borderRadius: 1,
-                  backgroundColor: alpha(config.theme.activeAgentBorder, 0.2),
-                  border: `1px solid ${config.theme.activeAgentBorder}`,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: config.theme.activeAgentBorder,
-                    fontWeight: 600,
-                    fontSize: "0.7rem",
-                  }}
-                >
-                  {agent}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        </Paper>
+          {Array.from(activeAgents).map((agent) => (
+            <Typography
+              key={agent}
+              variant="caption"
+              sx={{
+                color: config.theme.activeAgentBorder,
+                fontWeight: 600,
+                fontSize: "0.75rem",
+                lineHeight: 1.3,
+              }}
+            >
+              {agent}
+            </Typography>
+          ))}
+        </Box>
       )}
 
       {/* React Flow */}
