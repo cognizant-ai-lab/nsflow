@@ -1,0 +1,674 @@
+/*
+Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
+import { ReactFlowProvider } from "reactflow";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
+import {
+  Box,
+  Typography,
+  IconButton,
+  Tooltip,
+  alpha,
+  Fade,
+  Chip,
+  Tabs,
+  Tab,
+  Theme,
+  GlobalStyles,
+} from "@mui/material";
+import {
+  Close as CloseIcon,
+  Hub as NetworkIcon,
+  Chat as ChatIcon,
+  BugReport as InternalIcon,
+  DataObject as SlyDataIcon,
+  Settings as ConfigIcon,
+  Cable as ConnectorsIcon,
+} from "@mui/icons-material";
+import { useZenMode } from "../../hooks/useZenMode";
+import { useChatContext } from "../../context/ChatContext";
+import { useTheme } from "../../context/ThemeContext";
+import ZenModeAgentFlow from "./ZenModeAgentFlow";
+import ZenModeChat from "./ZenModeChat";
+import ZenModeSettings from "./ZenModeSettings";
+import InternalChatPanel from "../InternalChatPanel";
+import ConfigPanel from "../ConfigPanel";
+import EditorLogsPanel from "../EditorLogsPanel";
+import SlyDataPanel from "../slydata/EditorSlyDataPanel";
+import McpConnectorsPanel from "../mcp/McpConnectorsPanel";
+import Sidebar from "../Sidebar";
+
+// Memoized Tabs component to prevent re-renders on hover
+const ZenModeTabs = memo(({
+  activeTab,
+  onTabChange,
+  showInternalChat,
+  showConfigPanel,
+  showSlyDataPanel,
+  showConnectorsPanel,
+  theme
+}: {
+  activeTab: number;
+  onTabChange: (event: React.SyntheticEvent, newValue: number) => void;
+  showInternalChat: boolean;
+  showConfigPanel: boolean;
+  showSlyDataPanel: boolean;
+  showConnectorsPanel: boolean;
+  theme: Theme;
+}) => {
+  // Per-tab sx — match the icon sizing/spacing used in TabbedChatPanel.
+  const tabSx = {
+    gap: 1,
+    "& .MuiSvgIcon-root": { fontSize: "1.125rem" },
+  } as const;
+  return (
+    <Tabs
+      value={activeTab}
+      onChange={onTabChange}
+      // fullWidth distributes tabs evenly across the available space
+      variant="fullWidth"
+      sx={{
+        minHeight: 48,
+        borderBottom: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+        position: "relative",
+        width: "100%",
+        "& .MuiTab-root": {
+          minHeight: 48,
+          py: 1,
+          px: 2,
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          textTransform: "none",
+          color: theme.palette.text.secondary,
+          transition: "color 0.2s ease, background-color 0.2s ease",
+          "&:hover": {
+            color: theme.palette.text.primary,
+            backgroundColor: alpha(theme.palette.primary.main, 0.06),
+          },
+          "&.Mui-selected": {
+            color: theme.palette.primary.main,
+            fontWeight: 600,
+          },
+        },
+        "& .MuiTabs-indicator": {
+          backgroundColor: theme.palette.primary.main,
+          height: 3,
+        },
+      }}
+    >
+      <Tab icon={<ChatIcon />} iconPosition="start" label="Chat" sx={tabSx} />
+      {showInternalChat && (
+        <Tab icon={<InternalIcon />} iconPosition="start" label="Internal Chat" sx={tabSx} />
+      )}
+      {showConfigPanel && (
+        <Tab icon={<ConfigIcon />} iconPosition="start" label="Config" sx={tabSx} />
+      )}
+      {showSlyDataPanel && (
+        <Tab icon={<SlyDataIcon />} iconPosition="start" label="SlyData" sx={tabSx} />
+      )}
+      {showConnectorsPanel && (
+        <Tab icon={<ConnectorsIcon />} iconPosition="start" label="Connectors" sx={tabSx} />
+      )}
+      {/* Logs are rendered as a floating EditorLogsPanel below, not as a tab */}
+    </Tabs>
+  );
+});
+
+ZenModeTabs.displayName = "ZenModeTabs";
+
+const ZenModeOverlay = () => {
+  const {
+    isZenMode,
+    isTransitioning,
+    exitZenMode,
+    config,
+    zoomLevel,
+  } = useZenMode();
+  const { activeNetwork } = useChatContext();
+  const { theme } = useTheme();
+  const [isVisible, setIsVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Check if any advanced panel is enabled (logs are floating, not a tab)
+  const hasAdvancedPanels =
+    config.features.showInternalChat ||
+    config.features.showConfigPanel ||
+    config.features.showSlyDataPanel ||
+    config.features.showConnectorsPanel;
+
+
+  // Memoize tab change handler
+  const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  }, []);
+
+  // Calculate tab indices for each panel
+  const tabIndices = useMemo(() => {
+    let index = 0;
+    const indices: { [key: string]: number } = { chat: index++ };
+    if (config.features.showInternalChat) indices.internal = index++;
+    if (config.features.showConfigPanel) indices.config = index++;
+    if (config.features.showSlyDataPanel) indices.slydata = index++;
+    if (config.features.showConnectorsPanel) indices.connectors = index++;
+    // Logs are rendered as a floating EditorLogsPanel, not a tab
+    return indices;
+  }, [config.features]);
+
+  // Clamp activeTab whenever the enabled tab set changes so it always points to a valid index
+  useEffect(() => {
+    const maxTab = Object.keys(tabIndices).length - 1;
+    if (activeTab > maxTab) {
+      setActiveTab(maxTab);
+    }
+  }, [tabIndices, activeTab]);
+
+  // Render all panels but keep them mounted - use CSS to show/hide
+  const tabContent = useMemo(() => {
+    return (
+      <>
+        {/* Chat Panel - Always visible */}
+        <Box
+          sx={{
+            display: activeTab === tabIndices.chat ? 'flex' : 'none',
+            flexDirection: 'column',
+            height: '100%',
+            width: '100%',
+          }}
+        >
+          <ZenModeChat />
+        </Box>
+
+        {/* Internal Chat Panel */}
+        {config.features.showInternalChat && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.internal ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <InternalChatPanel />
+          </Box>
+        )}
+
+        {/* Config Panel */}
+        {config.features.showConfigPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.config ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <ConfigPanel selectedNetwork={activeNetwork || ""} />
+          </Box>
+        )}
+
+        {/* Sly Data Panel */}
+        {config.features.showSlyDataPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.slydata ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <SlyDataPanel />
+          </Box>
+        )}
+
+        {/* Connectors Panel */}
+        {config.features.showConnectorsPanel && (
+          <Box
+            sx={{
+              display: activeTab === tabIndices.connectors ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+            }}
+          >
+            <McpConnectorsPanel />
+          </Box>
+        )}
+
+        {/* Logs are rendered as a floating EditorLogsPanel below, outside the tab system. */}
+      </>
+    );
+  }, [activeTab, tabIndices, config.features, activeNetwork]);
+  // Theme-aware colors based on current MUI theme
+  const isDark = theme.palette.mode === 'dark';
+  const themeAwareColors = useMemo(() => {
+    if (isDark) {
+      // Dark theme - use config colors
+      return {
+        backgroundGradient: config.theme.backgroundGradient,
+        headerBackground: config.theme.headerBackground,
+        agentFlowBackground: config.theme.agentFlowBackground,
+        agentFlowBorder: config.theme.agentFlowBorder,
+        chatBackground: config.theme.chatBackground,
+        chatBorder: config.theme.chatBorder,
+      };
+    } else {
+      // Light theme - use theme-aware colors
+      return {
+        backgroundGradient: `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 50%, ${theme.palette.background.default} 100%)`,
+        headerBackground: alpha(theme.palette.background.paper, 0.95),
+        agentFlowBackground: 'transparent',
+        agentFlowBorder: alpha(theme.palette.primary.main, 0.2),
+        chatBackground: alpha(theme.palette.background.paper, 0.98),
+        chatBorder: alpha(theme.palette.primary.main, 0.3),
+      };
+    }
+  }, [isDark, theme, config.theme]);
+
+  // Handle visibility. exitZenMode already holds isZenMode true for the full
+  // transitionDuration while the overlay fades out, so by the time isZenMode
+  // flips false the fade is done — unmount immediately rather than keeping an
+  // invisible zIndex:9999 layer around that would swallow clicks.
+  useEffect(() => {
+    if (isZenMode) {
+      setIsVisible(true);
+    } else if (!isTransitioning) {
+      setIsVisible(false);
+    }
+  }, [isZenMode, isTransitioning]);
+
+  if (!isVisible && !isZenMode) return null;
+
+  const transitionStyle = {
+    opacity: isZenMode && !isTransitioning ? 1 : 0,
+    transform: isZenMode && !isTransitioning 
+      ? 'scale(1)' 
+      : `scale(${config.features.scaleFrom})`,
+    transition: `
+      opacity ${config.features.fadeInDuration}ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform ${config.features.transitionDuration}ms cubic-bezier(0.4, 0, 0.2, 1)
+    `,
+  };
+
+  return (
+    <Box
+      sx={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+        background: themeAwareColors.backgroundGradient,
+        ...transitionStyle,
+      }}
+    >
+      {/*
+        MUI modals/popovers portal to document.body at zIndex 1300, below the
+        overlay (9999). Raise them above the overlay so connector dialogs and
+        menus opened from within Zen Mode are visible. Scoped to while the
+        overlay is mounted.
+      */}
+      <GlobalStyles styles={{ ".MuiModal-root": { zIndex: "10000 !important" } }} />
+
+      {/* Ambient Background Effects */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          pointerEvents: "none",
+          overflow: "hidden",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: "-50%",
+            left: "-50%",
+            width: "200%",
+            height: "200%",
+            background: `
+              radial-gradient(circle at 20% 30%, ${alpha(theme.palette.primary.main, isDark ? 0.08 : 0.05)} 0%, transparent 40%),
+              radial-gradient(circle at 80% 70%, ${alpha(theme.palette.success.main, isDark ? 0.06 : 0.04)} 0%, transparent 40%)
+            `,
+            animation: "ambientFloat 20s ease-in-out infinite",
+            "@keyframes ambientFloat": {
+              "0%, 100%": { transform: "translate(0, 0) rotate(0deg)" },
+              "33%": { transform: "translate(2%, 3%) rotate(1deg)" },
+              "66%": { transform: "translate(-1%, -2%) rotate(-1deg)" },
+            },
+          },
+        }}
+      />
+
+      {/* Header */}
+      <Fade in={isZenMode && !isTransitioning} timeout={config.features.fadeInDuration}>
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: config.theme.headerHeight,
+              background: themeAwareColors.headerBackground,
+              backdropFilter: "blur(12px)",
+              borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              px: 3,
+              zIndex: 10,
+            }}
+          >
+            {/* Left - Network Info */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  px: 2,
+                  py: 0.75,
+                  borderRadius: 2,
+                  background: alpha(theme.palette.primary.main, 0.1),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                }}
+              >
+                <NetworkIcon
+                  sx={{
+                    fontSize: 20,
+                    color: theme.palette.primary.main,
+                  }}
+                />
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 600,
+                    color: theme.palette.text.primary,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  {activeNetwork || "No Network Selected"}
+                </Typography>
+              </Box>
+
+              {activeNetwork && (
+                <Chip
+                  size="small"
+                  label="Connected"
+                  sx={{
+                    backgroundColor: alpha(theme.palette.success.main, 0.15),
+                    color: theme.palette.success.main,
+                    border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+                    fontWeight: 500,
+                    "& .MuiChip-label": { px: 1.5 },
+                    "&::before": {
+                      content: '""',
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      backgroundColor: theme.palette.success.main,
+                      marginRight: 1,
+                      marginLeft: 1,
+                      animation: "pulse 2s ease-in-out infinite",
+                      "@keyframes pulse": {
+                        "0%, 100%": { opacity: 1 },
+                        "50%": { opacity: 0.4 },
+                      },
+                    },
+                  }}
+                />
+              )}
+            </Box>
+
+            {/* Center - Title */}
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 300,
+                color: alpha(theme.palette.text.primary, 0.7),
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                position: "absolute",
+                left: "50%",
+                transform: "translateX(-50%)",
+              }}
+            >
+              Zen Mode
+            </Typography>
+
+            {/* Right - Controls */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+
+
+              {/* Zen Mode Settings */}
+              <ZenModeSettings />
+
+              {/* Exit Button */}
+              <Tooltip title="Exit Zen Mode (Esc)">
+                <IconButton
+                  onClick={exitZenMode}
+                  sx={{
+                    ml: 1,
+                    color: theme.palette.text.primary,
+                    background: alpha(theme.palette.error.main, 0.1),
+                    border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+                    "&:hover": {
+                      background: alpha(theme.palette.error.main, 0.2),
+                      borderColor: theme.palette.error.main,
+                    },
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+        </Fade>
+
+      {/* Main Content */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: config.theme.headerHeight,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          p: 2,
+        }}
+      >
+        <PanelGroup direction="horizontal" id="zen-main-group">
+          {config.features.showSidebar && (
+            <>
+              <Panel id="zen-sidebar" order={1} defaultSize={14} minSize={10} maxSize={25}>
+                <Box
+                  sx={{
+                    height: "100%",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    background: themeAwareColors.chatBackground,
+                    border: `1px solid ${themeAwareColors.chatBorder}`,
+                    boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+                  }}
+                >
+                  <Sidebar onSelectNetwork={() => { /* selection is mirrored via ChatContext.activeNetwork */ }} />
+                </Box>
+              </Panel>
+              <PanelResizeHandle
+                style={{
+                  width: 8,
+                  background: "transparent",
+                  cursor: "ew-resize",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 40,
+                    borderRadius: 2,
+                    background: alpha(theme.palette.primary.main, 0.3),
+                    transition: "background 0.2s, height 0.2s",
+                    "&:hover": {
+                      background: config.theme.primaryAccent,
+                      height: 60,
+                    },
+                  }}
+                />
+              </PanelResizeHandle>
+            </>
+          )}
+
+          {/* Agent Flow Panel — fills the space left by the sidebar (when shown) and chat,
+              so the three panels' defaultSize values sum to 100 and resizing stays stable. */}
+          <Panel
+            id="zen-agentflow"
+            order={2}
+            defaultSize={
+              100 - config.features.chatPanelWidth - (config.features.showSidebar ? 14 : 0)
+            }
+            minSize={30}
+          >
+            <Box
+              sx={{
+                height: "100%",
+                borderRadius: 3,
+                overflow: "hidden",
+                background: themeAwareColors.agentFlowBackground,
+                border: `1px solid ${themeAwareColors.agentFlowBorder}`,
+                boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+              }}
+            >
+              <ReactFlowProvider>
+                <ZenModeAgentFlow zoomLevel={zoomLevel} />
+              </ReactFlowProvider>
+            </Box>
+          </Panel>
+          <PanelResizeHandle
+            style={{
+              width: 8,
+              background: "transparent",
+              cursor: "ew-resize",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Box
+              sx={{
+                width: 4,
+                height: 40,
+                borderRadius: 2,
+                background: alpha(theme.palette.primary.main, 0.3),
+                transition: "background 0.2s, height 0.2s",
+                "&:hover": {
+                  background: config.theme.primaryAccent,
+                  height: 60,
+                },
+              }}
+            />
+          </PanelResizeHandle>
+
+          {/* Chat Panel */}
+          <Panel
+            id="zen-chat"
+            order={3}
+            defaultSize={config.features.chatPanelWidth}
+            minSize={15}
+            maxSize={50}
+          >
+            <Box
+              sx={{
+                height: "100%",
+                borderRadius: 3,
+                overflow: "hidden",
+                background: themeAwareColors.chatBackground,
+                border: `1px solid ${themeAwareColors.chatBorder}`,
+                boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, isDark ? 0.2 : 0.1)}`,
+                display: "flex",
+                flexDirection: "column",
+                  }}
+                >
+                {/* Tabs for Chat and Advanced Panels */}
+                {hasAdvancedPanels && (
+                  <ZenModeTabs
+                    activeTab={activeTab}
+                    onTabChange={handleTabChange}
+                    showInternalChat={config.features.showInternalChat}
+                    showConfigPanel={config.features.showConfigPanel}
+                    showSlyDataPanel={config.features.showSlyDataPanel}
+                    showConnectorsPanel={config.features.showConnectorsPanel}
+                    theme={theme}
+                  />
+                )}
+
+                {/* Tab Content */}
+                <Box sx={{ flex: 1, overflow: "hidden" }}>
+                  {tabContent}
+                </Box>
+            </Box>
+          </Panel>
+        </PanelGroup>
+      </Box>
+
+      {/* Keyboard Shortcut Hint */}
+      <Fade in={isZenMode && !isTransitioning} timeout={config.features.fadeInDuration * 2}>
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            px: 2,
+            py: 1,
+            borderRadius: 2,
+            background: alpha(theme.palette.background.paper, 0.3),
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{ color: alpha(theme.palette.text.secondary, 0.7) }}
+          >
+            Press <strong>Esc</strong> to exit
+          </Typography>
+        </Box>
+      </Fade>
+
+      {/* Floating Editor-style logs panel. Anchored to the bottom-center of the
+          agent-flow area (left ~67% of the viewport), so it clears both the
+          ReactFlow zoom controls (bottom-left) and the chat panel (right ~33%).
+          The expanded panel (640px wide) sits centered under the agent-flow zone. */}
+      {config.features.showLogsPanel && (
+        <EditorLogsPanel
+          disableSidebarTracking
+          leftOffset={Math.max(16, Math.round(window.innerWidth * 0.335) - 320)}
+          bottom={24}
+          expandedWidth={640}
+          expandedHeight={320}
+        />
+      )}
+    </Box>
+  );
+};
+
+export default ZenModeOverlay;
