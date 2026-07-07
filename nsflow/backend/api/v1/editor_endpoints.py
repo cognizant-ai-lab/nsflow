@@ -794,8 +794,8 @@ async def undo_operation(design_id: str):
         success = operation_store.undo()
 
         # Get updated undo/redo status
-        history = operation_store.read_jsonl(operation_store.hist_file)
-        redo_stack = operation_store.read_jsonl(operation_store.redo_file)
+        history = operation_store._read_jsonl(operation_store.hist_file)
+        redo_stack = operation_store._read_jsonl(operation_store.redo_file)
 
         return UndoRedoResponse(
             success=success,
@@ -822,8 +822,8 @@ async def redo_operation(design_id: str):
         success = operation_store.redo()
 
         # Get updated undo/redo status
-        history = operation_store.read_jsonl(operation_store.hist_file)
-        redo_stack = operation_store.read_jsonl(operation_store.redo_file)
+        history = operation_store._read_jsonl(operation_store.hist_file)
+        redo_stack = operation_store._read_jsonl(operation_store.redo_file)
 
         return UndoRedoResponse(
             success=success,
