@@ -52,6 +52,9 @@ test.json
 test.py
 TopicMemory.json
 
+# local brainstorming/design specs (working artifacts, not committed)
+docs/superpowers/
+
 # keep the dist for prebuilt_frontend
 !nsflow/prebuilt_frontend/dist/
 !nsflow/prebuilt_frontend/dist/**
