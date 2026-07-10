@@ -18,6 +18,7 @@ import * as React from "react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Box } from "@mui/material";
 import Header from "../../components/Header";
+import StarStudioPopup from "../../components/StarStudioPopup";
 import { CruseInterface } from "../../components/cruse/CruseInterface";
 import CruseFloatingPanel from "../../components/cruse/CruseFloatingPanel";
 import { BackgroundEngine, type BackgroundSchema } from "../../components/cruse/backgrounds";
@@ -249,6 +250,7 @@ const CruseContent: React.FC = () => {
             }}
           >
             <Header selectedNetwork="" isCrusePage={true} />
+            <StarStudioPopup />
 
             <Box sx={{
               flex: 1,

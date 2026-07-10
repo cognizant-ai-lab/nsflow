@@ -26,6 +26,7 @@ import McpAuthGate from "../../components/mcp/McpAuthGate";
 import LogsPanel from "../../components/LogsPanel";
 import InfoPanel from "../../components/InfoPanel";
 import Header from "../../components/Header";
+import StarStudioPopup from "../../components/StarStudioPopup";
 import ZenModeOverlay from "../../components/zenMode/ZenModeOverlay";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
@@ -88,6 +89,7 @@ const HomeContent: React.FC = () => {
               <div className="h-14">
                 <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
               </div>
+              <StarStudioPopup />
 
               <PanelGroup direction="horizontal">
                 <Panel defaultSize={12} minSize={10} maxSize={25}>
