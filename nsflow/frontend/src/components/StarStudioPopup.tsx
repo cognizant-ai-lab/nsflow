@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 import { useEffect, useState } from "react";
-import { Box, IconButton, Paper, Typography, useTheme, alpha } from "@mui/material";
-import { Close as CloseIcon } from "@mui/icons-material";
+import { Box, IconButton, Tooltip, useTheme, alpha } from "@mui/material";
+import { Close as CloseIcon, Star as StarIcon } from "@mui/icons-material";
 import { FaGithub } from "react-icons/fa";
 
 const STUDIO_REPO_URL = "https://github.com/cognizant-ai-lab/neuro-san-studio";
@@ -30,6 +30,12 @@ function formatStars(count: number): string {
   return `${text}k`;
 }
 
+/**
+ * Compact, floating "star neuro-san-studio" chip anchored at the top-right, near the
+ * light/dark toggle. Floating (position: fixed) so it never affects the Header layout and
+ * is trivial to anchor. Dismissable via the x; dismissal is local state only, so it
+ * reappears on the next page load.
+ */
 export default function StarStudioPopup() {
   const theme = useTheme();
   const [open, setOpen] = useState(true);
@@ -46,7 +52,7 @@ export default function StarStudioPopup() {
           setStars(data.stargazers_count);
         }
       } catch {
-        // Rate-limited / offline / blocked: leave count hidden, keep the card.
+        // Rate-limited / offline / blocked: leave count hidden, keep the chip.
       }
     })();
     return () => {
@@ -57,81 +63,69 @@ export default function StarStudioPopup() {
   if (!open) return null;
 
   return (
-    <Paper
-      elevation={6}
-      sx={{
-        position: "fixed",
-        top: 64,
-        right: 16,
-        zIndex: theme.zIndex.appBar - 1,
-        width: 300,
-        maxWidth: "calc(100vw - 32px)",
-        p: 2,
-        borderRadius: 3,
-        border: `1px solid ${theme.palette.divider}`,
-        backgroundColor: theme.palette.background.paper,
-        color: theme.palette.text.primary,
-      }}
-    >
-      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-          Star neuro-san-studio
-        </Typography>
-        <IconButton
-          size="small"
-          aria-label="Dismiss star prompt"
-          onClick={() => setOpen(false)}
-          sx={{ mt: -0.5, mr: -0.5, color: theme.palette.text.secondary }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </Box>
-
-      <Typography variant="body2" sx={{ mt: 1, color: theme.palette.text.secondary }}>
-        See the latest releases and help grow the community on GitHub.
-      </Typography>
-
+    <Tooltip title="Checkout the latest release and help grow the community on GitHub" arrow>
       <Box
         component="a"
         href={STUDIO_REPO_URL}
         target="_blank"
         rel="noopener noreferrer"
         sx={{
-          mt: 2,
+          position: "fixed",
+          top: 10,
+          right: 160,
+          zIndex: theme.zIndex.appBar + 1,
+          height: 36,
           display: "inline-flex",
           alignItems: "center",
-          gap: 1,
-          px: 1.5,
-          py: 0.75,
-          borderRadius: 2,
+          gap: 0.75,
+          pl: 1,
+          pr: 0.25,
+          borderRadius: 1,
           border: `1px solid ${theme.palette.divider}`,
-          backgroundColor: alpha(theme.palette.text.primary, 0.04),
-          color: theme.palette.text.primary,
+          backgroundColor: theme.palette.background.paper,
+          boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.2)}`,
+          whiteSpace: "nowrap",
           textDecoration: "none",
           fontWeight: 600,
-          fontSize: 14,
-          "&:hover": { backgroundColor: alpha(theme.palette.text.primary, 0.1) },
+          fontSize: 13,
+          cursor: "pointer",
+          "&:hover": { backgroundColor: alpha(theme.palette.text.primary, 0.06) },
         }}
       >
-        <FaGithub size={18} />
-        <span>neuro-san-studio</span>
+        <StarIcon sx={{ fontSize: 16, color: "#f5b301" }} />
+        <span style={{ color: theme.palette.text.primary }}>Star neuro-san-studio</span>
+        <FaGithub size={15} color={theme.palette.text.primary} />
         {stars !== null && (
           <Box
             component="span"
             sx={{
-              ml: 0.5,
-              px: 0.75,
-              py: 0.25,
-              borderRadius: 1,
+              px: 0.6,
+              py: 0.1,
+              borderRadius: 0.75,
               border: `1px solid ${theme.palette.divider}`,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 600,
+              lineHeight: 1.6,
+              color: theme.palette.text.primary,
             }}
           >
             {formatStars(stars)}
           </Box>
         )}
+        <IconButton
+          size="small"
+          aria-label="Dismiss star prompt"
+          onClick={(e) => {
+            // Don't navigate to the repo when dismissing.
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+          }}
+          sx={{ color: theme.palette.text.secondary, p: 0.25 }}
+        >
+          <CloseIcon sx={{ fontSize: 16 }} />
+        </IconButton>
       </Box>
-    </Paper>
+    </Tooltip>
   );
 }
