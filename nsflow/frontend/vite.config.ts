@@ -30,6 +30,17 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 // package's Next/MUI-coupled modules (verified: controller pulls no React/MUI/Next/node).
 const uiCommonDist = path.resolve(dirname, "node_modules/@cognizant-ai-lab/ui-common/dist");
 
+// Vite's default esbuild target is [es2020, edge88, firefox78, chrome87, safari14].
+// esbuild >= 0.28 has a regression where it tries to transform destructuring for
+// safari14 (and then errors, since that transform isn't implemented). Only the safari14
+// floor trips it; the rest of the default list is fine. We bump just the Safari floor to
+// safari16 and keep every other default target, so browser support is unchanged except
+// for dropping Safari 14/15 (Safari 16: 2022). This target must be applied to every
+// esbuild path: production build (build.target), dev source transform (esbuild.target),
+// and dev dependency pre-bundling (optimizeDeps.esbuildOptions.target). build.target
+// alone does NOT cover `vite dev`.
+const ESBUILD_TARGET = ["es2020", "edge88", "firefox78", "chrome87", "safari16"];
+
 export default defineConfig(() => {
   return {
     plugins: [react()],
@@ -39,16 +50,18 @@ export default defineConfig(() => {
         "@ui-common/agent": path.join(uiCommonDist, "controller/agent/Agent.js"),
       },
     },
+    esbuild: {
+      target: ESBUILD_TARGET,
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        target: ESBUILD_TARGET,
+      },
+    },
     build: {
       outDir: "dist",
       assetsDir: "assets",
-      // Vite's default build target is [es2020, edge88, firefox78, chrome87, safari14].
-      // esbuild >= 0.28 has a regression where it tries to transform destructuring for
-      // safari14 (and then errors, since that transform isn't implemented), which breaks
-      // the build. Only the safari14 floor trips it; the rest of the default list is fine.
-      // We bump just the Safari floor to safari16 and keep every other default target, so
-      // browser support is unchanged except for dropping Safari 14/15 (Safari 16: 2022).
-      target: ["es2020", "edge88", "firefox78", "chrome87", "safari16"],
+      target: ESBUILD_TARGET,
       rollupOptions: {
         output: {
           entryFileNames: "assets/index.js",
