@@ -72,7 +72,7 @@ export default function StarStudioPopup() {
         sx={{
           position: "fixed",
           top: 10,
-          right: 160,
+          right: 210,
           zIndex: theme.zIndex.appBar + 1,
           height: 36,
           display: "inline-flex",
