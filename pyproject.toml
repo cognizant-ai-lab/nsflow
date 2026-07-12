@@ -57,25 +57,70 @@ exclude = ["tests*", "nsflow/frontend*", "coded_tools*", "registries*",
 [tool.setuptools_scm]
 fallback_version = "0.0.1"
 
-[tool.isort]
-profile = "black"
-src_paths = ["coded_tools", "tests"]
-line_length = 119
-
-[tool.flake8]
-extend-ignore = ["W503", "E203"]
-max-line-length = 119
-
-[tool.black]
+[tool.ruff]
+# Global line length (aligned with pylint).
 line-length = 119
-required-version = "25.1.0"
+indent-width = 4
+# Match requires-python (>=3.10).
+target-version = "py310"
+src = ["nsflow", "tests"]
+exclude = [
+    ".git",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    ".*checkpoint\\.py",
+    "^venv/.*$",
+    "^.*/\\.venv/.*$",
+]
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors (e.g. indentation, whitespace, line length)
+    "F",  # Pyflakes checks (e.g. undefined names, unused imports, unused variables)
+    "I",  # isort import-ordering rules
+    "W",  # pycodestyle warnings (e.g. trailing whitespace, blank lines)
+]
+ignore = ["E203"]
+fixable = ["ALL"]
+unfixable = []
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+known-first-party = ["nsflow", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"**/{tests,docs,tools}/*" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
 
 [tool.pylint]
 max-line-length = 119
 # Based on Google Python Style Guide
 disable = [
-    "C0301",  # Line too long (handled by black)
+    "C0301",  # Line too long (handled by ruff)
     "C0114",  # Missing module docstring (missing-module-docstring)
+    "C0115",  # Missing class docstring (missing-class-docstring)
+    "W0718",  # broad-exception-caught
     # This repo contains examples that should remain independent, so we expect some level of copy/paste
     "R0801",  # Similar lines in 2 files
     "W0511",  # TODO/FIXME comments
