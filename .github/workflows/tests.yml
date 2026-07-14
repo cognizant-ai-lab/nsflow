@@ -21,7 +21,8 @@ jobs:
         set -e
         VIRTUAL_ENV=system make lint-check
       run-shellcheck: false
-      run-pytest: false
+      run-pytest: true
+      test-command-override: 'VIRTUAL_ENV=system PYTHONPATH=.:$PYTHONPATH make test'
       check-readme-pypi: true
     secrets:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
