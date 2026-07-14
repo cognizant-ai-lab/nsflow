@@ -26,6 +26,8 @@ from fastapi.responses import JSONResponse
 from nsflow.backend.models.config_model import ConfigRequest
 from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
+from nsflow.backend.utils.version import DISTRIBUTION_NAME
+from nsflow.backend.utils.version import nsflow_version
 
 router = APIRouter(prefix="/api/v1")
 
@@ -128,7 +130,15 @@ async def health_check():
 
 
 def get_version(package_name: str):
-    """Get the version from installed package"""
+    """Get the version for a package.
+
+    For nsflow's own distribution, resolve robustly (installed metadata, then
+    setuptools-scm, then git sha) so the version is available even from a source
+    checkout that was never pip-installed. For any other package, read installed
+    distribution metadata.
+    """
+    if package_name == DISTRIBUTION_NAME:
+        return nsflow_version()
     try:
         # Fetch version from installed package
         return version(package_name)
