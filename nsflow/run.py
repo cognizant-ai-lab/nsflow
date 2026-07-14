@@ -53,7 +53,6 @@ log_cfg = {
 }
 
 
-# pylint: disable=too-many-instance-attributes
 class NsFlowRunner:
     """Manages the Neuro SAN server and FastAPI backend."""
 
@@ -207,12 +206,12 @@ The type of connection to initiate. Choices are to connect to:
         if args.client_only and (
             "--server-host" in explicitly_passed_args or "--server-port" in explicitly_passed_args
         ):
-            parser.error("[x] You cannot specify --server-host or --server-port " "when using --client-only mode.")
+            parser.error("[x] You cannot specify --server-host or --server-port when using --client-only mode.")
 
         if args.server_only and (
             "--nsflow-host" in explicitly_passed_args or "--nsflow-port" in explicitly_passed_args
         ):
-            parser.error("[x] You cannot specify --nsflow-host or --nsflow-port " "when using --server-only mode.")
+            parser.error("[x] You cannot specify --nsflow-host or --nsflow-port when using --server-only mode.")
 
         if args.client_only and args.server_only:
             parser.error("[x] You cannot specify both --client-only and --server-only at the same time.")
@@ -256,7 +255,7 @@ The type of connection to initiate. Choices are to connect to:
             "AGENT_ALLOW_CORS_HEADERS": "agent_allow_cors_headers",
         }
 
-        self.logger.info("\n" + "=" * 50)
+        self.logger.info("\n%s", "=" * 50)
         self.logger.info("Setting environment variables based on mode")
 
         # Always apply common
@@ -277,7 +276,7 @@ The type of connection to initiate. Choices are to connect to:
             self._apply_env(server_env)
 
         self.logger.info("Environment variables set successfully.")
-        self.logger.info("\n" + "=" * 50 + "\n")
+        self.logger.info("\n%s\n", "=" * 50)
 
     def _apply_env(self, mapping: Dict[str, str]):
         """Helper to apply config values to environment variables."""
@@ -293,6 +292,9 @@ The type of connection to initiate. Choices are to connect to:
         """Start a subprocess and hook our log bridge (no run.py streaming)."""
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if self.is_windows else 0
 
+        # Process is deliberately kept running beyond this scope and managed elsewhere;
+        # preexec_fn=os.setpgrp puts it in its own process group for clean signal handling.
+        # pylint: disable=consider-using-with,subprocess-popen-preexec-fn
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -348,9 +350,9 @@ The type of connection to initiate. Choices are to connect to:
         )
         self.logger.info("FastAPI started on port: %s", self.config["nsflow_port"])
 
-    def signal_handler(self, signum, frame):
+    def signal_handler(self, signum, frame):  # pylint: disable=unused-argument  # required signal handler signature
         """Handle termination signals for cleanup."""
-        self.logger.info("\n" + "=" * 50 + "\nTermination signal received. Stopping all processes...")
+        self.logger.info("\n%s\nTermination signal received. Stopping all processes...", "=" * 50)
 
         if self.server_process:
             self.logger.info("Stopping Neuro SAN (PID: %s)...", self.server_process.pid)
@@ -400,8 +402,10 @@ The type of connection to initiate. Choices are to connect to:
                 self.config["nsflow_host"], self.config["nsflow_port"]
             ):
                 self.logger.error(
-                    "\n" + "=" * 50 + "\nCannot start nsflow client while the port %s is already in use.\n" + "=" * 50,
+                    "\n%s\nCannot start nsflow client while the port %s is already in use.\n%s",
+                    "=" * 50,
                     self.config["nsflow_port"],
+                    "=" * 50,
                 )
             else:
                 self.start_fastapi()
@@ -412,11 +416,10 @@ The type of connection to initiate. Choices are to connect to:
                 self.config["server_host"], self.config["server_http_port"]
             ):
                 self.logger.error(
-                    "\n"
-                    + "=" * 50
-                    + "\nCannot start neuro-san server while the port %s is already in use.\n"
-                    + "=" * 50,
+                    "\n%s\nCannot start neuro-san server while the port %s is already in use.\n%s",
+                    "=" * 50,
                     self.config["server_http_port"],
+                    "=" * 50,
                 )
             else:
                 self.start_neuro_san()
@@ -442,7 +445,7 @@ The type of connection to initiate. Choices are to connect to:
         self.conditional_start_servers()
 
         self.logger.info("Press Ctrl+C to stop any running processes.")
-        self.logger.info("\n" + "=" * 50 + "\n")
+        self.logger.info("\n%s\n", "=" * 50)
 
         # Wait on active subprocesses
         if self.server_process:
