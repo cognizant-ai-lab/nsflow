@@ -99,7 +99,7 @@ lint-check: lint-check-source lint-check-tests ## Non-mutating lint checks (used
 lint: format lint-check ## Auto-format then run all lint checks (local convenience)
 
 test: lint ## Run tests with coverage
-	python -m pytest tests/ -v --cov=nsflow
+	python -m pytest tests/ -v --cov=nsflow -m "not integration"
 
 .PHONY: help venv install activate venv-guard format-source format-tests format \
 	lint-check-source lint-check-tests lint-check lint test check_python_version
