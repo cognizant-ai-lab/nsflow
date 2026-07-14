@@ -17,7 +17,9 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor

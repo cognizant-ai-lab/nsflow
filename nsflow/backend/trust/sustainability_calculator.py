@@ -16,7 +16,8 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
+from typing import Dict
 
 
 @dataclass
@@ -209,7 +210,7 @@ class SustainabilityCalculator:
             )
 
         except Exception as e:
-            self.logger.error(f"Error calculating sustainability metrics: {e}")
+            self.logger.error("Error calculating sustainability metrics: %s", e)
             # Return minimal default metrics on error
             return SustainabilityMetrics(
                 energy_kwh=0.0003,  # 0.3 Wh typical query
@@ -225,7 +226,7 @@ class SustainabilityCalculator:
         model_key = self._normalize_model_name(model_name)
         return self.model_energy_profiles.get(model_key, self.model_energy_profiles["gpt-3.5-turbo"])
 
-    def _normalize_model_name(self, model_name: str) -> str:
+    def _normalize_model_name(self, model_name: str) -> str:  # pylint: disable=too-many-branches  # model-name dispatch table
         """Normalize model name to match research profiles."""
         if not model_name or model_name == "unknown":
             normalized = "llama2-7b"  # Default to local model for unknown
@@ -277,22 +278,21 @@ class SustainabilityCalculator:
         if total_tokens <= 1000:
             # Linear scaling for small queries
             return model_profile["energy_per_query_wh"] * (total_tokens / 500.0)
-        elif total_tokens <= 10000:
+        if total_tokens <= 10000:
             # Scale between typical query and 10k tokens
             base_energy = model_profile["energy_per_query_wh"]
             energy_10k = model_profile["energy_per_10k_tokens_wh"]
             ratio = (total_tokens - 500) / (10000 - 500)
             return base_energy + (energy_10k - base_energy) * ratio
-        elif total_tokens <= 100000:
+        if total_tokens <= 100000:
             # Scale between 10k and 100k tokens
             energy_10k = model_profile["energy_per_10k_tokens_wh"]
             energy_100k = model_profile["energy_per_100k_tokens_wh"]
             ratio = (total_tokens - 10000) / (100000 - 10000)
             return energy_10k + (energy_100k - energy_10k) * ratio
-        else:
-            # Extrapolate beyond 100k tokens
-            energy_100k = model_profile["energy_per_100k_tokens_wh"]
-            return energy_100k * (total_tokens / 100000.0)
+        # Extrapolate beyond 100k tokens
+        energy_100k = model_profile["energy_per_100k_tokens_wh"]
+        return energy_100k * (total_tokens / 100000.0)
 
     def _calculate_carbon_footprint(self, energy_kwh: float, model_name: str) -> float:
         """Calculate carbon footprint from energy consumption."""
@@ -324,17 +324,15 @@ class SustainabilityCalculator:
 
         if energy_wh < 0.1:
             return f"less than {closest_context}"
-        elif abs(energy_wh - closest_value) < closest_value * 0.2:
+        if abs(energy_wh - closest_value) < closest_value * 0.2:
             return f"equivalent to {closest_context}"
-        elif energy_wh > closest_value:
+        if energy_wh > closest_value:
             ratio = energy_wh / closest_value
             if ratio < 2:
                 return f"{ratio:.1f}x {closest_context}"
-            else:
-                return f"{ratio:.0f}x {closest_context}"
-        else:
-            ratio = closest_value / energy_wh
-            return f"1/{ratio:.1f} of {closest_context}"
+            return f"{ratio:.0f}x {closest_context}"
+        ratio = closest_value / energy_wh
+        return f"1/{ratio:.1f} of {closest_context}"
 
     def get_model_info(self, model_name: str) -> Dict[str, Any]:
         """Get detailed model information for display."""
@@ -346,6 +344,6 @@ class SustainabilityCalculator:
             "active_parameters": f"{profile['active_parameters_b']}B",
             "typical_output_tokens": profile["typical_output_tokens"],
             "energy_per_query": f"{profile['energy_per_query_wh']:.3f} Wh",
-            "gpu_utilization": f"{profile['gpu_utilization']*100:.0f}%",
+            "gpu_utilization": f"{profile['gpu_utilization'] * 100:.0f}%",
             "datacenter_pue": profile["datacenter_pue"],
         }

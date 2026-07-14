@@ -21,7 +21,10 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 from werkzeug.utils import secure_filename
 
@@ -74,9 +77,11 @@ class OperationStore:
         if not os.path.exists(self.base_file):
             self._write_json(self.base_file, copy.deepcopy(self.manager.get_state()))
         if not os.path.exists(self.hist_file):
-            open(self.hist_file, "w").close()
+            with open(self.hist_file, "w", encoding="utf-8"):
+                pass
         if not os.path.exists(self.redo_file):
-            open(self.redo_file, "w").close()
+            with open(self.redo_file, "w", encoding="utf-8"):
+                pass
         if not os.path.exists(self.meta_file):
             self._write_json(
                 self.meta_file,
@@ -111,7 +116,8 @@ class OperationStore:
         inv = self._execute_and_make_inverse(forward["op"], forward.get("args", {}))
         self._append_jsonl(self.hist_file, {"ts": self._now(), "forward": forward, "inverse": inv})
         # A new edit invalidates redo (classic editor semantics)
-        open(self.redo_file, "w").close()
+        with open(self.redo_file, "w", encoding="utf-8"):
+            pass
         log.info("apply: %s  inverse: %s", forward["op"], inv["op"])
 
     def undo(self) -> bool:
@@ -152,7 +158,9 @@ class OperationStore:
 
     # ----------------- Inverse construction -----------------
 
-    def _execute_and_make_inverse(self, op: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_and_make_inverse(  # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches,too-many-statements
+        self, op: str, args: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute the forward op on manager and construct the exact inverse op.
         We read 'before' from manager.get_state() when needed.
@@ -358,7 +366,9 @@ class OperationStore:
 
         raise NotImplementedError(f"Unknown op: {op}")
 
-    def _execute(self, op: str, args: Dict[str, Any]) -> None:
+    def _execute(  # pylint: disable=too-many-return-statements,too-many-branches,too-many-statements
+        self, op: str, args: Dict[str, Any]
+    ) -> None:
         """
         Execute an operation without recording history (used for undo/redo).
         """
@@ -566,10 +576,10 @@ class OperationStore:
             # Update base state to current state
             self._write_json(self.base_file, copy.deepcopy(self.manager.get_state()))
 
-            log.info(f"Draft saved for design_id: {self.design_id}")
+            log.info("Draft saved for design_id: %s", self.design_id)
             return True
         except Exception as e:
-            log.error(f"Failed to save draft: {e}")
+            log.error("Failed to save draft: %s", e)
             return False
 
     def get_draft_info(self) -> Dict[str, Any]:
@@ -591,7 +601,7 @@ class OperationStore:
                 "draft_path": self.root,
             }
         except Exception as e:
-            log.error(f"Failed to get draft info: {e}")
+            log.error("Failed to get draft info: %s", e)
             return {}
 
     @staticmethod
@@ -630,9 +640,9 @@ class OperationStore:
                                 }
                             )
                         except Exception as e:
-                            log.warning(f"Failed to read draft metadata from {design_path}: {e}")
+                            log.warning("Failed to read draft metadata from %s: %s", design_path, e)
         except Exception as e:
-            log.error(f"Failed to list drafts: {e}")
+            log.error("Failed to list drafts: %s", e)
 
         return drafts
 
@@ -642,6 +652,7 @@ class OperationStore:
         try:
             store = OperationStore(design_id, manager)
             # Load the base state into the manager
+            # pylint: disable=protected-access  # helpers on our own OperationStore class
             base_state = store._read_json(store.base_file)
             manager.current_state = copy.deepcopy(base_state)
 
@@ -650,11 +661,12 @@ class OperationStore:
             for entry in history:
                 forward = entry["forward"]
                 store._execute(forward["op"], forward.get("args", {}))
+            # pylint: enable=protected-access
 
-            log.info(f"Loaded draft for design_id: {design_id}")
+            log.info("Loaded draft for design_id: %s", design_id)
             return store
         except Exception as e:
-            log.error(f"Failed to load draft {design_id}: {e}")
+            log.error("Failed to load draft %s: %s", design_id, e)
             return None
 
     # ----------------- File helpers -----------------

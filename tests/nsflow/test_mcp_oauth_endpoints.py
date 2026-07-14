@@ -22,13 +22,17 @@ files are involved.
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
-from urllib.parse import parse_qs, urlparse
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
 from fastapi.testclient import TestClient
 
 import nsflow.backend.api.v1.mcp_oauth_endpoints as ep
+import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
 from nsflow.backend.main import app
+from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
 
 client = TestClient(app)
 
@@ -51,6 +55,7 @@ def _flow(**overrides):
 
 
 # --------------------------- /start --------------------------- #
+
 
 def test_start_requires_server_url():
     """A blank server_url is rejected before any flow is started."""
@@ -103,15 +108,14 @@ def test_start_timeout_returns_504(monkeypatch):
 def test_start_unexpected_error_returns_502(monkeypatch):
     """An unexpected failure (e.g. disk write / SDK error) maps to a clean 502."""
     monkeypatch.setattr(ep.FileTokenStorage, "has_connection", MagicMock(return_value=False))
-    monkeypatch.setattr(
-        ep.mcp_oauth_manager, "start_flow", AsyncMock(side_effect=OSError("disk full"))
-    )
+    monkeypatch.setattr(ep.mcp_oauth_manager, "start_flow", AsyncMock(side_effect=OSError("disk full")))
     response = client.post(START_URL, json={"server_url": "https://mcp.example.com/mcp"})
     assert response.status_code == 502
     assert "disk full" in response.json()["detail"]
 
 
 # --------------------------- /callback --------------------------- #
+
 
 def test_callback_missing_state():
     """A callback without a state parameter is rejected."""
@@ -208,6 +212,7 @@ def test_callback_escapes_reflected_user_input(monkeypatch):
 
 # --------------------------- /status --------------------------- #
 
+
 def test_status_unknown_flow(monkeypatch):
     """Polling an unknown flow id is a 404."""
     monkeypatch.setattr(ep.mcp_oauth_manager, "get_flow", MagicMock(return_value=None))
@@ -225,14 +230,17 @@ def test_status_known_flow(monkeypatch):
 
 # --------------------- /connections & /redirect_uri --------------------- #
 
+
 def test_list_connections(monkeypatch):
     """Connections are listed as returned by storage (non-secret metadata)."""
-    conns = [{
-        "server_url": "https://mcp.example.com/mcp",
-        "obtained_at": 1,
-        "expires_at": None,
-        "has_refresh_token": False,
-    }]
+    conns = [
+        {
+            "server_url": "https://mcp.example.com/mcp",
+            "obtained_at": 1,
+            "expires_at": None,
+            "has_refresh_token": False,
+        }
+    ]
     monkeypatch.setattr(ep.FileTokenStorage, "list_connections", MagicMock(return_value=conns))
     response = client.get(CONNECTIONS_URL)
     assert response.status_code == 200
@@ -258,9 +266,9 @@ def test_delete_connection_blank_server_url(monkeypatch):
 
 def test_required_reports_missing(monkeypatch):
     """/required surfaces the unconnected MCP URLs a network needs."""
-    import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
     monkeypatch.setattr(
-        nw.NsWebsocketUtils, "missing_mcp_connections",
+        nw.NsWebsocketUtils,
+        "missing_mcp_connections",
         MagicMock(return_value=["https://api.githubcopilot.com/mcp"]),
     )
     response = client.get("/api/v1/mcp/oauth/required/my_net")
@@ -272,7 +280,6 @@ def test_required_reports_missing(monkeypatch):
 
 def test_required_none_reports_empty(monkeypatch):
     """A non-locally-readable network (None) reports nothing missing, not an error."""
-    import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
     monkeypatch.setattr(nw.NsWebsocketUtils, "missing_mcp_connections", MagicMock(return_value=None))
     response = client.get("/api/v1/mcp/oauth/required/remote_net")
     assert response.status_code == 200
@@ -290,15 +297,15 @@ def test_redirect_uri(monkeypatch):
 
 # --------------------- _normalize_authorization_url --------------------- #
 
+
 def test_normalize_auth_url_fixes_double_question_mark():
     """An authorization_endpoint that already had a query (e.g. Microsoft's
     ?prompt=select_account) must not produce a second '?'; later '?' -> '&'."""
-    from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
     bad = (
         "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
         "?prompt=select_account?response_type=code&client_id=abc&state=xyz"
     )
-    fixed = MCPOAuthManager._normalize_authorization_url(bad)
+    fixed = MCPOAuthManager._normalize_authorization_url(bad)  # pylint: disable=protected-access  # exercising a private method under test
     assert fixed.count("?") == 1
     q = parse_qs(urlparse(fixed).query)
     assert q["prompt"] == ["select_account"]
@@ -308,6 +315,5 @@ def test_normalize_auth_url_fixes_double_question_mark():
 
 def test_normalize_auth_url_leaves_normal_url_untouched():
     """A normal authorization URL (single query separator) is returned as-is."""
-    from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
     normal = "https://idp.example.com/authorize?response_type=code&client_id=abc&state=xyz"
-    assert MCPOAuthManager._normalize_authorization_url(normal) == normal
+    assert MCPOAuthManager._normalize_authorization_url(normal) == normal  # pylint: disable=protected-access  # exercising a private method under test

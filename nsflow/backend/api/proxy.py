@@ -61,7 +61,9 @@ import os
 from typing import Set
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Request
 from fastapi.responses import Response
 
 router_proxy = APIRouter()
@@ -70,7 +72,7 @@ AGENT_PROTO = os.getenv("NEURO_SAN_SERVER_CONNECTION", "https")
 AGENT_HOST = os.getenv("NEURO_SAN_SERVER_HOST", "neuro-san.onrender.com")
 AGENT_PORT = os.getenv("NEURO_SAN_SERVER_HTTP_PORT", "443")
 # BODY_CAPACITY = 10 * 1024 * 1024 (10 MB)
-BODY_CAPACITY = int(os.getenv("BODY_CAPACITY", 10 * 1024 * 1024))
+BODY_CAPACITY = int(os.getenv("BODY_CAPACITY", str(10 * 1024 * 1024)))
 SHARED_TOKEN = os.getenv("NEURO_SAN_SHARED_TOKEN")  # set same value on neuro-san
 
 BASE = f"{AGENT_PROTO}://{AGENT_HOST}" + (f":{AGENT_PORT}" if AGENT_PORT not in ("80", "443") else "")
@@ -111,6 +113,7 @@ client = httpx.AsyncClient(
 
 @router_proxy.api_route("/proxy/{path:path}", methods=list(ALLOWED_METHODS))
 async def proxy(path: str, request: Request):
+    """Forward an incoming request to the configured neuro-san server and stream the response back."""
     # Normalize first segment (e.g., "v1", "list", "chat")
     first_seg = path.split("/", 1)[0].strip()
 

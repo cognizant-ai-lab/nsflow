@@ -26,17 +26,20 @@ throughout the application via a shared registry.
 import asyncio
 import json
 import logging
-import os
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import datetime
+from datetime import timezone
+from typing import Any
+from typing import Dict
+from typing import List
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 
 # Configuration
 ASYNCIO_SLEEP_INTERVAL = 0.5
 
 
-class WebsocketLogsManager:
+class WebsocketLogsManager:  # pylint: disable=too-many-instance-attributes  # aggregates per-connection log state
     """
     Enables sending structured logs and internal chat messages over WebSocket connections.
     Each instance manages a list of connected WebSocket clients and can broadcast messages

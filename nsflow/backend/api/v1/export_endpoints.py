@@ -16,7 +16,8 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from nsflow.backend.utils.tools.notebook_generator import NotebookGenerator

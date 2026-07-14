@@ -21,14 +21,20 @@ No locks, no complex patterns - just simple state management.
 
 import json
 import logging
-from pathlib import Path
 import os
+import shutil
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 from werkzeug.utils import secure_filename
 
 from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR as EXPORT_ROOT_DIR
+from nsflow.backend.utils.agentutils.agent_network_utils import ROOT_DIR
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
 from nsflow.backend.utils.editor.ops_store import OperationStore
 from nsflow.backend.utils.editor.simple_state_manager import SimpleStateManager
@@ -44,7 +50,7 @@ class SimpleStateRegistry:
     Uses instance-based approach to avoid class-level conflicts.
     """
 
-    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", False)
+    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", "")
 
     def __init__(self, edited_state_dir: Optional[str] = None):
         self.managers: Dict[str, SimpleStateManager] = {}
@@ -113,13 +119,13 @@ class SimpleStateRegistry:
                         loaded_count += 1
 
                 except Exception as e:
-                    logger.warning(f"Failed to auto-load draft {design_id}: {e}")
+                    logger.warning("Failed to auto-load draft %s: %s", design_id, e)
 
             if loaded_count > 0:
-                logger.info(f"Auto-loaded {loaded_count} draft states with operation history")
+                logger.info("Auto-loaded %s draft states with operation history", loaded_count)
 
         except Exception as e:
-            logger.error(f"Failed to auto-load draft states: {e}")
+            logger.error("Failed to auto-load draft states: %s", e)
 
     def create_new_network(
         self, network_name: str = "", template_type: str = "single_agent", **template_kwargs
@@ -206,7 +212,7 @@ class SimpleStateRegistry:
             return design_id, manager
 
         except Exception as e:
-            logger.error(f"Failed to load network from registry: {e}")
+            logger.error("Failed to load network from registry: %s", e)
             raise
 
     def load_from_copilot_state(
@@ -231,41 +237,41 @@ class SimpleStateRegistry:
             self.design_id_to_info[existing_design_id]["updated_from_copilot"] = True
 
             return existing_design_id, manager
+
+        # Create new manager
+        if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
+            design_id = str(uuid.uuid4())
+            manager = SimpleStateManager(design_id)
         else:
-            # Create new manager
-            if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
-                design_id = str(uuid.uuid4())
-                manager = SimpleStateManager(design_id)
-            else:
-                manager = SimpleStateManager(design_id=network_name)
+            manager = SimpleStateManager(design_id=network_name)
 
-            # Load from copilot state
-            manager.load_from_copilot_state(copilot_state)
+        # Load from copilot state
+        manager.load_from_copilot_state(copilot_state)
 
-            # Ensure unique network name for session
-            if not network_name.endswith(f"_{design_id[:8]}"):
-                session_network_name = f"{network_name}_{design_id[:8]}"
-                manager.set_network_name(session_network_name)
-            else:
-                session_network_name = network_name
+        # Ensure unique network name for session
+        if not network_name.endswith(f"_{design_id[:8]}"):
+            session_network_name = f"{network_name}_{design_id[:8]}"
+            manager.set_network_name(session_network_name)
+        else:
+            session_network_name = network_name
 
-            # Register manager
-            self.managers[design_id] = manager
+        # Register manager
+        self.managers[design_id] = manager
 
-            # Update mappings
-            if session_network_name not in self.network_to_design_ids:
-                self.network_to_design_ids[session_network_name] = []
-            self.network_to_design_ids[session_network_name].append(design_id)
+        # Update mappings
+        if session_network_name not in self.network_to_design_ids:
+            self.network_to_design_ids[session_network_name] = []
+        self.network_to_design_ids[session_network_name].append(design_id)
 
-            self.design_id_to_info[design_id] = {
-                "network_name": session_network_name,
-                "original_network_name": network_name,
-                "source": "copilot",
-                "session_id": session_id,
-                "loaded_at": manager.current_state["meta"]["created_at"],
-            }
+        self.design_id_to_info[design_id] = {
+            "network_name": session_network_name,
+            "original_network_name": network_name,
+            "source": "copilot",
+            "session_id": session_id,
+            "loaded_at": manager.current_state["meta"]["created_at"],
+        }
 
-            return design_id, manager
+        return design_id, manager
 
     def get_manager(self, design_id: str) -> Optional[SimpleStateManager]:
         """Get state manager by design ID"""
@@ -316,7 +322,7 @@ class SimpleStateRegistry:
             result["registry_networks"] = registry_networks
             result["total_registry"] = len(registry_networks)
         except Exception as e:
-            logger.error(f"Failed to get registry networks: {e}")
+            logger.error("Failed to get registry networks: %s", e)
 
         # Get current editing sessions
         for design_id, info in self.design_id_to_info.items():
@@ -336,6 +342,7 @@ class SimpleStateRegistry:
                     "agent_count": len(state.get("agents", {})),
                     "created_at": state.get("meta", {}).get("created_at") or info.get("created_at"),
                     "updated_at": state.get("meta", {}).get("updated_at") or info.get("loaded_at"),
+                    # pylint: disable=protected-access  # reading internal jsonl of our own OperationStore
                     "can_undo": (
                         len(operation_store._read_jsonl(operation_store.hist_file)) > 0
                         if operation_store
@@ -346,6 +353,7 @@ class SimpleStateRegistry:
                         if operation_store
                         else manager.can_redo()
                     ),
+                    # pylint: enable=protected-access
                 }
 
                 result["editing_sessions"].append(session_info)
@@ -360,7 +368,7 @@ class SimpleStateRegistry:
                     result["draft_states"].append(draft)
             result["total_drafts"] = len(result["draft_states"])
         except Exception as e:
-            logger.error(f"Failed to get draft states: {e}")
+            logger.error("Failed to get draft states: %s", e)
 
         result["total_sessions"] = len(result["editing_sessions"])
         return result
@@ -374,7 +382,7 @@ class SimpleStateRegistry:
             # Load the draft using OperationStore
             operation_store = OperationStore.load_draft(design_id, manager)
             if not operation_store:
-                raise Exception(f"Failed to load draft {design_id}")
+                raise RuntimeError(f"Failed to load draft {design_id}")
 
             # Register the manager and operation store
             self.managers[design_id] = manager
@@ -408,11 +416,11 @@ class SimpleStateRegistry:
                 "original_network_name": state.get("original_network_name"),
             }
 
-            logger.info(f"Loaded draft state for design_id: {design_id}")
+            logger.info("Loaded draft state for design_id: %s", design_id)
             return design_id, manager
 
         except Exception as e:
-            logger.error(f"Failed to load draft state {design_id}: {e}")
+            logger.error("Failed to load draft state %s: %s", design_id, e)
             raise
 
     def delete_session(self, design_id: str) -> bool:
@@ -420,24 +428,17 @@ class SimpleStateRegistry:
         if design_id not in self.managers:
             # Check if it's a draft that's not currently loaded
             try:
-                import shutil
-
-                from werkzeug.utils import secure_filename
-
-                from nsflow.backend.utils.agentutils.agent_network_utils import ROOT_DIR
-
                 draft_root = os.path.join(ROOT_DIR, "draft_states")
                 safe_design_id = secure_filename(design_id)
                 draft_path = os.path.join(draft_root, safe_design_id)
 
                 if os.path.exists(draft_path):
                     shutil.rmtree(draft_path)
-                    logger.info(f"Deleted draft files for {design_id}")
+                    logger.info("Deleted draft files for %s", design_id)
                     return True
-                else:
-                    return False
+                return False
             except Exception as e:
-                logger.error(f"Failed to delete draft files for {design_id}: {e}")
+                logger.error("Failed to delete draft files for %s: %s", design_id, e)
                 return False
 
         try:
@@ -449,13 +450,11 @@ class SimpleStateRegistry:
             if design_id in self.operation_stores:
                 operation_store = self.operation_stores[design_id]
                 try:
-                    import shutil
-
                     if os.path.exists(operation_store.root):
                         shutil.rmtree(operation_store.root)
-                        logger.info(f"Deleted draft files at {operation_store.root}")
+                        logger.info("Deleted draft files at %s", operation_store.root)
                 except Exception as e:
-                    logger.warning(f"Failed to delete draft files: {e}")
+                    logger.warning("Failed to delete draft files: %s", e)
 
                 del self.operation_stores[design_id]
 
@@ -475,11 +474,11 @@ class SimpleStateRegistry:
             if design_id in self.design_id_to_info:
                 del self.design_id_to_info[design_id]
 
-            logger.info(f"Deleted session {design_id} and all associated files")
+            logger.info("Deleted session %s and all associated files", design_id)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete session: {e}")
+            logger.error("Failed to delete session: %s", e)
             return False
 
     def get_session_info(self, design_id: str) -> Optional[Dict[str, Any]]:
@@ -566,7 +565,7 @@ class SimpleStateRegistry:
             # 1) Validate the network first
             validation_result = manager.validate_network()
             if not validation_result.get("valid"):
-                logger.error(f"Network validation failed: {validation_result.get('errors')}")
+                logger.error("Network validation failed: %s", validation_result.get("errors"))
                 return False
 
             # 2) Compute a safe filename (no directories) and final path under trusted root
@@ -579,7 +578,7 @@ class SimpleStateRegistry:
             try:
                 filename = self.sanitize_export_filename(output_path, fallback_stem)
             except ValueError as e:
-                logger.error(f"Refused export due to invalid filename: {e}")
+                logger.error("Refused export due to invalid filename: %s", e)
                 return False
 
             final_path = (export_root / filename).resolve()
@@ -597,11 +596,11 @@ class SimpleStateRegistry:
             with open(final_path, "w", encoding="utf-8") as f:
                 f.write(hocon_content)
 
-            logger.info(f"Exported network to {final_path}")
+            logger.info("Exported network to %s", final_path)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to export to HOCON: {e}")
+            logger.error("Failed to export to HOCON: %s", e)
             return False
 
     def _dict_to_hocon_string(self, config: Dict[str, Any], indent: int = 0) -> str:
@@ -639,7 +638,7 @@ _registry_instance: Optional[SimpleStateRegistry] = None
 
 def get_registry() -> SimpleStateRegistry:
     """Get or create the registry instance"""
-    global _registry_instance
+    global _registry_instance  # pylint: disable=global-statement  # module-level singleton
     if _registry_instance is None:
         _registry_instance = SimpleStateRegistry()
     return _registry_instance

@@ -15,14 +15,19 @@
 # END COPYRIGHT
 import logging
 import os
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.models.config_model import ConfigRequest
 from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
+from nsflow.backend.utils.version import DISTRIBUTION_NAME
+from nsflow.backend.utils.version import nsflow_version
 
 router = APIRouter(prefix="/api/v1")
 
@@ -46,7 +51,8 @@ def get_runtime_config():
             "NSFLOW_PORT": os.getenv("NSFLOW_PORT", "4173"),
             "VITE_API_PROTOCOL": os.getenv("VITE_API_PROTOCOL", "http"),
             "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
-            "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),
+            # Default kept as bool so the JSON response field stays a boolean for the frontend.
+            "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),  # pylint: disable=invalid-envvar-default
             "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
             # Subdirectory under registries/ where the Agent Network Designer persists
             # generated networks. Mirrors neuro-san-studio's AGENT_NETWORK_DESIGNER_SUBDIRECTORY
@@ -56,8 +62,12 @@ def get_runtime_config():
             # to delay enabling the launch button after generation finishes, so the freshly
             # generated network has time to register and become discoverable via /api/v1/list.
             "AGENT_MANIFEST_UPDATE_PERIOD_SECONDS": os.getenv("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "2"),
-            "NSFLOW_CRUSE_WIDGET_AGENT_NAME": os.getenv("NSFLOW_CRUSE_WIDGET_AGENT_NAME", "experimental/cruse_widget_agent"),
-            "NSFLOW_CRUSE_THEME_AGENT_NAME": os.getenv("NSFLOW_CRUSE_THEME_AGENT_NAME", "experimental/cruse_theme_agent"),
+            "NSFLOW_CRUSE_WIDGET_AGENT_NAME": os.getenv(
+                "NSFLOW_CRUSE_WIDGET_AGENT_NAME", "experimental/cruse_widget_agent"
+            ),
+            "NSFLOW_CRUSE_THEME_AGENT_NAME": os.getenv(
+                "NSFLOW_CRUSE_THEME_AGENT_NAME", "experimental/cruse_theme_agent"
+            ),
             # NEW: feature flags (booleans)
             "NSFLOW_PLUGIN_CRUSE": _env_bool("NSFLOW_PLUGIN_CRUSE", False),
             "NSFLOW_PLUGIN_WAND": _env_bool("NSFLOW_PLUGIN_WAND", True),
@@ -120,7 +130,15 @@ async def health_check():
 
 
 def get_version(package_name: str):
-    """Get the version from installed package"""
+    """Get the version for a package.
+
+    For nsflow's own distribution, resolve robustly (installed metadata, then
+    setuptools-scm, then git sha) so the version is available even from a source
+    checkout that was never pip-installed. For any other package, read installed
+    distribution metadata.
+    """
+    if package_name == DISTRIBUTION_NAME:
+        return nsflow_version()
     try:
         # Fetch version from installed package
         return version(package_name)

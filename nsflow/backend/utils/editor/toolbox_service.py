@@ -20,14 +20,17 @@ Simplified toolbox service for managing toolbox tools.
 
 import logging
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any
+from typing import Dict
+from typing import Optional
+from typing import Union
 
 from neuro_san.internals.run_context.langchain.toolbox.toolbox_info_restorer import ToolboxInfoRestorer
 
 logger = logging.getLogger(__name__)
 
 
-class ToolboxService:
+class ToolboxService:  # pylint: disable=too-few-public-methods  # focused single-responsibility service
     """Simplified service for managing toolbox operations"""
 
     def __init__(self, toolbox_info_file: Optional[str] = None):
@@ -65,7 +68,7 @@ _toolbox_service: Optional[ToolboxService] = None
 
 def get_toolbox_service(toolbox_info_file: Optional[str] = None) -> ToolboxService:
     """Get or create the toolbox service instance"""
-    global _toolbox_service
+    global _toolbox_service  # pylint: disable=global-statement  # module-level singleton
     if _toolbox_service is None or toolbox_info_file:
         _toolbox_service = ToolboxService(toolbox_info_file)
     return _toolbox_service

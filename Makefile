@@ -16,6 +16,18 @@ MAX_VERSION := 3.13
 
 PYTHON_VERSION := $(shell $(PYTHON) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 
+# Lint/format targets. coded_tools, registries and middleware are gitignored (vendored
+# from neuro-san-studio), so linting is scoped to the tracked nsflow package + tests.
+SOURCES := nsflow
+TESTS   := tests
+# Aligned with neuro-san-studio: scan committed docs + README. (docs/superpowers/ is
+# gitignored local-only and absent in CI checkouts.)
+MARKDOWN := ./docs ./README.md
+
+RUFF_FORMAT_CHECK := --check --diff
+RUFF_LINT_CHECK := --output-format=full
+RUFF_IMPORTS_FIX := --select I --fix
+
 
 check_python_version:
 	@echo "Checking Python version..."
@@ -51,32 +63,46 @@ activate: ## Activate the venv
 		echo ""; \
 	fi
 
-lint: ## Run code formatting and linting tools on source
+venv-guard:
 	@if [ -z "$$VIRTUAL_ENV" ]; then \
 		echo ""; \
 		echo "Error: Linting must be run using a Python virtual environment"; \
 		echo "Please activate the correct environment for example:"; \
-		echo "  source venv/bin/activate"; \
+		echo "  source .venv/bin/activate"; \
 		echo ""; \
 		exit 1; \
 	fi
-	pylint nsflow/run.py coded_tools/
 
-lint-tests: ## Run code formatting and linting tools on tests
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo ""; \
-		echo "Error: Linting must be run using a Python virtual environment"; \
-		echo "Please activate the correct environment for example:"; \
-		echo "  source venv/bin/activate"; \
-		echo ""; \
-		exit 1; \
-	fi
-	pylint tests/
+format-source: venv-guard ## Auto-format source and sort imports via ruff
+	ruff check $(RUFF_IMPORTS_FIX) $(SOURCES)
+	ruff format $(SOURCES)
 
-test: lint lint-tests ## Run tests with coverage
-	python -m pytest tests/ -v --cov=coded_tools,run.py
+format-tests: venv-guard ## Auto-format tests and sort imports via ruff
+	ruff check $(RUFF_IMPORTS_FIX) $(TESTS)
+	ruff format $(TESTS)
 
-.PHONY: help venv install activate lint lint-tests test
+format: format-source format-tests ## Auto-format source and tests
+
+lint-check-source: venv-guard ## Check formatting + lint source (ruff, pylint, pymarkdown)
+	ruff format $(SOURCES) $(RUFF_FORMAT_CHECK)
+	ruff check $(SOURCES) $(RUFF_LINT_CHECK)
+	pylint --rcfile=pyproject.toml $(SOURCES)
+	pymarkdown --config ./.pymarkdownlint.yaml scan $(MARKDOWN)
+
+lint-check-tests: venv-guard ## Check formatting + lint tests (ruff, pylint)
+	ruff format $(TESTS) $(RUFF_FORMAT_CHECK)
+	ruff check $(TESTS) $(RUFF_LINT_CHECK)
+	pylint --rcfile=pyproject.toml $(TESTS)
+
+lint-check: lint-check-source lint-check-tests ## Non-mutating lint checks (used by CI)
+
+lint: format lint-check ## Auto-format then run all lint checks (local convenience)
+
+test: lint ## Run tests with coverage
+	python -m pytest tests/ -v --cov=nsflow -m "not integration"
+
+.PHONY: help venv install activate venv-guard format-source format-tests format \
+	lint-check-source lint-check-tests lint-check lint test check_python_version
 .DEFAULT_GOAL := help
 
 help: ## Show this help message and exit

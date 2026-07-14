@@ -14,33 +14,35 @@
 #
 # END COPYRIGHT
 
-import json
 import logging
 import os
 import uuid
 from datetime import datetime
 from datetime import timezone
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from nsflow.backend.db.database import get_nss_db
-from nsflow.backend.db.models import Message, Thread, Theme
-from nsflow.backend.db.schemas import (
-    MessageCreate,
-    MessageResponse,
-    ThreadCreate,
-    ThreadResponse,
-    ThreadWithMessages,
-    ThemeCreate,
-    ThemeUpdate,
-    ThemeResponse,
-    message_to_response,
-    parse_origin,
-    serialize_origin,
-    serialize_widget,
-)
+from nsflow.backend.db.models import Message
+from nsflow.backend.db.models import Theme
+from nsflow.backend.db.models import Thread
+from nsflow.backend.db.schemas import MessageCreate
+from nsflow.backend.db.schemas import MessageResponse
+from nsflow.backend.db.schemas import ThemeCreate
+from nsflow.backend.db.schemas import ThemeResponse
+from nsflow.backend.db.schemas import ThemeUpdate
+from nsflow.backend.db.schemas import ThreadCreate
+from nsflow.backend.db.schemas import ThreadResponse
+from nsflow.backend.db.schemas import ThreadWithMessages
+from nsflow.backend.db.schemas import message_to_response
+from nsflow.backend.db.schemas import parse_origin
+from nsflow.backend.db.schemas import serialize_origin
+from nsflow.backend.db.schemas import serialize_widget
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ router = APIRouter(prefix="/cruse", tags=["cruse"])
 
 
 # ==================== Thread Endpoints ====================
+
 
 @router.post("/threads", response_model=ThreadResponse)
 async def create_thread(thread: ThreadCreate, db: Session = Depends(get_nss_db)):
@@ -62,7 +65,7 @@ async def create_thread(thread: ThreadCreate, db: Session = Depends(get_nss_db))
     db.commit()
     db.refresh(db_thread)
 
-    logger.info(f"Created new thread: {thread_id} - {thread.title}")
+    logger.info("Created new thread: %s - %s", thread_id, thread.title)
     return db_thread
 
 
@@ -70,7 +73,7 @@ async def create_thread(thread: ThreadCreate, db: Session = Depends(get_nss_db))
 async def list_threads(db: Session = Depends(get_nss_db)):
     """List all chat threads, ordered by most recently updated."""
     threads = db.query(Thread).order_by(Thread.updated_at.desc()).all()
-    logger.info(f"Retrieved {len(threads)} threads")
+    logger.info("Retrieved %s threads", len(threads))
     return threads
 
 
@@ -81,12 +84,7 @@ async def get_thread(thread_id: str, db: Session = Depends(get_nss_db)):
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    messages = (
-        db.query(Message)
-        .filter(Message.thread_id == thread_id)
-        .order_by(Message.created_at.asc())
-        .all()
-    )
+    messages = db.query(Message).filter(Message.thread_id == thread_id).order_by(Message.created_at.asc()).all()
 
     return ThreadWithMessages(
         id=thread.id,
@@ -99,9 +97,7 @@ async def get_thread(thread_id: str, db: Session = Depends(get_nss_db)):
 
 
 @router.patch("/threads/{thread_id}", response_model=ThreadResponse)
-async def update_thread(
-    thread_id: str, thread_update: ThreadCreate, db: Session = Depends(get_nss_db)
-):
+async def update_thread(thread_id: str, thread_update: ThreadCreate, db: Session = Depends(get_nss_db)):
     """Update a thread's title and/or agent_name."""
     thread = db.query(Thread).filter(Thread.id == thread_id).first()
     if not thread:
@@ -117,7 +113,7 @@ async def update_thread(
     db.commit()
     db.refresh(thread)
 
-    logger.info(f"Updated thread: {thread_id} - {thread.title}")
+    logger.info("Updated thread: %s - %s", thread_id, thread.title)
     return thread
 
 
@@ -131,7 +127,7 @@ async def delete_thread(thread_id: str, db: Session = Depends(get_nss_db)):
     db.delete(thread)
     db.commit()
 
-    logger.info(f"Deleted thread: {thread_id}")
+    logger.info("Deleted thread: %s", thread_id)
     return {"message": "Thread deleted successfully", "thread_id": thread_id}
 
 
@@ -141,7 +137,7 @@ async def delete_all_threads_for_agent(agent_name: str, db: Session = Depends(ge
     threads = db.query(Thread).filter(Thread.agent_name == agent_name).all()
 
     if not threads:
-        logger.info(f"No threads found for agent: {agent_name}")
+        logger.info("No threads found for agent: %s", agent_name)
         return {"message": "No threads found for this agent", "agent_name": agent_name, "deleted_count": 0}
 
     deleted_count = len(threads)
@@ -151,16 +147,19 @@ async def delete_all_threads_for_agent(agent_name: str, db: Session = Depends(ge
 
     db.commit()
 
-    logger.info(f"Deleted {deleted_count} threads for agent: {agent_name}")
-    return {"message": f"Deleted {deleted_count} threads successfully", "agent_name": agent_name, "deleted_count": deleted_count}
+    logger.info("Deleted %s threads for agent: %s", deleted_count, agent_name)
+    return {
+        "message": f"Deleted {deleted_count} threads successfully",
+        "agent_name": agent_name,
+        "deleted_count": deleted_count,
+    }
 
 
 # ==================== Message Endpoints ====================
 
+
 @router.post("/threads/{thread_id}/messages", response_model=MessageResponse)
-async def add_message(
-    thread_id: str, message: MessageCreate, db: Session = Depends(get_nss_db)
-):
+async def add_message(thread_id: str, message: MessageCreate, db: Session = Depends(get_nss_db)):
     """Add a message to a thread."""
     thread = db.query(Thread).filter(Thread.id == thread_id).first()
     if not thread:
@@ -182,16 +181,12 @@ async def add_message(
     db.commit()
     db.refresh(db_message)
 
-    logger.info(f"Added message to thread {thread_id}: {message_id}")
+    logger.info("Added message to thread %s: %s", thread_id, message_id)
     return message_to_response(db_message)
 
 
 @router.get("/threads/{thread_id}/messages", response_model=List[MessageResponse])
-async def get_messages(
-    thread_id: str,
-    limit: int = 100,
-    offset: int = 0,
-    db: Session = Depends(get_nss_db)):
+async def get_messages(thread_id: str, limit: int = 100, offset: int = 0, db: Session = Depends(get_nss_db)):
     """Get all messages for a specific thread."""
     thread = db.query(Thread).filter(Thread.id == thread_id).first()
     if not thread:
@@ -206,15 +201,12 @@ async def get_messages(
         .all()
     )
 
-    logger.info(f"Retrieved {len(messages)} messages for thread {thread_id}")
+    logger.info("Retrieved %s messages for thread %s", len(messages), thread_id)
     return [message_to_response(msg) for msg in messages]
 
 
 @router.get("/threads/{thread_id}/chat_context")
-async def get_chat_context(
-    thread_id: str,
-    max_history: Optional[int] = None,
-    db: Session = Depends(get_nss_db)):
+async def get_chat_context(thread_id: str, max_history: Optional[int] = None, db: Session = Depends(get_nss_db)):
     """
     Build chat_context from the last N messages in a thread.
 
@@ -226,7 +218,7 @@ async def get_chat_context(
         A chat_context dictionary with chat_histories containing recent messages
     """
     if max_history is None:
-        max_history = int(os.getenv('MAX_MESSAGE_HISTORY', '10'))
+        max_history = int(os.getenv("MAX_MESSAGE_HISTORY", "10"))
 
     thread = db.query(Thread).filter(Thread.id == thread_id).first()
     if not thread:
@@ -254,11 +246,13 @@ async def get_chat_context(
     for msg in messages:
         msg_origin = [o.model_dump() for o in parse_origin(msg.origin)]
         message_type = "HUMAN" if msg.sender in ["user", "HUMAN"] else "AI"
-        chat_messages.append({
-            "type": message_type,
-            "origin": msg_origin,
-            "text": msg.text,
-        })
+        chat_messages.append(
+            {
+                "type": message_type,
+                "origin": msg_origin,
+                "text": msg.text,
+            }
+        )
 
     chat_context = {
         "chat_histories": [
@@ -269,11 +263,12 @@ async def get_chat_context(
         ]
     }
 
-    logger.info(f"Built chat_context for thread {thread_id} with {len(chat_messages)} messages")
+    logger.info("Built chat_context for thread %s with %s messages", thread_id, len(chat_messages))
     return {"chat_context": chat_context}
 
 
 # ==================== Theme Endpoints ====================
+
 
 @router.post("/themes", response_model=ThemeResponse)
 async def create_or_add_theme(theme_request: ThemeCreate, db: Session = Depends(get_nss_db)):
@@ -282,13 +277,13 @@ async def create_or_add_theme(theme_request: ThemeCreate, db: Session = Depends(
     If the agent already has a theme entry, updates the specified theme_type.
     Otherwise, creates a new theme entry.
     """
-    if theme_request.theme_type not in ['static', 'dynamic']:
+    if theme_request.theme_type not in ["static", "dynamic"]:
         raise HTTPException(status_code=400, detail="theme_type must be 'static' or 'dynamic'")
 
     existing_theme = db.query(Theme).filter(Theme.agent_name == theme_request.agent_name).first()
 
     if existing_theme:
-        if theme_request.theme_type == 'static':
+        if theme_request.theme_type == "static":
             existing_theme.static_theme = theme_request.theme_json
         else:
             existing_theme.dynamic_theme = theme_request.theme_json
@@ -297,20 +292,20 @@ async def create_or_add_theme(theme_request: ThemeCreate, db: Session = Depends(
         db.commit()
         db.refresh(existing_theme)
 
-        logger.info(f"Updated {theme_request.theme_type} theme for agent: {theme_request.agent_name}")
+        logger.info("Updated %s theme for agent: %s", theme_request.theme_type, theme_request.agent_name)
         return existing_theme
-    else:
-        new_theme = Theme(
-            agent_name=theme_request.agent_name,
-            static_theme=theme_request.theme_json if theme_request.theme_type == 'static' else None,
-            dynamic_theme=theme_request.theme_json if theme_request.theme_type == 'dynamic' else None,
-        )
-        db.add(new_theme)
-        db.commit()
-        db.refresh(new_theme)
 
-        logger.info(f"Created {theme_request.theme_type} theme for agent: {theme_request.agent_name}")
-        return new_theme
+    new_theme = Theme(
+        agent_name=theme_request.agent_name,
+        static_theme=theme_request.theme_json if theme_request.theme_type == "static" else None,
+        dynamic_theme=theme_request.theme_json if theme_request.theme_type == "dynamic" else None,
+    )
+    db.add(new_theme)
+    db.commit()
+    db.refresh(new_theme)
+
+    logger.info("Created %s theme for agent: %s", theme_request.theme_type, theme_request.agent_name)
+    return new_theme
 
 
 @router.get("/themes/{agent_name:path}", response_model=ThemeResponse)
@@ -321,18 +316,14 @@ async def get_theme(agent_name: str, db: Session = Depends(get_nss_db)):
     if not theme:
         raise HTTPException(status_code=404, detail=f"No themes found for agent: {agent_name}")
 
-    logger.info(f"Retrieved themes for agent: {agent_name}")
+    logger.info("Retrieved themes for agent: %s", agent_name)
     return theme
 
 
 @router.patch("/themes/{agent_name:path}", response_model=ThemeResponse)
-async def update_theme(
-    agent_name: str,
-    theme_update: ThemeUpdate,
-    db: Session = Depends(get_nss_db)
-):
+async def update_theme(agent_name: str, theme_update: ThemeUpdate, db: Session = Depends(get_nss_db)):
     """Update a specific theme type (static or dynamic) for an agent."""
-    if theme_update.theme_type not in ['static', 'dynamic']:
+    if theme_update.theme_type not in ["static", "dynamic"]:
         raise HTTPException(status_code=400, detail="theme_type must be 'static' or 'dynamic'")
 
     theme = db.query(Theme).filter(Theme.agent_name == agent_name).first()
@@ -340,7 +331,7 @@ async def update_theme(
     if not theme:
         raise HTTPException(status_code=404, detail=f"No themes found for agent: {agent_name}")
 
-    if theme_update.theme_type == 'static':
+    if theme_update.theme_type == "static":
         theme.static_theme = theme_update.theme_json
     else:
         theme.dynamic_theme = theme_update.theme_json
@@ -349,5 +340,5 @@ async def update_theme(
     db.commit()
     db.refresh(theme)
 
-    logger.info(f"Updated {theme_update.theme_type} theme for agent: {agent_name}")
+    logger.info("Updated %s theme for agent: %s", theme_update.theme_type, agent_name)
     return theme

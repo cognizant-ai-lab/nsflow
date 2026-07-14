@@ -17,8 +17,9 @@ jobs:
     uses: cognizant-ai-lab/build-common/.github/workflows/_python-quality-gate.yml@30321843331e00848309b34e08b839e1f6490ba2
     with:
       python-version: '3.12'
-      # No lint or test steps in original workflow
-      lint-command-override: 'true'
+      lint-command-override: |
+        set -e
+        VIRTUAL_ENV=system make lint-check
       run-shellcheck: false
       run-pytest: false
       check-readme-pypi: true

@@ -17,20 +17,18 @@ import os
 
 from fastapi import APIRouter
 
-from .v1 import (
-    agent_flows,
-    app_configs,
-    audio_endpoints,
-    cruse_endpoints,
-    editor_endpoints,
-    export_endpoints,
-    fast_websocket,
-    fastapi_concierge_endpoints,
-    mcp_oauth_endpoints,
-    oneshot_endpoints,
-    pdf_endpoints,
-    vqa_endpoints,
-)
+from .v1 import agent_flows
+from .v1 import app_configs
+from .v1 import audio_endpoints
+from .v1 import cruse_endpoints
+from .v1 import editor_endpoints
+from .v1 import export_endpoints
+from .v1 import fast_websocket
+from .v1 import fastapi_concierge_endpoints
+from .v1 import mcp_oauth_endpoints
+from .v1 import oneshot_endpoints
+from .v1 import pdf_endpoints
+from .v1 import vqa_endpoints
 
 NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
 

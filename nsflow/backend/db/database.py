@@ -16,9 +16,10 @@
 
 import os
 
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import declarative_base, sessionmaker
-
+from sqlalchemy import create_engine
+from sqlalchemy import event
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 Base = declarative_base()
 
@@ -47,8 +48,10 @@ if NSS_DB_URL:
 
     # Enable foreign key constraints for SQLite (required for CASCADE DELETE)
     if NSS_DB_TYPE == "sqlite":
+
         @event.listens_for(nss_engine, "connect")
         def set_sqlite_pragma(dbapi_conn, connection_record):
+            """Enable SQLite foreign key enforcement on each new connection."""
             _ = connection_record  # Unused
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
@@ -56,8 +59,9 @@ if NSS_DB_URL:
 
     NssSessionLocal = sessionmaker(bind=nss_engine, autocommit=False, autoflush=False)
 else:
-    nss_engine = None
-    NssSessionLocal = None
+    # module-level engine/session handles, not constants
+    nss_engine = None  # pylint: disable=invalid-name
+    NssSessionLocal = None  # pylint: disable=invalid-name
 
 
 def get_nss_db():

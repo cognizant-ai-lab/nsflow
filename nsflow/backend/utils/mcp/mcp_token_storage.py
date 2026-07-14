@@ -29,6 +29,7 @@ uses it); all instances read/write their own slice of the shared file.
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import time
@@ -44,7 +45,7 @@ except ImportError:  # pragma: no cover - non-POSIX (e.g. Windows)
 
 logger = logging.getLogger(__name__)
 
-_warned_no_flock = False
+_warned_no_flock = False  # pylint: disable=invalid-name  # mutable module-level flag, not a constant
 
 
 @contextlib.contextmanager
@@ -65,7 +66,7 @@ def _interprocess_lock(lock_path: Path):
     """
     lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if fcntl is None:
-        global _warned_no_flock
+        global _warned_no_flock  # pylint: disable=global-statement  # one-time module-level warning flag
         if not _warned_no_flock:
             logger.warning(
                 "fcntl is unavailable on this platform; the MCP token store has no cross-process "
@@ -181,6 +182,7 @@ class FileTokenStorage:
     # ------------------------------------------------------------------ #
 
     async def get_tokens(self) -> Optional[OAuthToken]:
+        """Return the stored OAuth tokens for this server, or None if absent/unparsable."""
         # Disk read offloaded to a worker thread so it never blocks the event loop.
         entry = await asyncio.to_thread(self._read_entry, self.server_url)
         raw = entry.get("tokens")
@@ -193,6 +195,7 @@ class FileTokenStorage:
             return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
+        """Persist OAuth tokens for this server to the token store."""
         # asyncio.Lock serializes coroutines in-process; the blocking
         # read-modify-write (and the cross-process fcntl lock) runs in a thread.
         async with self._lock:
@@ -216,6 +219,7 @@ class FileTokenStorage:
             self._write_file(blob)
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
+        """Return the stored OAuth client info for this server, or None if absent/unparsable."""
         entry = await asyncio.to_thread(self._read_entry, self.server_url)
         raw = entry.get("client_info")
         if not isinstance(raw, dict):
@@ -227,6 +231,7 @@ class FileTokenStorage:
             return None
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
+        """Persist OAuth client info for this server to the token store."""
         async with self._lock:
             await asyncio.to_thread(self._sync_set_client_info, client_info)
 
@@ -368,8 +373,6 @@ class FileTokenStorage:
 
     @staticmethod
     def _load_path(path: Path) -> Dict[str, Any]:
-        import json
-
         if not path.exists():
             return {}
         try:
@@ -382,8 +385,6 @@ class FileTokenStorage:
 
     @staticmethod
     def _write_path(path: Path, blob: Dict[str, Any]) -> None:
-        import json
-
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         tmp_path = path.with_suffix(path.suffix + ".tmp")
         # Create the temp file with 0600 perms so secrets are never briefly

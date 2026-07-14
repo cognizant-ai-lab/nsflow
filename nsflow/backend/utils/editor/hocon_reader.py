@@ -22,7 +22,11 @@ Removes dependency on AgentNetworkUtils to prevent conflicts.
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+import urllib.parse
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
 
@@ -50,7 +54,7 @@ class IndependentHoconReader:
             agent_manifest_file = os.path.join(root_dir, "registries", "manifest.hocon")
 
         registry_dir = os.path.dirname(agent_manifest_file)
-        logger.debug(f"Registry directory: {registry_dir}")
+        logger.debug("Registry directory: %s", registry_dir)
         return registry_dir
 
     def list_available_networks(self) -> Dict[str, Any]:
@@ -72,7 +76,7 @@ class IndependentHoconReader:
             return {"networks": networks}
 
         except Exception as e:
-            logger.error(f"Failed to list available networks: {e}")
+            logger.error("Failed to list available networks: %s", e)
             return {"networks": []}
 
     def get_network_file_path(self, network_name: str) -> str:
@@ -117,7 +121,7 @@ class IndependentHoconReader:
             return dict(config)
 
         except Exception as e:
-            logger.error(f"Failed to read network config for '{network_name}': {e}")
+            logger.error("Failed to read network config for '%s': %s", network_name, e)
             raise
 
     def parse_agent_network_for_editor(self, network_name: str) -> Dict[str, Any]:
@@ -158,7 +162,7 @@ class IndependentHoconReader:
             return {"nodes": nodes, "edges": edges, "agent_details": agent_details}
 
         except Exception as e:
-            logger.error(f"Failed to parse agent network '{network_name}': {e}")
+            logger.error("Failed to parse agent network '%s': %s", network_name, e)
             raise
 
     def _find_frontman(self, tools: List[Dict], node_lookup: Dict[str, Dict]) -> Optional[str]:
@@ -182,7 +186,7 @@ class IndependentHoconReader:
 
         return None
 
-    def _process_agent_recursive(
+    def _process_agent_recursive(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
         self,
         agent: Dict,
         nodes: List,
@@ -285,8 +289,6 @@ class IndependentHoconReader:
     def _is_url_like(s: str) -> bool:
         """Simple check to see if a string is URL-like"""
         try:
-            import urllib.parse
-
             result = urllib.parse.urlparse(s)
             return bool(result.netloc) or (result.path and "/" in result.path)
         except Exception:
@@ -307,5 +309,5 @@ class IndependentHoconReader:
             raise ValueError(f"Agent '{agent_name}' not found in network '{network_name}'")
 
         except Exception as e:
-            logger.error(f"Failed to get agent details: {e}")
+            logger.error("Failed to get agent details: %s", e)
             raise

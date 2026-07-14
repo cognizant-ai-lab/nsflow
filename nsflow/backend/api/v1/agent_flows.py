@@ -15,11 +15,13 @@
 # END COPYRIGHT
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
+from typing import Dict
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Request
 from fastapi.responses import JSONResponse
-
 from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
@@ -236,10 +238,12 @@ async def get_network_definition(network_name: str):
                 agent_def["tools"] = child_tools
             agent_network_definition[name] = agent_def
 
-    return JSONResponse(content={
-        "agent_network_definition": agent_network_definition,
-        "agent_network_name": network_name,
-    })
+    return JSONResponse(
+        content={
+            "agent_network_definition": agent_network_definition,
+            "agent_network_name": network_name,
+        }
+    )
 
 
 @router.get(

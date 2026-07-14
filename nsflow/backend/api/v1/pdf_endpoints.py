@@ -17,11 +17,15 @@
 PDF processing endpoints for extracting text from uploaded PDF files.
 Uses pypdf for reliable text extraction from PDF documents.
 """
+
 import io
 import logging
 from typing import List
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter
+from fastapi import File
+from fastapi import HTTPException
+from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
 
@@ -44,15 +48,11 @@ def validate_pdf_file(file: UploadFile) -> None:
     """
     if not file.content_type or "pdf" not in file.content_type.lower():
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type '{file.content_type}'. Please upload a PDF file."
+            status_code=400, detail=f"Invalid file type '{file.content_type}'. Please upload a PDF file."
         )
 
-    if not file.filename or not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(
-            status_code=400,
-            detail="File must have a .pdf extension."
-        )
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must have a .pdf extension.")
 
 
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> str:
@@ -76,10 +76,7 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> str:
         logging.info("Processing PDF '%s' with %d pages", filename, num_pages)
 
         if num_pages == 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"PDF file '{filename}' contains no pages."
-            )
+            raise HTTPException(status_code=400, detail=f"PDF file '{filename}' contains no pages.")
 
         text_parts: list[str] = []
 
@@ -99,12 +96,7 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> str:
 
         full_text: str = "\n\n".join(text_parts)
 
-        logging.info(
-            "Successfully extracted %d characters from %d pages of '%s'",
-            len(full_text),
-            num_pages,
-            filename
-        )
+        logging.info("Successfully extracted %d characters from %d pages of '%s'", len(full_text), num_pages, filename)
 
         return full_text
 
@@ -112,10 +104,7 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> str:
         raise
     except Exception as e:
         logging.error("Failed to parse PDF '%s': %s", filename, e)
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to parse PDF file '{filename}': {str(e)}"
-        ) from e
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF file '{filename}': {str(e)}") from e
 
 
 @router.post("/process_pdfs")
@@ -123,7 +112,7 @@ async def process_pdfs(files: List[UploadFile] = File(...)):
     """
     Process uploaded PDF files and extract text from each.
 
-    Accepts any number of PDF files. Files are processed in order and text is 
+    Accepts any number of PDF files. Files are processed in order and text is
     extracted from each page.
 
     Args:
@@ -147,10 +136,7 @@ async def process_pdfs(files: List[UploadFile] = File(...)):
     """
     try:
         if not files:
-            raise HTTPException(
-                status_code=400,
-                detail="No PDF files provided. Please upload at least one PDF file."
-            )
+            raise HTTPException(status_code=400, detail="No PDF files provided. Please upload at least one PDF file.")
 
         logging.info("Received %d PDF file(s) for processing", len(files))
 
@@ -168,31 +154,24 @@ async def process_pdfs(files: List[UploadFile] = File(...)):
                 pdf_bytes: bytes = await pdf_file.read()
                 file_size: int = len(pdf_bytes)
 
-                logging.info(
-                    "Processing PDF %d/%d: '%s' (%d bytes)",
-                    idx + 1,
-                    len(files),
-                    filename,
-                    file_size
-                )
+                logging.info("Processing PDF %d/%d: '%s' (%d bytes)", idx + 1, len(files), filename, file_size)
 
                 # Validate file size
                 if file_size < MIN_PDF_BYTES:
                     raise HTTPException(
                         status_code=400,
                         detail=(
-                            f"PDF file '{filename}' is too small ({file_size} bytes). "
-                            "Please provide a valid PDF file."
-                        )
+                            f"PDF file '{filename}' is too small ({file_size} bytes). Please provide a valid PDF file."
+                        ),
                     )
 
                 if file_size > MAX_PDF_BYTES:
                     raise HTTPException(
                         status_code=400,
                         detail=(
-                            f"PDF file '{filename}' is too large ({file_size / (1024*1024):.1f} MB). "
+                            f"PDF file '{filename}' is too large ({file_size / (1024 * 1024):.1f} MB). "
                             f"Maximum size is {MAX_PDF_SIZE_MB} MB."
-                        )
+                        ),
                     )
 
                 # Extract text from PDF
@@ -205,16 +184,13 @@ async def process_pdfs(files: List[UploadFile] = File(...)):
                 raise
             except Exception as e:
                 logging.error("Error processing PDF '%s': %s", filename, e)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to process PDF '{filename}': {str(e)}"
-                ) from e
+                raise HTTPException(status_code=500, detail=f"Failed to process PDF '{filename}': {str(e)}") from e
 
         response = {
             "success": True,
             "extracted_texts": extracted_texts,
             "file_count": len(extracted_texts),
-            "files_processed": filenames_processed
+            "files_processed": filenames_processed,
         }
 
         logging.info("Successfully processed %d PDF file(s)", len(extracted_texts))
@@ -225,7 +201,4 @@ async def process_pdfs(files: List[UploadFile] = File(...)):
         raise
     except Exception as e:
         logging.error("Error in process_pdfs endpoint: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"PDF processing failed: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"PDF processing failed: {str(e)}") from e

@@ -22,7 +22,11 @@ import threading
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from typing import Any, Dict, Optional, TextIO, Tuple
+from typing import Any
+from typing import Dict
+from typing import Optional
+from typing import TextIO
+from typing import Tuple
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -31,6 +35,7 @@ from rich.text import Text
 from rich.theme import Theme
 
 
+# pylint: disable=too-many-instance-attributes,too-few-public-methods  # cohesive log-bridge with rich internal state
 class ProcessLogBridge:
     """
     ProcessLogBridge: single-class logging bridge
@@ -139,8 +144,10 @@ class ProcessLogBridge:
         Drain stdout/stderr in background threads, pretty-print to terminal, mirror raw to file.
         """
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-        tee_out = open(log_file, "a", encoding="utf-8")
-        tee_err = open(log_file, "a", encoding="utf-8")
+        # These tee handles are deliberately kept open for the process lifetime and
+        # closed when the drain threads finish, so a `with` block is not applicable.
+        tee_out = open(log_file, "a", encoding="utf-8")  # pylint: disable=consider-using-with
+        tee_err = open(log_file, "a", encoding="utf-8")  # pylint: disable=consider-using-with
         self._streams[(process_name, "STDOUT")] = self._make_stream_state(process_name, tee_out)
         self._streams[(process_name, "STDERR")] = self._make_stream_state(process_name, tee_err)
 
@@ -154,7 +161,7 @@ class ProcessLogBridge:
     def _now_local(cls) -> datetime:
         return datetime.now().astimezone()
 
-    def _rich_time_text(self, record=None, date=None):
+    def _rich_time_text(self, record=None, date=None):  # pylint: disable=unused-argument  # Rich time-formatter callback signature
         now = self._now_local()
         return Text(f"[{now.strftime('%Y-%m-%d %H:%M:%S')} {now.tzname()}]", style=self._time_style_key)
 

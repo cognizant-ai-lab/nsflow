@@ -28,15 +28,18 @@ manager, the network loader) are patched.
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
 
+# pylint: disable=protected-access  # these aliases exercise private methods under test
 NORM = nw.NsWebsocketUtils._normalize_mcp_url
 
 
 REDACT = nw.NsWebsocketUtils.redact_sly_data_for_surface
 MERGE = nw.NsWebsocketUtils._merge_user_sly_data
+# pylint: enable=protected-access
 
 
 def _utils(agent_name="net"):
@@ -48,41 +51,51 @@ def _utils(agent_name="net"):
 
 # --------------------------- _normalize_mcp_url --------------------------- #
 
+
 def test_normalize_trailing_slash():
+    """A trailing slash is normalized away."""
     assert NORM("https://api.example.com/mcp/") == NORM("https://api.example.com/mcp")
 
 
 def test_normalize_host_case():
+    """Host casing is normalized to lower case."""
     assert NORM("https://API.Example.COM/mcp") == NORM("https://api.example.com/mcp")
 
 
 def test_normalize_strips_default_https_port():
+    """The default HTTPS port :443 is stripped during normalization."""
     assert NORM("https://api.example.com:443/mcp") == NORM("https://api.example.com/mcp")
 
 
 def test_normalize_strips_default_http_port():
+    """The default HTTP port :80 is stripped during normalization."""
     assert NORM("http://api.example.com:80/mcp") == NORM("http://api.example.com/mcp")
 
 
 def test_normalize_preserves_nondefault_port():
+    """A non-default port identifies a distinct endpoint and is preserved."""
     # :8443 genuinely identifies a different endpoint and must not be folded away.
     assert NORM("https://api.example.com:8443/mcp") != NORM("https://api.example.com/mcp")
 
 
 def test_normalize_different_host_differs():
+    """Different hosts normalize to different values."""
     assert NORM("https://a.example.com/mcp") != NORM("https://b.example.com/mcp")
 
 
 def test_normalize_preserves_query():
+    """A query string is preserved during normalization."""
     assert NORM("https://api.example.com/mcp?v=1") != NORM("https://api.example.com/mcp")
 
 
 def test_normalize_bad_input_falls_back_to_stripped_original():
+    """A non-URL string normalizes to its stripped self."""
     # A non-URL string should simply normalize to itself (exact-string behavior).
     assert NORM("  not a url  ") == "not a url"
 
 
 # --------------------------- get_network_mcp_urls --------------------------- #
+
 
 def _patch_network(monkeypatch, *, config=None, raise_exc=None, network_none=False):
     fake_anu = MagicMock()
@@ -98,13 +111,16 @@ def _patch_network(monkeypatch, *, config=None, raise_exc=None, network_none=Fal
 
 
 def test_get_urls_ignores_tool_refs_without_schema(monkeypatch):
+    """Tool-referenced MCP URLs absent from the sly_data_schema need no auth and are not collected."""
     # MCP servers a network merely references (dict `url` or a bare string in a
     # `tools` list) but does NOT declare in its sly_data_schema need no auth, so
     # they are not collected - only the schema is the auth contract.
-    config = {"tools": [
-        {"name": "a", "url": "https://no-auth.example.com/mcp"},
-        {"name": "b", "tools": ["https://also-no-auth.example.com/mcp", "helper"]},
-    ]}
+    config = {
+        "tools": [
+            {"name": "a", "url": "https://no-auth.example.com/mcp"},
+            {"name": "b", "tools": ["https://also-no-auth.example.com/mcp", "helper"]},
+        ]
+    }
     _patch_network(monkeypatch, config=config)
     assert _utils().get_network_mcp_urls() == set()
 
@@ -128,6 +144,7 @@ def _schema_tool(url):
 
 
 def test_get_urls_from_sly_data_schema(monkeypatch):
+    """http_headers property keys in the schema are collected as MCP URLs."""
     # The schema's http_headers properties keys are collected as MCP URLs.
     config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
     _patch_network(monkeypatch, config=config)
@@ -135,6 +152,7 @@ def test_get_urls_from_sly_data_schema(monkeypatch):
 
 
 def test_get_urls_only_from_schema_not_tool_refs(monkeypatch):
+    """Only schema-declared URLs are collected, not tool-referenced ones."""
     # Only the schema-declared URL is collected; a separate MCP url merely
     # referenced by a tool (and absent from the schema) is not.
     schema = _schema_tool("https://api.githubcopilot.com/mcp")
@@ -144,17 +162,21 @@ def test_get_urls_only_from_schema_not_tool_refs(monkeypatch):
 
 
 def test_get_urls_tolerates_partial_schema(monkeypatch):
+    """A malformed or partial sly_data_schema is skipped rather than raising."""
     # A malformed/partial sly_data_schema is skipped, not raised on.
-    config = {"tools": [
-        {"name": "a", "function": {"sly_data_schema": "not-a-dict"}},
-        {"name": "b", "function": {"sly_data_schema": {"properties": {"http_headers": 5}}}},
-        {"name": "c", "function": {}},
-    ]}
+    config = {
+        "tools": [
+            {"name": "a", "function": {"sly_data_schema": "not-a-dict"}},
+            {"name": "b", "function": {"sly_data_schema": {"properties": {"http_headers": 5}}}},
+            {"name": "c", "function": {}},
+        ]
+    }
     _patch_network(monkeypatch, config=config)
     assert _utils().get_network_mcp_urls() == set()
 
 
 def test_get_urls_schema_key_with_preserved_hocon_quotes(monkeypatch):
+    """A schema key carrying HOCON-preserved quotes is still collected."""
     # neuro-san's HOCON restorer preserves the surrounding quotes a URL key must
     # carry, so the parsed key is '"https://.../mcp"'. It must still be collected.
     config = {"tools": [_schema_tool('"https://api.githubcopilot.com/mcp"')]}
@@ -163,6 +185,7 @@ def test_get_urls_schema_key_with_preserved_hocon_quotes(monkeypatch):
 
 
 def test_get_urls_ignores_schema_required_array(monkeypatch):
+    """URLs appearing only in a sibling required array are not collected."""
     # Discovery collects the http_headers property keys, NOT URLs that only
     # appear in a sibling JSON-schema `required` array.
     tool = _schema_tool("https://declared.example.com/mcp")
@@ -174,6 +197,7 @@ def test_get_urls_ignores_schema_required_array(monkeypatch):
 
 
 def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
+    """An unreadable or remote network yields None for the caller fallback."""
     # get_agent_network raising (invalid/remote/unreadable) -> None (caller fallback).
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("not local"))
     assert _utils().get_network_mcp_urls() is None
@@ -181,23 +205,29 @@ def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
 
 # --------------------------- missing_mcp_connections --------------------------- #
 
+
 def _patch_connections(monkeypatch, urls):
     monkeypatch.setattr(
-        nw.FileTokenStorage, "list_connections",
+        nw.FileTokenStorage,
+        "list_connections",
         MagicMock(return_value=[{"server_url": u} for u in urls]),
     )
 
 
 def test_missing_mcp_connections_reports_unconnected(monkeypatch):
+    """Only required MCP URLs without a connection are reported as missing."""
     # One required MCP URL is connected and one is not; only the unconnected one is reported.
     tool = _schema_tool("https://api.githubcopilot.com/mcp")
-    tool["function"]["sly_data_schema"]["properties"]["http_headers"]["properties"]["https://connected.example.com/mcp"] = {"type": "object"}
+    tool["function"]["sly_data_schema"]["properties"]["http_headers"]["properties"][
+        "https://connected.example.com/mcp"
+    ] = {"type": "object"}
     _patch_network(monkeypatch, config={"tools": [tool]})
     _patch_connections(monkeypatch, ["https://connected.example.com/mcp"])
     assert nw.NsWebsocketUtils.missing_mcp_connections("net") == ["https://api.githubcopilot.com/mcp"]
 
 
 def test_missing_mcp_connections_matches_normalized(monkeypatch):
+    """A connection stored with a trailing slash satisfies the requirement."""
     # A connection stored with a trailing slash still satisfies the requirement.
     config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
     _patch_network(monkeypatch, config=config)
@@ -206,21 +236,25 @@ def test_missing_mcp_connections_matches_normalized(monkeypatch):
 
 
 def test_missing_mcp_connections_none_when_network_unreadable(monkeypatch):
+    """An unreadable network yields None instead of a missing list."""
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))
     assert nw.NsWebsocketUtils.missing_mcp_connections("net") is None
 
 
 def test_get_urls_network_none_returns_none(monkeypatch):
+    """A None agent network yields None from get_network_mcp_urls."""
     _patch_network(monkeypatch, network_none=True)
     assert _utils().get_network_mcp_urls() is None
 
 
 # --------------------------- inject_mcp_auth_headers --------------------------- #
 
+
 def _patch_injection(monkeypatch, *, connections, referenced, token="Bearer tok"):
     """Patch storage list, the network's referenced URLs, and the token fetch."""
     monkeypatch.setattr(
-        nw.FileTokenStorage, "list_connections",
+        nw.FileTokenStorage,
+        "list_connections",
         MagicMock(return_value=[{"server_url": u} for u in connections]),
     )
     get_token = AsyncMock(return_value=token)
@@ -231,6 +265,7 @@ def _patch_injection(monkeypatch, *, connections, referenced, token="Bearer tok"
 
 
 def test_inject_exact_match(monkeypatch):
+    """An exactly matching connection injects a Bearer header and fetches the token."""
     url = "https://api.example.com/mcp"
     inst, get_token = _patch_injection(monkeypatch, connections=[url], referenced=[url])
     sly = {}
@@ -240,6 +275,7 @@ def test_inject_exact_match(monkeypatch):
 
 
 def test_inject_trailing_slash_mismatch(monkeypatch):
+    """The header is keyed by the referenced URL while the token is fetched by the stored URL."""
     stored = "https://api.example.com/mcp"
     referenced = "https://api.example.com/mcp/"  # network uses the trailing-slash form
     inst, get_token = _patch_injection(monkeypatch, connections=[stored], referenced=[referenced])
@@ -253,6 +289,7 @@ def test_inject_trailing_slash_mismatch(monkeypatch):
 
 
 def test_inject_no_match_does_nothing(monkeypatch):
+    """No matching connection means no header is injected and no token fetched."""
     inst, get_token = _patch_injection(
         monkeypatch,
         connections=["https://connected.example.com/mcp"],
@@ -260,20 +297,22 @@ def test_inject_no_match_does_nothing(monkeypatch):
     )
     sly = {}
     asyncio.run(inst.inject_mcp_auth_headers(sly))
-    assert sly == {}
+    assert sly == {}  # pylint: disable=use-implicit-booleaness-not-comparison  # assert dict is exactly empty
     get_token.assert_not_awaited()
 
 
 def test_inject_fallback_injects_all_connections(monkeypatch):
+    """When referenced URLs are unknown, every connection is injected."""
     # referenced is None (HOCON not locally readable) -> inject every connection.
     conns = ["https://a.example.com/mcp", "https://b.example.com/mcp"]
-    inst, get_token = _patch_injection(monkeypatch, connections=conns, referenced=None)
+    inst, _ = _patch_injection(monkeypatch, connections=conns, referenced=None)
     sly = {}
     asyncio.run(inst.inject_mcp_auth_headers(sly))
     assert set(sly["http_headers"]) == set(conns)
 
 
 def test_inject_preserves_user_authorization(monkeypatch):
+    """A user-supplied Authorization header is never overwritten."""
     url = "https://api.example.com/mcp"
     inst, get_token = _patch_injection(monkeypatch, connections=[url], referenced=[url])
     sly = {"http_headers": {url: {"Authorization": "Bearer user-token"}}}
@@ -284,6 +323,7 @@ def test_inject_preserves_user_authorization(monkeypatch):
 
 
 def test_inject_no_token_available_skips(monkeypatch):
+    """A None token (needs re-auth) results in nothing injected."""
     url = "https://api.example.com/mcp"
     inst, _ = _patch_injection(monkeypatch, connections=[url], referenced=[url], token=None)
     sly = {}
@@ -293,23 +333,28 @@ def test_inject_no_token_available_skips(monkeypatch):
 
 
 def test_inject_coerces_non_dict_http_headers(monkeypatch):
+    """A non-dict http_headers value is coerced to a dict before injection."""
     url = "https://api.example.com/mcp"
     inst, _ = _patch_injection(monkeypatch, connections=[url], referenced=[url])
     sly = {"http_headers": "oops-not-a-dict"}
     asyncio.run(inst.inject_mcp_auth_headers(sly))
     assert isinstance(sly["http_headers"], dict)
-    assert sly["http_headers"][url] == {"Authorization": "Bearer tok"}
+    # inject_mcp_auth_headers coerces the str to a dict in place (asserted above);
+    # pylint still infers the original str literal here, so the index check is a false positive.
+    assert sly["http_headers"][url] == {"Authorization": "Bearer tok"}  # pylint: disable=invalid-sequence-index
 
 
 def test_inject_no_connections_returns_early(monkeypatch):
+    """With no connections, injection returns early without fetching a token."""
     inst, get_token = _patch_injection(monkeypatch, connections=[], referenced=["https://x/mcp"])
     sly = {}
     asyncio.run(inst.inject_mcp_auth_headers(sly))
-    assert sly == {}
+    assert sly == {}  # pylint: disable=use-implicit-booleaness-not-comparison  # assert dict is exactly empty
     get_token.assert_not_awaited()
 
 
 def test_inject_preserves_other_existing_headers(monkeypatch):
+    """An existing unrelated header on the URL is merged, not clobbered."""
     url = "https://api.example.com/mcp"
     inst, _ = _patch_injection(monkeypatch, connections=[url], referenced=[url])
     # An unrelated header dict already on this URL should be merged, not clobbered.
@@ -357,7 +402,9 @@ def test_inject_ignores_redaction_sentinel(monkeypatch):
 
 # --------------------------- redact_sly_data_for_surface --------------------------- #
 
+
 def test_redact_masks_authorization():
+    """The Authorization header is masked while non-sensitive headers are kept."""
     url = "https://api.example.com/mcp"
     sly = {"http_headers": {url: {"Authorization": "Bearer secret-tok", "X-Custom": "ok"}}}
     out = REDACT(sly)
@@ -367,6 +414,7 @@ def test_redact_masks_authorization():
 
 
 def test_redact_masks_other_credential_headers():
+    """Cookie and X-Api-Key headers are masked while benign headers are kept."""
     url = "https://api.example.com/mcp"
     sly = {"http_headers": {url: {"Cookie": "s=1", "X-Api-Key": "k", "Accept": "application/json"}}}
     out = REDACT(sly)
@@ -376,6 +424,7 @@ def test_redact_masks_other_credential_headers():
 
 
 def test_redact_does_not_mutate_original():
+    """Redaction returns a copy and leaves the original live token intact."""
     url = "https://api.example.com/mcp"
     sly = {"http_headers": {url: {"Authorization": "Bearer secret-tok"}}, "other": 1}
     out = REDACT(sly)
@@ -386,12 +435,14 @@ def test_redact_does_not_mutate_original():
 
 
 def test_redact_leaves_non_header_sly_data_unchanged():
+    """sly_data without http_headers is returned unchanged."""
     sly = {"user_id": "u1", "config": {"k": "v"}}
     out = REDACT(sly)
     assert out == sly
 
 
 def test_redact_handles_missing_or_bad_http_headers():
+    """Missing or malformed http_headers are handled without raising."""
     # No http_headers key -> returned unchanged.
     assert REDACT({"user_id": "u1"}) == {"user_id": "u1"}
     # A non-dict (malformed) http_headers could itself be/contain a secret, so the
@@ -411,6 +462,7 @@ def test_redact_tolerates_non_string_header_key():
 
 
 # --------------------------- _merge_user_sly_data --------------------------- #
+
 
 def test_merge_redacted_sentinel_does_not_clobber_real_secret():
     """A round-tripped ***redacted*** must not overwrite the retained real value."""
@@ -459,6 +511,7 @@ def test_merge_non_http_headers_keys_replace_as_before():
 
 
 def test_merge_ignores_non_dict_incoming():
+    """A non-dict incoming value leaves the merge state unchanged."""
     state = {"user_id": "u1"}
     MERGE(state, "not-a-dict")
     assert state == {"user_id": "u1"}

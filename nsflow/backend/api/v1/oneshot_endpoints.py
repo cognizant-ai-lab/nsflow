@@ -17,28 +17,35 @@
 One-shot chat endpoints for direct agent communication without WebSocket.
 Provides simple request/response interaction with agents.
 """
+
+import json
 import logging
-from typing import Any, Dict, Optional, Union
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from neuro_san.client.agent_session_factory import AgentSessionFactory
-from neuro_san.client.streaming_input_processor import StreamingInputProcessor
-from neuro_san.interfaces.agent_session import AgentSession
+import re
+from typing import Any
+from typing import Dict
+from typing import Optional
+
+from fastapi import APIRouter
+from fastapi import HTTPException
 from neuro_san.client.simple_one_shot import SimpleOneShot
+from pydantic import BaseModel
 
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/oneshot")
 
+
 class OneShotRequest(BaseModel):
     """Request model for one-shot chat."""
+
     agent_name: str
     message: str
 
 
 class OneShotResponse(BaseModel):
     """Response model for one-shot chat."""
+
     raw_response: Optional[Dict[str, Any]] = None
 
 
@@ -56,19 +63,16 @@ async def oneshot_chat(request: OneShotRequest):
     Raises:
         HTTPException: If agent session creation or communication fails
     """
-     # Get config from registry
+    # Get config from registry
     try:
         config = NsConfigsRegistry.get_current()
     except RuntimeError as e:
         raise HTTPException(
-            status_code=500,
-            detail="No active NsConfigStore. Please set it via /set_config before using endpoints."
+            status_code=500, detail="No active NsConfigStore. Please set it via /set_config before using endpoints."
         ) from e
-    
+
     try:
-        logger.info(
-            f"One-shot chat request to agent '{request.agent_name}': {request.message[:50]}..."
-        )
+        logger.info("One-shot chat request to agent '%s': %s...", request.agent_name, request.message[:50])
         sos_client = SimpleOneShot(request.agent_name, config.connection_type, config.host, config.port)
         raw_response = sos_client.get_answer_for(request.message)
 
@@ -77,13 +81,10 @@ async def oneshot_chat(request: OneShotRequest):
             response_data = {"message": raw_response}
         elif isinstance(raw_response, str):
             # Try to extract JSON from markdown code blocks first
-            import json
-            import re
-
             cleaned = raw_response.strip()
 
             # Check for markdown code block
-            code_block_match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', cleaned)
+            code_block_match = re.search(r"```(?:json)?\s*\n?([\s\S]*?)\n?```", cleaned)
             if code_block_match:
                 cleaned = code_block_match.group(1).strip()
 
@@ -98,13 +99,9 @@ async def oneshot_chat(request: OneShotRequest):
             response_data = {"message": str(raw_response)}
 
         return OneShotResponse(raw_response=response_data)
-    
+
     except Exception as e:
-        logger.error(
-            f"Error in one-shot chat with agent '{request.agent_name}': {str(e)}",
-            exc_info=True
-        )
+        logger.error("Error in one-shot chat with agent '%s': %s", request.agent_name, str(e), exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to communicate with agent '{request.agent_name}': {str(e)}"
-        )
+            status_code=500, detail=f"Failed to communicate with agent '{request.agent_name}': {str(e)}"
+        ) from e
