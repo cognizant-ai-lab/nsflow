@@ -20,10 +20,15 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlsplit, urlunsplit
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from urllib.parse import urlsplit
+from urllib.parse import urlunsplit
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
@@ -107,8 +112,7 @@ class NsWebsocketUtils:
         self.logs_manager = LogsRegistry.register(agent_name, self.session_id)
         self.session = self.create_agent_session()
 
-    # pylint: disable=too-many-function-args
-    async def handle_user_input(self):
+    async def handle_user_input(self):  # pylint: disable=too-many-locals  # cohesive websocket message loop
         """
         Handle incoming WebSocket messages and process them using the agent session."""
         websocket = self.websocket
@@ -206,7 +210,7 @@ class NsWebsocketUtils:
             "num_input": 0,
             "chat_filter": chat_filter,
             "sly_data": {},
-            "chat_context": {}
+            "chat_context": {},
         }
 
         input_processor = AsyncStreamingInputProcessor(
@@ -252,7 +256,9 @@ class NsWebsocketUtils:
         """
         return AgentSessionFactory()
 
-    async def inject_mcp_auth_headers(self, sly_data: Dict[str, Any]) -> None:
+    async def inject_mcp_auth_headers(  # pylint: disable=too-many-locals,too-many-branches  # header-merge logic over many optional fields
+        self, sly_data: Dict[str, Any]
+    ) -> None:
         """
         Merge OAuth Bearer tokens for connected MCP servers into sly_data's
         ``http_headers`` so the agent network can authenticate to them.
@@ -297,7 +303,8 @@ class NsWebsocketUtils:
                         targets.append((ref, token_url))
             logging.info(
                 "MCP auth injection for network '%s': connected=%s referenced=%s targets=%s",
-                self.agent_name, sorted(connected_urls),
+                self.agent_name,
+                sorted(connected_urls),
                 "ALL(fallback)" if referenced is None else sorted(referenced),
                 sorted({header_key for header_key, _ in targets}),
             )
@@ -332,9 +339,7 @@ class NsWebsocketUtils:
                     continue
                 authorization = await mcp_oauth_manager.get_fresh_token(token_url)
                 if not authorization:
-                    logging.warning(
-                        "MCP auth: no usable token for %s (connection may need re-auth)", token_url
-                    )
+                    logging.warning("MCP auth: no usable token for %s (connection may need re-auth)", token_url)
                     continue
                 # Drop any differently-cased existing key so we don't end up with
                 # two Authorization headers, then set the canonical casing.
@@ -439,9 +444,7 @@ class NsWebsocketUtils:
             url: (
                 {
                     name: (
-                        REDACTED_VALUE
-                        if isinstance(name, str) and name.lower() in _SENSITIVE_HEADER_NAMES
-                        else value
+                        REDACTED_VALUE if isinstance(name, str) and name.lower() in _SENSITIVE_HEADER_NAMES else value
                     )
                     for name, value in headers.items()
                 }

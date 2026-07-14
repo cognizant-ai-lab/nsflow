@@ -25,18 +25,21 @@ import os
 import uuid
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-class SimpleStateManager:
+class SimpleStateManager:  # pylint: disable=too-many-public-methods  # cohesive state-editing API surface
     """
     Simplified state manager for agent network editing.
     No locks, no complex async patterns - just simple state management.
     """
 
-    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", False)
+    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", "")
 
     def __init__(self, design_id: Optional[str] = None):
         self.design_id = design_id or str(uuid.uuid4())
@@ -116,7 +119,7 @@ class SimpleStateManager:
             self.current_state["meta"]["updated_at"] = datetime.now().isoformat()
             return True
         except Exception as e:
-            logger.error(f"Failed to set network name: {e}")
+            logger.error("Failed to set network name: %s", e)
             return False
 
     def load_from_hocon_structure(self, hocon_config: Dict[str, Any], network_name: str):
@@ -143,7 +146,7 @@ class SimpleStateManager:
             self.current_state["meta"]["updated_at"] = datetime.now().isoformat()
 
         except Exception as e:
-            logger.error(f"Failed to load from HOCON: {e}")
+            logger.error("Failed to load from HOCON: %s", e)
             raise
 
     def _load_top_level_config(self, hocon_config: Dict[str, Any]):
@@ -244,7 +247,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load from copilot state: {e}")
+            logger.error("Failed to load from copilot state: %s", e)
             return False
 
     def create_from_template(self, template_type: str, **kwargs) -> bool:
@@ -274,7 +277,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create from template: {e}")
+            logger.error("Failed to create from template: %s", e)
             return False
 
     def _create_single_agent_template(self, **kwargs):
@@ -315,7 +318,7 @@ class SimpleStateManager:
         for level in range(1, levels):
             new_agents = []
             for parent in current_parents:
-                for i in range(agents_per_level[level]):
+                for _ in range(agents_per_level[level]):
                     agent_name = f"agent_L{level}_{len(new_agents) + 1}"
                     agent_def = {
                         "name": agent_name,
@@ -384,7 +387,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to add agent: {e}")
+            logger.error("Failed to add agent: %s", e)
             return False
 
     def update_agent(self, agent_name: str, updates: Dict[str, Any]) -> bool:
@@ -404,7 +407,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to update agent: {e}")
+            logger.error("Failed to update agent: %s", e)
             return False
 
     def duplicate_agent(self, agent_name: str, new_name: str) -> bool:
@@ -431,7 +434,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to duplicate agent: {e}")
+            logger.error("Failed to duplicate agent: %s", e)
             return False
 
     def delete_agent(self, agent_name: str) -> bool:
@@ -468,7 +471,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete agent: {e}")
+            logger.error("Failed to delete agent: %s", e)
             return False
 
     def add_edge(self, source_agent: str, target_agent: str) -> bool:
@@ -495,7 +498,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to add edge: {e}")
+            logger.error("Failed to add edge: %s", e)
             return False
 
     def remove_edge(self, source_agent: str, target_agent: str) -> bool:
@@ -520,7 +523,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to remove edge: {e}")
+            logger.error("Failed to remove edge: %s", e)
             return False
 
     def _would_create_cycle(self, source: str, target: str) -> bool:
@@ -661,7 +664,7 @@ class SimpleStateManager:
                 json.dump(self.current_state, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
-            logger.error(f"Failed to save to file: {e}")
+            logger.error("Failed to save to file: %s", e)
             return False
 
     def load_from_file(self, file_path: str) -> bool:
@@ -677,7 +680,7 @@ class SimpleStateManager:
 
             return True
         except Exception as e:
-            logger.error(f"Failed to load from file: {e}")
+            logger.error("Failed to load from file: %s", e)
             return False
 
     def extract_state_from_progress(self, progress_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -743,7 +746,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to update network state: {e}")
+            logger.error("Failed to update network state: %s", e)
             return False
 
     def get_top_level_config(self) -> Dict[str, Any]:
@@ -767,7 +770,7 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to update top-level config: {e}")
+            logger.error("Failed to update top-level config: %s", e)
             return False
 
     def restore_top_level_config(self, config: Dict[str, Any]) -> bool:
@@ -782,5 +785,5 @@ class SimpleStateManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to restore top-level config: {e}")
+            logger.error("Failed to restore top-level config: %s", e)
             return False

@@ -16,7 +16,8 @@
 
 import json
 import socket
-from typing import Any, Dict
+from typing import Any
+from typing import Dict
 
 import httpx
 from fastapi import HTTPException
@@ -68,7 +69,7 @@ class NsConciergeUtils:
                 metadata[item_name] = headers[item_name]
         return metadata
 
-    async def list_concierge(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    async def list_concierge(self, metadata: Dict[str, Any]) -> Dict[str, Any]:  # pylint: disable=unused-argument  # kept for interface parity across concierge callers
         """
         Call the concierge `list()` method via HTTP.
 

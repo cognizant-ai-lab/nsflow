@@ -13,13 +13,17 @@
 # limitations under the License.
 #
 # END COPYRIGHT
-import logging
 import os
 import subprocess
 import tempfile
-from typing import Annotated, Optional
+from typing import Annotated
+from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter
+from fastapi import File
+from fastapi import Form
+from fastapi import HTTPException
+from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import StringConstraints
 from werkzeug.utils import secure_filename
@@ -146,7 +150,7 @@ async def vqa(
 
 
 @router.post("/vqa_video")
-async def vqa_video(
+async def vqa_video(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals  # FastAPI form params + sequential pipeline
     question: QuestionField = Form(...),
     video: UploadFile = File(...),
     model_name: Optional[str] = Form(None),
@@ -199,7 +203,7 @@ async def vqa_video(
             content = await video.read()
             tmp.write(content)
     except Exception as e:
-        raise HTTPException(400, f"Failed to save uploaded video: {e}")
+        raise HTTPException(400, f"Failed to save uploaded video: {e}") from e
 
     # Call predict.py
     cmd = [
@@ -227,9 +231,9 @@ async def vqa_video(
             timeout=timeout_sec,
             check=False,  # don’t raise automatically; we’ll return stderr if needed
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         os.unlink(video_path)
-        raise HTTPException(504, f"Prediction timed out after {timeout_sec}s")
+        raise HTTPException(504, f"Prediction timed out after {timeout_sec}s") from exc
 
     # Clean up the temp file
     try:

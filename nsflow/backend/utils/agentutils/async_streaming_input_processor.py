@@ -16,7 +16,10 @@
 
 import asyncio
 from copy import copy
-from typing import Any, Dict, Generator, Optional
+from typing import Any
+from typing import Dict
+from typing import Generator
+from typing import Optional
 
 from neuro_san.client.streaming_input_processor import StreamingInputProcessor
 from neuro_san.interfaces.agent_session import AgentSession
@@ -71,7 +74,6 @@ class AsyncStreamingInputProcessor(StreamingInputProcessor):
         returned_sly_data: Optional[Dict[str, Any]] = None
         chat_responses: Generator[Dict[str, Any], None, None] = self.session.streaming_chat(chat_request)
         async for chat_response in self.async_wrap_iter(chat_responses):
-
             response: Dict[str, Any] = chat_response.get("response", empty)
             # Use the async version of the message processor
             await self.processor.async_process_message(response)

@@ -24,11 +24,15 @@ and injected into ``sly_data`` at chat time - they are never returned to the UI.
 
 import asyncio
 import html
+import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi.responses import HTMLResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from nsflow.backend.utils.mcp.mcp_oauth_manager import mcp_oauth_manager
@@ -56,11 +60,7 @@ def _callback_html(status: str, server_url: str, message: str = "") -> str:
     closes itself, falling back to a readable message if it cannot close.
     """
     # Values are server-controlled / our own flow data; still JSON-encode for safety.
-    import json
-
-    payload = json.dumps(
-        {"type": "mcp-oauth", "status": status, "server_url": server_url, "message": message}
-    )
+    payload = json.dumps({"type": "mcp-oauth", "status": status, "server_url": server_url, "message": message})
     heading = "Connected!" if status == "ok" else "Connection failed"
     detail = message or ("You can close this window." if status == "ok" else "Please try again.")
     # Escape EVERY value that reaches the page with html.escape (the sanitizer
@@ -130,9 +130,7 @@ async def start_oauth_flow(body: StartFlowRequest):
         # unexpected SDK error. Log the stack trace and return a consistent
         # error to the UI instead of a bare 500.
         logger.exception("MCP OAuth flow for %s failed to start.", server_url)
-        raise HTTPException(
-            status_code=502, detail=f"Could not start OAuth flow with the MCP server: {exc}"
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"Could not start OAuth flow with the MCP server: {exc}") from exc
 
     if flow.status == "error" or not flow.authorization_url:
         logger.warning("MCP OAuth flow for %s could not start: %s", server_url, flow.error)
@@ -206,7 +204,9 @@ async def oauth_callback(
 
     return HTMLResponse(
         content=_callback_html(
-            "error", flow.server_url, flow.error or "Token exchange did not complete.",
+            "error",
+            flow.server_url,
+            flow.error or "Token exchange did not complete.",
         ),
         status_code=400,
     )
@@ -218,9 +218,7 @@ async def oauth_status(flow_id: str):
     flow = mcp_oauth_manager.get_flow(flow_id)
     if flow is None:
         raise HTTPException(status_code=404, detail="Unknown flow_id.")
-    return JSONResponse(
-        content={"status": flow.status, "server_url": flow.server_url, "error": flow.error}
-    )
+    return JSONResponse(content={"status": flow.status, "server_url": flow.server_url, "error": flow.error})
 
 
 @router.get("/redirect_uri")
@@ -261,6 +259,7 @@ async def required_mcp_connections(network_name: str):
     before chatting with a network that needs MCP auth.
     """
     # Imported here to avoid pulling the (heavy) websocket utils at module import.
+    # pylint: disable=import-outside-toplevel
     from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 
     name = network_name.strip()

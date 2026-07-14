@@ -14,7 +14,12 @@
 #
 # END COPYRIGHT
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 
 @dataclass
@@ -25,7 +30,6 @@ class AgentData:
     edges: List[Dict]
 
 
-# pylint: disable=too-few-public-methods
 class NsNetworkUtils:
     """
     Utility class to handle network-related operations for Neuro-San agents.

@@ -14,7 +14,8 @@
 #
 # END COPYRIGHT
 import logging
-from typing import Dict, Optional
+from typing import Dict
+from typing import Optional
 
 from nsflow.backend.utils.tools.ns_config import NsConfig
 

@@ -14,7 +14,9 @@
 #
 # END COPYRIGHT
 import jwt
-from fastapi import Header, HTTPException, status
+from fastapi import Header
+from fastapi import HTTPException
+from fastapi import status
 
 
 class AuthUtils:

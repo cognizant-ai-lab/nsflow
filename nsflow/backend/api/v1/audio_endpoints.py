@@ -19,8 +19,12 @@ import tempfile
 from io import BytesIO
 
 import speech_recognition as sr
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter
+from fastapi import File
+from fastapi import HTTPException
+from fastapi import UploadFile
+from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from gtts import gTTS
 from pydantic import BaseModel
 from pydub import AudioSegment
@@ -159,7 +163,7 @@ class TextToSpeechRequest(BaseModel):
 
 
 @router.post("/speech_to_text")
-async def speech_to_text(audio: UploadFile = File(...)):
+async def speech_to_text(audio: UploadFile = File(...)):  # pylint: disable=too-many-locals  # sequential audio-processing pipeline
     """
     Convert speech from an MP3 file to text using Google Speech Recognition.
 
@@ -196,7 +200,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 detail=(
                     f"Audio file is too small or empty ({file_size} bytes) "
                     "please ensure microphone permission is granted and try recording again."
-                )
+                ),
             )
         # Detect audio format from content type
         audio_format, file_suffix = detect_audio_format_and_suffix(audio.content_type)
@@ -227,8 +231,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Audio file is too short ({duration_seconds:.2f} seconds). "
-                        "Please provide a longer audio."
+                        f"Audio file is too short ({duration_seconds:.2f} seconds). Please provide a longer audio."
                     ),
                 )
             # Apply audio preprocessing and export
@@ -245,8 +248,8 @@ async def speech_to_text(audio: UploadFile = File(...)):
             transcribed_text = recognizer.recognize_google(
                 audio_data,
                 language="en-US",
-                show_all=False #return best match only
-                )
+                show_all=False,  # return best match only
+            )
 
             logging.info("Transcription successful: %.50s...", transcribed_text)
 
@@ -264,7 +267,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
             # logging.info("DEBUG: Temporary files kept for inspection:")
             # logging.info("  Original audio: %s", temp_audio_path)
             # logging.info("  Processed WAV: %s", temp_wav_path)
-            try:# disable deletion for debugging if needed and enable logging above
+            try:  # disable deletion for debugging if needed and enable logging above
                 os.unlink(temp_audio_path)
                 os.unlink(temp_wav_path)
             except OSError:

@@ -17,9 +17,12 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
+from typing import Dict
+from typing import List
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 
 from nsflow.backend.trust.sustainability_calculator import SustainabilityCalculator
 
@@ -51,12 +54,12 @@ class RaiService:
             cls._instance = cls()
         return cls._instance
 
-    def _get_default_metrics(self, agent_name: str = "ollama") -> Dict[str, str]:
+    def _get_default_metrics(self, agent_name: str = "ollama") -> Dict[str, str]:  # pylint: disable=unused-argument  # kept for signature parity
         """Return default sustainability metrics."""
         # self.logger.info(f"Returning default sustainability metrics for agent: {agent_name}")
         return {"energy": "0.00 kWh", "carbon": "0.00 g CO₂", "water": "0.00 L", "model": "", "cost": "$0.000"}
 
-    def _calculate_metrics_from_token_accounting(
+    def _calculate_metrics_from_token_accounting(  # pylint: disable=too-many-branches,unused-argument  # precision formatting branches; agent_name kept for signature parity
         self, token_accounting: Dict[str, Any], agent_name: str = "ollama"
     ) -> Dict[str, str]:
         """
@@ -74,7 +77,8 @@ class RaiService:
             List of sustainability metrics with updated values
         """
         try:
-            # self.logger.info(f"Processing token accounting in _calculate_metrics_from_token_accounting: {token_accounting}")
+            # self.logger.info("Processing token accounting in "
+            #                  "_calculate_metrics_from_token_accounting: %s", token_accounting)
 
             # Add model name to token accounting data if not already present
             enhanced_token_data = token_accounting.copy()
@@ -88,7 +92,9 @@ class RaiService:
             # Use the research-based calculator
             sustainability_metrics = self.calculator.calculate_from_token_accounting(enhanced_token_data)
 
-            # self.logger.info(f"Calculator returned: energy={sustainability_metrics.energy_kwh}, carbon={sustainability_metrics.carbon_g_co2}, water={sustainability_metrics.water_liters}, model={sustainability_metrics.model_name}")
+            # self.logger.info("Calculator returned: energy=%s, carbon=%s, water=%s, model=%s",
+            #                  sustainability_metrics.energy_kwh, sustainability_metrics.carbon_g_co2,
+            #                  sustainability_metrics.water_liters, sustainability_metrics.model_name)
 
             # Convert to the format expected by the frontend with appropriate precision
             # Use scientific notation or more decimal places for very small values
@@ -143,7 +149,7 @@ class RaiService:
             return result
 
         except Exception as e:
-            self.logger.error(f"Error calculating sustainability metrics: {e}")
+            self.logger.error("Error calculating sustainability metrics: %s", e)
             return {
                 "energy": "0.00 kWh",
                 "carbon": "00 g CO₂",
@@ -152,7 +158,9 @@ class RaiService:
                 "cost": "$0.00",
             }  # Return default metrics on error
 
-    async def handle_websocket(self, websocket: WebSocket, agent_name: str = "ollama", session_id: str = "global"):
+    async def handle_websocket(  # pylint: disable=unused-argument  # agent_name kept for signature parity
+        self, websocket: WebSocket, agent_name: str = "ollama", session_id: str = "global"
+    ):
         """
         Handle a new WebSocket connection for real-time sustainability metrics.
 
@@ -177,7 +185,7 @@ class RaiService:
             if session_metrics and isinstance(session_metrics, dict):
                 await websocket.send_text(json.dumps(session_metrics))
         except Exception as e:
-            self.logger.error(f"Error sending initial metrics: {e}")
+            self.logger.error("Error sending initial metrics: %s", e)
 
         try:
             # Keep connection alive and handle any incoming messages
@@ -191,7 +199,7 @@ class RaiService:
                     del self.active_connections[session_id]
             # self.logger.info(f"Sustainability metrics WebSocket client disconnected for session: {session_id}")
         except Exception as e:
-            self.logger.error(f"WebSocket error: {e}")
+            self.logger.error("WebSocket error: %s", e)
             if session_id in self.active_connections and websocket in self.active_connections[session_id]:
                 self.active_connections[session_id].remove(websocket)
                 # Clean up empty session lists
@@ -227,7 +235,7 @@ class RaiService:
             await self._broadcast_metrics(session_id)
 
         except Exception as e:
-            self.logger.error(f"Error updating metrics from token accounting: {e}")
+            self.logger.error("Error updating metrics from token accounting: %s", e)
 
     async def _broadcast_metrics(self, session_id: str = "global"):
         """
@@ -250,7 +258,7 @@ class RaiService:
             except WebSocketDisconnect:
                 disconnected_clients.append(websocket)
             except Exception as e:
-                self.logger.error(f"Error broadcasting to WebSocket client: {e}")
+                self.logger.error("Error broadcasting to WebSocket client: %s", e)
                 disconnected_clients.append(websocket)
 
         # Remove disconnected clients
@@ -263,7 +271,7 @@ class RaiService:
 
         if disconnected_clients:
             self.logger.info(
-                f"Removed {len(disconnected_clients)} disconnected WebSocket clients from session {session_id}"
+                "Removed %s disconnected WebSocket clients from session %s", len(disconnected_clients), session_id
             )
 
     def get_current_metrics(self) -> Dict[str, str]:

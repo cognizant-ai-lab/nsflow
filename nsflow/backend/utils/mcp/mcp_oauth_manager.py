@@ -108,7 +108,7 @@ class ReauthRequiredError(Exception):
 
 
 @dataclass
-class PendingFlow:
+class PendingFlow:  # pylint: disable=too-many-instance-attributes  # dataclass aggregating flow fields
     """In-flight OAuth authorization for a single MCP server connection."""
 
     flow_id: str
@@ -448,6 +448,7 @@ class MCPOAuthManager:
         return flow
 
     def get_flow(self, flow_id: str) -> Optional[PendingFlow]:
+        """Return the pending flow for the given id, sweeping expired flows first."""
         # Sweep on poll so completed/expired flows don't accumulate when no new
         # flow is ever started.
         self._sweep_expired()

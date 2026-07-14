@@ -18,7 +18,8 @@ import os
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,9 +39,7 @@ NUMERIC_LOG_LEVEL = getattr(logging, LOG_LEVEL, logging.INFO)
 # Configure root logger once at application startup
 # All module loggers will inherit this configuration
 logging.basicConfig(
-    level=NUMERIC_LOG_LEVEL,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    level=NUMERIC_LOG_LEVEL, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 if NSFLOW_DEV_MODE:

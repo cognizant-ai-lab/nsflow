@@ -22,10 +22,11 @@ from nsflow.backend.utils.editor import ops_store
 from nsflow.backend.utils.editor.ops_store import OperationStore
 
 
-class _FakeManager:
+class _FakeManager:  # pylint: disable=too-few-public-methods  # minimal test stand-in
     """Minimal SimpleStateManager stand-in: OperationStore only needs get_state()."""
 
     def get_state(self):
+        """Return a fixed minimal state dict for the store to snapshot."""
         return {"network_name": "net", "agents": {}}
 
 
@@ -49,11 +50,13 @@ class TestOperationStore(unittest.TestCase):
     def test_read_jsonl_round_trip(self):
         """_read_jsonl returns [] for a missing file and reads back appended rows."""
         path = os.path.join(self.tmp_dir, "history.jsonl")
+        # pylint: disable=protected-access  # exercising OperationStore's private jsonl helpers directly
         self.assertEqual(OperationStore._read_jsonl(path), [])
 
         OperationStore._append_jsonl(path, {"a": 1})
         OperationStore._append_jsonl(path, {"b": 2})
         self.assertEqual(OperationStore._read_jsonl(path), [{"a": 1}, {"b": 2}])
+        # pylint: enable=protected-access
 
 
 if __name__ == "__main__":

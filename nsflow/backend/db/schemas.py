@@ -24,9 +24,11 @@ which define the database schema.
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from pydantic import Field
 
 from nsflow.backend.db.models import Message
 
@@ -34,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==================== Message Schemas ====================
+
 
 class WidgetDefinition(BaseModel):
     model_config = {"populate_by_name": True}
@@ -67,11 +70,12 @@ class MessageResponse(BaseModel):
     widget: Optional[dict] = None
     created_at: datetime
 
-    class Config:
+    class Config:  # pylint: disable=too-few-public-methods  # pydantic model config
         from_attributes = True
 
 
 # ==================== Thread Schemas ====================
+
 
 class ThreadCreate(BaseModel):
     title: str
@@ -85,7 +89,7 @@ class ThreadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
+    class Config:  # pylint: disable=too-few-public-methods  # pydantic model config
         from_attributes = True
 
 
@@ -94,6 +98,7 @@ class ThreadWithMessages(ThreadResponse):
 
 
 # ==================== Theme Schemas ====================
+
 
 class ThemeCreate(BaseModel):
     agent_name: str
@@ -113,11 +118,12 @@ class ThemeResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
+    class Config:  # pylint: disable=too-few-public-methods  # pydantic model config
         from_attributes = True
 
 
 # ==================== Conversion Helpers ====================
+
 
 def parse_origin(origin_str: str) -> List[MessageOrigin]:
     """Parse a JSON-encoded origin string from the DB into a list of MessageOrigin."""

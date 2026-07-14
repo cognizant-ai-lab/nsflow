@@ -19,33 +19,35 @@ import os
 
 # pylint: disable=too-many-lines
 from functools import lru_cache
-from typing import Any, Dict, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 import aiofiles
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Query
 
-from nsflow.backend.models.editor_models import (
-    AgentCreateRequest,
-    AgentDuplicateRequest,
-    AgentUpdateRequest,
-    BaseAgentProperties,
-    EdgeRequest,
-    EditorState,
-    NetworkConnectivity,
-    NetworkExportRequest,
-    NetworkInfo,
-    NetworksList,
-    NetworkStateInfo,
-    NetworkTemplate,
-    StateConnectivityResponse,
-    TemplateType,
-    ToolboxAgentCreateRequest,
-    ToolboxInfo,
-    TopLevelConfig,
-    TopLevelConfigUpdateRequest,
-    UndoRedoResponse,
-    ValidationResult,
-)
+from nsflow.backend.models.editor_models import AgentCreateRequest
+from nsflow.backend.models.editor_models import AgentDuplicateRequest
+from nsflow.backend.models.editor_models import AgentUpdateRequest
+from nsflow.backend.models.editor_models import BaseAgentProperties
+from nsflow.backend.models.editor_models import EdgeRequest
+from nsflow.backend.models.editor_models import EditorState
+from nsflow.backend.models.editor_models import NetworkConnectivity
+from nsflow.backend.models.editor_models import NetworkExportRequest
+from nsflow.backend.models.editor_models import NetworkInfo
+from nsflow.backend.models.editor_models import NetworksList
+from nsflow.backend.models.editor_models import NetworkStateInfo
+from nsflow.backend.models.editor_models import NetworkTemplate
+from nsflow.backend.models.editor_models import StateConnectivityResponse
+from nsflow.backend.models.editor_models import TemplateType
+from nsflow.backend.models.editor_models import ToolboxAgentCreateRequest
+from nsflow.backend.models.editor_models import ToolboxInfo
+from nsflow.backend.models.editor_models import TopLevelConfig
+from nsflow.backend.models.editor_models import TopLevelConfigUpdateRequest
+from nsflow.backend.models.editor_models import UndoRedoResponse
+from nsflow.backend.models.editor_models import ValidationResult
 from nsflow.backend.utils.editor.hocon_reader import IndependentHoconReader
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.editor.toolbox_service import get_toolbox_service
@@ -794,8 +796,10 @@ async def undo_operation(design_id: str):
         success = operation_store.undo()
 
         # Get updated undo/redo status
+        # pylint: disable=protected-access  # reading internal jsonl of our own OperationStore
         history = operation_store._read_jsonl(operation_store.hist_file)
         redo_stack = operation_store._read_jsonl(operation_store.redo_file)
+        # pylint: enable=protected-access
 
         return UndoRedoResponse(
             success=success,
@@ -822,8 +826,10 @@ async def redo_operation(design_id: str):
         success = operation_store.redo()
 
         # Get updated undo/redo status
+        # pylint: disable=protected-access  # reading internal jsonl of our own OperationStore
         history = operation_store._read_jsonl(operation_store.hist_file)
         redo_stack = operation_store._read_jsonl(operation_store.redo_file)
+        # pylint: enable=protected-access
 
         return UndoRedoResponse(
             success=success,
@@ -945,7 +951,7 @@ async def export_to_hocon(design_id: str, request: NetworkExportRequest):
             # Determine action message
             if original_network_name:
                 action_message = (
-                    f"Network exported to {output_path}" f" (replaced existing '{original_network_name}.hocon')"
+                    f"Network exported to {output_path} (replaced existing '{original_network_name}.hocon')"
                 )
             else:
                 action_message = f"Network exported to {output_path} (new file)"
