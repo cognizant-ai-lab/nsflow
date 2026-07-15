@@ -119,4 +119,6 @@ const EditableAgentNode: React.FC<NodeProps<EditableAgentNodeData>> = ({ data, s
   );
 };
 
-export default EditableAgentNode;
+// Memoized to avoid re-rendering every node when the nodes array is rebuilt by
+// reference on each render (see large-graph performance, issue #55).
+export default React.memo(EditableAgentNode);
