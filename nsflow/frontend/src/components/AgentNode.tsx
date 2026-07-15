@@ -428,4 +428,7 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
   );
 };
 
-export default AgentNode;
+// Memoized so a single node's highlight/state change (or any parent re-render that
+// rebuilds the nodes array by reference) doesn't re-render all node instances. Critical
+// for large graphs where hundreds of nodes would otherwise re-render on every tick.
+export default React.memo(AgentNode);
