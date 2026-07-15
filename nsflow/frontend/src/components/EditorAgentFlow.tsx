@@ -647,6 +647,7 @@ const EditorAgentFlow = ({
           markerEnd: "arrowclosed" as EdgeMarkerType,
         }}
         fitView
+        onlyRenderVisibleElements
         attributionPosition="bottom-left"
         minZoom={0.01}
         maxZoom={3}
