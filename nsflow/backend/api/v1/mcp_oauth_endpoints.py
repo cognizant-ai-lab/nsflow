@@ -239,9 +239,7 @@ async def get_redirect_uri(request: Request):
     actually browsing on (localhost vs 127.0.0.1) - the same value /start sends,
     so what the dialog tells them to register is exactly what gets used.
     """
-    return JSONResponse(
-        content={"redirect_uri": mcp_oauth_manager.compute_redirect_uri(request.headers.get("host"))}
-    )
+    return JSONResponse(content={"redirect_uri": mcp_oauth_manager.compute_redirect_uri(request.headers.get("host"))})
 
 
 @router.get("/connections")
