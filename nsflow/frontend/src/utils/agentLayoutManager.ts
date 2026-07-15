@@ -97,9 +97,11 @@ export class AgentLayoutManager {
 
     // Apply hierarchical layout to connected components
     if (connectedNodes.length > 0) {
-      const connectedEdges = edges.filter(edge => 
-        connectedNodes.some(n => n.id === edge.source) && 
-        connectedNodes.some(n => n.id === edge.target)
+      // Membership test via a Set is O(1); the previous .some() inside .filter()
+      // was O(E*N) and dominated layout time for large graphs.
+      const connectedNodeIds = new Set(connectedNodes.map((n) => n.id));
+      const connectedEdges = edges.filter(
+        (edge) => connectedNodeIds.has(edge.source) && connectedNodeIds.has(edge.target)
       );
 
       if (connectedEdges.length > 0) {
