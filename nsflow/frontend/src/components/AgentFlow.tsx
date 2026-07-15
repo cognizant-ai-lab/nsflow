@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -204,8 +204,37 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     }
   };
 
+  // Derive the render arrays once per relevant change instead of rebuilding new node/edge
+  // objects on every render. Stable references let React.memo on the node/edge components
+  // skip re-rendering unchanged elements, which is what keeps large graphs responsive.
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        data: { ...node.data, isActive: activeAgents.has(node.id), selectedNetwork },
+      })),
+    [nodes, activeAgents, selectedNetwork]
+  );
+
+  const displayEdges = useMemo(
+    () =>
+      edges.map((edge) => ({
+        ...edge,
+        animated: activeEdges.has(`${edge.source}-${edge.target}`),
+        style: {
+          strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 4 : 1,
+          stroke: activeEdges.has(`${edge.source}-${edge.target}`)
+            ? theme.palette.warning.main
+            : theme.palette.mode === "dark"
+              ? "rgba(255, 255, 255, 0.35)"
+              : "rgba(0, 0, 0, 0.3)",
+        },
+      })),
+    [edges, activeEdges, theme.palette.warning.main, theme.palette.mode]
+  );
+
   return (
-    <Box sx={{ 
+    <Box sx={{
       height: '100%', 
       width: '100%', 
       backgroundColor: theme.palette.background.default,
@@ -370,23 +399,12 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       {/* React Flow Component */}
       <ReactFlow
         key={diagramKey} // Force remount on network change
-        nodes={nodes.map((node) => ({
-          ...node,
-          data: { ...node.data, isActive: activeAgents.has(node.id), selectedNetwork },
-        }))}
-        edges={edges.map((edge) => ({
-          ...edge,
-          animated: activeEdges.has(`${edge.source}-${edge.target}`),
-          style: {
-            strokeWidth: activeEdges.has(`${edge.source}-${edge.target}`) ? 4 : 1,
-            stroke: activeEdges.has(`${edge.source}-${edge.target}`)
-              ? theme.palette.warning.main
-              : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.3)',
-          },
-        }))}
+        nodes={displayNodes}
+        edges={displayEdges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
+        onlyRenderVisibleElements
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         minZoom={0.01}
