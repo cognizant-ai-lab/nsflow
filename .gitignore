@@ -55,6 +55,9 @@ TopicMemory.json
 # local brainstorming/design specs (working artifacts, not committed)
 docs/superpowers/
 
+# Playwright MCP scratch output (local, not committed)
+.playwright-mcp/
+
 # keep the dist for prebuilt_frontend
 !nsflow/prebuilt_frontend/dist/
 !nsflow/prebuilt_frontend/dist/**
