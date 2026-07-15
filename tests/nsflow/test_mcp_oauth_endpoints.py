@@ -326,45 +326,43 @@ def test_redirect_uri_follows_loopback_request_host(monkeypatch):
     """The redirect_uri follows the loopback host the browser used (localhost vs
     127.0.0.1), including its port - so it matches whatever the user registers."""
     monkeypatch.delenv("NSFLOW_PUBLIC_BASE_URL", raising=False)
-    assert (
-        MCPOAuthManager.compute_redirect_uri("localhost:4173")
-        == "http://localhost:4173/api/v1/mcp/oauth/callback"
-    )
-    assert (
-        MCPOAuthManager.compute_redirect_uri("127.0.0.1:9999")
-        == "http://127.0.0.1:9999/api/v1/mcp/oauth/callback"
-    )
+    assert MCPOAuthManager.compute_redirect_uri("localhost:4173") == "http://localhost:4173/api/v1/mcp/oauth/callback"
+    assert MCPOAuthManager.compute_redirect_uri("127.0.0.1:9999") == "http://127.0.0.1:9999/api/v1/mcp/oauth/callback"
+
+
+def _pin_fallback_env(monkeypatch):
+    """Pin the env the fallback path reads so its output is deterministic
+    regardless of a dev/CI environment that exports NSFLOW_HOST/PORT."""
+    monkeypatch.delenv("NSFLOW_PUBLIC_BASE_URL", raising=False)
+    monkeypatch.delenv("NSFLOW_OAUTH_REDIRECT_PORT", raising=False)
+    monkeypatch.setenv("NSFLOW_HOST", "127.0.0.1")
+    monkeypatch.setenv("NSFLOW_PORT", "4173")
+
+
+FALLBACK_URI = "http://127.0.0.1:4173/api/v1/mcp/oauth/callback"
 
 
 def test_redirect_uri_ignores_non_loopback_request_host(monkeypatch):
     """A non-loopback (potentially spoofed) Host header must NOT steer the
     redirect to an external origin; it falls back to the loopback default."""
-    monkeypatch.delenv("NSFLOW_PUBLIC_BASE_URL", raising=False)
-    result = MCPOAuthManager.compute_redirect_uri("evil.example.com")
-    assert "evil.example.com" not in result
-    assert result.startswith("http://127.0.0.1:")
-    assert result.endswith("/api/v1/mcp/oauth/callback")
+    _pin_fallback_env(monkeypatch)
+    assert MCPOAuthManager.compute_redirect_uri("evil.example.com") == FALLBACK_URI
 
 
 def test_redirect_uri_rejects_host_with_userinfo(monkeypatch):
     """A Host with embedded userinfo (e.g. "localhost:4173@evil.com") must not
     pass the loopback check by its prefix and resolve to an external authority;
     the real host is evil.com, so it is rejected and the default is used."""
-    monkeypatch.delenv("NSFLOW_PUBLIC_BASE_URL", raising=False)
-    result = MCPOAuthManager.compute_redirect_uri("localhost:4173@evil.com")
-    assert "evil.com" not in result
-    assert result.startswith("http://127.0.0.1:")
-    assert result.endswith("/api/v1/mcp/oauth/callback")
+    _pin_fallback_env(monkeypatch)
+    assert MCPOAuthManager.compute_redirect_uri("localhost:4173@evil.com") == FALLBACK_URI
 
 
 def test_redirect_uri_tolerates_malformed_host(monkeypatch):
     """A malformed Host (bad port / unbalanced IPv6) never raises and falls back
     to the loopback default rather than producing a broken URL."""
-    monkeypatch.delenv("NSFLOW_PUBLIC_BASE_URL", raising=False)
+    _pin_fallback_env(monkeypatch)
     for bad in ("localhost:notaport", "[::1", "localhost:99999"):
-        result = MCPOAuthManager.compute_redirect_uri(bad)
-        assert result.startswith("http://127.0.0.1:")
-        assert result.endswith("/api/v1/mcp/oauth/callback")
+        assert MCPOAuthManager.compute_redirect_uri(bad) == FALLBACK_URI
 
 
 def test_redirect_uri_override_beats_request_host(monkeypatch):
