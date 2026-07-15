@@ -58,7 +58,10 @@ export function hierarchicalRadialLayout(
 
   const PADDING = NODE_SIZE * 0.4;
 
-  const rootNode = nodes.find((node) => !edges.some((edge) => edge.target === node.id));
+  // Nodes that are the target of some edge have a parent; the rest are roots.
+  // Build the set once (O(E)) instead of scanning all edges per node (O(N*E)).
+  const targetIds = new Set<string>(edges.map((edge) => edge.target));
+  const rootNode = nodes.find((node) => !targetIds.has(node.id));
   if (!rootNode) {
     console.error("No root node found!");
     return { nodes, edges };
@@ -86,7 +89,13 @@ export function hierarchicalRadialLayout(
     }
   });
 
+  // Guard against cycles / diamonds in the connectivity graph: without a visited
+  // set, a cycle (A -> B -> A) or a node reachable by two paths recurses forever
+  // and hard-freezes the UI. Each node is visited (depth-assigned) at most once.
+  const depthVisited = new Set<string>();
   const setDepth = (node: ExtendedNode, depth: number = 0): void => {
+    if (depthVisited.has(node.id)) return;
+    depthVisited.add(node.id);
     node.depth = depth;
     node.children.forEach((child) => setDepth(child, depth + 1));
   };
@@ -104,12 +113,16 @@ export function hierarchicalRadialLayout(
   const root = nodeMap.get(rootNode.id)!;
   root.position = { x: centerX, y: centerY };
 
-  // Recursive placement with angular range tracking
+  // Recursive placement with angular range tracking. Uses the same visited guard
+  // as setDepth so a cyclic/diamond graph cannot recurse forever.
+  const placeVisited = new Set<string>();
   const placeChildren = (
     node: ExtendedNode,
     level: number,
     angleRange: AngleRange
   ) => {
+    if (placeVisited.has(node.id)) return;
+    placeVisited.add(node.id);
     const children = node.children;
     if (!children.length) return;
 

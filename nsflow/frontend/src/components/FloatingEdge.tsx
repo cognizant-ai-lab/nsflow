@@ -15,7 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { getBezierPath, useNodes, EdgeProps, Node } from "reactflow";
+import { memo } from "react";
+import { getBezierPath, useStore, EdgeProps, Node, ReactFlowState } from "reactflow";
 import { useTheme } from "@mui/material/styles";
 import { getEdgeParams } from "../utils/utils";
 
@@ -27,12 +28,13 @@ interface CustomNode extends Node {
 
 // Explicitly type the FloatingEdge component using ReactFlow's EdgeProps
 const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, style }) => {
-  const nodes = useNodes();
   const theme = useTheme();
 
-  // Ensure we correctly type sourceNode and targetNode
-  const sourceNode = nodes.find((node) => node.id === source) as CustomNode | undefined;
-  const targetNode = nodes.find((node) => node.id === target) as CustomNode | undefined;
+  // Look the two endpoints up directly from the store's node map (O(1) each) rather
+  // than useNodes() + Array.find() (O(N) each, O(N*E) across all edges per render).
+  // This is the single biggest cost for large graphs on every highlight/drag tick.
+  const sourceNode = useStore((s: ReactFlowState) => s.nodeInternals.get(source)) as CustomNode | undefined;
+  const targetNode = useStore((s: ReactFlowState) => s.nodeInternals.get(target)) as CustomNode | undefined;
 
   if (!sourceNode || !targetNode) {
     return null;
@@ -67,4 +69,4 @@ const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, styl
   );
 };
 
-export default FloatingEdge;
+export default memo(FloatingEdge);
