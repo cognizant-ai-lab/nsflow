@@ -40,7 +40,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 import httpx
 from mcp import ClientSession
@@ -205,11 +205,26 @@ class MCPOAuthManager:
             return f"{override.rstrip('/')}/api/v1/mcp/oauth/callback"
 
         if request_host:
-            # Host header is "<host>" or "<host>:<port>"; trust only loopback so
-            # the redirect follows the browse host (localhost vs 127.0.0.1).
-            hostname = request_host.rsplit(":", 1)[0].strip().lower().strip("[]")
-            if hostname in ("localhost", "127.0.0.1", "::1"):
-                return f"http://{request_host.strip()}/api/v1/mcp/oauth/callback"
+            # The Host header is client-controllable, so parse it strictly and
+            # rebuild the authority rather than interpolating the raw value:
+            # a header like "localhost:4173@evil.com" would pass a naive host
+            # check yet resolve to evil.com as the real authority (userinfo@host),
+            # leaking the OAuth code off-origin. Trust only a bare loopback host
+            # with an optional numeric port and nothing else (no userinfo, path,
+            # query, or fragment).
+            try:
+                parsed = urlsplit(f"//{request_host.strip()}", scheme="http")
+                hostname = (parsed.hostname or "").lower()
+                port = parsed.port  # raises ValueError on a bad/out-of-range port
+                suspicious = bool(
+                    parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment
+                )
+            except ValueError:  # malformed Host (bad port, unbalanced IPv6, ...)
+                hostname, port, suspicious = "", None, True
+            if not suspicious and hostname in ("localhost", "127.0.0.1", "::1"):
+                host = f"[{hostname}]" if ":" in hostname else hostname
+                authority = f"{host}:{port}" if port is not None else host
+                return f"http://{authority}/api/v1/mcp/oauth/callback"
 
         host = os.getenv("NSFLOW_HOST", "127.0.0.1")
         if host in ("0.0.0.0", "::", "", "localhost"):
