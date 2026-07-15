@@ -40,7 +40,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 import httpx
 from mcp import ClientSession
@@ -165,7 +165,7 @@ class MCPOAuthManager:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def compute_redirect_uri() -> str:
+    def compute_redirect_uri(request_host: Optional[str] = None) -> str:
         """
         Build the loopback redirect URI that the MCP server redirects back to.
 
@@ -177,19 +177,54 @@ class MCPOAuthManager:
         Resolution order:
           1. ``NSFLOW_PUBLIC_BASE_URL`` - full base URL override (proxied/HTTPS
              deployments); used verbatim.
-          2. Otherwise ``http://<host>:<port>/...`` where ``port`` is
+          2. ``request_host`` (the ``Host`` header of the originating request),
+             but ONLY when it is a loopback host - so the redirect_uri follows
+             whichever loopback name the user actually browses nsflow on
+             (``localhost`` vs ``127.0.0.1``) and matches the value the connect
+             dialog shows them to register. Some providers (e.g. Salesforce)
+             reject the bare IP and require ``localhost``; others prefer the IP.
+             Following the browse host makes both work with no configuration.
+             Non-loopback request hosts are ignored so a spoofed ``Host`` header
+             can't steer the redirect to an external origin - proxied/remote
+             deployments use ``NSFLOW_PUBLIC_BASE_URL`` instead.
+          3. Otherwise ``http://<host>:<port>/...`` where ``port`` is
              ``NSFLOW_OAUTH_REDIRECT_PORT`` if set, else ``NSFLOW_PORT``.
 
         The default port is ``NSFLOW_PORT`` because ``/callback`` is a route on
         the FastAPI backend, which binds ``NSFLOW_PORT`` (8005 in dev, 4173 when
-        that same process also serves the built frontend). The dedicated
-        ``NSFLOW_OAUTH_REDIRECT_PORT`` knob exists for topologies where the
-        browser must reach the callback on a different port (e.g. a reverse
-        proxy) - it must still resolve to wherever ``/callback`` is served.
+        that same process also serves the built frontend). ``NSFLOW_OAUTH_REDIRECT_PORT``
+        is a legacy port-only override, kept for backward compatibility: it
+        predates the request-host derivation (which already picks up a
+        port-mapped setup from the browse address), and ``NSFLOW_PUBLIC_BASE_URL``
+        expresses everything it can. Prefer those. Either way, these env vars
+        change only the ADVERTISED URL - the value must still resolve to
+        wherever ``/callback`` is actually served.
         """
         override = os.getenv("NSFLOW_PUBLIC_BASE_URL")
         if override:
             return f"{override.rstrip('/')}/api/v1/mcp/oauth/callback"
+
+        if request_host:
+            # The Host header is client-controllable, so parse it strictly and
+            # rebuild the authority rather than interpolating the raw value:
+            # a header like "localhost:4173@evil.com" would pass a naive host
+            # check yet resolve to evil.com as the real authority (userinfo@host),
+            # leaking the OAuth code off-origin. Trust only a bare loopback host
+            # with an optional numeric port and nothing else (no userinfo, path,
+            # query, or fragment).
+            try:
+                parsed = urlsplit(f"//{request_host.strip()}", scheme="http")
+                hostname = (parsed.hostname or "").lower()
+                port = parsed.port  # raises ValueError on a bad/out-of-range port
+                suspicious = bool(
+                    parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment
+                )
+            except ValueError:  # malformed Host (bad port, unbalanced IPv6, ...)
+                hostname, port, suspicious = "", None, True
+            if not suspicious and hostname in ("localhost", "127.0.0.1", "::1"):
+                host = f"[{hostname}]" if ":" in hostname else hostname
+                authority = f"{host}:{port}" if port is not None else host
+                return f"http://{authority}/api/v1/mcp/oauth/callback"
 
         host = os.getenv("NSFLOW_HOST", "127.0.0.1")
         if host in ("0.0.0.0", "::", "", "localhost"):
@@ -201,10 +236,11 @@ class MCPOAuthManager:
         return f"http://{host}:{port}/api/v1/mcp/oauth/callback"
 
     def _build_client_metadata(
-        self, scope: Optional[str] = None, auth_method: str = "none"
+        self, scope: Optional[str] = None, auth_method: str = "none",
+        redirect_uri: Optional[str] = None,
     ) -> OAuthClientMetadata:
         return OAuthClientMetadata(
-            redirect_uris=[self.compute_redirect_uri()],
+            redirect_uris=[redirect_uri or self.compute_redirect_uri()],
             client_name="nsflow",
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
@@ -218,12 +254,14 @@ class MCPOAuthManager:
     # Starting / completing a flow
     # ------------------------------------------------------------------ #
 
-    async def start_flow(
+    async def start_flow(  # pylint: disable=too-many-arguments  # independent optional OAuth knobs, keyword-only
         self,
         server_url: str,
+        *,
         scope: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
     ) -> PendingFlow:
         """
         Kick off an OAuth flow for ``server_url`` and wait until the
@@ -238,6 +276,12 @@ class MCPOAuthManager:
         """
         self._sweep_expired()
 
+        # Resolve the redirect_uri once so pre-seeded client_info, DCR, and the
+        # authorization request all send the same value (the provider matches it
+        # exactly). Defaults to the configured/loopback value when the caller
+        # (the /start endpoint) didn't derive one from the request host.
+        redirect_uri = redirect_uri or self.compute_redirect_uri()
+
         # Public (PKCE) unless a secret was provided.
         auth_method = "client_secret_post" if client_secret else "none"
 
@@ -247,7 +291,7 @@ class MCPOAuthManager:
                 OAuthClientInformationFull(
                     client_id=client_id,
                     client_secret=client_secret or None,
-                    redirect_uris=[self.compute_redirect_uri()],
+                    redirect_uris=[redirect_uri],
                     client_name="nsflow",
                     grant_types=["authorization_code", "refresh_token"],
                     response_types=["code"],
@@ -260,7 +304,7 @@ class MCPOAuthManager:
         flow.preseeded_client_info = bool(client_id)
         flow.code_future = asyncio.get_running_loop().create_future()
         self._by_flow_id[flow.flow_id] = flow
-        flow.task = asyncio.create_task(self._run_oauth_flow(flow, scope, auth_method))
+        flow.task = asyncio.create_task(self._run_oauth_flow(flow, scope, auth_method, redirect_uri))
 
         # Wait for redirect_handler to capture the URL, or the task to fail.
         try:
@@ -310,12 +354,15 @@ class MCPOAuthManager:
         if flow.state:
             self._by_state.pop(flow.state, None)
 
-    async def _run_oauth_flow(self, flow: PendingFlow, scope: Optional[str], auth_method: str = "none") -> None:
+    async def _run_oauth_flow(
+        self, flow: PendingFlow, scope: Optional[str], auth_method: str = "none",
+        redirect_uri: Optional[str] = None,
+    ) -> None:
         """Background task: drive the SDK auth flow to completion."""
         try:
             provider = OAuthClientProvider(
                 server_url=flow.server_url,
-                client_metadata=self._build_client_metadata(scope, auth_method),
+                client_metadata=self._build_client_metadata(scope, auth_method, redirect_uri),
                 storage=FileTokenStorage(flow.server_url),
                 redirect_handler=self._make_redirect_handler(flow),
                 callback_handler=self._make_callback_handler(flow),
