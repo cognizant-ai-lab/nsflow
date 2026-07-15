@@ -77,7 +77,7 @@ the provider, then paste its credentials into nsflow:
 
 The provider redirects back to nsflow's callback route after you approve:
 
-```
+```text
 http://<host>:<port>/api/v1/mcp/oauth/callback
 ```
 
@@ -130,12 +130,16 @@ export NSFLOW_PUBLIC_BASE_URL=http://localhost:4173
 
 ## Environment variables
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `NSFLOW_MCP_STORAGE_DIR` | Directory holding `tokens.json` (the credential store) | `~/.nsflow/mcp_oauth` |
-| `NSFLOW_PUBLIC_BASE_URL` | Full base URL override for the callback (proxied / remote / HTTPS). Used verbatim; highest priority. | *(derived from the browse host / loopback)* |
-| `NSFLOW_OAUTH_REDIRECT_PORT` | Legacy: port-only override for the advertised callback. Rarely needed — the browse host already carries the right port, and `NSFLOW_PUBLIC_BASE_URL` covers the rest. | `NSFLOW_PORT` |
-| `NSFLOW_HOST` / `NSFLOW_PORT` | Backend bind host / port | `127.0.0.1` / `4173` (`8005` in dev) |
+- **`NSFLOW_MCP_STORAGE_DIR`** — directory holding `tokens.json` (the credential
+  store). Default: `~/.nsflow/mcp_oauth`.
+- **`NSFLOW_PUBLIC_BASE_URL`** — full base URL override for the callback
+  (proxied / remote / HTTPS deployments). Used verbatim; highest priority.
+  Default: derived from the browse host / loopback.
+- **`NSFLOW_OAUTH_REDIRECT_PORT`** — legacy port-only override for the advertised
+  callback. Rarely needed: the browse host already carries the right port, and
+  `NSFLOW_PUBLIC_BASE_URL` covers the rest. Default: `NSFLOW_PORT`.
+- **`NSFLOW_HOST` / `NSFLOW_PORT`** — backend bind host / port. Default:
+  `127.0.0.1` / `4173` (`8005` in dev).
 
 ---
 
