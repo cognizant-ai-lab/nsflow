@@ -152,3 +152,12 @@ sudo apt install ffmpeg
 ### Enabling Visual Question Answering (VQA) http endpoints
 
 Follow these [instructions](./docs/VQA_README.md)
+
+---
+
+### Connecting OAuth-protected MCP servers
+
+Connect MCP servers that require OAuth (e.g. You.com, Linear, GitHub, Salesforce)
+from the **Connectors** tab — nsflow runs the OAuth flow, stores the tokens
+locally, and injects them into agent networks automatically. See these
+[instructions](./docs/MCP_OAUTH.md).

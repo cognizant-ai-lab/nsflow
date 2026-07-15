@@ -31,6 +31,7 @@ from typing import Optional
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -98,7 +99,7 @@ def _callback_html(status: str, server_url: str, message: str = "") -> str:
 
 
 @router.post("/start")
-async def start_oauth_flow(body: StartFlowRequest):
+async def start_oauth_flow(body: StartFlowRequest, request: Request):
     """
     Begin an OAuth flow for an MCP server.
 
@@ -112,13 +113,19 @@ async def start_oauth_flow(body: StartFlowRequest):
     if await asyncio.to_thread(FileTokenStorage.has_connection, server_url):
         return JSONResponse(content={"already_connected": True, "server_url": server_url})
 
-    logger.info("Starting MCP OAuth flow for %s", server_url)
+    # Derive the redirect_uri from the host the browser used to reach nsflow, so
+    # it follows localhost vs 127.0.0.1 automatically and matches the value shown
+    # in the connect dialog (see compute_redirect_uri / GET /redirect_uri).
+    redirect_uri = mcp_oauth_manager.compute_redirect_uri(request.headers.get("host"))
+
+    logger.info("Starting MCP OAuth flow for %s (redirect_uri=%s)", server_url, redirect_uri)
     try:
         flow = await mcp_oauth_manager.start_flow(
             server_url,
             scope=body.scope,
             client_id=(body.client_id or "").strip() or None,
             client_secret=(body.client_secret or "").strip() or None,
+            redirect_uri=redirect_uri,
         )
     except TimeoutError as exc:
         logger.warning("MCP OAuth flow for %s timed out building the authorization URL.", server_url)
@@ -222,13 +229,19 @@ async def oauth_status(flow_id: str):
 
 
 @router.get("/redirect_uri")
-async def get_redirect_uri():
+async def get_redirect_uri(request: Request):
     """
     Return the OAuth callback URL nsflow uses. Users must register this exact
     value as the redirect/callback URI of any manually-created OAuth app (for
-    servers without dynamic client registration, e.g. GitHub).
+    servers without dynamic client registration, e.g. GitHub, Salesforce).
+
+    Derived from the request host so it reflects the loopback name the user is
+    actually browsing on (localhost vs 127.0.0.1) - the same value /start sends,
+    so what the dialog tells them to register is exactly what gets used.
     """
-    return JSONResponse(content={"redirect_uri": mcp_oauth_manager.compute_redirect_uri()})
+    return JSONResponse(
+        content={"redirect_uri": mcp_oauth_manager.compute_redirect_uri(request.headers.get("host"))}
+    )
 
 
 @router.get("/connections")
