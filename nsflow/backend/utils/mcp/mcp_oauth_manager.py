@@ -239,9 +239,10 @@ class MCPOAuthManager:
     # Starting / completing a flow
     # ------------------------------------------------------------------ #
 
-    async def start_flow(
+    async def start_flow(  # pylint: disable=too-many-arguments  # independent optional OAuth knobs, keyword-only
         self,
         server_url: str,
+        *,
         scope: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
