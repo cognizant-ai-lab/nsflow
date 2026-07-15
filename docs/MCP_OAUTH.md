@@ -119,9 +119,12 @@ To force a specific loopback form regardless of how you browse:
 export NSFLOW_PUBLIC_BASE_URL=http://localhost:4173
 ```
 
-If the callback must be reached on a different port than the backend binds (e.g.
-a proxy), set `NSFLOW_OAUTH_REDIRECT_PORT` — it must still resolve to wherever
-`/callback` is served.
+> **`NSFLOW_OAUTH_REDIRECT_PORT` (legacy — rarely needed).** Overrides only the
+> *port* of the advertised callback. It predates the browse-host behavior above,
+> which already picks up a port-mapped setup (Docker `-p`, SSH tunnel) from the
+> address you browse on; and `NSFLOW_PUBLIC_BASE_URL` covers everything else.
+> Prefer those. If set, it must still resolve to wherever `/callback` is served —
+> the env vars change only the advertised URL, never where the backend listens.
 
 ---
 
@@ -131,7 +134,7 @@ a proxy), set `NSFLOW_OAUTH_REDIRECT_PORT` — it must still resolve to wherever
 | --- | --- | --- |
 | `NSFLOW_MCP_STORAGE_DIR` | Directory holding `tokens.json` (the credential store) | `~/.nsflow/mcp_oauth` |
 | `NSFLOW_PUBLIC_BASE_URL` | Full base URL override for the callback (proxied / remote / HTTPS). Used verbatim; highest priority. | *(derived from the browse host / loopback)* |
-| `NSFLOW_OAUTH_REDIRECT_PORT` | Port for the callback URL when it differs from the backend port | `NSFLOW_PORT` |
+| `NSFLOW_OAUTH_REDIRECT_PORT` | Legacy: port-only override for the advertised callback. Rarely needed — the browse host already carries the right port, and `NSFLOW_PUBLIC_BASE_URL` covers the rest. | `NSFLOW_PORT` |
 | `NSFLOW_HOST` / `NSFLOW_PORT` | Backend bind host / port | `127.0.0.1` / `4173` (`8005` in dev) |
 
 ---

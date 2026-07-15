@@ -192,10 +192,13 @@ class MCPOAuthManager:
 
         The default port is ``NSFLOW_PORT`` because ``/callback`` is a route on
         the FastAPI backend, which binds ``NSFLOW_PORT`` (8005 in dev, 4173 when
-        that same process also serves the built frontend). The dedicated
-        ``NSFLOW_OAUTH_REDIRECT_PORT`` knob exists for topologies where the
-        browser must reach the callback on a different port (e.g. a reverse
-        proxy) - it must still resolve to wherever ``/callback`` is served.
+        that same process also serves the built frontend). ``NSFLOW_OAUTH_REDIRECT_PORT``
+        is a legacy port-only override, kept for backward compatibility: it
+        predates the request-host derivation (which already picks up a
+        port-mapped setup from the browse address), and ``NSFLOW_PUBLIC_BASE_URL``
+        expresses everything it can. Prefer those. Either way, these env vars
+        change only the ADVERTISED URL - the value must still resolve to
+        wherever ``/callback`` is actually served.
         """
         override = os.getenv("NSFLOW_PUBLIC_BASE_URL")
         if override:
