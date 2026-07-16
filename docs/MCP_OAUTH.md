@@ -147,14 +147,16 @@ export NSFLOW_PUBLIC_BASE_URL=http://localhost:4173
 
 - Credentials are stored in a single JSON file, `tokens.json`, under
   `NSFLOW_MCP_STORAGE_DIR` (default `~/.nsflow/mcp_oauth`), written `0600` with a
-  cross-process lock. It contains the access token, refresh token, and the
-  registered client info per server URL.
+  cross-process lock. It contains the access token, refresh token, registered
+  client info, and discovered token endpoint per server URL.
 - Tokens are **never** sent to the frontend and are **redacted** anywhere
   `sly_data` might be logged or streamed.
 - Disconnecting a server from the Connectors tab removes its entry from the file.
 - nsflow keeps the access token fresh using the stored refresh token where the
-  server supports it. If a connection can no longer be refreshed, just
-  **reconnect** it from the tab.
+  server supports it: at chat time, a token near expiry is exchanged silently
+  (a standard OAuth refresh grant on the backend) before being injected. If a
+  connection can no longer be refreshed (e.g. the grant was revoked), nsflow
+  injects nothing and you just **reconnect** it from the tab.
 
 ---
 
