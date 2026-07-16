@@ -217,14 +217,17 @@ class FileTokenStorage:
                 entry = {}
                 blob[self.server_url] = entry
             new_tokens = tokens.model_dump(mode="json")
-            if not new_tokens.get("refresh_token"):
+            if "refresh_token" not in new_tokens or new_tokens["refresh_token"] is None:
                 # RFC 6749 section 6: a refresh response MAY omit the refresh
                 # token, meaning "keep using the existing one" (Salesforce and
                 # Google do this; You.com rotates instead). Overwriting with
-                # null would silently make the next refresh impossible.
+                # null would silently make the next refresh impossible. Only an
+                # omitted/None field means "keep" - an explicit empty string is
+                # stored as sent (a server clearing the token), not preserved.
                 old_tokens = entry.get("tokens")
-                if isinstance(old_tokens, dict) and old_tokens.get("refresh_token"):
-                    new_tokens["refresh_token"] = old_tokens["refresh_token"]
+                old_refresh = old_tokens.get("refresh_token") if isinstance(old_tokens, dict) else None
+                if isinstance(old_refresh, str) and old_refresh:
+                    new_tokens["refresh_token"] = old_refresh
             entry["tokens"] = new_tokens
             entry["obtained_at"] = int(time.time())
             if tokens.expires_in is not None:

@@ -32,6 +32,7 @@ import time
 import httpx
 import pytest
 from mcp.shared.auth import OAuthClientMetadata
+from mcp.shared.auth import OAuthToken
 
 import nsflow.backend.utils.mcp.mcp_oauth_manager as om
 from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
@@ -244,6 +245,20 @@ def test_silent_refresh_wires_stored_expiry_and_endpoint(tmp_path, monkeypatch):
     assert captured["server_url"] == SERVER_URL
     assert captured["token_endpoint"] == TOKEN_ENDPOINT
     assert captured["token_expiry_time"] == expires_at - om.TOKEN_REFRESH_MARGIN_SECONDS
+
+
+def test_set_tokens_stores_explicit_empty_refresh_token(tmp_path):
+    """
+    Only an omitted/None refresh_token means "keep using the existing one"
+    (RFC 6749 section 6). An explicit empty string is a server clearing the
+    token and must be stored as sent, not swapped for the previous value.
+    """
+    _seed_store(tmp_path, token_endpoint=None)
+    storage = FileTokenStorage(SERVER_URL, storage_dir=tmp_path)
+
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="fresh-token", refresh_token="")))
+
+    assert _read_store(tmp_path)["tokens"]["refresh_token"] == ""
 
 
 def test_set_token_endpoint_persists_and_merges(tmp_path):
