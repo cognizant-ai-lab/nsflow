@@ -150,8 +150,9 @@ class SilentRefreshOAuthProvider(OAuthClientProvider):
         """
         Build the refresh-grant request (RFC 6749 section 6).
 
-        Identical to the base implementation except that the token endpoint
-        captured at connect time wins over the discovered/guessed one.
+        Same as the base implementation except that the token endpoint captured
+        at connect time wins over the discovered/guessed one, and the fallback
+        guess joins onto the base URL instead of replacing its path.
         """
         if not self.context.current_tokens or not self.context.current_tokens.refresh_token:
             raise OAuthTokenError("No refresh token available")
@@ -163,6 +164,13 @@ class SilentRefreshOAuthProvider(OAuthClientProvider):
         elif self.context.oauth_metadata and self.context.oauth_metadata.token_endpoint:
             token_url = str(self.context.oauth_metadata.token_endpoint)
         else:
+            # Last-resort guess (the SDK's own legacy default) for connections
+            # made before the token endpoint was persisted. auth_base_url is
+            # scheme://netloc by construction (get_authorization_base_url strips
+            # the path), so this matches the SDK's urljoin(base, "/token") for
+            # every reachable input - but the trailing-slash join also preserves
+            # a path prefix should that helper ever start returning one. If the
+            # guess is wrong, the reactive 401 path discovers the real endpoint.
             auth_base_url = self.context.get_authorization_base_url(self.context.server_url)
             token_url = urljoin(auth_base_url.rstrip("/") + "/", "token")
 
