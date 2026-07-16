@@ -216,7 +216,16 @@ class FileTokenStorage:
             if not isinstance(entry, dict):
                 entry = {}
                 blob[self.server_url] = entry
-            entry["tokens"] = tokens.model_dump(mode="json")
+            new_tokens = tokens.model_dump(mode="json")
+            if not new_tokens.get("refresh_token"):
+                # RFC 6749 section 6: a refresh response MAY omit the refresh
+                # token, meaning "keep using the existing one" (Salesforce and
+                # Google do this; You.com rotates instead). Overwriting with
+                # null would silently make the next refresh impossible.
+                old_tokens = entry.get("tokens")
+                if isinstance(old_tokens, dict) and old_tokens.get("refresh_token"):
+                    new_tokens["refresh_token"] = old_tokens["refresh_token"]
+            entry["tokens"] = new_tokens
             entry["obtained_at"] = int(time.time())
             if tokens.expires_in is not None:
                 entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)

@@ -135,6 +135,39 @@ def test_proactive_refresh_fires_before_request(tmp_path):
     assert entry["token_endpoint"] == TOKEN_ENDPOINT  # set_tokens preserved it
 
 
+def test_refresh_without_rotation_keeps_stored_refresh_token(tmp_path):
+    """
+    Providers like Salesforce omit the refresh token from a refresh response,
+    meaning "keep using the existing one" (RFC 6749 section 6). The stored
+    refresh token must survive the overwrite, or the next refresh would find
+    null and force a reconnect.
+    """
+    _seed_store(tmp_path)
+    provider = _provider(tmp_path, token_expiry_time=time.time() - 10)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == TOKEN_ENDPOINT:
+            # No refresh_token in the response - the non-rotating style.
+            return httpx.Response(
+                200, json={"access_token": "fresh-token", "token_type": "Bearer", "expires_in": 3600}
+            )
+        return httpx.Response(200, json={})
+
+    response = _request_through(provider, handler)
+
+    assert response.status_code == 200
+    entry = _read_store(tmp_path)
+    assert entry["tokens"]["access_token"] == "fresh-token"
+    assert entry["tokens"]["refresh_token"] == "refresh-1"  # preserved, not nulled
+    assert entry["expires_at"] > time.time()
+
+    # A second refresh cycle must still be possible with the preserved token.
+    provider2 = _provider(tmp_path, token_expiry_time=time.time() - 10)
+    response2 = _request_through(provider2, handler)
+    assert response2.status_code == 200
+    assert _read_store(tmp_path)["tokens"]["refresh_token"] == "refresh-1"
+
+
 def test_valid_token_is_not_refreshed(tmp_path):
     """A token whose restored expiry is still in the future is used as-is."""
     future = time.time() + 3600
