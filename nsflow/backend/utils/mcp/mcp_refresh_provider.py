@@ -164,7 +164,7 @@ class SilentRefreshOAuthProvider(OAuthClientProvider):
             token_url = str(self.context.oauth_metadata.token_endpoint)
         else:
             auth_base_url = self.context.get_authorization_base_url(self.context.server_url)
-            token_url = urljoin(auth_base_url, "/token")
+            token_url = urljoin(auth_base_url.rstrip("/") + "/", "token")
 
         refresh_data = {
             "grant_type": "refresh_token",
