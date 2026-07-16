@@ -34,9 +34,13 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp.shared.auth import OAuthClientInformationFull
+from mcp.shared.auth import OAuthToken
 
 try:
     import fcntl  # POSIX only
@@ -157,13 +161,15 @@ class FileTokenStorage:
                 "tokens": { ...OAuthToken.model_dump()... },
                 "client_info": { ...OAuthClientInformationFull.model_dump()... },
                 "obtained_at": 1733659200,
-                "expires_at": 1733662800
+                "expires_at": 1733662800,
+                "token_endpoint": "https://auth.example.com/oauth/token"
             }
         }
 
     ``expires_at`` is computed and stored by us because ``OAuthToken`` only
     carries the relative ``expires_in`` and loses the wall-clock anchor across
-    restarts.
+    restarts. ``token_endpoint`` is captured at connect time so silent refreshes
+    can send the refresh grant directly, without re-running discovery.
     """
 
     # Serializes read-modify-write within this process (across coroutines). A
@@ -243,6 +249,28 @@ class FileTokenStorage:
                 entry = {}
                 blob[self.server_url] = entry
             entry["client_info"] = client_info.model_dump(mode="json")
+            self._write_file(blob)
+
+    async def set_token_endpoint(self, token_endpoint: str) -> None:
+        """
+        Persist the authorization server's token endpoint for this server.
+
+        Captured once at connect time (from the SDK's completed discovery) so a
+        later silent refresh can POST the refresh grant straight to it instead
+        of re-running discovery or falling back to the SDK's guessed endpoint.
+        Not part of the ``TokenStorage`` protocol.
+        """
+        async with self._lock:
+            await asyncio.to_thread(self._sync_set_token_endpoint, token_endpoint)
+
+    def _sync_set_token_endpoint(self, token_endpoint: str) -> None:
+        with _interprocess_lock(self._lock_path):
+            blob = self._load_file()
+            entry = blob.get(self.server_url)
+            if not isinstance(entry, dict):
+                entry = {}
+                blob[self.server_url] = entry
+            entry["token_endpoint"] = token_endpoint
             self._write_file(blob)
 
     # ------------------------------------------------------------------ #
@@ -351,7 +379,7 @@ class FileTokenStorage:
         return cls._entry_is_usable(entry)
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Return this server's stored entry (tokens, client_info, obtained_at, expires_at)."""
+        """Return this server's stored entry (tokens, client_info, obtained_at, expires_at, token_endpoint)."""
         return self._read_entry(self.server_url)
 
     # ------------------------------------------------------------------ #

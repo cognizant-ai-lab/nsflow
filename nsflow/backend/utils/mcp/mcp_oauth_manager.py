@@ -38,15 +38,22 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
-from urllib.parse import parse_qs, urlparse, urlsplit
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Dict
+from typing import Optional
+from typing import Tuple
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 import httpx
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.streamable_http import streamablehttp_client
-from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.auth import OAuthClientInformationFull
+from mcp.shared.auth import OAuthClientMetadata
+from mcp.shared.auth import OAuthToken
 
 # create_mcp_http_client currently lives in the private mcp.shared._httpx_utils
 # (that is where the SDK's own client modules import it from as of mcp 1.27.x).
@@ -58,7 +65,10 @@ try:
 except ImportError:  # pragma: no cover - exercised only on older/newer SDK layouts
     from mcp.shared._httpx_utils import create_mcp_http_client
 
-from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage, _stored_expiry
+from nsflow.backend.utils.mcp.mcp_refresh_provider import ReauthRequiredError
+from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
+from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
+from nsflow.backend.utils.mcp.mcp_token_storage import _stored_expiry
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +95,7 @@ async def _force_json_accept_on_oauth_requests(request: httpx.Request) -> None:
         request.headers["Accept"] = "application/json"
 
 
-def _mcp_http_client_factory(
-    headers=None, timeout=None, auth=None, **kwargs
-) -> httpx.AsyncClient:
+def _mcp_http_client_factory(headers=None, timeout=None, auth=None, **kwargs) -> httpx.AsyncClient:
     """
     MCP http client factory that adds the OAuth Accept-JSON request hook.
 
@@ -101,10 +109,6 @@ def _mcp_http_client_factory(
     client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth, **kwargs)
     client.event_hooks.setdefault("request", []).append(_force_json_accept_on_oauth_requests)
     return client
-
-
-class ReauthRequiredError(Exception):
-    """Raised internally when a silent refresh would require user interaction."""
 
 
 @dataclass
@@ -216,9 +220,7 @@ class MCPOAuthManager:
                 parsed = urlsplit(f"//{request_host.strip()}", scheme="http")
                 hostname = (parsed.hostname or "").lower()
                 port = parsed.port  # raises ValueError on a bad/out-of-range port
-                suspicious = bool(
-                    parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment
-                )
+                suspicious = bool(parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment)
             except ValueError:  # malformed Host (bad port, unbalanced IPv6, ...)
                 hostname, port, suspicious = "", None, True
             if not suspicious and hostname in ("localhost", "127.0.0.1", "::1"):
@@ -236,7 +238,9 @@ class MCPOAuthManager:
         return f"http://{host}:{port}/api/v1/mcp/oauth/callback"
 
     def _build_client_metadata(
-        self, scope: Optional[str] = None, auth_method: str = "none",
+        self,
+        scope: Optional[str] = None,
+        auth_method: str = "none",
         redirect_uri: Optional[str] = None,
     ) -> OAuthClientMetadata:
         return OAuthClientMetadata(
@@ -342,9 +346,7 @@ class MCPOAuthManager:
             logger.info("Could not clean up stale client_info for %s: %s", flow.server_url, exc)
             return
         if removed:
-            logger.info(
-                "Removed stale pre-seeded client_info for %s after a failed OAuth flow.", flow.server_url
-            )
+            logger.info("Removed stale pre-seeded client_info for %s after a failed OAuth flow.", flow.server_url)
 
     def _discard_flow(self, flow: PendingFlow) -> None:
         """Cancel a flow's background task and remove it from both registries."""
@@ -355,10 +357,14 @@ class MCPOAuthManager:
             self._by_state.pop(flow.state, None)
 
     async def _run_oauth_flow(
-        self, flow: PendingFlow, scope: Optional[str], auth_method: str = "none",
+        self,
+        flow: PendingFlow,
+        scope: Optional[str],
+        auth_method: str = "none",
         redirect_uri: Optional[str] = None,
     ) -> None:
         """Background task: drive the SDK auth flow to completion."""
+        provider: Optional[OAuthClientProvider] = None
         try:
             provider = OAuthClientProvider(
                 server_url=flow.server_url,
@@ -380,6 +386,7 @@ class MCPOAuthManager:
             # Reached here without the provider needing to authorize.
             if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
                 flow.status = "completed"
+                await self._persist_token_endpoint(provider, flow.server_url)
             else:
                 flow.status = "error"
                 flow.error = (
@@ -395,17 +402,36 @@ class MCPOAuthManager:
             # later handshake step failed - the goal is to acquire credentials.
             if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
                 flow.status = "completed"
+                await self._persist_token_endpoint(provider, flow.server_url)
             else:
                 flow.status = "error"
                 flow.error = self._describe_exception(exc)
-                logger.warning(
-                    "MCP OAuth flow for %s failed: %s", flow.server_url, flow.error, exc_info=True
-                )
+                logger.warning("MCP OAuth flow for %s failed: %s", flow.server_url, flow.error, exc_info=True)
                 await self._cleanup_failed_preseed(flow)
         finally:
             # Make sure a /start caller is never left blocked.
             if not flow.url_event.is_set():
                 flow.url_event.set()
+
+    @staticmethod
+    async def _persist_token_endpoint(provider: Optional[OAuthClientProvider], server_url: str) -> None:
+        """
+        Record the token endpoint the flow discovered alongside the stored tokens.
+
+        A later silent refresh runs with a fresh provider that has no discovery
+        state; without the stored endpoint the SDK falls back to guessing
+        ``<authorization-base>/token``, which is wrong whenever the authorization
+        server lives on a different host than the MCP server (e.g. Salesforce's
+        login.salesforce.com vs api.salesforce.com). Best effort: a miss only
+        means the refresh must fall back to discovery via the 401 path.
+        """
+        try:
+            metadata = provider.context.oauth_metadata if provider else None
+            token_endpoint = str(metadata.token_endpoint) if metadata and metadata.token_endpoint else None
+            if token_endpoint:
+                await FileTokenStorage(server_url).set_token_endpoint(token_endpoint)
+        except Exception as exc:  # noqa: BLE001 - metadata capture must never fail the flow
+            logger.info("Could not persist the token endpoint for %s: %s", server_url, exc)
 
     @staticmethod
     def _describe_exception(exc: BaseException) -> str:
@@ -586,9 +612,7 @@ class MCPOAuthManager:
 
         # Drop a token that is actually expired (refresh failed / unavailable).
         if expires_at is not None and time.time() >= expires_at:
-            logger.warning(
-                "MCP token for %s is expired and could not be refreshed; reconnect required.", server_url
-            )
+            logger.warning("MCP token for %s is expired and could not be refreshed; reconnect required.", server_url)
             return None
 
         raw = meta.get("tokens")
@@ -597,9 +621,7 @@ class MCPOAuthManager:
         try:
             tokens = OAuthToken.model_validate(raw)
         except Exception as exc:  # noqa: BLE001 - tolerate a corrupted/hand-edited store
-            logger.warning(
-                "MCP token for %s is unparsable; reconnect required: %s", server_url, exc
-            )
+            logger.warning("MCP token for %s is unparsable; reconnect required: %s", server_url, exc)
             return None
         if not tokens.access_token:
             return None
@@ -610,29 +632,37 @@ class MCPOAuthManager:
 
     async def _silent_refresh(self, server_url: str) -> None:
         """
-        Probe the server through the provider so the SDK refreshes the access
-        token using the stored refresh token. If full re-authentication would be
-        required, abort quietly (the stale token is left in place; the user can
-        reconnect from the Connectors tab).
+        Exchange the stored refresh token for a fresh access token, headlessly.
+
+        Probes the server through ``SilentRefreshOAuthProvider``, which restores
+        our persisted expiry so the SDK's proactive refresh grant fires *before*
+        the probe request (a server that answers a stale token with ``200``
+        instead of ``401`` would otherwise never trigger a refresh), and answers
+        a ``401`` with the refresh grant rather than interactive re-auth. On any
+        failure (no refresh token, revoked grant, ...) it aborts quietly, leaving
+        the stale token in place; get_fresh_token then refuses to inject it and
+        the user can reconnect from the Connectors tab.
         """
+        storage = FileTokenStorage(server_url)
+        meta = await asyncio.to_thread(storage.get_metadata)
+        expires_at = _stored_expiry(meta)
+        token_endpoint = meta.get("token_endpoint")
 
-        async def _no_reauth(_authorization_url: str) -> None:
-            raise ReauthRequiredError("re-authentication required")
-
-        async def _no_callback() -> Tuple[str, Optional[str]]:
-            raise ReauthRequiredError("re-authentication required")
-
-        provider = OAuthClientProvider(
+        provider = SilentRefreshOAuthProvider(
             server_url=server_url,
             client_metadata=self._build_client_metadata(),
-            storage=FileTokenStorage(server_url),
-            redirect_handler=_no_reauth,
-            callback_handler=_no_callback,
+            storage=storage,
+            # Report the expiry with the refresh margin already applied, so a
+            # token get_fresh_token deems stale is equally invalid to the SDK's
+            # is_token_valid() and the proactive refresh fires.
+            token_expiry_time=(expires_at - TOKEN_REFRESH_MARGIN_SECONDS) if expires_at is not None else None,
+            token_endpoint=token_endpoint if isinstance(token_endpoint, str) else None,
         )
         try:
-            # Touch the MCP server through the provider; with a valid refresh
-            # token the SDK refreshes silently (no redirect). If full re-auth is
-            # required, _no_reauth raises and we bail out, leaving the stale token.
+            # Touch the MCP server through the provider; the refresh grant runs
+            # inside its auth flow before/with this request. If re-auth would be
+            # required instead, the provider raises and we bail out, leaving the
+            # stale token.
             async with streamablehttp_client(
                 url=server_url, auth=provider, httpx_client_factory=_mcp_http_client_factory
             ) as (read, write, _get_id):
