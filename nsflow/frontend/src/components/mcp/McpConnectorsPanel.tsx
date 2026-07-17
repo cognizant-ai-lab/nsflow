@@ -34,6 +34,8 @@ interface McpConnection {
   obtained_at: number | null;
   expires_at: number | null;
   has_refresh_token: boolean;
+  /** True when the token expired and the silent refresh failed - the user must reconnect. */
+  needs_reauth: boolean;
 }
 
 interface OAuthMessage {
@@ -439,6 +441,29 @@ const McpConnectorsPanel: React.FC = () => {
   // Look up a known server (for its icon) by a connection's normalized URL.
   const knownByUrl = new Map(KNOWN_MCP_SERVERS.map((s) => [normalizeUrl(s.url), s]));
 
+  // Re-run the OAuth flow for a connection whose silent refresh failed. The
+  // backend reuses the stored client registration (DCR result or previously
+  // supplied credentials), so nothing needs to be re-entered: known DCR servers
+  // get their one-click dialog; everything else (custom or pre-registered)
+  // opens the Add-server dialog pre-seeded with the URL, credentials optional.
+  const openReconnect = (conn: McpConnection) => {
+    const known = knownByUrl.get(normalizeUrl(conn.server_url));
+    if (known && known.auth !== 'pre_registered') {
+      openKnownConnect(known);
+      return;
+    }
+    // Same mid-flow guard as openKnownConnect: never reset state on top of an
+    // in-flight attempt, or its late poll/postMessage can corrupt this dialog.
+    if (busy || awaitingAuth || pendingServerRef.current) return;
+    setError(null);
+    setBusy(false);
+    setAwaitingAuth(false);
+    setClientId('');
+    setClientSecret('');
+    setServerUrl(conn.server_url);
+    setDialogOpen(true);
+  };
+
   // A titled row of clickable connector tiles; `onPick` opens the right dialog.
   const renderSuggestionGroup = (title: string, servers: KnownMcpServer[], onPick: (s: KnownMcpServer) => void) => {
     if (servers.length === 0) return null;
@@ -541,21 +566,36 @@ const McpConnectorsPanel: React.FC = () => {
                 key={conn.server_url}
                 sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 1, backgroundColor: theme.palette.background.default }}
                 secondaryAction={
-                  <Tooltip title="Disconnect">
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      aria-label={`Disconnect ${conn.server_url}`}
-                      onClick={() => handleDisconnect(conn.server_url)}
-                      sx={{ color: theme.palette.error.main }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  <Box component="span" sx={{ display: 'inline-flex', gap: 0.5 }}>
+                    {conn.needs_reauth && (
+                      <Tooltip title="Reconnect">
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          aria-label={`Reconnect ${conn.server_url}`}
+                          onClick={() => openReconnect(conn)}
+                          sx={{ color: theme.palette.warning.main }}
+                        >
+                          <RefreshIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Disconnect">
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        aria-label={`Disconnect ${conn.server_url}`}
+                        onClick={() => handleDisconnect(conn.server_url)}
+                        sx={{ color: theme.palette.error.main }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 }
               >
                 {known ? (
-                  <Tooltip title="Connected">
+                  <Tooltip title={conn.needs_reauth ? 'Reconnect required' : 'Connected'}>
                     <Avatar
                       src={known.iconUrl}
                       sx={{ width: 22, height: 22, mr: 1, fontSize: '0.7rem', p: '2px', bgcolor: '#fff', color: theme.palette.primary.main, '& img': { objectFit: 'contain' } }}
@@ -564,16 +604,22 @@ const McpConnectorsPanel: React.FC = () => {
                     </Avatar>
                   </Tooltip>
                 ) : (
-                  <CheckCircleIcon sx={{ color: theme.palette.success.main, fontSize: '1.1rem', mr: 1 }} />
+                  <CheckCircleIcon sx={{ color: conn.needs_reauth ? theme.palette.warning.main : theme.palette.success.main, fontSize: '1.1rem', mr: 1 }} />
                 )}
                 <ListItemText
                   primary={conn.server_url}
                   primaryTypographyProps={{ sx: { wordBreak: 'break-all', fontSize: '0.85rem' } }}
                   secondary={
                     <Box component="span" sx={{ display: 'inline-flex', gap: 0.5, mt: 0.5 }}>
-                      <Chip size="small" label="Connected" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.success.main, 0.15), color: theme.palette.success.main }} />
-                      {conn.has_refresh_token && (
-                        <Chip size="small" label="Auto-refresh" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }} />
+                      {conn.needs_reauth ? (
+                        <Chip size="small" label="Reconnect required" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.warning.main, 0.15), color: theme.palette.warning.main }} />
+                      ) : (
+                        <>
+                          <Chip size="small" label="Connected" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.success.main, 0.15), color: theme.palette.success.main }} />
+                          {conn.has_refresh_token && (
+                            <Chip size="small" label="Auto-refresh" sx={{ height: 18, fontSize: '0.7rem', backgroundColor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }} />
+                          )}
+                        </>
                       )}
                     </Box>
                   }

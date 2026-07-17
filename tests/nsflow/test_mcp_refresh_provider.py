@@ -42,7 +42,9 @@ SERVER_URL = "https://mcp.example.com/mcp"
 TOKEN_ENDPOINT = "https://auth.example.com/oauth/token"
 
 
-def _seed_store(tmp_path, *, refresh_token="refresh-1", expires_at=None, token_endpoint=TOKEN_ENDPOINT):
+def _seed_store(
+    tmp_path, *, refresh_token="refresh-1", expires_at=None, token_endpoint=TOKEN_ENDPOINT, needs_reauth=False
+):
     """Write a tokens.json entry the way a completed connect flow would have."""
     tokens = {"access_token": "stale-token", "token_type": "Bearer"}
     if refresh_token:
@@ -59,6 +61,8 @@ def _seed_store(tmp_path, *, refresh_token="refresh-1", expires_at=None, token_e
     }
     if token_endpoint:
         entry["token_endpoint"] = token_endpoint
+    if needs_reauth:
+        entry["needs_reauth"] = True
     (tmp_path / "tokens.json").write_text(json.dumps({SERVER_URL: entry}), encoding="utf-8")
 
 
@@ -245,6 +249,61 @@ def test_silent_refresh_wires_stored_expiry_and_endpoint(tmp_path, monkeypatch):
     assert captured["server_url"] == SERVER_URL
     assert captured["token_endpoint"] == TOKEN_ENDPOINT
     assert captured["token_expiry_time"] == expires_at - om.TOKEN_REFRESH_MARGIN_SECONDS
+    # The failed refresh is persisted so the UI can prompt a reconnect.
+    assert _read_store(tmp_path).get("needs_reauth") is True
+
+
+def test_needs_reauth_entry_listed_but_not_connected(tmp_path):
+    """
+    A marked entry gates like a disconnected server (has_connection False, so
+    /start allows re-auth and the network gate prompts) but is still listed -
+    flagged - so the Connectors panel can show "Reconnect required" instead of
+    the connection silently vanishing.
+    """
+    _seed_store(tmp_path, needs_reauth=True)  # expired, refresh token present, marker set
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is False
+    conns = FileTokenStorage.list_connections(storage_dir=tmp_path)
+    assert [c["server_url"] for c in conns] == [SERVER_URL]
+    assert conns[0]["needs_reauth"] is True
+
+    # Without the marker, the same expired-but-refreshable entry counts as
+    # connected (the refresh is presumed to work until it fails).
+    _seed_store(tmp_path, needs_reauth=False)
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is True
+    assert FileTokenStorage.list_connections(storage_dir=tmp_path)[0]["needs_reauth"] is False
+
+
+def test_successful_refresh_clears_needs_reauth(tmp_path):
+    """
+    The marker self-heals: a refresh that succeeds (e.g. the earlier failure was
+    a transient network error) writes fresh tokens, which clears needs_reauth.
+    """
+    _seed_store(tmp_path, needs_reauth=True)
+    provider = _provider(tmp_path, token_expiry_time=time.time() - 10)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == TOKEN_ENDPOINT:
+            return httpx.Response(
+                200, json={"access_token": "fresh-token", "token_type": "Bearer", "expires_in": 3600}
+            )
+        return httpx.Response(200, json={})
+
+    response = _request_through(provider, handler)
+
+    assert response.status_code == 200
+    entry = _read_store(tmp_path)
+    assert entry["tokens"]["access_token"] == "fresh-token"
+    assert "needs_reauth" not in entry
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is True
+
+
+def test_set_needs_reauth_does_not_create_stub_entries(tmp_path):
+    """Marking a server with no stored tokens is a no-op, not a stub entry."""
+    _seed_store(tmp_path)
+    other = FileTokenStorage("https://other.example.com/mcp", storage_dir=tmp_path)
+    asyncio.run(other.set_needs_reauth())
+    blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+    assert "https://other.example.com/mcp" not in blob
 
 
 def test_set_tokens_stores_explicit_empty_refresh_token(tmp_path):

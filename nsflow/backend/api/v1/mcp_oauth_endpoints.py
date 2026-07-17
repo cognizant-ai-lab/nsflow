@@ -266,6 +266,8 @@ async def required_mcp_connections(network_name: str):
     """
     Report the MCP server URLs a network declares it needs auth headers for (via its
     ``sly_data_schema`` http_headers properties) that the user has not yet connected.
+    ``needs_reauth`` is the subset of ``missing`` that was connected but whose
+    silent refresh failed - the user should reconnect those, not connect anew.
     The frontend uses this to prompt the user to authenticate in the Connectors tab
     before chatting with a network that needs MCP auth.
     """
@@ -276,9 +278,16 @@ async def required_mcp_connections(network_name: str):
     name = network_name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="network_name is required.")
+    # Freshen the required connections first so the gate decision reflects
+    # reality: a near-expiry token is refreshed now (pre-warming the first chat
+    # message) and a dead refresh token is discovered - and marked - before the
+    # user sends anything. No-op (a disk read) when tokens are fresh.
+    await NsWebsocketUtils.freshen_required_mcp_connections(name)
     # Network parse + token-store read are synchronous; offload off the loop.
-    missing = await asyncio.to_thread(NsWebsocketUtils.missing_mcp_connections, name)
-    # missing is None when the network HOCON is not locally readable (e.g. a
+    gaps = await asyncio.to_thread(NsWebsocketUtils.mcp_connection_gaps, name)
+    # gaps is None when the network HOCON is not locally readable (e.g. a
     # remote network); we can't determine requirements, so report none missing
     # rather than blocking the user.
-    return JSONResponse(content={"network": name, "missing": missing or []})
+    if gaps is None:
+        return JSONResponse(content={"network": name, "missing": [], "needs_reauth": []})
+    return JSONResponse(content={"network": name, "missing": gaps["missing"], "needs_reauth": gaps["needs_reauth"]})

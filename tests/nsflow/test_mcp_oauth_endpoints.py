@@ -266,24 +266,54 @@ def test_delete_connection_blank_server_url(monkeypatch):
 
 def test_required_reports_missing(monkeypatch):
     """/required surfaces the unconnected MCP URLs a network needs."""
+    monkeypatch.setattr(nw.NsWebsocketUtils, "freshen_required_mcp_connections", AsyncMock())
     monkeypatch.setattr(
         nw.NsWebsocketUtils,
-        "missing_mcp_connections",
-        MagicMock(return_value=["https://api.githubcopilot.com/mcp"]),
+        "mcp_connection_gaps",
+        MagicMock(return_value={"missing": ["https://api.githubcopilot.com/mcp"], "needs_reauth": []}),
     )
     response = client.get("/api/v1/mcp/oauth/required/my_net")
     assert response.status_code == 200
     body = response.json()
     assert body["network"] == "my_net"
     assert body["missing"] == ["https://api.githubcopilot.com/mcp"]
+    assert body["needs_reauth"] == []
+
+
+def test_required_freshens_and_reports_needs_reauth(monkeypatch):
+    """
+    /required refreshes the network's stored connections first (so the gate
+    reflects refresh reality) and flags the missing URLs that need a
+    *re*-connect rather than a first-time connect.
+    """
+    freshen = AsyncMock()
+    monkeypatch.setattr(nw.NsWebsocketUtils, "freshen_required_mcp_connections", freshen)
+    monkeypatch.setattr(
+        nw.NsWebsocketUtils,
+        "mcp_connection_gaps",
+        MagicMock(
+            return_value={
+                "missing": ["https://expired.example.com/mcp", "https://new.example.com/mcp"],
+                "needs_reauth": ["https://expired.example.com/mcp"],
+            }
+        ),
+    )
+    response = client.get("/api/v1/mcp/oauth/required/my_net")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["missing"] == ["https://expired.example.com/mcp", "https://new.example.com/mcp"]
+    assert body["needs_reauth"] == ["https://expired.example.com/mcp"]
+    freshen.assert_awaited_once_with("my_net")
 
 
 def test_required_none_reports_empty(monkeypatch):
     """A non-locally-readable network (None) reports nothing missing, not an error."""
-    monkeypatch.setattr(nw.NsWebsocketUtils, "missing_mcp_connections", MagicMock(return_value=None))
+    monkeypatch.setattr(nw.NsWebsocketUtils, "freshen_required_mcp_connections", AsyncMock())
+    monkeypatch.setattr(nw.NsWebsocketUtils, "mcp_connection_gaps", MagicMock(return_value=None))
     response = client.get("/api/v1/mcp/oauth/required/remote_net")
     assert response.status_code == 200
     assert response.json()["missing"] == []
+    assert response.json()["needs_reauth"] == []
 
 
 def test_redirect_uri(monkeypatch):

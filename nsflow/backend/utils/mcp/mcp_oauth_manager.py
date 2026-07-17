@@ -613,6 +613,11 @@ class MCPOAuthManager:
         # Drop a token that is actually expired (refresh failed / unavailable).
         if expires_at is not None and time.time() >= expires_at:
             logger.warning("MCP token for %s is expired and could not be refreshed; reconnect required.", server_url)
+            # Persist the failure so the UI can prompt a reconnect (Connectors
+            # panel chip, network-selection gate) instead of showing a dead
+            # connection as "Connected". Self-healing: any later successful
+            # token write (a refresh that recovers, or a re-auth) clears it.
+            await storage.set_needs_reauth()
             return None
 
         raw = meta.get("tokens")
