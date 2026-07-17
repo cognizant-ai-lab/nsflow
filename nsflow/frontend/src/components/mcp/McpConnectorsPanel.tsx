@@ -373,21 +373,29 @@ const McpConnectorsPanel: React.FC = () => {
     }
   }, [apiUrl, isReady, refreshConnections]);
 
-  // Open the one-click connect dialog for a known DCR server. Seeds serverUrl
-  // (which handleConnect reads) and clears any leftover credentials/state so the
-  // shared OAuth machinery runs a clean DCR flow.
-  const openKnownConnect = (server: KnownMcpServer) => {
-    // Don't switch servers mid-flow: a previous attempt may still have a popup
-    // open / poll running, and resetting state without cancelling it lets a late
-    // poll or postMessage close or error the newly opened dialog. (Today the
-    // modal backdrop already blocks this; the guard protects the invariant.)
-    if (busy || awaitingAuth || pendingServerRef.current) return;
+  // Shared preamble for opening any connect dialog: refuse mid-flow, then seed
+  // serverUrl (which handleConnect reads) and clear leftover credentials/state
+  // so the shared OAuth machinery runs a clean flow. Returns whether it is safe
+  // for the caller to open its dialog.
+  //
+  // The mid-flow guard matters: a previous attempt may still have a popup open /
+  // poll running, and resetting state without cancelling it lets a late poll or
+  // postMessage close or error the newly opened dialog. (Today the modal
+  // backdrop already blocks this; the guard protects the invariant.)
+  const beginConnectAttempt = (url: string): boolean => {
+    if (busy || awaitingAuth || pendingServerRef.current) return false;
     setError(null);
     setBusy(false);
     setAwaitingAuth(false);
     setClientId('');
     setClientSecret('');
-    setServerUrl(server.url);
+    setServerUrl(url);
+    return true;
+  };
+
+  // Open the one-click connect dialog for a known DCR server.
+  const openKnownConnect = (server: KnownMcpServer) => {
+    if (!beginConnectAttempt(server.url)) return;
     setKnownServer(server);
   };
 
@@ -407,15 +415,7 @@ const McpConnectorsPanel: React.FC = () => {
   // openKnownConnect, but the user will supply a Client ID / Secret which
   // handleConnect passes to /start.
   const openPreRegConnect = (server: KnownMcpServer) => {
-    // Same mid-flow guard as openKnownConnect: never reset state on top of an
-    // in-flight attempt, or its late poll/postMessage can corrupt this dialog.
-    if (busy || awaitingAuth || pendingServerRef.current) return;
-    setError(null);
-    setBusy(false);
-    setAwaitingAuth(false);
-    setClientId('');
-    setClientSecret('');
-    setServerUrl(server.url);
+    if (!beginConnectAttempt(server.url)) return;
     setPreRegServer(server);
   };
 
@@ -446,22 +446,20 @@ const McpConnectorsPanel: React.FC = () => {
   // supplied credentials), so nothing needs to be re-entered: known DCR servers
   // get their one-click dialog; everything else (custom or pre-registered)
   // opens the Add-server dialog pre-seeded with the URL, credentials optional.
+  //
+  // The flow is always seeded with conn.server_url - the exact key the token
+  // store holds - never the catalog's canonical URL. If the two differ
+  // cosmetically (e.g. a trailing slash from an original Add-server connect),
+  // using the catalog form would create a second entry and orphan the marked
+  // one as a permanent "Reconnect required" row.
   const openReconnect = (conn: McpConnection) => {
+    if (!beginConnectAttempt(conn.server_url)) return;
     const known = knownByUrl.get(normalizeUrl(conn.server_url));
     if (known && known.auth !== 'pre_registered') {
-      openKnownConnect(known);
-      return;
+      setKnownServer(known);
+    } else {
+      setDialogOpen(true);
     }
-    // Same mid-flow guard as openKnownConnect: never reset state on top of an
-    // in-flight attempt, or its late poll/postMessage can corrupt this dialog.
-    if (busy || awaitingAuth || pendingServerRef.current) return;
-    setError(null);
-    setBusy(false);
-    setAwaitingAuth(false);
-    setClientId('');
-    setClientSecret('');
-    setServerUrl(conn.server_url);
-    setDialogOpen(true);
   };
 
   // A titled row of clickable connector tiles; `onPick` opens the right dialog.
@@ -564,7 +562,13 @@ const McpConnectorsPanel: React.FC = () => {
               return (
               <ListItem
                 key={conn.server_url}
-                sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 1, backgroundColor: theme.palette.background.default }}
+                sx={{
+                  border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 1,
+                  backgroundColor: theme.palette.background.default,
+                  // MUI reserves 48px for ONE secondaryAction button; reauth rows
+                  // show two, so widen the reserve or the URL text flows under them.
+                  ...(conn.needs_reauth ? { pr: 12 } : {}),
+                }}
                 secondaryAction={
                   <Box component="span" sx={{ display: 'inline-flex', gap: 0.5 }}>
                     {conn.needs_reauth && (

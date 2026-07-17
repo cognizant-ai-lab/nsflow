@@ -50,6 +50,7 @@ from urllib.parse import urlsplit
 import httpx
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth.exceptions import OAuthTokenError
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
@@ -163,6 +164,25 @@ class MCPOAuthManager:
         # Strong refs to in-flight best-effort cleanup tasks scheduled from the
         # (sync) sweep, so they aren't garbage-collected before they finish.
         self._cleanup_tasks: set = set()
+        # Per-server locks serializing silent refreshes (see _refresh_lock).
+        self._refresh_locks: Dict[str, asyncio.Lock] = {}
+
+    def _refresh_lock(self, server_url: str) -> asyncio.Lock:
+        """
+        Per-server lock serializing silent refreshes within this process.
+
+        Two concurrent triggers (the network-selection gate and chat-time
+        injection, or two browser tabs) must never POST the same single-use
+        refresh token twice: providers that rotate refresh tokens treat reuse
+        as theft and revoke the whole grant. Single-worker is already a hard
+        requirement for MCP OAuth (see class docstring), so an in-process lock
+        fully serializes refreshes.
+        """
+        lock = self._refresh_locks.get(server_url)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._refresh_locks[server_url] = lock
+        return lock
 
     # ------------------------------------------------------------------ #
     # Configuration helpers
@@ -333,12 +353,17 @@ class MCPOAuthManager:
         fails before any token is stored, that entry lingers in tokens.json but
         is hidden from /connections (which only lists usable tokens), so the user
         can't delete it or fall back to DCR from the UI. Remove it here - but only
-        if we pre-seeded it AND no usable token exists (so we never delete a real,
-        token-bearing connection, e.g. a re-auth that failed over an existing one).
+        if we pre-seeded it AND the entry holds no tokens at all (so we never
+        delete a real, token-bearing connection, e.g. a re-auth that failed over
+        an existing one). Checked on the raw entry, NOT has_connection: a
+        connection marked needs_reauth reports not-connected but still holds the
+        refresh token and client registration the user would lose if a canceled
+        reconnect attempt deleted it.
         """
         if not flow.preseeded_client_info:
             return
-        if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
+        meta = await asyncio.to_thread(FileTokenStorage(flow.server_url).get_metadata)
+        if meta.get("tokens"):
             return
         try:
             removed = await FileTokenStorage.remove(flow.server_url)
@@ -604,20 +629,45 @@ class MCPOAuthManager:
         # rather than inject a token we can't vouch for.
         expires_at = _stored_expiry(meta)
         if expires_at is not None and time.time() >= (expires_at - TOKEN_REFRESH_MARGIN_SECONDS):
-            await self._silent_refresh(server_url)
-            # Re-read: a successful refresh pushes expires_at into the future and
-            # rewrites meta["tokens"] with the new access token.
-            meta = await asyncio.to_thread(storage.get_metadata)
-            expires_at = _stored_expiry(meta)
+            if meta.get("needs_reauth"):
+                # A previous refresh already failed definitively; skip the
+                # (expensive) probe - only reconnecting can recover this entry.
+                logger.info("MCP token for %s needs re-auth; skipping silent refresh.", server_url)
+            else:
+                # Serialize refreshes per server so concurrent triggers can't
+                # POST the same single-use refresh token twice (rotation
+                # providers revoke the grant on reuse).
+                async with self._refresh_lock(server_url):
+                    # Re-read under the lock: a concurrent holder may already
+                    # have refreshed (or marked) this entry while we waited.
+                    meta = await asyncio.to_thread(storage.get_metadata)
+                    expires_at = _stored_expiry(meta)
+                    if (
+                        expires_at is not None
+                        and time.time() >= (expires_at - TOKEN_REFRESH_MARGIN_SECONDS)
+                        and not meta.get("needs_reauth")
+                    ):
+                        needs_reauth = await self._silent_refresh(server_url)
+                        # Re-read: a successful refresh pushes expires_at into the
+                        # future and rewrites meta["tokens"] with the new token.
+                        meta = await asyncio.to_thread(storage.get_metadata)
+                        expires_at = _stored_expiry(meta)
+                        if needs_reauth and expires_at is not None and time.time() >= expires_at:
+                            # The refresh failed *definitively* (rejected/absent
+                            # refresh token, not a transient network error):
+                            # persist that so the UI can prompt a reconnect
+                            # (Connectors panel chip, network-selection gate)
+                            # instead of showing a dead connection as
+                            # "Connected". Cleared by the next successful token
+                            # write (the re-auth).
+                            try:
+                                await storage.set_needs_reauth()
+                            except Exception as exc:  # noqa: BLE001 - marking must not break token lookup
+                                logger.info("Could not persist needs_reauth for %s: %s", server_url, exc)
 
-        # Drop a token that is actually expired (refresh failed / unavailable).
+        # Drop a token that is actually expired (refresh failed / unavailable / skipped).
         if expires_at is not None and time.time() >= expires_at:
             logger.warning("MCP token for %s is expired and could not be refreshed; reconnect required.", server_url)
-            # Persist the failure so the UI can prompt a reconnect (Connectors
-            # panel chip, network-selection gate) instead of showing a dead
-            # connection as "Connected". Self-healing: any later successful
-            # token write (a refresh that recovers, or a re-auth) clears it.
-            await storage.set_needs_reauth()
             return None
 
         raw = meta.get("tokens")
@@ -635,7 +685,31 @@ class MCPOAuthManager:
             token_type = "Bearer"
         return f"{token_type} {tokens.access_token}"
 
-    async def _silent_refresh(self, server_url: str) -> None:
+    @staticmethod
+    def _refresh_failure_needs_reauth(exc: BaseException) -> bool:
+        """
+        True if a failed silent refresh *definitively* requires re-authentication
+        - the refresh token is absent or was rejected (``OAuthTokenError``), or
+        the SDK demanded interactive authorization (``ReauthRequiredError``) -
+        as opposed to a transient failure (network down, auth server 5xx) that a
+        later attempt may recover from. Walks causes/contexts and exception
+        groups, since the SDK and anyio wrap the original error.
+        """
+        seen: set = set()
+        stack = [exc]
+        while stack:
+            err = stack.pop()
+            if err is None or id(err) in seen:
+                continue
+            seen.add(id(err))
+            if isinstance(err, (OAuthTokenError, ReauthRequiredError)):
+                return True
+            stack.extend(getattr(err, "exceptions", ()) or ())
+            stack.append(err.__cause__)
+            stack.append(err.__context__)
+        return False
+
+    async def _silent_refresh(self, server_url: str) -> bool:
         """
         Exchange the stored refresh token for a fresh access token, headlessly.
 
@@ -647,6 +721,10 @@ class MCPOAuthManager:
         failure (no refresh token, revoked grant, ...) it aborts quietly, leaving
         the stale token in place; get_fresh_token then refuses to inject it and
         the user can reconnect from the Connectors tab.
+
+        :return: True when the failure definitively requires re-authentication
+                 (see _refresh_failure_needs_reauth); False on success or a
+                 transient failure.
         """
         storage = FileTokenStorage(server_url)
         meta = await asyncio.to_thread(storage.get_metadata)
@@ -674,7 +752,15 @@ class MCPOAuthManager:
                 async with ClientSession(read, write) as session:
                     await session.initialize()
         except Exception as exc:  # noqa: BLE001 - refresh is best effort
-            logger.info("Silent token refresh for %s did not complete: %s", server_url, exc)
+            needs_reauth = self._refresh_failure_needs_reauth(exc)
+            logger.info(
+                "Silent token refresh for %s did not complete (%s): %s",
+                server_url,
+                "re-auth required" if needs_reauth else "transient",
+                exc,
+            )
+            return needs_reauth
+        return False
 
 
 # Process-wide singleton.

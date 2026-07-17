@@ -310,6 +310,17 @@ class FileTokenStorage:
             # entry for a server that has no stored tokens.
             if not isinstance(entry, dict) or not isinstance(entry.get("tokens"), dict):
                 return
+            # Already marked: nothing to change - skip the disk rewrite. (Callers
+            # also skip marked entries, but don't depend on their discipline.)
+            if entry.get("needs_reauth"):
+                return
+            # Re-check staleness under the lock: the marking decision was made
+            # from an earlier read, and a concurrent successful refresh or
+            # re-auth may have landed fresh tokens since. Never stamp a working
+            # entry as dead.
+            expires_at = _stored_expiry(entry)
+            if expires_at is None or time.time() < expires_at:
+                return
             entry["needs_reauth"] = True
             self._write_file(blob)
 
@@ -346,17 +357,22 @@ class FileTokenStorage:
             return False
         if not tokens.get("access_token"):
             return False
+        # A connection whose silent refresh failed definitively (needs_reauth,
+        # set by get_fresh_token) is not usable regardless of expiry state:
+        # honoring the marker unconditionally keeps every reader consistent -
+        # otherwise a marked-but-unexpired entry (reachable only through races
+        # or clock edits) would gate the network while /start simultaneously
+        # reports already_connected, making the Reconnect button a no-op.
+        if entry.get("needs_reauth"):
+            return False
         # expires_at may be missing or wrong-typed in a hand-edited store.
         # _stored_expiry coerces defensively (so a bad value can't raise here) and
         # treats a present-but-unparsable value as already expired - consistent
         # with get_fresh_token, so a corrupt entry isn't shown as connected when
-        # injection would refuse it. A refresh token still makes it usable -
-        # unless its refresh has already failed (needs_reauth, set by
-        # get_fresh_token), in which case only re-authenticating can help.
+        # injection would refuse it. A refresh token still makes it usable.
         expires_at = _stored_expiry(entry)
-        if expires_at is not None and time.time() >= expires_at:
-            if not tokens.get("refresh_token") or entry.get("needs_reauth"):
-                return False
+        if expires_at is not None and time.time() >= expires_at and not tokens.get("refresh_token"):
+            return False
         return True
 
     @staticmethod
@@ -383,7 +399,7 @@ class FileTokenStorage:
         them). Entries holding only a pre-seeded client_info (no token yet), or
         an expired token with no refresh token, are not real connections and
         are skipped. Callers gating on connectivity (``has_connection``,
-        ``missing_mcp_connections``) must treat ``needs_reauth`` entries as not
+        ``mcp_connection_gaps``) must treat ``needs_reauth`` entries as not
         connected.
         """
         path = (storage_dir or _default_storage_dir()) / "tokens.json"
