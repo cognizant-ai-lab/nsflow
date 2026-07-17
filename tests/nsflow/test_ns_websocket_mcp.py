@@ -206,11 +206,14 @@ def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
 # --------------------------- missing_mcp_connections --------------------------- #
 
 
-def _patch_connections(monkeypatch, urls):
+def _patch_connections(monkeypatch, urls, reauth_urls=()):
+    """Stub stored connections: ``urls`` are usable, ``reauth_urls`` are marked needs_reauth."""
+    connections = [{"server_url": u, "needs_reauth": False} for u in urls]
+    connections += [{"server_url": u, "needs_reauth": True} for u in reauth_urls]
     monkeypatch.setattr(
         nw.FileTokenStorage,
         "list_connections",
-        MagicMock(return_value=[{"server_url": u} for u in urls]),
+        MagicMock(return_value=connections),
     )
 
 
@@ -239,6 +242,88 @@ def test_missing_mcp_connections_none_when_network_unreadable(monkeypatch):
     """An unreadable network yields None instead of a missing list."""
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))
     assert nw.NsWebsocketUtils.missing_mcp_connections("net") is None
+
+
+def test_missing_mcp_connections_treats_needs_reauth_as_missing(monkeypatch):
+    """A connection whose refresh failed gates exactly like a never-connected server."""
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    _patch_connections(monkeypatch, [], reauth_urls=["https://api.githubcopilot.com/mcp"])
+    assert nw.NsWebsocketUtils.missing_mcp_connections("net") == ["https://api.githubcopilot.com/mcp"]
+
+
+def test_mcp_connection_gaps_reports_reauth_subset(monkeypatch):
+    """gaps distinguishes first-time connects from expired connections to reconnect."""
+    tool = _schema_tool("https://expired.example.com/mcp")
+    tool["function"]["sly_data_schema"]["properties"]["http_headers"]["properties"]["https://new.example.com/mcp"] = {
+        "type": "object"
+    }
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    _patch_connections(monkeypatch, [], reauth_urls=["https://expired.example.com/mcp"])
+    gaps = nw.NsWebsocketUtils.mcp_connection_gaps("net")
+    assert gaps == {
+        "missing": ["https://expired.example.com/mcp", "https://new.example.com/mcp"],
+        "needs_reauth": ["https://expired.example.com/mcp"],
+    }
+
+
+def test_gaps_fresh_refreshes_stored_urls(monkeypatch):
+    """
+    mcp_connection_gaps_fresh runs get_fresh_token for each required URL that
+    has a stored connection - keyed by the STORED url (normalized match),
+    exactly like injection, so a cosmetic trailing-slash difference still hits
+    the right token-store entry - then reports the gaps.
+    """
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    _patch_connections(monkeypatch, ["https://api.githubcopilot.com/mcp/"])
+    get_token = AsyncMock(return_value="Bearer tok")
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+
+    gaps = asyncio.run(nw.NsWebsocketUtils.mcp_connection_gaps_fresh("net"))
+
+    get_token.assert_awaited_once_with("https://api.githubcopilot.com/mcp/")
+    assert gaps == {"missing": [], "needs_reauth": []}
+
+
+def test_gaps_fresh_skips_marked_connections(monkeypatch):
+    """
+    A connection already marked needs_reauth is not re-probed on selection
+    (only a reconnect can recover it; re-probing would stall the gate on a dead
+    server every time) - it is reported straight from the stored state.
+    """
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    _patch_connections(monkeypatch, [], reauth_urls=["https://api.githubcopilot.com/mcp"])
+    get_token = AsyncMock()
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+
+    gaps = asyncio.run(nw.NsWebsocketUtils.mcp_connection_gaps_fresh("net"))
+
+    get_token.assert_not_awaited()
+    assert gaps == {
+        "missing": ["https://api.githubcopilot.com/mcp"],
+        "needs_reauth": ["https://api.githubcopilot.com/mcp"],
+    }
+
+
+def test_gaps_fresh_tolerates_refresh_errors(monkeypatch):
+    """A get_fresh_token failure must not break the gate - gaps still compute."""
+    config = {"tools": [_schema_tool("https://api.githubcopilot.com/mcp")]}
+    _patch_network(monkeypatch, config=config)
+    _patch_connections(monkeypatch, ["https://api.githubcopilot.com/mcp"])
+    get_token = AsyncMock(side_effect=RuntimeError("disk full"))
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+
+    gaps = asyncio.run(nw.NsWebsocketUtils.mcp_connection_gaps_fresh("net"))
+
+    assert gaps == {"missing": [], "needs_reauth": []}
+
+
+def test_gaps_fresh_none_when_network_unreadable(monkeypatch):
+    """An unreadable network yields None (caller reports nothing missing)."""
+    _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))
+    assert asyncio.run(nw.NsWebsocketUtils.mcp_connection_gaps_fresh("net")) is None
 
 
 def test_get_urls_network_none_returns_none(monkeypatch):
@@ -286,6 +371,24 @@ def test_inject_trailing_slash_mismatch(monkeypatch):
     assert stored not in sly["http_headers"]
     # ...but the token is fetched using the STORED connection URL.
     get_token.assert_awaited_once_with(stored)
+
+
+def test_inject_skips_needs_reauth_connections(monkeypatch):
+    """A connection marked needs_reauth is neither probed nor injected."""
+    url = "https://api.example.com/mcp"
+    monkeypatch.setattr(
+        nw.FileTokenStorage,
+        "list_connections",
+        MagicMock(return_value=[{"server_url": url, "needs_reauth": True}]),
+    )
+    get_token = AsyncMock(return_value="Bearer tok")
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+    inst = _utils()
+    inst.get_network_mcp_urls = lambda: {url}
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    assert sly == {}  # pylint: disable=use-implicit-booleaness-not-comparison  # assert dict is exactly empty
+    get_token.assert_not_awaited()
 
 
 def test_inject_no_match_does_nothing(monkeypatch):

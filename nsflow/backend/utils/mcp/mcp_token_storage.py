@@ -234,6 +234,10 @@ class FileTokenStorage:
                 entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
             else:
                 entry.pop("expires_at", None)
+            # Fresh tokens mean the connection works again: clear a "reconnect
+            # required" marker left by a previously failed silent refresh
+            # (whether this write comes from a successful refresh or a re-auth).
+            entry.pop("needs_reauth", None)
             self._write_file(blob)
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
@@ -285,6 +289,41 @@ class FileTokenStorage:
             entry["token_endpoint"] = token_endpoint
             self._write_file(blob)
 
+    async def set_needs_reauth(self) -> None:
+        """
+        Mark this server's connection as needing re-authentication.
+
+        Written by ``get_fresh_token`` when the stored token is past expiry and
+        the silent refresh could not renew it, so the UI can tell the user to
+        reconnect instead of showing a dead connection as "Connected". Cleared
+        automatically by the next successful ``set_tokens`` (a later refresh
+        that succeeds, or a re-auth). Not part of the ``TokenStorage`` protocol.
+        """
+        async with self._lock:
+            await asyncio.to_thread(self._sync_set_needs_reauth)
+
+    def _sync_set_needs_reauth(self) -> None:
+        with _interprocess_lock(self._lock_path):
+            blob = self._load_file()
+            entry = blob.get(self.server_url)
+            # Only a real connection can need re-auth; don't create a stub
+            # entry for a server that has no stored tokens.
+            if not isinstance(entry, dict) or not isinstance(entry.get("tokens"), dict):
+                return
+            # Already marked: nothing to change - skip the disk rewrite. (Callers
+            # also skip marked entries, but don't depend on their discipline.)
+            if entry.get("needs_reauth"):
+                return
+            # Re-check staleness under the lock: the marking decision was made
+            # from an earlier read, and a concurrent successful refresh or
+            # re-auth may have landed fresh tokens since. Never stamp a working
+            # entry as dead.
+            expires_at = _stored_expiry(entry)
+            if expires_at is None or time.time() < expires_at:
+                return
+            entry["needs_reauth"] = True
+            self._write_file(blob)
+
     # ------------------------------------------------------------------ #
     # Housekeeping helpers (used by the OAuth endpoints, not the protocol)
     #
@@ -318,6 +357,14 @@ class FileTokenStorage:
             return False
         if not tokens.get("access_token"):
             return False
+        # A connection whose silent refresh failed definitively (needs_reauth,
+        # set by get_fresh_token) is not usable regardless of expiry state:
+        # honoring the marker unconditionally keeps every reader consistent -
+        # otherwise a marked-but-unexpired entry (reachable only through races
+        # or clock edits) would gate the network while /start simultaneously
+        # reports already_connected, making the Reconnect button a no-op.
+        if entry.get("needs_reauth"):
+            return False
         # expires_at may be missing or wrong-typed in a hand-edited store.
         # _stored_expiry coerces defensively (so a bad value can't raise here) and
         # treats a present-but-unparsable value as already expired - consistent
@@ -328,19 +375,39 @@ class FileTokenStorage:
             return False
         return True
 
+    @staticmethod
+    def _entry_needs_reauth(entry: Dict[str, Any]) -> bool:
+        """
+        True if the entry holds a real (once-working) connection whose silent
+        refresh has failed. Such entries are not usable (injection would fail)
+        but are still listed by ``list_connections`` - flagged - so the UI can
+        show "reconnect required" instead of the connection silently vanishing.
+        """
+        if not isinstance(entry, dict):
+            return False
+        tokens = entry.get("tokens")
+        if not isinstance(tokens, dict) or not tokens.get("access_token"):
+            return False
+        return bool(entry.get("needs_reauth"))
+
     @classmethod
     def list_connections(cls, storage_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
         """
         Return non-secret metadata for every stored MCP connection that has a
-        usable access token. Entries holding only a pre-seeded client_info (no
-        token yet), or an expired token with no refresh token, are not real
-        connections and are skipped.
+        usable access token, plus connections marked ``needs_reauth`` (dead but
+        shown so the UI can prompt a reconnect rather than silently dropping
+        them). Entries holding only a pre-seeded client_info (no token yet), or
+        an expired token with no refresh token, are not real connections and
+        are skipped. Callers gating on connectivity (``has_connection``,
+        ``mcp_connection_gaps``) must treat ``needs_reauth`` entries as not
+        connected.
         """
         path = (storage_dir or _default_storage_dir()) / "tokens.json"
         blob = cls._load_path(path)
         connections: List[Dict[str, Any]] = []
         for server_url, entry in blob.items():
-            if not cls._entry_is_usable(entry):
+            needs_reauth = cls._entry_needs_reauth(entry)
+            if not needs_reauth and not cls._entry_is_usable(entry):
                 continue
             tokens = entry.get("tokens", {}) or {}
             connections.append(
@@ -349,6 +416,7 @@ class FileTokenStorage:
                     "obtained_at": entry.get("obtained_at"),
                     "expires_at": entry.get("expires_at"),
                     "has_refresh_token": bool(tokens.get("refresh_token")),
+                    "needs_reauth": needs_reauth,
                 }
             )
         return connections

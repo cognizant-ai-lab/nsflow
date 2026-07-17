@@ -31,6 +31,7 @@ import time
 
 import httpx
 import pytest
+from mcp.client.auth.exceptions import OAuthTokenError
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthToken
 
@@ -42,7 +43,9 @@ SERVER_URL = "https://mcp.example.com/mcp"
 TOKEN_ENDPOINT = "https://auth.example.com/oauth/token"
 
 
-def _seed_store(tmp_path, *, refresh_token="refresh-1", expires_at=None, token_endpoint=TOKEN_ENDPOINT):
+def _seed_store(
+    tmp_path, *, refresh_token="refresh-1", expires_at=None, token_endpoint=TOKEN_ENDPOINT, needs_reauth=False
+):
     """Write a tokens.json entry the way a completed connect flow would have."""
     tokens = {"access_token": "stale-token", "token_type": "Bearer"}
     if refresh_token:
@@ -59,6 +62,8 @@ def _seed_store(tmp_path, *, refresh_token="refresh-1", expires_at=None, token_e
     }
     if token_endpoint:
         entry["token_endpoint"] = token_endpoint
+    if needs_reauth:
+        entry["needs_reauth"] = True
     (tmp_path / "tokens.json").write_text(json.dumps({SERVER_URL: entry}), encoding="utf-8")
 
 
@@ -245,6 +250,175 @@ def test_silent_refresh_wires_stored_expiry_and_endpoint(tmp_path, monkeypatch):
     assert captured["server_url"] == SERVER_URL
     assert captured["token_endpoint"] == TOKEN_ENDPOINT
     assert captured["token_expiry_time"] == expires_at - om.TOKEN_REFRESH_MARGIN_SECONDS
+    # A RuntimeError is a TRANSIENT failure (like a network blip), so the entry
+    # is NOT marked needs_reauth - a later refresh attempt may recover it.
+    assert "needs_reauth" not in _read_store(tmp_path)
+
+
+def test_definitive_refresh_failure_marks_needs_reauth(tmp_path, monkeypatch):
+    """
+    Only a definitive OAuth failure (rejected/absent refresh token) persists the
+    needs_reauth marker; the marker then makes the UI prompt a reconnect.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path)
+
+    def _rejected(**_kwargs):
+        raise OAuthTokenError("invalid grant")
+
+    monkeypatch.setattr(om, "streamablehttp_client", _rejected)
+
+    assert asyncio.run(om.mcp_oauth_manager.get_fresh_token(SERVER_URL)) is None
+    assert _read_store(tmp_path).get("needs_reauth") is True
+
+
+def test_marked_entry_skips_refresh_probe(tmp_path, monkeypatch):
+    """
+    Once marked, an entry is not re-probed (only a reconnect recovers it) - so a
+    dead server can't stall every chat message / network selection.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path, needs_reauth=True)
+    probes = []
+
+    def _probe(**kwargs):
+        probes.append(kwargs)
+        raise RuntimeError("should not be reached")
+
+    monkeypatch.setattr(om, "streamablehttp_client", _probe)
+
+    assert asyncio.run(om.mcp_oauth_manager.get_fresh_token(SERVER_URL)) is None
+    assert not probes
+
+
+def test_concurrent_get_fresh_token_refreshes_once(tmp_path, monkeypatch):
+    """
+    Concurrent triggers (selection-gate freshen + chat injection, two tabs)
+    must be single-flight: only ONE refresh grant may be sent - rotation
+    providers revoke the whole grant when a single-use refresh token is reused.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path)
+    calls = []
+
+    async def _fake_refresh(url):
+        calls.append(url)
+        await asyncio.sleep(0.05)  # let the second caller pile up on the lock
+        await FileTokenStorage(url).set_tokens(
+            OAuthToken(access_token="fresh-token", expires_in=3600, refresh_token="refresh-2")
+        )
+        return False
+
+    # Stub the probe itself (by name, so no protected attribute access) to
+    # isolate the single-flight lock logic in get_fresh_token.
+    monkeypatch.setattr(om.mcp_oauth_manager, "_silent_refresh", _fake_refresh)
+
+    async def both():
+        return await asyncio.gather(
+            om.mcp_oauth_manager.get_fresh_token(SERVER_URL),
+            om.mcp_oauth_manager.get_fresh_token(SERVER_URL),
+        )
+
+    assert asyncio.run(both()) == ["Bearer fresh-token", "Bearer fresh-token"]
+    assert len(calls) == 1  # the second caller reused the first one's result
+
+
+def test_cleanup_failed_preseed_keeps_token_bearing_entry(tmp_path, monkeypatch):
+    """
+    A canceled/failed credentialed reconnect must NOT delete a token-bearing
+    connection - even one marked needs_reauth (which reports not-connected) -
+    or the user would lose the refresh token and client registration.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path, needs_reauth=True)
+    flow = om.PendingFlow(flow_id="f1", server_url=SERVER_URL, created_at=0.0)
+    flow.preseeded_client_info = True
+
+    asyncio.run(om.mcp_oauth_manager._cleanup_failed_preseed(flow))  # pylint: disable=protected-access  # exercising a private method under test
+
+    assert _read_store(tmp_path)["tokens"]["refresh_token"] == "refresh-1"  # survived
+
+    # A bare pre-seeded client_info stub (no tokens) is still cleaned up.
+    (tmp_path / "tokens.json").write_text(
+        json.dumps({SERVER_URL: {"client_info": {"client_id": "cid", "redirect_uris": None}}}), encoding="utf-8"
+    )
+    asyncio.run(om.mcp_oauth_manager._cleanup_failed_preseed(flow))  # pylint: disable=protected-access  # exercising a private method under test
+    blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+    assert SERVER_URL not in blob
+
+
+def test_needs_reauth_entry_listed_but_not_connected(tmp_path):
+    """
+    A marked entry gates like a disconnected server (has_connection False, so
+    /start allows re-auth and the network gate prompts) but is still listed -
+    flagged - so the Connectors panel can show "Reconnect required" instead of
+    the connection silently vanishing.
+    """
+    _seed_store(tmp_path, needs_reauth=True)  # expired, refresh token present, marker set
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is False
+    conns = FileTokenStorage.list_connections(storage_dir=tmp_path)
+    assert [c["server_url"] for c in conns] == [SERVER_URL]
+    assert conns[0]["needs_reauth"] is True
+
+    # Without the marker, the same expired-but-refreshable entry counts as
+    # connected (the refresh is presumed to work until it fails).
+    _seed_store(tmp_path, needs_reauth=False)
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is True
+    assert FileTokenStorage.list_connections(storage_dir=tmp_path)[0]["needs_reauth"] is False
+
+    # The marker is honored regardless of expiry state, so every reader agrees
+    # (a marked-but-unexpired entry must not report already_connected to /start
+    # while simultaneously gating the network).
+    _seed_store(tmp_path, needs_reauth=True, expires_at=int(time.time()) + 3600)
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is False
+    assert FileTokenStorage.list_connections(storage_dir=tmp_path)[0]["needs_reauth"] is True
+
+
+def test_set_needs_reauth_skipped_when_token_fresh(tmp_path):
+    """
+    The stale check re-runs under the write lock: if a concurrent refresh or
+    re-auth landed fresh tokens between the caller's read and this write, the
+    marker must not stamp a working entry as dead.
+    """
+    _seed_store(tmp_path, expires_at=int(time.time()) + 3600)
+    storage = FileTokenStorage(SERVER_URL, storage_dir=tmp_path)
+
+    asyncio.run(storage.set_needs_reauth())
+
+    assert "needs_reauth" not in _read_store(tmp_path)
+
+
+def test_successful_refresh_clears_needs_reauth(tmp_path):
+    """
+    The marker self-heals: a refresh that succeeds (e.g. the earlier failure was
+    a transient network error) writes fresh tokens, which clears needs_reauth.
+    """
+    _seed_store(tmp_path, needs_reauth=True)
+    provider = _provider(tmp_path, token_expiry_time=time.time() - 10)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == TOKEN_ENDPOINT:
+            return httpx.Response(
+                200, json={"access_token": "fresh-token", "token_type": "Bearer", "expires_in": 3600}
+            )
+        return httpx.Response(200, json={})
+
+    response = _request_through(provider, handler)
+
+    assert response.status_code == 200
+    entry = _read_store(tmp_path)
+    assert entry["tokens"]["access_token"] == "fresh-token"
+    assert "needs_reauth" not in entry
+    assert FileTokenStorage.has_connection(SERVER_URL, storage_dir=tmp_path) is True
+
+
+def test_set_needs_reauth_does_not_create_stub_entries(tmp_path):
+    """Marking a server with no stored tokens is a no-op, not a stub entry."""
+    _seed_store(tmp_path)
+    other = FileTokenStorage("https://other.example.com/mcp", storage_dir=tmp_path)
+    asyncio.run(other.set_needs_reauth())
+    blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+    assert "https://other.example.com/mcp" not in blob
 
 
 def test_set_tokens_stores_explicit_empty_refresh_token(tmp_path):

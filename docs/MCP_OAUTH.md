@@ -58,6 +58,13 @@ Connected servers appear in the list with a **Connected** chip (and an
 **Auto-refresh** chip when a refresh token was issued). Click the trash icon to
 disconnect — that deletes the stored credentials.
 
+A connection whose token expired and could not be silently renewed (e.g. the
+provider revoked the grant) shows a **Reconnect required** chip instead, with a
+reconnect button that re-runs the sign-in — no credentials to re-enter, the
+stored client registration is reused. Until reconnected it behaves like a
+disconnected server: nothing is injected, and selecting a network that needs it
+prompts you.
+
 ### Pre-registered servers (Client ID/Secret)
 
 For servers without DCR (GitHub, Salesforce, …) you register an OAuth app once at
@@ -153,10 +160,12 @@ export NSFLOW_PUBLIC_BASE_URL=http://localhost:4173
   `sly_data` might be logged or streamed.
 - Disconnecting a server from the Connectors tab removes its entry from the file.
 - nsflow keeps the access token fresh using the stored refresh token where the
-  server supports it: at chat time, a token near expiry is exchanged silently
-  (a standard OAuth refresh grant on the backend) before being injected. If a
-  connection can no longer be refreshed (e.g. the grant was revoked), nsflow
-  injects nothing and you just **reconnect** it from the tab.
+  server supports it: when you select a network and at chat time, a token near
+  expiry is exchanged silently (a standard OAuth refresh grant on the backend)
+  before being injected. If a connection can no longer be refreshed (e.g. the
+  grant was revoked), nsflow injects nothing, flags it **Reconnect required**
+  in the Connectors tab, and prompts you when a selected network needs it —
+  just **reconnect** it from the tab.
 
 ---
 
@@ -181,6 +190,7 @@ polls the flow status as a fallback, so completion is still detected if the
 popup can't message back.
 
 **A network prompts you to connect before chatting** — if a network's
-`sly_data_schema` declares `http_headers` for an MCP URL you haven't connected,
-nsflow surfaces a gate directing you to the Connectors tab. Connect the server,
+`sly_data_schema` declares `http_headers` for an MCP URL you haven't connected —
+or one whose connection expired and could not be renewed — nsflow surfaces a
+gate directing you to the Connectors tab. Connect (or reconnect) the server,
 then retry.

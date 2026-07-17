@@ -31,6 +31,7 @@ const McpAuthGate: React.FC = () => {
 
   const [open, setOpen] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
+  const [needsReauth, setNeedsReauth] = useState<string[]>([]);
   const [gatedNetwork, setGatedNetwork] = useState('');
   // Avoid re-prompting for a network the user already acknowledged this session.
   const acknowledgedRef = useRef<Set<string>>(new Set());
@@ -48,8 +49,12 @@ const McpAuthGate: React.FC = () => {
         // Ignore a response for a network the user already moved away from.
         if (cancelled || data?.network !== activeNetwork) return;
         const missingUrls: string[] = Array.isArray(data?.missing) ? data.missing : [];
+        // Subset of missing that was connected but expired beyond refresh - the
+        // dialog words those as "reconnect" rather than first-time "connect".
+        const reauthUrls: string[] = Array.isArray(data?.needs_reauth) ? data.needs_reauth : [];
         if (missingUrls.length > 0) {
           setMissing(missingUrls);
+          setNeedsReauth(reauthUrls);
           setGatedNetwork(activeNetwork);
           setOpen(true);
         }
@@ -75,7 +80,7 @@ const McpAuthGate: React.FC = () => {
 
   if (!open) return null;
   return (
-    <McpAuthRequiredDialog open={open} networkName={gatedNetwork} missing={missing} onOk={handleOk} />
+    <McpAuthRequiredDialog open={open} networkName={gatedNetwork} missing={missing} needsReauth={needsReauth} onOk={handleOk} />
   );
 };
 

@@ -25,17 +25,26 @@ export interface McpAuthRequiredDialogProps {
   networkName: string;
   /** MCP server URLs this network needs but that aren't connected yet. */
   missing: string[];
+  /**
+   * Subset of `missing` that WAS connected but whose session expired and could
+   * not be renewed - worded as "reconnect" rather than first-time "connect".
+   */
+  needsReauth?: string[];
   onOk: () => void;
 }
 
 /**
  * Shown when a selected network requires authenticated MCP servers the user has
- * not connected. Directs the user to the Connectors tab; OK returns them home.
+ * not connected (or whose connection expired beyond silent refresh). Directs the
+ * user to the Connectors tab; OK returns them home.
  */
 export const McpAuthRequiredDialog: React.FC<McpAuthRequiredDialogProps> = ({
-  open, networkName, missing, onOk,
+  open, networkName, missing, needsReauth = [], onOk,
 }) => {
   const { theme } = useTheme();
+  const reauth = new Set(needsReauth);
+  // All-expired vs first-time (or mixed) determines the wording.
+  const allReauth = missing.length > 0 && missing.every((url) => reauth.has(url));
 
   return (
     <Dialog open={open} onClose={onOk} maxWidth="sm" fullWidth>
@@ -44,8 +53,13 @@ export const McpAuthRequiredDialog: React.FC<McpAuthRequiredDialogProps> = ({
       </DialogTitle>
       <DialogContent sx={{ backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
         <Typography variant="body2" sx={{ mb: 2, color: theme.palette.text.secondary }}>
-          {networkName ? <>The agent network <b>{networkName}</b> needs access to MCP server(s) you
-            haven't connected yet:</> : 'This agent network needs access to MCP server(s) you haven\'t connected yet:'}
+          {allReauth ? (
+            networkName ? <>Your connection to MCP server(s) the agent network <b>{networkName}</b> uses
+              has expired and could not be renewed:</> : 'Your connection to MCP server(s) this agent network uses has expired and could not be renewed:'
+          ) : (
+            networkName ? <>The agent network <b>{networkName}</b> needs access to MCP server(s) you
+              haven't connected yet:</> : 'This agent network needs access to MCP server(s) you haven\'t connected yet:'
+          )}
         </Typography>
         <Box
           sx={{
@@ -55,11 +69,20 @@ export const McpAuthRequiredDialog: React.FC<McpAuthRequiredDialogProps> = ({
           }}
         >
           {missing.map((url) => (
-            <div key={url}>{url}</div>
+            <div key={url}>
+              {url}
+              {!allReauth && reauth.has(url) && (
+                <em style={{ color: theme.palette.warning.main }}> (expired - reconnect)</em>
+              )}
+            </div>
           ))}
         </Box>
         <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-          Please connect them in the <b>Connectors</b> tab first, then select this network again.
+          {allReauth
+            ? <>Please reconnect them in the <b>Connectors</b> tab, then select this network again.</>
+            : reauth.size > 0
+              ? <>Please connect them - and reconnect the expired ones - in the <b>Connectors</b> tab first, then select this network again.</>
+              : <>Please connect them in the <b>Connectors</b> tab first, then select this network again.</>}
         </Typography>
       </DialogContent>
       <DialogActions sx={{ backgroundColor: theme.palette.background.paper }}>

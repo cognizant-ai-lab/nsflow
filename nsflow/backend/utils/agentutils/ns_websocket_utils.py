@@ -60,6 +60,11 @@ _SENSITIVE_HEADER_NAMES = frozenset(
 # with a fresh token rather than sent to the agent verbatim.
 REDACTED_VALUE = "***redacted***"
 
+# Upper bound on the network-selection freshen (mcp_connection_gaps_fresh): a
+# hung/unreachable MCP server or auth server must not stall the gate decision
+# indefinitely (SDK defaults allow up to 30s connect / 300s read).
+MCP_FRESHEN_TIMEOUT_SECONDS = 15
+
 
 # pylint: disable=too-many-instance-attributes
 class NsWebsocketUtils:
@@ -280,7 +285,11 @@ class NsWebsocketUtils:
             connections = await asyncio.to_thread(FileTokenStorage.list_connections)
             if not connections:
                 return
-            connected_urls = [conn["server_url"] for conn in connections]
+            # Skip connections marked needs_reauth: their refresh already failed
+            # definitively, so probing them again on every message only burns
+            # time - and when a healthy duplicate of the same normalized URL
+            # exists, filtering ensures injection resolves to the healthy one.
+            connected_urls = [conn["server_url"] for conn in connections if not conn.get("needs_reauth")]
 
             referenced = await asyncio.to_thread(self.get_network_mcp_urls)
             # Build (header_key, token_url) pairs. URLs are matched on a normalized
@@ -541,12 +550,104 @@ class NsWebsocketUtils:
                  None if the network is not locally readable (we can't determine
                  requirements, so the caller should not block on it).
         """
+        gaps = cls.mcp_connection_gaps(agent_name)
+        return None if gaps is None else gaps["missing"]
+
+    @classmethod
+    def mcp_connection_gaps(cls, agent_name: str) -> Optional[Dict[str, List[str]]]:
+        """
+        Like ``missing_mcp_connections``, but distinguishes *why* a required URL
+        is missing so the UI can word its prompt correctly:
+
+        * ``missing`` - every required URL without a usable connection (a
+          superset of ``needs_reauth``).
+        * ``needs_reauth`` - the subset that HAS a stored connection whose
+          silent refresh failed (marked by get_fresh_token); the user should
+          *re*-connect these rather than connect them for the first time.
+
+        :return: ``{"missing": [...], "needs_reauth": [...]}`` (sorted), or None
+                 if the network is not locally readable.
+        """
         required = cls.collect_network_mcp_urls(agent_name)
         if required is None:
             return None
-        connections = FileTokenStorage.list_connections()
-        connected = {cls._normalize_mcp_url(conn["server_url"]) for conn in connections}
-        return sorted(url for url in required if cls._normalize_mcp_url(url) not in connected)
+        return cls._gaps_from(required, FileTokenStorage.list_connections())
+
+    @classmethod
+    def _gaps_from(cls, required, connections) -> Dict[str, List[str]]:
+        """Compute the gaps dict from a required-URL set and a connection list."""
+        connected = set()
+        reauth = set()
+        for conn in connections:
+            norm = cls._normalize_mcp_url(conn["server_url"])
+            # A needs_reauth connection is listed (so the UI can show it) but is
+            # not usable - it must gate exactly like a never-connected server.
+            if conn.get("needs_reauth"):
+                reauth.add(norm)
+            else:
+                connected.add(norm)
+        missing = sorted(url for url in required if cls._normalize_mcp_url(url) not in connected)
+        needs_reauth = [url for url in missing if cls._normalize_mcp_url(url) in reauth]
+        return {"missing": missing, "needs_reauth": needs_reauth}
+
+    @classmethod
+    async def mcp_connection_gaps_fresh(cls, agent_name: str) -> Optional[Dict[str, List[str]]]:
+        """
+        ``mcp_connection_gaps``, but freshened first: proactively runs
+        ``get_fresh_token`` for every stored connection this network requires,
+        then reports the gaps. Called when the user selects a network
+        (GET /required), so the gate decision reflects reality:
+
+        * a token near expiry is refreshed *now* (pre-warming the first chat
+          message);
+        * a dead refresh token is discovered and marked ``needs_reauth`` before
+          the user sends anything, instead of one failed message later.
+
+        Fast path: a token that is fresh per its stored ``expires_at`` is a disk
+        read only - no network I/O. Connections already marked ``needs_reauth``
+        are not re-probed (only a reconnect can recover them, and re-probing
+        would stall every selection of the network on a dead server). Refreshes
+        run concurrently and are bounded by ``MCP_FRESHEN_TIMEOUT_SECONDS`` so a
+        hung server can't block the gate; on timeout or per-URL failure the gaps
+        are computed from the state on disk.
+        """
+        required = await asyncio.to_thread(cls.collect_network_mcp_urls, agent_name)
+        if required is None:
+            return None
+        connections = await asyncio.to_thread(FileTokenStorage.list_connections)
+        # get_fresh_token is keyed by the *stored* connection URL, which may
+        # differ cosmetically from the schema's form - map via normalization,
+        # exactly like inject_mcp_auth_headers does.
+        by_norm = {
+            cls._normalize_mcp_url(conn["server_url"]): conn["server_url"]
+            for conn in connections
+            if not conn.get("needs_reauth")
+        }
+        stored_urls = sorted(
+            {by_norm[cls._normalize_mcp_url(url)] for url in required if cls._normalize_mcp_url(url) in by_norm}
+        )
+        if stored_urls:
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(
+                        *(mcp_oauth_manager.get_fresh_token(url) for url in stored_urls),
+                        return_exceptions=True,
+                    ),
+                    timeout=MCP_FRESHEN_TIMEOUT_SECONDS,
+                )
+                for url, result in zip(stored_urls, results):
+                    if isinstance(result, BaseException):
+                        logging.warning("MCP freshen for %s failed: %s", url, result)
+            except asyncio.TimeoutError:
+                logging.warning(
+                    "MCP freshen for network '%s' timed out after %ss; gating on stored state.",
+                    agent_name,
+                    MCP_FRESHEN_TIMEOUT_SECONDS,
+                )
+            # Re-read: a successful refresh (or a newly set needs_reauth marker)
+            # changes the gate decision.
+            connections = await asyncio.to_thread(FileTokenStorage.list_connections)
+        return cls._gaps_from(required, connections)
 
     @staticmethod
     def _collect_schema_http_header_urls(config: Any, urls: set) -> None:
