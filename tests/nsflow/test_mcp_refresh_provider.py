@@ -32,12 +32,14 @@ import time
 import httpx
 import pytest
 from mcp.client.auth.exceptions import OAuthTokenError
+from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthToken
 
 import nsflow.backend.utils.mcp.mcp_oauth_manager as om
 from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
+from nsflow.backend.utils.mcp.mcp_token_storage import ReauthFlowTokenStorage
 
 SERVER_URL = "https://mcp.example.com/mcp"
 TOKEN_ENDPOINT = "https://auth.example.com/oauth/token"
@@ -321,6 +323,91 @@ def test_concurrent_get_fresh_token_refreshes_once(tmp_path, monkeypatch):
 
     assert asyncio.run(both()) == ["Bearer fresh-token", "Bearer fresh-token"]
     assert len(calls) == 1  # the second caller reused the first one's result
+
+
+def test_reconnect_flow_probes_unauthenticated(tmp_path, monkeypatch):
+    """
+    Regression: a (re)connect flow over an entry with stored tokens must NOT
+    present the old Bearer token in its probe. Tolerant servers (You.com)
+    answer 200 to a stale token, so no 401 challenge would ever start the
+    authorization and the flow would abort with "no 401 challenge was
+    returned" - the exact failure seen when reconnecting a marked connection.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path, needs_reauth=True)
+    captured = {}
+
+    def _capture_probe(**kwargs):
+        captured["auth"] = kwargs.get("auth")
+        raise RuntimeError("stop probe")
+
+    monkeypatch.setattr(om, "streamablehttp_client", _capture_probe)
+    flow = om.PendingFlow(flow_id="f2", server_url=SERVER_URL, created_at=0.0)
+
+    asyncio.run(om.mcp_oauth_manager._run_oauth_flow(flow, None))  # pylint: disable=protected-access  # exercising a private method under test
+
+    storage = captured["auth"].context.storage
+    # The flow's storage view hides the stored (dead) tokens so the probe goes
+    # out unauthenticated and draws the 401 challenge...
+    assert asyncio.run(storage.get_tokens()) is None
+    # ...but reuses the stored user-supplied credentials (no re-entering them;
+    # the seeded entry has no client_id_issued_at, so it classifies as manual)...
+    assert asyncio.run(storage.get_client_info()).client_id == "client-1"
+    # ...and writes pass through to disk, clearing the marker on success.
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="new-token", expires_in=3600, refresh_token="r3")))
+    entry = _read_store(tmp_path)
+    assert entry["tokens"]["access_token"] == "new-token"
+    assert "needs_reauth" not in entry
+
+
+def test_reconnect_hides_dcr_client_info_but_reuses_manual(tmp_path):
+    """
+    A DCR-issued registration is hidden from a (re)connect flow so the SDK
+    registers a fresh client - providers may no longer honor the old dynamic
+    client (You.com renders consent for it, then hangs after approval and never
+    redirects back). User-supplied credentials are reused: the user must not
+    have to re-enter them, and the server has no DCR to fall back on.
+    """
+    _seed_store(tmp_path)
+    wrapped = ReauthFlowTokenStorage(FileTokenStorage(SERVER_URL, storage_dir=tmp_path))
+
+    def _set_flag(manual):
+        blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+        blob[SERVER_URL]["client_info_manual"] = manual
+        (tmp_path / "tokens.json").write_text(json.dumps(blob), encoding="utf-8")
+
+    _set_flag(False)  # DCR-issued -> hidden, forcing a fresh registration
+    assert asyncio.run(wrapped.get_client_info()) is None
+    _set_flag(True)  # user-supplied -> reused
+    assert asyncio.run(wrapped.get_client_info()).client_id == "client-1"
+
+
+def test_reconnect_classifies_legacy_client_info_by_issued_at(tmp_path):
+    """
+    Entries written before the manual flag existed are classified by the
+    RFC 7591 ``client_id_issued_at`` metadata: DCR responses carry it, our
+    manual pre-seed never did.
+    """
+    _seed_store(tmp_path)  # no flag, no client_id_issued_at -> manual, reused
+    wrapped = ReauthFlowTokenStorage(FileTokenStorage(SERVER_URL, storage_dir=tmp_path))
+    assert asyncio.run(wrapped.get_client_info()).client_id == "client-1"
+
+    blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+    blob[SERVER_URL]["client_info"]["client_id_issued_at"] = 1784333961  # DCR fingerprint
+    (tmp_path / "tokens.json").write_text(json.dumps(blob), encoding="utf-8")
+    assert asyncio.run(wrapped.get_client_info()) is None
+
+
+def test_set_client_info_records_manual_flag(tmp_path):
+    """set_client_info persists whether the registration was user-supplied."""
+    storage = FileTokenStorage(SERVER_URL, storage_dir=tmp_path)
+    info = OAuthClientInformationFull(client_id="cid", redirect_uris=None)
+
+    asyncio.run(storage.set_client_info(info))  # the SDK's DCR write path
+    assert _read_store(tmp_path)["client_info_manual"] is False
+
+    asyncio.run(storage.set_client_info(info, manual=True))  # the /start pre-seed path
+    assert _read_store(tmp_path)["client_info_manual"] is True
 
 
 def test_cleanup_failed_preseed_keeps_token_bearing_entry(tmp_path, monkeypatch):

@@ -252,12 +252,22 @@ class FileTokenStorage:
             logger.warning("Ignoring unparsable stored MCP client_info for %s: %s", self.server_url, exc)
             return None
 
-    async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
-        """Persist OAuth client info for this server to the token store."""
-        async with self._lock:
-            await asyncio.to_thread(self._sync_set_client_info, client_info)
+    async def set_client_info(self, client_info: OAuthClientInformationFull, manual: bool = False) -> None:
+        """
+        Persist OAuth client info for this server to the token store.
 
-    def _sync_set_client_info(self, client_info: OAuthClientInformationFull) -> None:
+        ``manual=True`` records that the credentials were supplied by the user
+        (a pre-registered server without DCR); the default False means a
+        DCR-issued registration (the SDK calls this with one argument). The
+        distinction decides whether a later reconnect may reuse the
+        registration (manual: yes - the user shouldn't re-enter credentials)
+        or must register a fresh client (DCR: reuse can wedge the flow, see
+        ReauthFlowTokenStorage.get_client_info).
+        """
+        async with self._lock:
+            await asyncio.to_thread(self._sync_set_client_info, client_info, manual)
+
+    def _sync_set_client_info(self, client_info: OAuthClientInformationFull, manual: bool = False) -> None:
         with _interprocess_lock(self._lock_path):
             blob = self._load_file()
             entry = blob.get(self.server_url)
@@ -265,6 +275,7 @@ class FileTokenStorage:
                 entry = {}
                 blob[self.server_url] = entry
             entry["client_info"] = client_info.model_dump(mode="json")
+            entry["client_info_manual"] = bool(manual)
             self._write_file(blob)
 
     async def set_token_endpoint(self, token_endpoint: str) -> None:
@@ -519,3 +530,56 @@ class FileTokenStorage:
         except OSError:
             # Best effort (e.g. on Windows); not fatal.
             pass
+
+
+class ReauthFlowTokenStorage:
+    """
+    ``TokenStorage`` view used while a (re)authorization flow is running.
+
+    Reads of stored tokens return None so the flow's probe request goes out
+    unauthenticated and the server's 401 challenge starts a fresh
+    authorization. A flow only ever runs when the stored tokens are unusable -
+    expired beyond refresh, or marked ``needs_reauth`` (``/start``
+    short-circuits with ``already_connected`` otherwise) - and presenting such
+    a token can draw a ``200`` from tolerant servers (e.g. You.com accepts
+    stale tokens), in which case no 401 ever fires and the flow aborts with
+    "no 401 challenge was returned".
+
+    Client-info reads pass through only for *user-supplied* registrations
+    (pre-registered servers without DCR - the user shouldn't have to re-enter
+    credentials). A DCR-issued registration is hidden so the SDK registers a
+    fresh client: DCR is free, and providers may no longer honor the old
+    dynamic client (You.com's consent page still accepts it, but its
+    post-approval step hangs and never redirects back). ALL writes pass
+    through, so the completed token exchange persists normally - which also
+    clears any ``needs_reauth`` marker.
+    """
+
+    def __init__(self, inner: FileTokenStorage):
+        self._inner = inner
+
+    async def get_tokens(self) -> Optional[OAuthToken]:
+        """Hide stored (unusable) tokens so the probe triggers the 401 challenge."""
+        return None
+
+    async def set_tokens(self, tokens: OAuthToken) -> None:
+        """Persist the newly exchanged tokens to the real store."""
+        await self._inner.set_tokens(tokens)
+
+    async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
+        """Reuse a user-supplied registration; hide a DCR-issued one (re-register)."""
+        entry = await asyncio.to_thread(self._inner.get_metadata)
+        manual = entry.get("client_info_manual")
+        if manual is None:
+            # Legacy entry written before the flag existed: DCR responses carry
+            # the RFC 7591 client_id_issued_at metadata, while our manual
+            # pre-seed never set it - use that to classify.
+            raw = entry.get("client_info")
+            manual = isinstance(raw, dict) and not raw.get("client_id_issued_at")
+        if not manual:
+            return None
+        return await self._inner.get_client_info()
+
+    async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
+        """Persist a (re)registration to the real store (DCR-issued: not manual)."""
+        await self._inner.set_client_info(client_info)

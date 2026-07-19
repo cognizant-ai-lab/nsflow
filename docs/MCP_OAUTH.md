@@ -60,10 +60,10 @@ disconnect — that deletes the stored credentials.
 
 A connection whose token expired and could not be silently renewed (e.g. the
 provider revoked the grant) shows a **Reconnect required** chip instead, with a
-reconnect button that re-runs the sign-in — no credentials to re-enter, the
-stored client registration is reused. Until reconnected it behaves like a
-disconnected server: nothing is injected, and selecting a network that needs it
-prompts you.
+reconnect button that re-runs the sign-in — no credentials to re-enter:
+pre-registered credentials are reused, and DCR servers register a fresh client
+automatically. Until reconnected it behaves like a disconnected server: nothing
+is injected, and selecting a network that needs it prompts you.
 
 ### Pre-registered servers (Client ID/Secret)
 
