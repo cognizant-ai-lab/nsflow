@@ -382,20 +382,50 @@ def test_reconnect_hides_dcr_client_info_but_reuses_manual(tmp_path):
     assert asyncio.run(wrapped.get_client_info()).client_id == "client-1"
 
 
-def test_reconnect_classifies_legacy_client_info_by_issued_at(tmp_path):
+def test_reconnect_classifies_legacy_client_info_by_registration_metadata(tmp_path):
     """
-    Entries written before the manual flag existed are classified by the
-    RFC 7591 ``client_id_issued_at`` metadata: DCR responses carry it, our
-    manual pre-seed never did.
+    Entries written before the manual flag existed are classified by RFC 7591
+    registration-response metadata - ``client_id_issued_at`` or
+    ``client_secret_expires_at`` - which DCR responses may carry and our manual
+    pre-seed never wrote. Presence counts, not truthiness: 0 is a meaningful
+    DCR value for both fields ("never expires").
     """
-    _seed_store(tmp_path)  # no flag, no client_id_issued_at -> manual, reused
+    _seed_store(tmp_path)  # no flag, no registration metadata -> manual, reused
     wrapped = ReauthFlowTokenStorage(FileTokenStorage(SERVER_URL, storage_dir=tmp_path))
+
+    def _set_client_info_field(field, value):
+        blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+        blob[SERVER_URL]["client_info"][field] = value
+        (tmp_path / "tokens.json").write_text(json.dumps(blob), encoding="utf-8")
+
     assert asyncio.run(wrapped.get_client_info()).client_id == "client-1"
 
-    blob = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
-    blob[SERVER_URL]["client_info"]["client_id_issued_at"] = 1784333961  # DCR fingerprint
-    (tmp_path / "tokens.json").write_text(json.dumps(blob), encoding="utf-8")
+    _set_client_info_field("client_id_issued_at", 1784333961)  # DCR fingerprint
     assert asyncio.run(wrapped.get_client_info()) is None
+
+    _set_client_info_field("client_id_issued_at", None)  # ambiguous again...
+    _set_client_info_field("client_secret_expires_at", 0)  # ...but DCR issued a secret
+    assert asyncio.run(wrapped.get_client_info()) is None
+
+
+def test_reconnect_exchange_does_not_graft_old_refresh_token(tmp_path):
+    """
+    A (re)connect flow's token write is a fresh grant - possibly for a freshly
+    registered DCR client - so an exchange response that omits the refresh
+    token must NOT inherit the stored one (its refresh just definitively
+    failed, and it may belong to the abandoned client). The RFC 6749
+    keep-if-omitted rule still applies to writes through the plain storage
+    (refresh-grant responses).
+    """
+    _seed_store(tmp_path, needs_reauth=True)  # stored refresh_token "refresh-1"
+    inner = FileTokenStorage(SERVER_URL, storage_dir=tmp_path)
+
+    asyncio.run(ReauthFlowTokenStorage(inner).set_tokens(OAuthToken(access_token="new-token", expires_in=3600)))
+    assert _read_store(tmp_path)["tokens"].get("refresh_token") is None
+
+    _seed_store(tmp_path)  # re-seed: a refresh-grant write still preserves it
+    asyncio.run(inner.set_tokens(OAuthToken(access_token="new-token-2", expires_in=3600)))
+    assert _read_store(tmp_path)["tokens"]["refresh_token"] == "refresh-1"
 
 
 def test_set_client_info_records_manual_flag(tmp_path):

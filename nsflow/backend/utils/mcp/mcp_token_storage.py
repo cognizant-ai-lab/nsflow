@@ -200,14 +200,22 @@ class FileTokenStorage:
             logger.warning("Ignoring unparsable stored MCP tokens for %s: %s", self.server_url, exc)
             return None
 
-    async def set_tokens(self, tokens: OAuthToken) -> None:
-        """Persist OAuth tokens for this server to the token store."""
+    async def set_tokens(self, tokens: OAuthToken, preserve_refresh_token: bool = True) -> None:
+        """
+        Persist OAuth tokens for this server to the token store.
+
+        ``preserve_refresh_token`` keeps the stored refresh token when the new
+        payload omits one (RFC 6749 section 6 refresh-response semantics; the
+        SDK calls this with a single argument). Interactive (re)auth flows pass
+        False: their write is a fresh grant - possibly for a freshly registered
+        client - so the old refresh token must not outlive it.
+        """
         # asyncio.Lock serializes coroutines in-process; the blocking
         # read-modify-write (and the cross-process fcntl lock) runs in a thread.
         async with self._lock:
-            await asyncio.to_thread(self._sync_set_tokens, tokens)
+            await asyncio.to_thread(self._sync_set_tokens, tokens, preserve_refresh_token)
 
-    def _sync_set_tokens(self, tokens: OAuthToken) -> None:
+    def _sync_set_tokens(self, tokens: OAuthToken, preserve_refresh_token: bool = True) -> None:
         with _interprocess_lock(self._lock_path):
             blob = self._load_file()
             entry = blob.get(self.server_url)
@@ -217,7 +225,7 @@ class FileTokenStorage:
                 entry = {}
                 blob[self.server_url] = entry
             new_tokens = tokens.model_dump(mode="json")
-            if "refresh_token" not in new_tokens or new_tokens["refresh_token"] is None:
+            if preserve_refresh_token and ("refresh_token" not in new_tokens or new_tokens["refresh_token"] is None):
                 # RFC 6749 section 6: a refresh response MAY omit the refresh
                 # token, meaning "keep using the existing one" (Salesforce and
                 # Google do this; You.com rotates instead). Overwriting with
@@ -563,19 +571,37 @@ class ReauthFlowTokenStorage:
         return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
-        """Persist the newly exchanged tokens to the real store."""
-        await self._inner.set_tokens(tokens)
+        """
+        Persist the newly exchanged tokens to the real store.
+
+        ``preserve_refresh_token=False``: the RFC 6749 keep-the-old-refresh-token
+        rule applies to *refresh* responses, not to this fresh grant. The stored
+        refresh token is the one whose refresh just definitively failed - and
+        after a DCR re-registration it belongs to the abandoned client - so
+        grafting it onto these tokens would only set up an ``invalid_grant`` at
+        the first silent refresh.
+        """
+        await self._inner.set_tokens(tokens, preserve_refresh_token=False)
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
         """Reuse a user-supplied registration; hide a DCR-issued one (re-register)."""
         entry = await asyncio.to_thread(self._inner.get_metadata)
         manual = entry.get("client_info_manual")
         if manual is None:
-            # Legacy entry written before the flag existed: DCR responses carry
-            # the RFC 7591 client_id_issued_at metadata, while our manual
-            # pre-seed never set it - use that to classify.
+            # Legacy entry written before the flag existed. Classify by RFC 7591
+            # registration-response metadata our manual pre-seed never writes:
+            # client_id_issued_at, or client_secret_expires_at (required whenever
+            # DCR issues a secret; 0 is meaningful - "never expires" - hence the
+            # presence checks, not truthiness). Both fields are OPTIONAL for a
+            # DCR server to send, so a legacy DCR entry carrying neither still
+            # classifies as manual and reuses the old client; if that provider
+            # no longer honors it, recovery is disconnect + reconnect. Accepted
+            # residual: only pre-flag stores, and only providers that both omit
+            # the metadata and reject their own old clients.
             raw = entry.get("client_info")
-            manual = isinstance(raw, dict) and not raw.get("client_id_issued_at")
+            manual = isinstance(raw, dict) and all(
+                raw.get(field) is None for field in ("client_id_issued_at", "client_secret_expires_at")
+            )
         if not manual:
             return None
         return await self._inner.get_client_info()
