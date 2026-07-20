@@ -203,6 +203,84 @@ def test_get_urls_remote_or_missing_network_returns_none(monkeypatch):
     assert _utils().get_network_mcp_urls() is None
 
 
+# --------------------------- collect_required_mcp_urls --------------------------- #
+
+
+def _two_url_tool(url_a, url_b, required=None):
+    """A front-man tool declaring two http_headers URLs, optionally with a required array."""
+    tool = _schema_tool(url_a)
+    http_headers = tool["function"]["sly_data_schema"]["properties"]["http_headers"]
+    http_headers["properties"][url_b] = {"type": "object"}
+    if required is not None:
+        http_headers["required"] = required
+    return tool
+
+
+def test_required_defaults_to_all_declared(monkeypatch):
+    """With no required array, every declared URL is required (backward-compatible)."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    _patch_network(monkeypatch, config={"tools": [_two_url_tool(url_a, url_b)]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a, url_b}
+
+
+def test_required_honors_required_array(monkeypatch):
+    """A required array narrows gating to its URLs, while injection still sees both."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    _patch_network(monkeypatch, config={"tools": [_two_url_tool(url_a, url_b, required=[url_a])]})
+    # Only the required URL gates...
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a}
+    # ...but both are still injection targets (opportunistic auth for the optional one).
+    assert _utils().get_network_mcp_urls() == {url_a, url_b}
+
+
+def test_required_empty_array_requires_nothing(monkeypatch):
+    """An empty required array makes every declared URL optional (gate nothing)."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    _patch_network(monkeypatch, config={"tools": [_two_url_tool(url_a, url_b, required=[])]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == set()
+    assert _utils().get_network_mcp_urls() == {url_a, url_b}
+
+
+def test_required_ignores_undeclared_entry(monkeypatch):
+    """A required URL not declared under properties is ignored (nothing to inject for it)."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    tool = _two_url_tool(url_a, url_b, required=[url_a, "https://ghost.example.com/mcp"])
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a}
+
+
+def test_required_matches_normalized(monkeypatch):
+    """A required entry differing only cosmetically from its properties key still gates."""
+    # properties key has no trailing slash; required lists the trailing-slash
+    # form. Matching normalizes both, and the declared (canonical) form gates.
+    declared = "https://a.example.com/mcp"
+    tool = _two_url_tool(declared, "https://b.example.com/mcp", required=["https://A.example.com/mcp/"])
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {declared}
+
+
+def test_required_non_list_gates_all(monkeypatch):
+    """A malformed (non-list) required value falls back to gating on all declared URLs."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    _patch_network(monkeypatch, config={"tools": [_two_url_tool(url_a, url_b, required="oops")]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a, url_b}
+
+
+def test_required_is_per_tool(monkeypatch):
+    """A tool without a required array still gates on all its URLs even if another tool narrows."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    narrowed = _two_url_tool(url_a, url_b, required=[url_a])
+    default = _schema_tool("https://c.example.com/mcp")
+    _patch_network(monkeypatch, config={"tools": [narrowed, default]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a, "https://c.example.com/mcp"}
+
+
+def test_required_none_when_network_unreadable(monkeypatch):
+    """An unreadable network yields None so the caller does not gate on it."""
+    _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") is None
+
+
 # --------------------------- missing_mcp_connections --------------------------- #
 
 
@@ -227,6 +305,17 @@ def test_missing_mcp_connections_reports_unconnected(monkeypatch):
     _patch_network(monkeypatch, config={"tools": [tool]})
     _patch_connections(monkeypatch, ["https://connected.example.com/mcp"])
     assert nw.NsWebsocketUtils.missing_mcp_connections("net") == ["https://api.githubcopilot.com/mcp"]
+
+
+def test_missing_mcp_connections_skips_optional_url(monkeypatch):
+    """A declared-but-not-required URL with no connection does not gate the network."""
+    # `required` lists only url_a, so an unconnected url_b (optional - it may
+    # authenticate another way, or need no auth) must NOT be reported as missing.
+    url_a, url_b = "https://required.example.com/mcp", "https://optional.example.com/mcp"
+    tool = _two_url_tool(url_a, url_b, required=[url_a])
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    _patch_connections(monkeypatch, [])  # neither is connected
+    assert nw.NsWebsocketUtils.missing_mcp_connections("net") == [url_a]
 
 
 def test_missing_mcp_connections_matches_normalized(monkeypatch):

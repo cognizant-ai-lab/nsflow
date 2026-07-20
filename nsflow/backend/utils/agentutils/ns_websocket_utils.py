@@ -498,11 +498,11 @@ class NsWebsocketUtils:
         return self.collect_network_mcp_urls(self.agent_name)
 
     @classmethod
-    def collect_network_mcp_urls(cls, agent_name: str):
+    def _load_schema_mcp_urls(cls, agent_name: str):
         """
-        Collect the MCP server URLs a network expects auth headers for.
+        Load the network and return ``(declared, required)`` schema URL sets.
 
-        These come solely from the network's declared ``sly_data_schema`` - the
+        Both come solely from the network's declared ``sly_data_schema`` - the
         MCP URLs listed under
         ``tools[].function.sly_data_schema.properties.http_headers.properties``.
         This is the explicit contract: a network that requires authenticated MCP
@@ -512,29 +512,73 @@ class NsWebsocketUtils:
         auth at all - those must not be flagged as a missing connection nor have
         a token injected for them.
 
+        The two sets serve different jobs (see :meth:`collect_network_mcp_urls`
+        and :meth:`collect_required_mcp_urls`): ``declared`` is every URL under
+        ``http_headers.properties`` (the injection set), while ``required`` is the
+        subset the network cannot function without (the gating set), read from the
+        ``http_headers.required`` array when present.
+
         Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
         same restore path the rest of the app uses - so the config is plain and
         fully resolved (commondefs/defaults applied), and missing/remote networks
         raise.
 
-        :return: The set of schema-declared URLs (possibly empty), or None if the
-                 network is not readable locally (invalid name, or a network on a
-                 remote neuro-san server), signalling the caller to fall back to
-                 all connections.
+        :return: ``(declared, required)`` sets (each possibly empty), or
+                 ``(None, None)`` if the network is not readable locally (invalid
+                 name, or a network on a remote neuro-san server), signalling the
+                 caller to fall back to all connections.
         """
         try:
             agent_network = AgentNetworkUtils().get_agent_network(agent_name)
             if agent_network is None:
-                return None
+                return None, None
             config = agent_network.get_config()
         except Exception as e:  # noqa: BLE001 - invalid/remote/unreadable network
             logging.info("MCP auth: network '%s' not readable locally: %s", agent_name, e)
-            return None
+            return None, None
 
-        # Schema-declared URLs are the explicit auth contract.
-        urls: set = set()
-        cls._collect_schema_http_header_urls(config, urls)
-        return urls
+        declared: set = set()
+        required: set = set()
+        cls._collect_schema_http_header_urls(config, declared, required)
+        return declared, required
+
+    @classmethod
+    def collect_network_mcp_urls(cls, agent_name: str):
+        """
+        The MCP URLs a network may need an auth header for - the *injection* set.
+
+        Every URL declared under ``http_headers.properties`` is returned, so a
+        token is injected opportunistically whenever one is connected. Whether the
+        user is *forced* to connect a URL is a separate question answered by
+        :meth:`collect_required_mcp_urls`.
+
+        :return: The set of schema-declared URLs (possibly empty), or None if the
+                 network is not readable locally, signalling the caller to fall
+                 back to all connections.
+        """
+        declared, _ = cls._load_schema_mcp_urls(agent_name)
+        return declared
+
+    @classmethod
+    def collect_required_mcp_urls(cls, agent_name: str):
+        """
+        The MCP URLs a network cannot function without - the *gating* set.
+
+        A network narrows the gate by adding an ``http_headers.required`` array
+        (a sibling of ``http_headers.properties``, per JSON Schema) listing only
+        the URLs it truly needs. This lets a network declare a URL for
+        opportunistic token injection without forcing a connection - useful when
+        the server accepts an alternative credential (an API key via
+        ``MCP_SERVERS_INFO_FILE``) or needs no auth at all.
+
+        When a tool's ``http_headers`` has no ``required`` array, every declared
+        URL is treated as required (backward-compatible default: gate on all).
+
+        :return: The set of required URLs (possibly empty), or None if the network
+                 is not readable locally.
+        """
+        _, required = cls._load_schema_mcp_urls(agent_name)
+        return required
 
     @classmethod
     def missing_mcp_connections(cls, agent_name: str) -> Optional[List[str]]:
@@ -568,7 +612,7 @@ class NsWebsocketUtils:
         :return: ``{"missing": [...], "needs_reauth": [...]}`` (sorted), or None
                  if the network is not locally readable.
         """
-        required = cls.collect_network_mcp_urls(agent_name)
+        required = cls.collect_required_mcp_urls(agent_name)
         if required is None:
             return None
         return cls._gaps_from(required, FileTokenStorage.list_connections())
@@ -611,7 +655,7 @@ class NsWebsocketUtils:
         hung server can't block the gate; on timeout or per-URL failure the gaps
         are computed from the state on disk.
         """
-        required = await asyncio.to_thread(cls.collect_network_mcp_urls, agent_name)
+        required = await asyncio.to_thread(cls.collect_required_mcp_urls, agent_name)
         if required is None:
             return None
         connections = await asyncio.to_thread(FileTokenStorage.list_connections)
@@ -650,19 +694,34 @@ class NsWebsocketUtils:
         return cls._gaps_from(required, connections)
 
     @staticmethod
-    def _collect_schema_http_header_urls(config: Any, urls: set) -> None:
+    def _clean_schema_url(value: Any) -> Optional[str]:
         """
-        Add MCP URLs declared in any tool's ``sly_data_schema`` to ``urls``.
+        Normalize a schema URL key/entry, or return None if it is not an http URL.
+
+        A URL key must be quoted in HOCON (it contains ``:`` and ``/``), and
+        neuro-san's restorer preserves those surrounding quotes in the parsed
+        key (e.g. ``'"https://api.githubcopilot.com/mcp"'``), so the surrounding
+        quotes are stripped before the ``http(s)`` check.
+        """
+        if not isinstance(value, str):
+            return None
+        value = value.strip().strip('"').strip("'").strip()
+        return value if value.startswith(("http://", "https://")) else None
+
+    @classmethod
+    def _collect_schema_http_header_urls(cls, config: Any, urls: set, required_urls: set) -> None:
+        """
+        Add MCP URLs declared in any tool's ``sly_data_schema`` to ``urls``, and
+        the *gating* subset (the URLs the network cannot function without) to
+        ``required_urls``.
 
         Reads ``tools[].function.sly_data_schema.properties.http_headers.properties``
         - each key there is an MCP URL the network advertises it needs an
         ``http_headers`` entry for. Every level is type-guarded so a partial or
         unconventional schema is simply skipped rather than raising.
 
-        A URL key must be quoted in HOCON (it contains ``:`` and ``/``), and
-        neuro-san's restorer preserves those surrounding quotes in the parsed
-        key (e.g. ``'"https://api.githubcopilot.com/mcp"'``), so each key is
-        unquoted before the ``http(s)`` check.
+        The gating subset comes from each tool's ``http_headers.required`` array;
+        see :meth:`_required_urls_for_tool` for how it is matched.
         """
         tools = config.get("tools") if isinstance(config, dict) else None
         if not isinstance(tools, list):
@@ -677,12 +736,45 @@ class NsWebsocketUtils:
             header_props = http_headers.get("properties") if isinstance(http_headers, dict) else None
             if not isinstance(header_props, dict):
                 continue
-            for url in header_props:
-                if not isinstance(url, str):
-                    continue
-                url = url.strip().strip('"').strip("'").strip()
-                if url.startswith(("http://", "https://")):
-                    urls.add(url)
+            declared = {cleaned for url in header_props if (cleaned := cls._clean_schema_url(url)) is not None}
+            urls |= declared
+            required_urls |= cls._required_urls_for_tool(http_headers, declared)
+
+    @classmethod
+    def _required_urls_for_tool(cls, http_headers: dict, declared: set) -> set:
+        """
+        The *gating* subset of a single tool's ``declared`` http_headers URLs.
+
+        Read from the ``http_headers.required`` array (a sibling of
+        ``http_headers.properties``, per JSON Schema): each required entry is
+        matched to a declared URL on its normalized form (so a cosmetic difference
+        - trailing slash / host case / default port - between the entry and its
+        properties key doesn't silently drop the gate, the same normalization the
+        rest of this module matches connections by), and the declared URL's
+        canonical form is what gates. A required entry matching no declared URL is
+        ignored (nothing to inject for it) and logged. When there is no
+        ``required`` array, every declared URL is required - the backward-compatible
+        default (gate on all).
+        """
+        required_list = http_headers.get("required")
+        if not isinstance(required_list, list):
+            return declared
+        required: set = set()
+        declared_by_norm = {cls._normalize_mcp_url(url): url for url in declared}
+        for entry in required_list:
+            cleaned = cls._clean_schema_url(entry)
+            if cleaned is None:
+                continue
+            canonical = declared_by_norm.get(cls._normalize_mcp_url(cleaned))
+            if canonical is not None:
+                required.add(canonical)
+            else:
+                logging.info(
+                    "MCP auth: network requires '%s' but it is not declared in "
+                    "http_headers.properties; ignoring.",
+                    cleaned,
+                )
+        return required
 
     @classmethod
     def get_latest_sly_data(cls, network_name: str, session_id: str = None) -> dict:
