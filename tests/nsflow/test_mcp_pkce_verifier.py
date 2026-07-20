@@ -41,7 +41,10 @@ from mcp.client.auth.oauth2 import PKCEParameters
 # bind the same class object and .generate resolves at call time.
 from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
 
-# The base64url alphabet (RFC 4648 §5) - the only chars the verifier may contain.
+# The base64url alphabet (RFC 4648 §5): the only chars *our patched* verifier emits.
+# This is a strict subset of RFC 7636's unreserved set (which also permits '.' and
+# '~'); we pin the narrower set because that's what the Salesforce-safe workaround
+# produces, not because the protocol requires it.
 _BASE64URL = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
 
 
@@ -51,8 +54,11 @@ def _expected_challenge(verifier: str) -> str:
 
 
 def test_generated_verifier_is_base64url_only():
-    """Across many draws, the verifier never contains '~' or '.' (both outside base64url)."""
-    for _ in range(3000):
+    """Across repeated draws, the verifier never contains '~' or '.' (both outside base64url)."""
+    # If the patch regressed to the SDK's unreserved charset, ~86% of draws would
+    # contain a '~', so even this modest sample makes a miss astronomically unlikely
+    # (0.14**200) - no need for thousands of generations.
+    for _ in range(200):
         verifier = PKCEParameters.generate().code_verifier
         assert "~" not in verifier  # the char Salesforce rejects
         assert "." not in verifier  # also outside base64url, dropped for strictness
@@ -101,7 +107,10 @@ def test_sdk_auth_code_grant_still_calls_generate():
     ``PKCEParameters.generate`` - the exact attribute we patch. If a future SDK
     inlines or renames PKCE generation, our patch silently no-ops and Salesforce
     breaks again; failing here forces a re-verify instead of a silent regression."""
-    assert "PKCEParameters.generate(" in inspect.getsource(sdk_oauth2)
+    # Strip whitespace so a non-semantic SDK reformat (added spaces, a line wrap)
+    # doesn't trip the canary - only an actual inline/rename should.
+    source_no_ws = "".join(inspect.getsource(sdk_oauth2).split())
+    assert "PKCEParameters.generate(" in source_no_ws
 
 
 def test_ensure_verifier_raises_on_sdk_shape_change():
