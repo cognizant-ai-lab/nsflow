@@ -620,23 +620,32 @@ def test_challenge_factory_injects_401_into_the_auth_flow():
 
 def test_challenge_factory_wraps_proxy_mounts_with_shared_gate(monkeypatch):
     """
-    Behind an env proxy, httpx routes via _mounts before _transport, so wrapping
-    only _transport would let the real 200 through and the synthetic 401 would
-    never fire. The factory must wrap the default AND each mount, sharing one
-    gate so still exactly one request is challenged.
+    Behind a proxy, httpx routes via _mounts before _transport, so wrapping only
+    _transport would let the real 200 through and the synthetic 401 would never
+    fire. The factory must wrap the default AND each mount, sharing one gate so
+    still exactly one request is challenged. A mount is injected directly (rather
+    than via a proxy env var) so the test doesn't depend on httpx's env handling.
     """
-    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
-    client = om._challenge_http_client_factory(  # pylint: disable=protected-access  # unit under test
+
+    def _base_factory(**_kwargs):
+        client = httpx.AsyncClient()
+        # Stand in for the proxy transport httpx would put in _mounts from a
+        # proxy env var; _transport_for_url consults this before _transport.
+        client._mounts = {"all://": httpx.MockTransport(lambda _req: httpx.Response(200))}  # pylint: disable=protected-access
+        return client
+
+    monkeypatch.setattr(mh, "_mcp_http_client_factory", _base_factory)
+    client = mh._challenge_http_client_factory(  # pylint: disable=protected-access  # unit under test
         "https://mcp.example.com/.well-known/oauth-protected-resource"
     )()
     try:
         transport = client._transport  # pylint: disable=protected-access  # asserting wiring
         mounts = [t for t in client._mounts.values() if t is not None]  # pylint: disable=protected-access
         assert isinstance(transport, mh._SyntheticChallengeTransport)  # pylint: disable=protected-access
-        assert mounts and all(
-            isinstance(t, mh._SyntheticChallengeTransport) for t in mounts  # pylint: disable=protected-access
-        )
-        # One shared one-shot gate across default + proxy transports.
+        assert mounts  # the proxy mount is present...
+        # ...and both the default transport and the mount are wrapped...
+        assert all(isinstance(t, mh._SyntheticChallengeTransport) for t in mounts)  # pylint: disable=protected-access
+        # ...sharing one one-shot gate so exactly one 401 fires either way.
         assert all(t._fired is transport._fired for t in mounts)  # pylint: disable=protected-access
     finally:
         asyncio.run(client.aclose())
