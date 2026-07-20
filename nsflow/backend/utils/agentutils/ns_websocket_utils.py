@@ -521,8 +521,9 @@ class NsWebsocketUtils:
 
         Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
         same restore path the rest of the app uses - so the config is plain and
-        fully resolved (commondefs/defaults applied), and missing/remote networks
-        raise.
+        fully resolved (commondefs/defaults applied). A missing/remote/unreadable
+        network (``get_agent_network`` returning None or raising) is caught here
+        and reported as ``(None, None)`` rather than propagating.
 
         :return: ``(declared, required)`` sets (each possibly empty), or
                  ``(None, None)`` if the network is not readable locally (invalid
