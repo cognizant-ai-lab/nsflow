@@ -69,6 +69,7 @@ except ImportError:  # pragma: no cover - exercised only on older/newer SDK layo
 from nsflow.backend.utils.mcp.mcp_refresh_provider import ReauthRequiredError
 from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
+from nsflow.backend.utils.mcp.mcp_token_storage import ReauthFlowTokenStorage
 from nsflow.backend.utils.mcp.mcp_token_storage import _stored_expiry
 
 logger = logging.getLogger(__name__)
@@ -310,7 +311,10 @@ class MCPOAuthManager:
         auth_method = "client_secret_post" if client_secret else "none"
 
         if client_id:
-            # Pre-seed the dynamic-registration result so the SDK skips DCR.
+            # Pre-seed the user-supplied credentials so the SDK skips DCR.
+            # manual=True lets a later reconnect reuse them (the user shouldn't
+            # re-enter credentials), unlike DCR-issued registrations which are
+            # re-registered on reconnect.
             await FileTokenStorage(server_url).set_client_info(
                 OAuthClientInformationFull(
                     client_id=client_id,
@@ -321,7 +325,8 @@ class MCPOAuthManager:
                     response_types=["code"],
                     token_endpoint_auth_method=auth_method,
                     scope=scope,
-                )
+                ),
+                manual=True,
             )
 
         flow = PendingFlow(flow_id=uuid.uuid4().hex, server_url=server_url, created_at=time.time())
@@ -394,7 +399,11 @@ class MCPOAuthManager:
             provider = OAuthClientProvider(
                 server_url=flow.server_url,
                 client_metadata=self._build_client_metadata(scope, auth_method, redirect_uri),
-                storage=FileTokenStorage(flow.server_url),
+                # ReauthFlowTokenStorage hides any stored (dead) tokens: on a
+                # reconnect the stock provider would otherwise present the old
+                # Bearer token, a tolerant server answers 200, and the flow
+                # aborts with "no 401 challenge was returned".
+                storage=ReauthFlowTokenStorage(FileTokenStorage(flow.server_url)),
                 redirect_handler=self._make_redirect_handler(flow),
                 callback_handler=self._make_callback_handler(flow),
             )
