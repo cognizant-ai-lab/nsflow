@@ -96,32 +96,6 @@ _RESERVED_AUTHORIZE_PARAMS = frozenset(
 )
 
 
-def _install_salesforce_pkce_workaround() -> None:
-    """
-    Patch the MCP SDK's PKCE generator so the code_verifier never contains ``~``.
-
-    Salesforce's token endpoint rejects a ``code_verifier`` that contains ``~``
-    with ``invalid_grant`` / "invalid code verifier", even though RFC 7636 lists
-    ``~`` as an allowed *unreserved* character (``A-Z a-z 0-9 - . _ ~``). The MCP
-    SDK's ``PKCEParameters.generate()`` draws each of 128 chars from that full
-    set, so ~86% of generated verifiers include a ``~`` and Salesforce rejects
-    the otherwise-cryptographically-valid pair. The SDK offers no hook to supply
-    our own verifier, so we replace the generator with one that draws from the
-    same set minus ``~`` - still RFC-compliant and accepted by every provider.
-    """
-    charset = string.ascii_letters + string.digits + "-._"  # RFC 7636 unreserved, minus '~'
-
-    def _generate(cls):
-        verifier = "".join(secrets.choice(charset) for _ in range(128))
-        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
-        return cls(code_verifier=verifier, code_challenge=challenge)
-
-    PKCEParameters.generate = classmethod(_generate)
-
-
-_install_salesforce_pkce_workaround()
-
-
 @dataclass
 class PendingFlow:  # pylint: disable=too-many-instance-attributes  # dataclass aggregating flow fields
     """In-flight OAuth authorization for a single MCP server connection."""
@@ -168,6 +142,10 @@ class MCPOAuthManager:
     MCP OAuth. Keep the backend single-worker.
     """
 
+    # Set once the SDK's PKCE generator has been replaced; class-level so the
+    # global patch installs exactly once (see _ensure_base64url_pkce_verifier).
+    _pkce_verifier_patched: bool = False
+
     def __init__(self):
         self._by_flow_id: Dict[str, PendingFlow] = {}
         self._by_state: Dict[str, PendingFlow] = {}
@@ -176,6 +154,42 @@ class MCPOAuthManager:
         self._cleanup_tasks: set = set()
         # Per-server locks serializing silent refreshes (see _refresh_lock).
         self._refresh_locks: Dict[str, asyncio.Lock] = {}
+        self._ensure_base64url_pkce_verifier()
+
+    @classmethod
+    def _ensure_base64url_pkce_verifier(cls) -> None:
+        """
+        Replace the MCP SDK's PKCE generator with a base64url one, once.
+
+        Salesforce's token endpoint rejects a ``code_verifier`` containing ``~``
+        with ``invalid_grant`` / "invalid code verifier" - it documents the
+        verifier as base64url (RFC 4648 §5), which is stricter than RFC 7636's
+        unreserved set (RFC 7636 additionally allows ``.`` and ``~``). The MCP
+        SDK draws verifier chars from the full unreserved set, so ~86% include a
+        ``~`` and are rejected even though the pair is cryptographically valid.
+        The SDK exposes no hook to supply our own verifier, so we swap its
+        ``PKCEParameters.generate`` for :meth:`_base64url_pkce_parameters`.
+        base64url is the subset every provider accepts, so this is safe globally.
+        """
+        if cls._pkce_verifier_patched:
+            return
+        PKCEParameters.generate = classmethod(cls._base64url_pkce_parameters)
+        cls._pkce_verifier_patched = True
+
+    @staticmethod
+    def _base64url_pkce_parameters(pkce_cls: type) -> PKCEParameters:
+        """
+        Build PKCE parameters whose ``code_verifier`` is base64url (``A-Za-z0-9-_``).
+
+        Installed as the SDK's ``PKCEParameters.generate`` (see
+        :meth:`_ensure_base64url_pkce_verifier`), hence ``pkce_cls`` is the SDK's
+        ``PKCEParameters`` class passed in by the classmethod protocol. Still 128
+        chars (~768 bits of entropy) and a valid S256 pair.
+        """
+        charset = string.ascii_letters + string.digits + "-_"  # base64url (RFC 4648 §5)
+        verifier = "".join(secrets.choice(charset) for _ in range(128))
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+        return pkce_cls(code_verifier=verifier, code_challenge=challenge)
 
     def _refresh_lock(self, server_url: str) -> asyncio.Lock:
         """
