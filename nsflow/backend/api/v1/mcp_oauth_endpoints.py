@@ -26,6 +26,7 @@ import asyncio
 import html
 import json
 import logging
+from typing import Dict
 from typing import Optional
 
 from fastapi import APIRouter
@@ -53,6 +54,10 @@ class StartFlowRequest(BaseModel):
     # registration (e.g. GitHub). client_secret makes it a confidential client.
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
+    # Optional provider-specific query params appended to the authorization URL
+    # (e.g. Google needs access_type=offline & prompt=consent to issue a
+    # refresh token). Supplied by the connector catalog or the user.
+    extra_authorize_params: Optional[Dict[str, str]] = None
 
 
 def _callback_html(status: str, server_url: str, message: str = "") -> str:
@@ -126,6 +131,7 @@ async def start_oauth_flow(body: StartFlowRequest, request: Request):
             client_id=(body.client_id or "").strip() or None,
             client_secret=(body.client_secret or "").strip() or None,
             redirect_uri=redirect_uri,
+            extra_authorize_params=body.extra_authorize_params or None,
         )
     except TimeoutError as exc:
         logger.warning("MCP OAuth flow for %s timed out building the authorization URL.", server_url)

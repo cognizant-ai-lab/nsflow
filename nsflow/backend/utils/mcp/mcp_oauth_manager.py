@@ -44,10 +44,10 @@ from typing import Dict
 from typing import Optional
 from typing import Tuple
 from urllib.parse import parse_qs
+from urllib.parse import urlencode
 from urllib.parse import urlparse
 from urllib.parse import urlsplit
 
-import httpx
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth.exceptions import OAuthTokenError
@@ -56,16 +56,9 @@ from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthToken
 
-# create_mcp_http_client currently lives in the private mcp.shared._httpx_utils
-# (that is where the SDK's own client modules import it from as of mcp 1.27.x).
-# Prefer a public path if a future SDK promotes it (underscore -> public is a
-# common deprecation path), and fall back to the private module for current and
-# older versions.
-try:
-    from mcp.shared.httpx_utils import create_mcp_http_client  # type: ignore
-except ImportError:  # pragma: no cover - exercised only on older/newer SDK layouts
-    from mcp.shared._httpx_utils import create_mcp_http_client
-
+from nsflow.backend.utils.mcp.mcp_http import _challenge_http_client_factory
+from nsflow.backend.utils.mcp.mcp_http import _discover_protected_resource_metadata
+from nsflow.backend.utils.mcp.mcp_http import _mcp_http_client_factory
 from nsflow.backend.utils.mcp.mcp_refresh_provider import ReauthRequiredError
 from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
@@ -78,39 +71,6 @@ logger = logging.getLogger(__name__)
 PENDING_FLOW_TTL_SECONDS = 600
 # Refresh a token this many seconds before its actual expiry.
 TOKEN_REFRESH_MARGIN_SECONDS = 60
-
-
-async def _force_json_accept_on_oauth_requests(request: httpx.Request) -> None:
-    """
-    httpx request hook: force ``Accept: application/json`` on OAuth token/refresh
-    requests. Some authorization servers (notably GitHub's
-    ``…/login/oauth/access_token``) return a form-encoded body unless the client
-    explicitly asks for JSON, which then fails the SDK's JSON token parsing.
-
-    These OAuth requests are form-encoded (``application/x-www-form-urlencoded``),
-    which uniquely distinguishes them from MCP streamable-HTTP JSON-RPC POSTs
-    (``application/json``, which must keep their ``application/json,
-    text/event-stream`` Accept header), so this never touches MCP traffic.
-    """
-    content_type = request.headers.get("content-type", "")
-    if content_type.startswith("application/x-www-form-urlencoded"):
-        request.headers["Accept"] = "application/json"
-
-
-def _mcp_http_client_factory(headers=None, timeout=None, auth=None, **kwargs) -> httpx.AsyncClient:
-    """
-    MCP http client factory that adds the OAuth Accept-JSON request hook.
-
-    Accepts and forwards any extra keyword arguments so the factory stays
-    compatible if a future MCP SDK passes additional parameters to
-    ``httpx_client_factory`` (a common forward-compat pattern). Forwarding rather
-    than dropping them means new client settings (proxy, TLS verify, etc.) still
-    reach the underlying client - and since we wrap the SDK's own
-    ``create_mcp_http_client``, anything it passes is something it accepts.
-    """
-    client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth, **kwargs)
-    client.event_hooks.setdefault("request", []).append(_force_json_accept_on_oauth_requests)
-    return client
 
 
 @dataclass
@@ -287,6 +247,7 @@ class MCPOAuthManager:
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         redirect_uri: Optional[str] = None,
+        extra_authorize_params: Optional[Dict[str, str]] = None,
     ) -> PendingFlow:
         """
         Kick off an OAuth flow for ``server_url`` and wait until the
@@ -333,7 +294,15 @@ class MCPOAuthManager:
         flow.preseeded_client_info = bool(client_id)
         flow.code_future = asyncio.get_running_loop().create_future()
         self._by_flow_id[flow.flow_id] = flow
-        flow.task = asyncio.create_task(self._run_oauth_flow(flow, scope, auth_method, redirect_uri))
+        flow.task = asyncio.create_task(
+            self._run_oauth_flow(
+                flow,
+                scope,
+                auth_method=auth_method,
+                redirect_uri=redirect_uri,
+                extra_authorize_params=extra_authorize_params,
+            )
+        )
 
         # Wait for redirect_handler to capture the URL, or the task to fail.
         try:
@@ -386,49 +355,113 @@ class MCPOAuthManager:
         if flow.state:
             self._by_state.pop(flow.state, None)
 
-    async def _run_oauth_flow(
+    def _flow_provider(  # pylint: disable=too-many-arguments  # independent optional OAuth knobs, keyword-only
         self,
         flow: PendingFlow,
         scope: Optional[str],
+        *,
+        auth_method: str,
+        redirect_uri: Optional[str],
+        extra_authorize_params: Optional[Dict[str, str]] = None,
+    ) -> OAuthClientProvider:
+        """Build the SDK provider an interactive (re)connect flow runs through."""
+        return OAuthClientProvider(
+            server_url=flow.server_url,
+            client_metadata=self._build_client_metadata(scope, auth_method, redirect_uri),
+            # ReauthFlowTokenStorage hides any stored (dead) tokens: on a
+            # reconnect the stock provider would otherwise present the old
+            # Bearer token, a tolerant server answers 200, and the flow
+            # aborts without ever authorizing.
+            storage=ReauthFlowTokenStorage(FileTokenStorage(flow.server_url)),
+            redirect_handler=self._make_redirect_handler(flow, extra_authorize_params),
+            callback_handler=self._make_callback_handler(flow),
+        )
+
+    @staticmethod
+    async def _probe_mcp_session(server_url: str, provider: OAuthClientProvider, http_client_factory) -> None:
+        """
+        Open a real MCP streamable-HTTP session through the auth provider.
+
+        An unauthenticated request normally returns 401, which triggers the
+        SDK's discovery -> DCR -> authorization (our redirect_handler) ->
+        callback (our callback_handler) -> token exchange. A plain GET does not
+        work: MCP endpoints answer GET with 405, so the challenge never fires.
+        """
+        async with streamablehttp_client(
+            url=server_url, auth=provider, httpx_client_factory=http_client_factory
+        ) as (read, write, _get_id):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+    async def _run_oauth_flow(  # pylint: disable=too-many-arguments  # independent optional OAuth knobs, keyword-only
+        self,
+        flow: PendingFlow,
+        scope: Optional[str],
+        *,
         auth_method: str = "none",
         redirect_uri: Optional[str] = None,
+        extra_authorize_params: Optional[Dict[str, str]] = None,
     ) -> None:
         """Background task: drive the SDK auth flow to completion."""
         provider: Optional[OAuthClientProvider] = None
         try:
-            provider = OAuthClientProvider(
-                server_url=flow.server_url,
-                client_metadata=self._build_client_metadata(scope, auth_method, redirect_uri),
-                # ReauthFlowTokenStorage hides any stored (dead) tokens: on a
-                # reconnect the stock provider would otherwise present the old
-                # Bearer token, a tolerant server answers 200, and the flow
-                # aborts with "no 401 challenge was returned".
-                storage=ReauthFlowTokenStorage(FileTokenStorage(flow.server_url)),
-                redirect_handler=self._make_redirect_handler(flow),
-                callback_handler=self._make_callback_handler(flow),
+            provider = self._flow_provider(
+                flow,
+                scope,
+                auth_method=auth_method,
+                redirect_uri=redirect_uri,
+                extra_authorize_params=extra_authorize_params,
             )
-            # Open a real MCP streamable-HTTP session through the auth provider.
-            # The unauthenticated request returns 401, which triggers the SDK's
-            # discovery -> DCR -> authorization (our redirect_handler) -> callback
-            # (our callback_handler) -> token exchange. A plain GET does not work:
-            # MCP endpoints answer GET with 405, so the 401 challenge never fires.
-            async with streamablehttp_client(
-                url=flow.server_url, auth=provider, httpx_client_factory=_mcp_http_client_factory
-            ) as (read, write, _get_id):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-            # Reached here without the provider needing to authorize.
-            if await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url):
+            await self._probe_mcp_session(flow.server_url, provider, _mcp_http_client_factory)
+            connected = await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url)
+            prm_url = None
+            if not connected:
+                # Auth-optional server: it answered the probe without demanding
+                # authentication (e.g. Google Maps and Hugging Face 200 an
+                # anonymous initialize and only reject tool calls), so the SDK's
+                # 401-driven flow never started. If the server still publishes
+                # RFC 9728 protected-resource metadata, OAuth is available -
+                # re-probe with a synthetic challenge pointing at it; the stock
+                # SDK flow runs unmodified from that 401 onward.
+                prm_url = await _discover_protected_resource_metadata(flow.server_url)
+                if prm_url:
+                    logger.info(
+                        "MCP server %s is auth-optional; retrying with a synthetic challenge (%s)",
+                        flow.server_url,
+                        prm_url,
+                    )
+                    provider = self._flow_provider(
+                        flow,
+                        scope,
+                        auth_method=auth_method,
+                        redirect_uri=redirect_uri,
+                        extra_authorize_params=extra_authorize_params,
+                    )
+                    await self._probe_mcp_session(flow.server_url, provider, _challenge_http_client_factory(prm_url))
+                    connected = await asyncio.to_thread(FileTokenStorage.has_connection, flow.server_url)
+            if connected:
                 flow.status = "completed"
                 await self._persist_token_endpoint(provider, flow.server_url)
             else:
                 flow.status = "error"
-                flow.error = (
-                    "Connected to the MCP server but it did not start an OAuth "
-                    "authorization (no 401 challenge was returned). The server may "
-                    "be open, use a different auth scheme, or require static client "
-                    "credentials."
-                )
+                if prm_url:
+                    # We DID find protected-resource metadata and drove the
+                    # synthetic-challenge flow, but no token landed - the user
+                    # cancelled/closed the popup, it timed out, or the provider
+                    # rejected the authorization.
+                    flow.error = (
+                        "Found the MCP server's OAuth metadata but authorization "
+                        "did not complete (it was cancelled, timed out, or the "
+                        "provider rejected it). Please try connecting again."
+                    )
+                else:
+                    flow.error = (
+                        "Connected to the MCP server without authentication: it "
+                        "returned no 401 challenge and publishes no OAuth "
+                        "protected-resource metadata (RFC 9728). It may be an open "
+                        "server, or use an auth scheme nsflow cannot bootstrap "
+                        "(e.g. API keys)."
+                    )
                 logger.warning("MCP OAuth flow for %s: %s", flow.server_url, flow.error)
                 await self._cleanup_failed_preseed(flow)
         except Exception as exc:  # noqa: BLE001 - report any failure back to the UI
@@ -510,11 +543,26 @@ class MCPOAuthManager:
             return url
         return f"{head}?{tail.replace('?', '&')}"
 
-    def _make_redirect_handler(self, flow: PendingFlow):
+    def _make_redirect_handler(self, flow: PendingFlow, extra_authorize_params: Optional[Dict[str, str]] = None):
         async def redirect_handler(authorization_url: str) -> None:
             authorization_url = self._normalize_authorization_url(authorization_url)
-            flow.authorization_url = authorization_url
             params = parse_qs(urlparse(authorization_url).query)
+            if extra_authorize_params:
+                # Provider-specific authorize knobs the SDK has no notion of -
+                # e.g. Google only issues a refresh token when the authorize
+                # request carries access_type=offline (and prompt=consent for
+                # repeat grants). Supplied by the connector catalog or the user.
+                # Only append keys the SDK didn't already set: the SDK's own
+                # params (state, redirect_uri, client_id, code_challenge, scope)
+                # are authoritative and must not be duplicated or overridden by a
+                # stray/malicious catalog or /start value.
+                extra = {k: v for k, v in extra_authorize_params.items() if k not in params}
+                if extra:
+                    separator = "&" if "?" in authorization_url else "?"
+                    authorization_url = f"{authorization_url}{separator}{urlencode(extra)}"
+            flow.authorization_url = authorization_url
+            # state was parsed above and is never among the appended keys (the
+            # SDK's params are authoritative), so `params` still holds it.
             state_values = params.get("state")
             flow.state = state_values[0] if state_values else None
             if flow.state:
@@ -769,7 +817,25 @@ class MCPOAuthManager:
                 exc,
             )
             return needs_reauth
-        return False
+        # No exception, but the probe may have succeeded on a dead token: an
+        # auth-optional server (Google Maps, Hugging Face) answers 200 without a
+        # valid token, so a rejected refresh never surfaces as a 401/exception.
+        # The recorded refresh status is then the only signal - a client error
+        # (invalid_grant, revoked/expired refresh token) means re-auth.
+        return self._refresh_status_needs_reauth(provider.refresh_http_status)
+
+    @staticmethod
+    def _refresh_status_needs_reauth(status: Optional[int]) -> bool:
+        """
+        Classify a refresh-grant HTTP status when the probe raised nothing.
+
+        A 4xx (invalid_grant, revoked/expired refresh token) definitively needs
+        re-auth. A 5xx / rate-limit (408, 429) is transient - retry later. None
+        means no refresh was attempted (nothing to mark), and 200 succeeded.
+        """
+        if status is None:
+            return False
+        return 400 <= status < 500 and status not in (408, 429)
 
 
 # Process-wide singleton.

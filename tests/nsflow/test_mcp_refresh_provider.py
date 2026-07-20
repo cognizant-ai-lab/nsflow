@@ -32,10 +32,12 @@ import time
 import httpx
 import pytest
 from mcp.client.auth.exceptions import OAuthTokenError
+from mcp.client.auth.utils import extract_field_from_www_auth
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthToken
 
+import nsflow.backend.utils.mcp.mcp_http as mh
 import nsflow.backend.utils.mcp.mcp_oauth_manager as om
 from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
@@ -274,6 +276,121 @@ def test_definitive_refresh_failure_marks_needs_reauth(tmp_path, monkeypatch):
     assert _read_store(tmp_path).get("needs_reauth") is True
 
 
+def test_refresh_status_needs_reauth_classification():
+    """Only a 4xx (except rate-limit) is a definitive re-auth signal."""
+    classify = om.MCPOAuthManager._refresh_status_needs_reauth  # pylint: disable=protected-access  # unit under test
+    assert classify(400) is True  # invalid_grant
+    assert classify(401) is True
+    assert classify(403) is True
+    assert classify(408) is False  # request timeout - transient
+    assert classify(429) is False  # rate limited - transient
+    assert classify(500) is False  # server error - transient
+    assert classify(503) is False
+    assert classify(200) is False  # refreshed
+    assert classify(None) is False  # no refresh attempted
+
+
+def test_refresh_provider_records_refresh_status(tmp_path):
+    """
+    SilentRefreshOAuthProvider records the refresh-grant HTTP status so a
+    rejected refresh is detectable even when the follow-up request succeeds
+    (auth-optional servers 200 a dead token). _silent_refresh reads this.
+    """
+    provider = SilentRefreshOAuthProvider(
+        server_url=SERVER_URL,
+        client_metadata=_client_metadata(),
+        storage=FileTokenStorage(SERVER_URL, storage_dir=tmp_path),
+    )
+    assert provider.refresh_http_status is None
+    # A non-200 refresh: the base handler returns False; we recorded the status.
+    result = asyncio.run(provider._handle_refresh_response(httpx.Response(400)))  # pylint: disable=protected-access  # exercising the override
+    assert result is False
+    assert provider.refresh_http_status == 400
+
+
+def test_auth_optional_dead_refresh_marks_needs_reauth(tmp_path, monkeypatch):
+    """
+    The Hugging Face bug: an auth-optional server answers the refresh probe with
+    200 even though the refresh grant was rejected (400), so no exception is
+    raised. The recorded refresh status must still mark the entry needs_reauth,
+    or the dead connection shows as healthy and the reconnect gate never fires.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path)  # expired token WITH a (now-dead) refresh token
+
+    class _FakeStreams:
+        async def __aenter__(self):
+            return (None, None, None)
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    def _fake_streamable(**kwargs):
+        # Simulate the SDK recording a rejected refresh, then the probe 200ing.
+        kwargs["auth"].refresh_http_status = 400
+        return _FakeStreams()
+
+    class _FakeSession:
+        def __init__(self, *_a, **_k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        async def initialize(self):
+            """No-op MCP handshake for the stubbed session."""
+            return None
+
+    monkeypatch.setattr(om, "streamablehttp_client", _fake_streamable)
+    monkeypatch.setattr(om, "ClientSession", _FakeSession)
+
+    assert asyncio.run(om.mcp_oauth_manager.get_fresh_token(SERVER_URL)) is None
+    assert _read_store(tmp_path).get("needs_reauth") is True
+
+
+def test_auth_optional_transient_refresh_not_marked(tmp_path, monkeypatch):
+    """
+    A 5xx on the refresh endpoint (with the auth-optional 200 probe) is
+    transient: don't mark needs_reauth, so a later attempt can recover it.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    _seed_store(tmp_path)
+
+    class _FakeStreams:
+        async def __aenter__(self):
+            return (None, None, None)
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    def _fake_streamable(**kwargs):
+        kwargs["auth"].refresh_http_status = 503
+        return _FakeStreams()
+
+    class _FakeSession:
+        def __init__(self, *_a, **_k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        async def initialize(self):
+            """No-op MCP handshake for the stubbed session."""
+            return None
+
+    monkeypatch.setattr(om, "streamablehttp_client", _fake_streamable)
+    monkeypatch.setattr(om, "ClientSession", _FakeSession)
+
+    assert asyncio.run(om.mcp_oauth_manager.get_fresh_token(SERVER_URL)) is None
+    assert "needs_reauth" not in _read_store(tmp_path)
+
+
 def test_marked_entry_skips_refresh_probe(tmp_path, monkeypatch):
     """
     Once marked, an entry is not re-probed (only a reconnect recovers it) - so a
@@ -438,6 +555,215 @@ def test_set_client_info_records_manual_flag(tmp_path):
 
     asyncio.run(storage.set_client_info(info, manual=True))  # the /start pre-seed path
     assert _read_store(tmp_path)["client_info_manual"] is True
+
+
+def test_synthetic_challenge_transport_401s_only_the_first_request():
+    """
+    The synthetic 401 must fire exactly once (the SDK's OAuth trigger), carry a
+    challenge the SDK's own parser reads back, and every later request - the
+    flow's discovery/registration/token calls and the authenticated retry -
+    must reach the real transport untouched.
+    """
+    prm_url = "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+
+    class _Inner(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            return httpx.Response(200, request=request)
+
+    transport = mh._SyntheticChallengeTransport(_Inner(), prm_url)  # pylint: disable=protected-access  # unit under test
+    request = httpx.Request("POST", SERVER_URL)
+
+    first = asyncio.run(transport.handle_async_request(request))
+    assert first.status_code == 401
+    # The SDK's own WWW-Authenticate parser must recover the metadata URL.
+    assert extract_field_from_www_auth(first, "resource_metadata") == prm_url
+
+    second = asyncio.run(transport.handle_async_request(request))
+    assert second.status_code == 200
+
+
+def test_challenge_factory_injects_401_into_the_auth_flow():
+    """
+    End-to-end wiring: a client from _challenge_http_client_factory must route
+    the synthetic 401 into httpx's auth flow (not just exist as a transport), so
+    the SDK's OAuthClientProvider would see the challenge. Drives a real client
+    with a stub auth and a stubbed inner transport (no network).
+    """
+    prm_url = "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+    client = om._challenge_http_client_factory(prm_url)()  # pylint: disable=protected-access  # unit under test
+    # Replace the real network transport under the wrapper with a 200 stub, so
+    # the retry after the synthetic 401 stays in-process.
+    client._transport._inner = httpx.MockTransport(  # pylint: disable=protected-access  # swap inner for a stub
+        lambda _req: httpx.Response(200, json={"ok": True})
+    )
+    seen = []
+
+    class _RecordingAuth(httpx.Auth):
+        async def async_auth_flow(self, request):
+            response = yield request
+            seen.append(response.status_code)
+            if response.status_code == 401:
+                # The challenge reached the auth flow; retry once (the stub 200s).
+                retry = yield request
+                seen.append(retry.status_code)
+
+    async def run():
+        try:
+            return await client.get("https://mcp.example.com/mcp", auth=_RecordingAuth())
+        finally:
+            await client.aclose()
+
+    response = asyncio.run(run())
+    assert seen == [401, 200]  # auth flow saw the synthetic 401, then the inner 200
+    assert response.status_code == 200
+
+
+def test_challenge_factory_wraps_proxy_mounts_with_shared_gate(monkeypatch):
+    """
+    Behind an env proxy, httpx routes via _mounts before _transport, so wrapping
+    only _transport would let the real 200 through and the synthetic 401 would
+    never fire. The factory must wrap the default AND each mount, sharing one
+    gate so still exactly one request is challenged.
+    """
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
+    client = om._challenge_http_client_factory(  # pylint: disable=protected-access  # unit under test
+        "https://mcp.example.com/.well-known/oauth-protected-resource"
+    )()
+    try:
+        transport = client._transport  # pylint: disable=protected-access  # asserting wiring
+        mounts = [t for t in client._mounts.values() if t is not None]  # pylint: disable=protected-access
+        assert isinstance(transport, mh._SyntheticChallengeTransport)  # pylint: disable=protected-access
+        assert mounts and all(
+            isinstance(t, mh._SyntheticChallengeTransport) for t in mounts  # pylint: disable=protected-access
+        )
+        # One shared one-shot gate across default + proxy transports.
+        assert all(t._fired is transport._fired for t in mounts)  # pylint: disable=protected-access
+    finally:
+        asyncio.run(client.aclose())
+
+
+def test_discover_protected_resource_metadata(monkeypatch):
+    """
+    The PRM probe returns the path-inserted well-known URL when the server
+    publishes RFC 9728 metadata there, and None when nothing (or junk) is
+    served - the signal separating 'OAuth available, fake the challenge' from
+    'nothing to connect'.
+    """
+    documents = {}
+
+    def _handler(request):
+        doc = documents.get(request.url.path)
+        if doc is None:
+            return httpx.Response(404)
+        return httpx.Response(200, json=doc) if isinstance(doc, dict) else httpx.Response(200, text=doc)
+
+    def _factory(**_kwargs):
+        return httpx.AsyncClient(transport=httpx.MockTransport(_handler))
+
+    # Patch the factory in mcp_http, where _discover_protected_resource_metadata
+    # lives and references it.
+    monkeypatch.setattr(mh, "_mcp_http_client_factory", _factory)
+    discover = mh._discover_protected_resource_metadata  # pylint: disable=protected-access  # unit under test
+
+    # Nothing published -> None (both well-known forms 404).
+    assert asyncio.run(discover(SERVER_URL)) is None
+
+    # Junk (HTML error page served with 200) -> None.
+    documents["/.well-known/oauth-protected-resource/mcp"] = "<html>not json</html>"
+    assert asyncio.run(discover(SERVER_URL)) is None
+
+    # A 200 JSON document without authorization_servers is not usable metadata.
+    documents["/.well-known/oauth-protected-resource/mcp"] = {"resource": SERVER_URL}
+    assert asyncio.run(discover(SERVER_URL)) is None
+
+    # Real metadata at the path-inserted form (Google Maps / Hugging Face shape).
+    documents["/.well-known/oauth-protected-resource/mcp"] = {
+        "resource": SERVER_URL,
+        "authorization_servers": ["https://auth.example.com"],
+    }
+    assert asyncio.run(discover(SERVER_URL)) == "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+
+
+def test_auth_optional_server_retries_with_synthetic_challenge(tmp_path, monkeypatch):
+    """
+    A server that answers the probe without demanding auth (Google Maps /
+    Hugging Face) but publishes PRM gets a second probe whose client fakes the
+    401 challenge; tokens obtained by that probe complete the flow.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+    factories = []
+
+    async def _fake_probe(server_url, _provider, http_client_factory):
+        factories.append(http_client_factory)
+        if len(factories) == 2:  # the challenge-driven probe obtains tokens
+            await FileTokenStorage(server_url).set_tokens(OAuthToken(access_token="fresh", expires_in=3600))
+
+    async def _fake_discover(_server_url):
+        return "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+
+    monkeypatch.setattr(om.MCPOAuthManager, "_probe_mcp_session", staticmethod(_fake_probe))
+    monkeypatch.setattr(om, "_discover_protected_resource_metadata", _fake_discover)
+    flow = om.PendingFlow(flow_id="f6", server_url=SERVER_URL, created_at=0.0)
+
+    asyncio.run(om.mcp_oauth_manager._run_oauth_flow(flow, None))  # pylint: disable=protected-access  # exercising a private method under test
+
+    assert flow.status == "completed"
+    assert len(factories) == 2
+    assert factories[0] is om._mcp_http_client_factory  # pylint: disable=protected-access  # asserting wiring
+    # The second probe's clients must carry the synthetic-challenge transport.
+    client = factories[1]()
+    try:
+        transport = client._transport  # pylint: disable=protected-access  # asserting wiring
+        assert isinstance(transport, mh._SyntheticChallengeTransport)  # pylint: disable=protected-access  # asserting wiring
+    finally:
+        asyncio.run(client.aclose())
+
+
+def test_auth_optional_server_without_prm_fails_with_clear_error(tmp_path, monkeypatch):
+    """
+    No 401 challenge AND no published PRM -> the flow fails with a message
+    naming both facts (open server / API-key server), not the old generic one.
+    """
+    monkeypatch.setenv("NSFLOW_MCP_STORAGE_DIR", str(tmp_path))
+
+    async def _fake_probe(_server_url, _provider, _http_client_factory):
+        return None
+
+    async def _fake_discover(_server_url):
+        return None
+
+    monkeypatch.setattr(om.MCPOAuthManager, "_probe_mcp_session", staticmethod(_fake_probe))
+    monkeypatch.setattr(om, "_discover_protected_resource_metadata", _fake_discover)
+    flow = om.PendingFlow(flow_id="f7", server_url=SERVER_URL, created_at=0.0)
+
+    asyncio.run(om.mcp_oauth_manager._run_oauth_flow(flow, None))  # pylint: disable=protected-access  # exercising a private method under test
+
+    assert flow.status == "error"
+    assert "protected-resource metadata" in flow.error
+    assert "401" in flow.error
+
+
+def test_redirect_handler_appends_extra_authorize_params():
+    """
+    Catalog-supplied authorize knobs (e.g. Google's access_type=offline &
+    prompt=consent, required for a refresh token) are appended to the
+    authorization URL after normalization; without them the URL is untouched.
+    """
+    flow = om.PendingFlow(flow_id="f8", server_url=SERVER_URL, created_at=0.0)
+    handler = om.mcp_oauth_manager._make_redirect_handler(  # pylint: disable=protected-access  # unit under test
+        flow, {"access_type": "offline", "prompt": "consent"}
+    )
+    asyncio.run(handler("https://auth.example.com/authorize?client_id=x&state=st-extra"))
+    assert flow.authorization_url == (
+        "https://auth.example.com/authorize?client_id=x&state=st-extra&access_type=offline&prompt=consent"
+    )
+    assert flow.state == "st-extra"
+    om.mcp_oauth_manager._by_state.pop("st-extra", None)  # pylint: disable=protected-access  # test cleanup
+
+    plain = om.mcp_oauth_manager._make_redirect_handler(flow)  # pylint: disable=protected-access  # unit under test
+    asyncio.run(plain("https://auth.example.com/authorize?client_id=x&state=st-plain"))
+    assert flow.authorization_url == "https://auth.example.com/authorize?client_id=x&state=st-plain"
+    om.mcp_oauth_manager._by_state.pop("st-plain", None)  # pylint: disable=protected-access  # test cleanup
 
 
 def test_cleanup_failed_preseed_keeps_token_bearing_entry(tmp_path, monkeypatch):
