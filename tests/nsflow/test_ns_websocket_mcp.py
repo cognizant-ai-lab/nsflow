@@ -266,6 +266,17 @@ def test_required_non_list_gates_all(monkeypatch):
     assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a, url_b}
 
 
+def test_required_all_unmatched_gates_all(monkeypatch):
+    """A non-empty required array that matches no declared URL fails closed (gate on all)."""
+    # Every required entry is a typo / wrong URL, so none match declared. Rather
+    # than silently gating nothing, fall back to requiring all declared URLs -
+    # only an explicit `required: []` opts out of gating.
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    tool = _two_url_tool(url_a, url_b, required=["https://typo.example.com/mcp"])
+    _patch_network(monkeypatch, config={"tools": [tool]})
+    assert nw.NsWebsocketUtils.collect_required_mcp_urls("net") == {url_a, url_b}
+
+
 def test_required_is_per_tool(monkeypatch):
     """A tool without a required array still gates on all its URLs even if another tool narrows."""
     url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"

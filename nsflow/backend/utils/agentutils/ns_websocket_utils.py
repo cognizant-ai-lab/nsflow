@@ -502,21 +502,22 @@ class NsWebsocketUtils:
         """
         Load the network and return ``(declared, required)`` schema URL sets.
 
-        Both come solely from the network's declared ``sly_data_schema`` - the
-        MCP URLs listed under
-        ``tools[].function.sly_data_schema.properties.http_headers.properties``.
+        Both are derived from the network's declared ``sly_data_schema`` and
+        serve different jobs (see :meth:`collect_network_mcp_urls` and
+        :meth:`collect_required_mcp_urls`):
+
+        * ``declared`` (the injection set) is every MCP URL listed under
+          ``tools[].function.sly_data_schema.properties.http_headers.properties``.
+        * ``required`` (the gating set) is the subset the network cannot function
+          without, selected from each tool's ``http_headers.required`` array (see
+          :meth:`_required_urls_for_tool`).
+
         This is the explicit contract: a network that requires authenticated MCP
         access advertises exactly which URLs need ``http_headers`` (see neuro-san
         ``mcp_github.hocon``). We deliberately do NOT also harvest every MCP URL
         the tools reference, because a network may call MCP servers that need no
         auth at all - those must not be flagged as a missing connection nor have
         a token injected for them.
-
-        The two sets serve different jobs (see :meth:`collect_network_mcp_urls`
-        and :meth:`collect_required_mcp_urls`): ``declared`` is every URL under
-        ``http_headers.properties`` (the injection set), while ``required`` is the
-        subset the network cannot function without (the gating set), read from the
-        ``http_headers.required`` array when present.
 
         Loads the network through ``AgentNetworkUtils.get_agent_network`` - the
         same restore path the rest of the app uses - so the config is plain and
@@ -751,14 +752,26 @@ class NsWebsocketUtils:
         - trailing slash / host case / default port - between the entry and its
         properties key doesn't silently drop the gate, the same normalization the
         rest of this module matches connections by), and the declared URL's
-        canonical form is what gates. A required entry matching no declared URL is
-        ignored (nothing to inject for it) and logged. When there is no
-        ``required`` array, every declared URL is required - the backward-compatible
-        default (gate on all).
+        canonical form is what gates.
+
+        Fail closed so a schema mistake never silently disables the gate:
+
+        * no ``required`` array (or a non-list value) -> every declared URL is
+          required (gate on all);
+        * a non-empty ``required`` array that matches *no* declared URL (a typo or
+          the array placed at the wrong nesting level) -> gate on all declared,
+          logged as a warning;
+        * only an explicit empty array (``required: []``) gates on nothing.
+
+        A required entry matching no declared URL while others do match is ignored
+        (nothing to inject for it) and logged.
         """
         required_list = http_headers.get("required")
         if not isinstance(required_list, list):
             return declared
+        if not required_list:
+            # Explicit empty array: intentional opt-out, gate on nothing.
+            return set()
         required: set = set()
         declared_by_norm = {cls._normalize_mcp_url(url): url for url in declared}
         for entry in required_list:
@@ -770,10 +783,19 @@ class NsWebsocketUtils:
                 required.add(canonical)
             else:
                 logging.info(
-                    "MCP auth: network requires '%s' but it is not declared in "
-                    "http_headers.properties; ignoring.",
+                    "MCP auth: network requires '%s' but it is not declared in http_headers.properties; ignoring.",
                     cleaned,
                 )
+        if not required:
+            # A non-empty required list that matched nothing is almost certainly an
+            # authoring error (typo / wrong nesting level), not an intent to gate
+            # nothing - fail closed on all declared URLs, don't silently drop the gate.
+            logging.warning(
+                "MCP auth: none of the required entries %s matched a declared http_headers URL; "
+                "gating on all declared URLs.",
+                required_list,
+            )
+            return declared
         return required
 
     @classmethod
