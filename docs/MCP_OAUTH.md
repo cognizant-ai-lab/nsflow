@@ -218,8 +218,17 @@ authorize request and file it.
 polls the flow status as a fallback, so completion is still detected if the
 popup can't message back.
 
-**A network prompts you to connect before chatting** — if a network's
-`sly_data_schema` declares `http_headers` for an MCP URL you haven't connected —
-or one whose connection expired and could not be renewed — nsflow surfaces a
-gate directing you to the Connectors tab. Connect (or reconnect) the server,
-then retry.
+**A network prompts you to connect before chatting** — if a network *requires* an
+MCP URL you haven't connected — or one whose connection expired and could not be
+renewed — nsflow surfaces a gate directing you to the Connectors tab. Connect (or
+reconnect) the server, then retry.
+
+Which URLs are *required* comes from the network's `sly_data_schema`: the
+`http_headers.required` array (a sibling of `http_headers.properties`) lists the
+URLs the network cannot function without. A network author who wants a URL to
+receive an injected token **when connected** without *forcing* the connection —
+because the server accepts an alternative credential (an API key via
+`MCP_SERVERS_INFO_FILE`) or needs no auth at all — should declare it under
+`http_headers.properties` but leave it out of `http_headers.required`. If a tool
+declares no `required` array, every URL it declares is treated as required
+(gate on all).
