@@ -120,6 +120,17 @@ class SilentRefreshOAuthProvider(OAuthClientProvider):
         )
         self._stored_token_expiry_time = token_expiry_time
         self.token_endpoint = token_endpoint
+        # HTTP status of the most recent refresh-grant response (None until one
+        # is attempted). Auth-optional servers answer the follow-up request with
+        # 200 even when the refresh was rejected, so the SDK never reaches its
+        # 401 re-auth path and raises nothing; this status is then the only
+        # evidence the refresh failed. See _handle_refresh_response.
+        self.refresh_http_status: Optional[int] = None
+
+    async def _handle_refresh_response(self, response: httpx.Response) -> bool:
+        """Record the refresh-grant HTTP status, then defer to the base handler."""
+        self.refresh_http_status = response.status_code
+        return await super()._handle_refresh_response(response)
 
     async def _initialize(self) -> None:
         """Load stored tokens/client info, then restore the token expiry."""

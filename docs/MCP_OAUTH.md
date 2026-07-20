@@ -42,11 +42,12 @@ Relevant code: [`mcp_oauth_manager.py`](../nsflow/backend/utils/mcp/mcp_oauth_ma
 Open the **Connectors** tab. You'll see:
 
 - **Quick Connect** — curated servers that support DCR. One click, nothing to
-  enter: a popup opens, you approve, done. (You.com, Linear, Notion, Sentry,
-  Atlassian, Stripe, PayPal, Intercom, Zapier, Postman.)
+  enter: a popup opens, you approve, done. (Atlassian, Hugging Face, Intercom,
+  Linear, Notion, PayPal, Postman, Sentry, Stripe, You.com, Zapier.)
 - **Client ID/Secret** — curated servers that do **not** support DCR, so you must
   register an OAuth app at the provider and paste its Client ID (and Secret, if
-  it's a confidential client). (GitHub, Asana, Slack.)
+  it's a confidential client). (Asana, GitHub, Gmail, Google Calendar, Google
+  Drive, Google Maps, Salesforce, Slack.)
 - **Add server** — connect any OAuth-protected MCP server by URL. Supply a Client
   ID/Secret only if the server has no DCR.
 
@@ -79,6 +80,34 @@ the provider, then paste its credentials into nsflow:
    click **Connect**. A popup opens for you to approve.
 
 ---
+
+### Auth-optional servers (no 401 challenge)
+
+Some MCP servers (e.g. **Google Maps**, **Hugging Face**) answer an
+unauthenticated request with `200` and only require a token when you actually
+call a tool. The standard OAuth flow can't start from that: the SDK begins
+authorization only when the server returns a `401` challenge, which never comes.
+
+nsflow handles these automatically. When the connect probe succeeds without
+authenticating, the backend looks for the server's **protected-resource
+metadata** (RFC 9728, at `/.well-known/oauth-protected-resource`). If it's
+published — the signal that the server does support OAuth — nsflow retries the
+probe with a **synthetic 401 challenge** pointing at that metadata, and the
+normal flow (metadata fetch, client registration or your pre-registered
+credentials, authorization, token exchange) runs from there unchanged. Scopes
+come from the metadata, so you don't set them.
+
+If a server serves anonymous requests and publishes **no** such metadata, it
+either needs no auth (nothing to connect) or uses a scheme nsflow can't
+bootstrap (e.g. API keys); the connect attempt reports that instead of the
+generic "no 401 challenge" error.
+
+> **Google (Maps, and Drive/Gmail/Calendar):** Google has no DCR, so register an
+> OAuth client in the Google Cloud Console (Client ID/Secret), enable the
+> relevant API, and add its scope to the consent screen. nsflow appends
+> `access_type=offline` and `prompt=consent` to the authorization request so
+> Google returns a **refresh token** (it omits one otherwise), which is what
+> keeps the connection alive without re-authorizing.
 
 ## The redirect / callback URI
 

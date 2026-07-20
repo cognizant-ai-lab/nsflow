@@ -45,6 +45,14 @@ interface OAuthMessage {
   message?: string;
 }
 
+// Normalize a server URL for comparison so a trailing slash / host case
+// difference doesn't treat two forms of the same server as distinct. Module
+// scope (pure) so handleConnect can reference it and the catalog map below.
+const normalizeUrl = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
+// Catalog lookup by normalized URL (icons, extra authorize params). Built from
+// the module constant, so it's stable across renders.
+const KNOWN_BY_URL = new Map(KNOWN_MCP_SERVERS.map((s) => [normalizeUrl(s.url), s]));
+
 const McpConnectorsPanel: React.FC = () => {
   const { theme } = useTheme();
   const { apiUrl, isReady } = useApiPort();
@@ -284,6 +292,10 @@ const McpConnectorsPanel: React.FC = () => {
     setAwaitingAuth(false);
     setError(null);
     pendingServerRef.current = url;
+    // Catalog-supplied authorize knobs (e.g. Google's access_type=offline) ride
+    // along, matched on the normalized URL so they apply on Quick Connect,
+    // pre-registered, reconnect, and a manually typed known URL.
+    const extraAuthorizeParams = KNOWN_BY_URL.get(normalizeUrl(url))?.extraAuthorizeParams;
     try {
       const res = await fetch(`${apiUrl}/api/v1/mcp/oauth/start`, {
         method: 'POST',
@@ -292,6 +304,7 @@ const McpConnectorsPanel: React.FC = () => {
           server_url: url,
           ...(clientId.trim() ? { client_id: clientId.trim() } : {}),
           ...(clientSecret.trim() ? { client_secret: clientSecret.trim() } : {}),
+          ...(extraAuthorizeParams ? { extra_authorize_params: extraAuthorizeParams } : {}),
         }),
       });
       // Parse defensively: a backend/proxy can return a non-JSON error body
@@ -433,19 +446,16 @@ const McpConnectorsPanel: React.FC = () => {
   // Known servers the user hasn't connected yet (matched on a normalized URL so
   // a trailing slash / host case difference doesn't show an already-connected
   // server as still suggested), split by connection method.
-  const normalizeUrl = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
   const connectedUrls = new Set(connections.map((c) => normalizeUrl(c.server_url)));
   const unconnected = KNOWN_MCP_SERVERS.filter((s) => !connectedUrls.has(normalizeUrl(s.url)));
   const dcrSuggestions = unconnected.filter((s) => s.auth !== 'pre_registered');
   const preRegSuggestions = unconnected.filter((s) => s.auth === 'pre_registered');
-  // Look up a known server (for its icon) by a connection's normalized URL.
-  const knownByUrl = new Map(KNOWN_MCP_SERVERS.map((s) => [normalizeUrl(s.url), s]));
 
-  // Re-run the OAuth flow for a connection whose silent refresh failed. The
-  // backend reuses the stored client registration (DCR result or previously
-  // supplied credentials), so nothing needs to be re-entered: known DCR servers
-  // get their one-click dialog; everything else (custom or pre-registered)
-  // opens the Add-server dialog pre-seeded with the URL, credentials optional.
+  // Re-run the OAuth flow for a connection whose silent refresh failed. Nothing
+  // needs to be re-entered: pre-registered credentials are reused, and DCR
+  // servers register a fresh client automatically. Known DCR servers get their
+  // one-click dialog; everything else (custom or pre-registered) opens the
+  // Add-server dialog pre-seeded with the URL, credentials optional.
   //
   // The flow is always seeded with conn.server_url - the exact key the token
   // store holds - never the catalog's canonical URL. If the two differ
@@ -454,7 +464,7 @@ const McpConnectorsPanel: React.FC = () => {
   // one as a permanent "Reconnect required" row.
   const openReconnect = (conn: McpConnection) => {
     if (!beginConnectAttempt(conn.server_url)) return;
-    const known = knownByUrl.get(normalizeUrl(conn.server_url));
+    const known = KNOWN_BY_URL.get(normalizeUrl(conn.server_url));
     if (known && known.auth !== 'pre_registered') {
       setKnownServer(known);
     } else {
@@ -558,7 +568,7 @@ const McpConnectorsPanel: React.FC = () => {
         ) : (
           <List dense>
             {connections.map((conn) => {
-              const known = knownByUrl.get(normalizeUrl(conn.server_url));
+              const known = KNOWN_BY_URL.get(normalizeUrl(conn.server_url));
               return (
               <ListItem
                 key={conn.server_url}
