@@ -190,7 +190,14 @@ async def _discover_protected_resource_metadata(server_url: str) -> Optional[str
             data = response.json()
         except ValueError:
             return None
-        return url if isinstance(data, dict) and data.get("authorization_servers") else None
+        if not isinstance(data, dict):
+            return None
+        # RFC 9728: authorization_servers is a non-empty JSON array of issuer
+        # URLs. Require exactly that - a truthy string/object here would be a
+        # malformed document, and treating it as OAuth-capable would wrongly
+        # send the flow down the synthetic-401 path into a confusing failure.
+        servers = data.get("authorization_servers")
+        return url if isinstance(servers, list) and servers else None
 
     async with _mcp_http_client_factory() as client:
         # Probe the well-known forms concurrently (worst case one timeout, not

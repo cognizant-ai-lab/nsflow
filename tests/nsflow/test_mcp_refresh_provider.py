@@ -685,6 +685,13 @@ def test_discover_protected_resource_metadata(monkeypatch):
     documents["/.well-known/oauth-protected-resource/mcp"] = {"resource": SERVER_URL}
     assert asyncio.run(discover(SERVER_URL)) is None
 
+    # authorization_servers must be a NON-EMPTY ARRAY per RFC 9728: a truthy
+    # string or an empty list is malformed and must not classify as OAuth-capable.
+    documents["/.well-known/oauth-protected-resource/mcp"] = {"authorization_servers": "https://auth.example.com"}
+    assert asyncio.run(discover(SERVER_URL)) is None
+    documents["/.well-known/oauth-protected-resource/mcp"] = {"authorization_servers": []}
+    assert asyncio.run(discover(SERVER_URL)) is None
+
     # Real metadata at the path-inserted form (Google Maps / Hugging Face shape).
     documents["/.well-known/oauth-protected-resource/mcp"] = {
         "resource": SERVER_URL,
