@@ -34,8 +34,12 @@ them when needed so the token injected into ``sly_data`` is never stale.
 """
 
 import asyncio
+import base64
+import hashlib
 import logging
 import os
+import secrets
+import string
 import time
 import uuid
 from dataclasses import dataclass
@@ -51,6 +55,7 @@ from urllib.parse import urlsplit
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth.exceptions import OAuthTokenError
+from mcp.client.auth.oauth2 import PKCEParameters
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
@@ -89,6 +94,32 @@ _RESERVED_AUTHORIZE_PARAMS = frozenset(
         "resource",
     }
 )
+
+
+def _install_salesforce_pkce_workaround() -> None:
+    """
+    Patch the MCP SDK's PKCE generator so the code_verifier never contains ``~``.
+
+    Salesforce's token endpoint rejects a ``code_verifier`` that contains ``~``
+    with ``invalid_grant`` / "invalid code verifier", even though RFC 7636 lists
+    ``~`` as an allowed *unreserved* character (``A-Z a-z 0-9 - . _ ~``). The MCP
+    SDK's ``PKCEParameters.generate()`` draws each of 128 chars from that full
+    set, so ~86% of generated verifiers include a ``~`` and Salesforce rejects
+    the otherwise-cryptographically-valid pair. The SDK offers no hook to supply
+    our own verifier, so we replace the generator with one that draws from the
+    same set minus ``~`` - still RFC-compliant and accepted by every provider.
+    """
+    charset = string.ascii_letters + string.digits + "-._"  # RFC 7636 unreserved, minus '~'
+
+    def _generate(cls):
+        verifier = "".join(secrets.choice(charset) for _ in range(128))
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+        return cls(code_verifier=verifier, code_challenge=challenge)
+
+    PKCEParameters.generate = classmethod(_generate)
+
+
+_install_salesforce_pkce_workaround()
 
 
 @dataclass
