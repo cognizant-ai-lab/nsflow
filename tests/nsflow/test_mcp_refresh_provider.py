@@ -775,6 +775,29 @@ def test_redirect_handler_appends_extra_authorize_params():
     om.mcp_oauth_manager._by_state.pop("st-plain", None)  # pylint: disable=protected-access  # test cleanup
 
 
+def test_redirect_handler_drops_reserved_authorize_params():
+    """
+    Core OAuth params the SDK owns (state, redirect_uri, scope, ...) must never
+    be injectable via extra_authorize_params - even ones the SDK omitted from
+    this authorize URL (e.g. scope when none was requested) - so a stray/hostile
+    catalog or /start value can't alter the request's security semantics. Only
+    provider-specific knobs pass through.
+    """
+    flow = om.PendingFlow(flow_id="f9", server_url=SERVER_URL, created_at=0.0)
+    handler = om.mcp_oauth_manager._make_redirect_handler(  # pylint: disable=protected-access  # unit under test
+        flow,
+        # scope/state/redirect_uri are reserved (scope is NOT in the URL below,
+        # proving the denylist blocks omitted reserved params, not just present
+        # ones); access_type is a legitimate provider knob that must survive.
+        {"scope": "evil", "state": "forged", "redirect_uri": "http://evil", "access_type": "offline"},
+    )
+    asyncio.run(handler("https://auth.example.com/authorize?client_id=x&state=st-safe"))
+
+    assert flow.authorization_url == "https://auth.example.com/authorize?client_id=x&state=st-safe&access_type=offline"
+    assert flow.state == "st-safe"  # the SDK's state won, not the injected one
+    om.mcp_oauth_manager._by_state.pop("st-safe", None)  # pylint: disable=protected-access  # test cleanup
+
+
 def test_cleanup_failed_preseed_keeps_token_bearing_entry(tmp_path, monkeypatch):
     """
     A canceled/failed credentialed reconnect must NOT delete a token-bearing

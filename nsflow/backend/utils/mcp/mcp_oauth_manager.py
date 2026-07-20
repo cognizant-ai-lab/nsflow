@@ -72,6 +72,24 @@ PENDING_FLOW_TTL_SECONDS = 600
 # Refresh a token this many seconds before its actual expiry.
 TOKEN_REFRESH_MARGIN_SECONDS = 60
 
+# Core OAuth authorize parameters the SDK owns and computes for security
+# (PKCE, CSRF, resource binding). extra_authorize_params may never set or
+# override these - not even ones the SDK happens to omit for a given flow -
+# so a catalog or /start value can't alter the request's security semantics;
+# only provider-specific knobs (access_type, prompt, login_hint, ...) pass.
+_RESERVED_AUTHORIZE_PARAMS = frozenset(
+    {
+        "response_type",
+        "client_id",
+        "redirect_uri",
+        "scope",
+        "state",
+        "code_challenge",
+        "code_challenge_method",
+        "resource",
+    }
+)
+
 
 @dataclass
 class PendingFlow:  # pylint: disable=too-many-instance-attributes  # dataclass aggregating flow fields
@@ -552,11 +570,15 @@ class MCPOAuthManager:
                 # e.g. Google only issues a refresh token when the authorize
                 # request carries access_type=offline (and prompt=consent for
                 # repeat grants). Supplied by the connector catalog or the user.
-                # Only append keys the SDK didn't already set: the SDK's own
-                # params (state, redirect_uri, client_id, code_challenge, scope)
-                # are authoritative and must not be duplicated or overridden by a
-                # stray/malicious catalog or /start value.
-                extra = {k: v for k, v in extra_authorize_params.items() if k not in params}
+                # Drop any core OAuth param (whether or not the SDK set it this
+                # flow) and any key already in the URL, so a stray/malicious
+                # catalog or /start value can't override the SDK's authoritative,
+                # security-relevant params. Values coerced to str defensively.
+                extra = {
+                    k: str(v)
+                    for k, v in extra_authorize_params.items()
+                    if k not in params and k not in _RESERVED_AUTHORIZE_PARAMS
+                }
                 if extra:
                     separator = "&" if "?" in authorization_url else "?"
                     authorization_url = f"{authorization_url}{separator}{urlencode(extra)}"
