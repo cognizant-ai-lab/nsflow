@@ -36,6 +36,7 @@ them when needed so the token injected into ``sly_data`` is never stale.
 import asyncio
 import base64
 import hashlib
+import inspect
 import logging
 import os
 import secrets
@@ -170,9 +171,21 @@ class MCPOAuthManager:
         The SDK exposes no hook to supply our own verifier, so we swap its
         ``PKCEParameters.generate`` for :meth:`_base64url_pkce_parameters`.
         base64url is the subset every provider accepts, so this is safe globally.
+
+        Raises ``RuntimeError`` if the SDK no longer exposes ``generate`` as a
+        classmethod (e.g. a bump renamed or inlined PKCE generation). Blindly
+        assigning to a missing attribute would leave the stock ``~``-containing
+        verifier on the real flow - a silent regression that unit tests calling
+        ``generate()`` directly would not catch - so we fail loud at import/CI.
         """
         if cls._pkce_verifier_patched:
             return
+        if not isinstance(inspect.getattr_static(PKCEParameters, "generate", None), classmethod):
+            raise RuntimeError(
+                "MCP SDK PKCEParameters.generate is missing or no longer a classmethod; "
+                "the base64url PKCE workaround cannot be installed. Re-verify the SDK's "
+                "PKCE code_verifier generation (Salesforce rejects '~') after this dependency bump."
+            )
         PKCEParameters.generate = classmethod(cls._base64url_pkce_parameters)
         cls._pkce_verifier_patched = True
 

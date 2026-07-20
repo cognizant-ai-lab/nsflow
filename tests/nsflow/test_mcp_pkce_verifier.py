@@ -28,14 +28,18 @@ while still producing a valid S256 pair.
 
 import base64
 import hashlib
+import inspect
 
+import mcp.client.auth.oauth2 as sdk_oauth2
+import pytest
 from mcp.client.auth.oauth2 import PKCEParameters
 
-# Importing this module installs the PKCE workaround as a side effect: creating
-# the module-level singleton runs MCPOAuthManager.__init__, which patches
-# PKCEParameters.generate. Order vs the mcp import above doesn't matter - both
+# Importing this module installs the PKCE workaround as a side effect: importing
+# any name from it runs the module body, which creates the module-level singleton
+# (MCPOAuthManager.__init__ -> _ensure_base64url_pkce_verifier, which patches
+# PKCEParameters.generate). Order vs the mcp imports above doesn't matter - both
 # bind the same class object and .generate resolves at call time.
-import nsflow.backend.utils.mcp.mcp_oauth_manager  # noqa: F401  pylint: disable=unused-import
+from nsflow.backend.utils.mcp.mcp_oauth_manager import MCPOAuthManager
 
 # The base64url alphabet (RFC 4648 §5) - the only chars the verifier may contain.
 _BASE64URL = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -74,3 +78,48 @@ def test_verifier_has_high_entropy_charset():
         seen.update(PKCEParameters.generate().code_verifier)
     assert seen <= _BASE64URL
     assert len(seen) > 40
+
+
+# The tests below exercise the patch as wired into the SDK/manager, not just the
+# generator in isolation - so a regression that decouples the workaround from the
+# real OAuth flow (SDK drift or the manager failing to install) is caught here.
+# pylint: disable=protected-access  # asserting on the workaround's internals
+
+
+def test_patch_installed_on_sdk_class():
+    """The manager installed *our* generator onto the SDK class - not merely that
+    generate() happens to return base64url. This ties the workaround to the exact
+    attribute the real authorization-code flow calls."""
+    assert MCPOAuthManager._pkce_verifier_patched is True
+    # PKCEParameters.generate is our classmethod; its __func__ is the manager's
+    # generator function object (same object accessed via either class).
+    assert PKCEParameters.generate.__func__ is MCPOAuthManager._base64url_pkce_parameters
+
+
+def test_sdk_auth_code_grant_still_calls_generate():
+    """Canary: the SDK's authorization-code grant still routes through
+    ``PKCEParameters.generate`` - the exact attribute we patch. If a future SDK
+    inlines or renames PKCE generation, our patch silently no-ops and Salesforce
+    breaks again; failing here forces a re-verify instead of a silent regression."""
+    assert "PKCEParameters.generate(" in inspect.getsource(sdk_oauth2)
+
+
+def test_ensure_verifier_raises_on_sdk_shape_change():
+    """If the SDK no longer exposes ``generate`` as a classmethod (rename/inline),
+    installing the workaround must raise rather than silently overwrite a
+    missing/foreign attribute and regress the real flow."""
+    original = inspect.getattr_static(PKCEParameters, "generate", None)
+    was_patched = MCPOAuthManager._pkce_verifier_patched
+    try:
+        # Simulate SDK drift: generate is present but no longer a classmethod.
+        PKCEParameters.generate = staticmethod(lambda: None)
+        MCPOAuthManager._pkce_verifier_patched = False
+        with pytest.raises(RuntimeError, match="PKCEParameters.generate"):
+            MCPOAuthManager._ensure_base64url_pkce_verifier()
+    finally:
+        # Restore the real workaround so later tests keep base64url verifiers.
+        PKCEParameters.generate = original
+        MCPOAuthManager._pkce_verifier_patched = was_patched
+
+
+# pylint: enable=protected-access
