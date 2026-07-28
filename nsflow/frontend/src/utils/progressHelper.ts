@@ -45,14 +45,17 @@ export function asObjectText(text: string | object): Record<string, any> | undef
 
 /** Normalize an object that may use `connectivity_info` into a ProgressPayload. */
 function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefined {
-  if ("agent_network_definition" in obj || "agent_network_name" in obj) {
-    return obj as ProgressPayload;
-  }
+  // Check connectivity_info first: a connectivity-style payload may also carry
+  // agent_network_name, and matching on the name alone would return it without
+  // an agent_network_definition, causing consumers to drop the frame.
   if ("connectivity_info" in obj && Array.isArray(obj.connectivity_info)) {
     return {
       agent_network_definition: obj.connectivity_info as Array<Record<string, any>>,
       agent_network_name: obj.agent_network_name,
     };
+  }
+  if ("agent_network_definition" in obj || "agent_network_name" in obj) {
+    return obj as ProgressPayload;
   }
   return undefined;
 }
