@@ -147,7 +147,7 @@ export const KNOWN_MCP_SERVERS: KnownMcpServer[] = [
     iconUrl: 'https://github.com/favicon.ico',
     auth: 'pre_registered',
   },
-  // Google MCP services (Gmail, Calendar, Drive, Maps): all auth-optional like
+  // Google MCP services (Gmail, Calendar, Docs, Drive, Maps, Sheets): all auth-optional like
   // Hugging Face (handled by the backend's synthetic-challenge fallback), and
   // all lack DCR - register one OAuth client in the Google Cloud Console and
   // enable the relevant API + scopes on its consent screen. access_type=offline
@@ -172,6 +172,14 @@ export const KNOWN_MCP_SERVERS: KnownMcpServer[] = [
     extraAuthorizeParams: { access_type: 'offline', prompt: 'consent' },
   },
   {
+    id: 'googledocs',
+    name: 'Google Docs',
+    url: 'https://docsmcp.googleapis.com/mcp/v1',
+    iconUrl: 'https://ssl.gstatic.com/images/branding/product/1x/docs_2020q4_48dp.png',
+    auth: 'pre_registered',
+    extraAuthorizeParams: { access_type: 'offline', prompt: 'consent' },
+  },
+  {
     id: 'googledrive',
     name: 'Google Drive',
     url: 'https://drivemcp.googleapis.com/mcp/v1',
@@ -184,6 +192,14 @@ export const KNOWN_MCP_SERVERS: KnownMcpServer[] = [
     name: 'Google Maps',
     url: 'https://mapstools.googleapis.com/mcp',
     iconUrl: 'https://www.google.com/s2/favicons?domain=maps.google.com&sz=64',
+    auth: 'pre_registered',
+    extraAuthorizeParams: { access_type: 'offline', prompt: 'consent' },
+  },
+  {
+    id: 'googlesheets',
+    name: 'Google Sheets',
+    url: 'https://sheetsmcp.googleapis.com/mcp/v1',
+    iconUrl: 'https://ssl.gstatic.com/images/branding/product/1x/sheets_2020q4_48dp.png',
     auth: 'pre_registered',
     extraAuthorizeParams: { access_type: 'offline', prompt: 'consent' },
   },
@@ -235,5 +251,5 @@ export const KNOWN_MCP_SERVERS: KnownMcpServer[] = [
  * time) used to be excluded because the OAuth flow never started. They are now
  * supported via the backend's synthetic-challenge fallback when they publish
  * RFC 9728 protected-resource metadata - Hugging Face and the Google services
- * (Maps, Gmail, Calendar, Drive) are all listed above.
+ * (Maps, Gmail, Calendar, Docs, Drive, Sheets) are all listed above.
  */

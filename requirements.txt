@@ -9,6 +9,22 @@ neuro-san>=0.6.32,<0.7
 # Pin matches the sibling neuro-san library so the two stay compatible.
 mcp>=1.23.0,<2.0
 
+# SQLAlchemy - direct dependency of the backend persistence layer
+# (nsflow/backend/db/*, backing the CRUSE thread/message/theme endpoints).
+# main.py and api/router.py import that layer unconditionally at import time,
+# so the app cannot even start without SQLAlchemy installed.
+#
+# It was never declared here because it used to arrive transitively: neuro-san
+# depended on langchain-classic, which depends on SQLAlchemy. neuro-san removed
+# langchain-classic on 2026-07-28 (commit 327d60623, "Remove langchain-classic
+# and langchain-community from requirements"), so a clean install resolving a
+# current neuro-san (>=0.6.85, still inside our >=0.6.32,<0.7 range above) no
+# longer pulls SQLAlchemy in - which broke both `pip install nsflow` startup and
+# the CI pylint import-check. Declare it directly rather than lean on neuro-san's
+# transitive graph. 2.0.x is what was previously resolved (2.0.51) and the db
+# layer's API usage is SQLAlchemy 2.0-clean.
+sqlalchemy>=2.0,<3
+
 # These are needed to run this app
 fastapi-cors>=0.0.6
 fastapi>=0.115.8
