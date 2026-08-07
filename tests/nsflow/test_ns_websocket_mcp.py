@@ -460,6 +460,41 @@ def test_non_designer_injection_stays_schema_scoped(monkeypatch):
     assert sly_data["http_headers"] == {url_a: {"Authorization": "Bearer tok"}}
 
 
+def test_designer_skips_needs_reauth_connections(monkeypatch):
+    """
+    The designer's inject-all path still honors the needs_reauth filter: a
+    connection whose refresh already failed definitively is not injected, so
+    inject-all never means inject-broken.
+    """
+    good, dead = "https://good.example.com/mcp", "https://dead.example.com/mcp"
+    _patch_connections(monkeypatch, [good], reauth_urls=[dead])
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", AsyncMock(return_value="Bearer tok"))
+    inst = _utils(agent_name=nw.AGENT_NETWORK_DESIGNER_NAME)
+
+    sly_data = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly_data))
+
+    assert sly_data["http_headers"] == {good: {"Authorization": "Bearer tok"}}
+
+
+def test_designer_preserves_user_supplied_authorization(monkeypatch):
+    """
+    The designer's inject-all path leaves a user-supplied Authorization untouched
+    (never overwriting it with a freshly fetched token) while still injecting the
+    other connected servers.
+    """
+    url_user, url_auto = "https://user.example.com/mcp", "https://auto.example.com/mcp"
+    _patch_connections(monkeypatch, [url_user, url_auto])
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", AsyncMock(return_value="Bearer fresh"))
+    inst = _utils(agent_name=nw.AGENT_NETWORK_DESIGNER_NAME)
+
+    sly_data = {"http_headers": {url_user: {"Authorization": "Bearer user-token"}}}
+    asyncio.run(inst.inject_mcp_auth_headers(sly_data))
+
+    assert sly_data["http_headers"][url_user] == {"Authorization": "Bearer user-token"}
+    assert sly_data["http_headers"][url_auto] == {"Authorization": "Bearer fresh"}
+
+
 def test_gaps_fresh_none_when_network_unreadable(monkeypatch):
     """An unreadable network yields None (caller reports nothing missing)."""
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))

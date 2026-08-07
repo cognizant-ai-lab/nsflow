@@ -31,6 +31,7 @@ from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
 
+from nsflow.backend.utils.agentutils.agent_log_processor import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
@@ -64,13 +65,6 @@ REDACTED_VALUE = "***redacted***"
 # hung/unreachable MCP server or auth server must not stall the gate decision
 # indefinitely (SDK defaults allow up to 30s connect / 300s read).
 MCP_FRESHEN_TIMEOUT_SECONDS = 15
-
-# The Agent Network Designer (the "wand") builds *other* networks, so it needs to
-# see every MCP server the user has connected - it offers the available ones when
-# generating networks. When the chat target IS this network we inject all connected
-# tokens rather than the schema-scoped subset. Read from the same env used for the
-# designer elsewhere (agent_log_processor.AGENT_NETWORK_DESIGNER_NAME).
-AGENT_NETWORK_DESIGNER_NAME = os.getenv("NSFLOW_WAND_NAME", "agent_network_designer")
 
 
 # pylint: disable=too-many-instance-attributes

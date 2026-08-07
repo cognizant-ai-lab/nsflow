@@ -24,6 +24,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.models.config_model import ConfigRequest
+from nsflow.backend.utils.agentutils.agent_log_processor import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 from nsflow.backend.utils.version import DISTRIBUTION_NAME
@@ -53,7 +54,10 @@ def get_runtime_config():
             "VITE_WS_PROTOCOL": os.getenv("VITE_WS_PROTOCOL", "ws"),
             # Default kept as bool so the JSON response field stays a boolean for the frontend.
             "VITE_USE_SPEECH": os.getenv("VITE_USE_SPEECH", True),  # pylint: disable=invalid-envvar-default
-            "NSFLOW_WAND_NAME": os.getenv("NSFLOW_WAND_NAME", "agent_network_designer"),
+            # Shared constant (read once at import time) rather than a fresh
+            # os.getenv here, so the designer network the UI routes to is exactly
+            # the one the backend treats as the designer - see AGENT_NETWORK_DESIGNER_NAME.
+            "NSFLOW_WAND_NAME": AGENT_NETWORK_DESIGNER_NAME,
             # Subdirectory under registries/ where the Agent Network Designer persists
             # generated networks. Mirrors neuro-san-studio's AGENT_NETWORK_DESIGNER_SUBDIRECTORY
             # so the Editor can build the served agent path (e.g. "generated/<name>") for launch.

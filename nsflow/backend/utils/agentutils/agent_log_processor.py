@@ -28,6 +28,16 @@ from nsflow.backend.trust.rai_service import RaiService
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
+# Single source of truth for the Agent Network Designer (the "wand") network
+# name. The designer builds *other* networks, so several places key off this
+# exact value: this log processor (rendering its copilot state updates), the MCP
+# token injector (ns_websocket_utils, which sends the designer every connected
+# token), and the runtime-config endpoint (app_configs, which serves the same
+# value to the UI). Defining it once means the network the frontend routes to
+# and the one the backend treats as the designer can never silently drift. Read
+# once at import time, matching how the backend logic consumes it.
+AGENT_NETWORK_DESIGNER_NAME = os.getenv("NSFLOW_WAND_NAME", "agent_network_designer")
+
 EDITOR_TOOLS = {
     "create_new_network",
     "add_agent_to_network",
@@ -43,7 +53,6 @@ class AgentLogProcessor(MessageProcessor):
     Tells the UI there's an agent message to process.
     """
 
-    AGENT_NETWORK_DESIGNER_NAME = os.getenv("NSFLOW_WAND_NAME", "agent_network_designer")
     NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", None)
 
     def __init__(self, agent_name: str, session_id: str = None):
@@ -191,7 +200,7 @@ class AgentLogProcessor(MessageProcessor):
 
     def process_for_manual_editor(self, progress: Dict[str, Any]) -> str:
         """process progress message for manual editor's consumption"""
-        if self.agent_name == self.AGENT_NETWORK_DESIGNER_NAME:
+        if self.agent_name == AGENT_NETWORK_DESIGNER_NAME:
             # Use simple state registry for copilot state updates
             try:
                 network_name = progress.get("agent_network_name", "new_network")
