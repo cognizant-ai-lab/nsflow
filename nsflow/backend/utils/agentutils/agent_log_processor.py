@@ -25,6 +25,7 @@ from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
 
 from nsflow.backend.trust.rai_service import RaiService
+from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
@@ -43,7 +44,6 @@ class AgentLogProcessor(MessageProcessor):
     Tells the UI there's an agent message to process.
     """
 
-    AGENT_NETWORK_DESIGNER_NAME = os.getenv("NSFLOW_WAND_NAME", "agent_network_designer")
     NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", None)
 
     def __init__(self, agent_name: str, session_id: str = None):
@@ -191,7 +191,7 @@ class AgentLogProcessor(MessageProcessor):
 
     def process_for_manual_editor(self, progress: Dict[str, Any]) -> str:
         """process progress message for manual editor's consumption"""
-        if self.agent_name == self.AGENT_NETWORK_DESIGNER_NAME:
+        if self.agent_name == AGENT_NETWORK_DESIGNER_NAME:
             # Use simple state registry for copilot state updates
             try:
                 network_name = progress.get("agent_network_name", "new_network")

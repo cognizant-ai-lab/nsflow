@@ -34,6 +34,7 @@ from neuro_san.client.agent_session_factory import AgentSessionFactory
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
+from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.mcp.mcp_oauth_manager import mcp_oauth_manager
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
@@ -272,8 +273,11 @@ class NsWebsocketUtils:
         ``sly_data_schema``) are injected, so a token is never broadcast to an
         unrelated network or to an MCP server that needs no auth. If the network's
         HOCON cannot be read locally (e.g. it lives on a remote neuro-san server),
-        we fall back to injecting every connected server. Any header the user
-        already supplied for a given URL is left untouched.
+        we fall back to injecting every connected server. The Agent Network
+        Designer (``NSFLOW_WAND_NAME``) is treated the same way on purpose: it
+        builds other networks, so it receives every connected MCP server's token
+        rather than a schema-scoped subset. Any header the user already supplied
+        for a given URL is left untouched.
 
         :param sly_data: The sly_data dict to enrich in place.
         """
@@ -291,7 +295,15 @@ class NsWebsocketUtils:
             # exists, filtering ensures injection resolves to the healthy one.
             connected_urls = [conn["server_url"] for conn in connections if not conn.get("needs_reauth")]
 
-            referenced = await asyncio.to_thread(self.get_network_mcp_urls)
+            # The Agent Network Designer is the exception to schema-scoping: it
+            # needs to see every connected MCP server so it can offer them when
+            # generating networks, so inject all connected tokens (like the
+            # unreadable-HOCON fallback) instead of the network's declared subset.
+            is_designer = self.agent_name == AGENT_NETWORK_DESIGNER_NAME
+            if is_designer:
+                referenced = None
+            else:
+                referenced = await asyncio.to_thread(self.get_network_mcp_urls)
             # Build (header_key, token_url) pairs. URLs are matched on a normalized
             # form so cosmetic differences (trailing slash, host case, default
             # port) between the stored connection URL and the network's declared
@@ -310,11 +322,20 @@ class NsWebsocketUtils:
                     token_url = connected_by_norm.get(self._normalize_mcp_url(ref))
                     if token_url is not None:
                         targets.append((ref, token_url))
+            # What we scoped injection to, for the log line: the designer and the
+            # unreadable-HOCON fallback both inject every connection (referenced is
+            # None); a normal network logs its declared subset.
+            if is_designer:
+                referenced_label = "ALL(designer)"
+            elif referenced is None:
+                referenced_label = "ALL(fallback)"
+            else:
+                referenced_label = sorted(referenced)
             logging.info(
                 "MCP auth injection for network '%s': connected=%s referenced=%s targets=%s",
                 self.agent_name,
                 sorted(connected_urls),
-                "ALL(fallback)" if referenced is None else sorted(referenced),
+                referenced_label,
                 sorted({header_key for header_key, _ in targets}),
             )
             if not targets:
