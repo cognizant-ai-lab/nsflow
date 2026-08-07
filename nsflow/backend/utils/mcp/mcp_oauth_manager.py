@@ -33,6 +33,8 @@ are persisted by ``FileTokenStorage``, and ``get_fresh_token`` silently refreshe
 them when needed so the token injected into ``sly_data`` is never stale.
 """
 
+# pylint: disable=too-many-lines
+
 import asyncio
 import base64
 import hashlib
@@ -77,6 +79,22 @@ logger = logging.getLogger(__name__)
 PENDING_FLOW_TTL_SECONDS = 600
 # Refresh a token this many seconds before its actual expiry.
 TOKEN_REFRESH_MARGIN_SECONDS = 60
+# How long get_fresh_token_bounded lets a caller wait for a token fetch. A
+# hung/unreachable MCP server or auth server must not stall the caller
+# (the network-selection gate, or a chat message awaiting header injection)
+# indefinitely - the SDK's own HTTP defaults allow up to 30s connect / 300s
+# read. The fetch itself is never cancelled on timeout (see
+# get_fresh_token_bounded); the caller just stops waiting.
+TOKEN_FETCH_TIMEOUT_SECONDS = 15
+# Cap on concurrent token fetches through get_fresh_token_bounded. The
+# injection path fetches one token per connected server per chat message (the
+# Agent Network Designer targets ALL of them), so after e.g. a laptop sleep
+# expires every token at once this prevents a stampede of simultaneous MCP
+# refresh probes (each opens a full streamable-HTTP session) and to_thread
+# disk reads. Queue time counts against the caller's wait budget, so the
+# message-latency bound still holds; fetches that outlive it finish in the
+# background and later messages pick their tokens up from disk.
+MAX_CONCURRENT_TOKEN_FETCHES = 4
 
 # Core OAuth authorize parameters the SDK owns and computes for security
 # (PKCE, CSRF, resource binding). extra_authorize_params may never set or
@@ -155,6 +173,11 @@ class MCPOAuthManager:
         self._cleanup_tasks: set = set()
         # Per-server locks serializing silent refreshes (see _refresh_lock).
         self._refresh_locks: Dict[str, asyncio.Lock] = {}
+        # Bounds concurrent token fetches (see get_fresh_token_bounded).
+        self._fetch_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TOKEN_FETCHES)
+        # Strong refs to fetch tasks whose caller gave up waiting, so they are
+        # neither garbage-collected mid-run nor left with an unretrieved result.
+        self._abandoned_fetches: set = set()
         self._ensure_base64url_pkce_verifier()
 
     @classmethod
@@ -821,6 +844,93 @@ class MCPOAuthManager:
         if token_type.lower() == "bearer":
             token_type = "Bearer"
         return f"{token_type} {tokens.access_token}"
+
+    async def get_fresh_token_bounded(self, server_url: str, timeout: Optional[float] = None) -> Optional[str]:
+        """
+        ``get_fresh_token``, but the caller waits at most ``timeout`` seconds
+        (default ``TOKEN_FETCH_TIMEOUT_SECONDS``) and never sees an exception.
+
+        The fetch itself is NEVER cancelled on timeout - the caller just stops
+        waiting and the fetch finishes in the background. Cancelling a silent
+        refresh mid-flight is dangerous twice over: a rotation provider's
+        single-use refresh token can be consumed server-side without the
+        rotated replacement ever being persisted (the provider then revokes
+        the grant on the next attempt - see ``_refresh_lock``), and cancelling
+        the storage write would release ``FileTokenStorage``'s in-process lock
+        while its worker thread finishes the write detached. A fetch that
+        completes after the caller gave up still persists its tokens, so the
+        next caller gets them from disk.
+
+        Fetches are capped at ``MAX_CONCURRENT_TOKEN_FETCHES`` concurrent;
+        queue time counts against ``timeout`` so the caller's latency bound
+        holds regardless of how many URLs are being fetched at once.
+
+        :param server_url: The stored connection URL to fetch a token for.
+        :param timeout: Max seconds to wait; None means the module default
+                        (read at call time so tests can shrink it).
+        :return: ``"Bearer <token>"`` like ``get_fresh_token``, or None on
+                 timeout, fetch failure, or no-usable-token - each logged with
+                 its actual cause, so callers can treat None as "inject
+                 nothing" without re-diagnosing.
+        """
+        if timeout is None:
+            timeout = TOKEN_FETCH_TIMEOUT_SECONDS
+
+        async def gated_fetch() -> Optional[str]:
+            async with self._fetch_semaphore:
+                return await self.get_fresh_token(server_url)
+
+        task = asyncio.ensure_future(gated_fetch())
+        try:
+            # wait (unlike wait_for) does NOT cancel the task on timeout.
+            await asyncio.wait({task}, timeout=timeout)
+        except asyncio.CancelledError:
+            # Caller torn down (e.g. websocket closed): the mid-refresh dangers
+            # above still apply, so let the fetch finish in the background.
+            self._abandon_fetch(task, server_url)
+            raise
+        if not task.done():
+            logger.warning(
+                "MCP auth: token fetch for %s still running after %ss; giving up the wait "
+                "(the fetch continues in the background and its tokens persist for later calls)",
+                server_url,
+                timeout,
+            )
+            self._abandon_fetch(task, server_url)
+            return None
+        try:
+            token = task.result()
+        except Exception as exc:  # noqa: BLE001 - one server's failure must not break the caller's batch
+            logger.warning("MCP auth: token fetch for %s failed: %r", server_url, exc)
+            return None
+        if not token:
+            # get_fresh_token's definitive "no usable connection" answer (no
+            # tokens stored, expired and unrefreshable, needs re-auth, ...).
+            logger.warning("MCP auth: no usable token for %s (connection may need re-auth)", server_url)
+        return token
+
+    def _abandon_fetch(self, task: "asyncio.Task", server_url: str) -> None:
+        """
+        Detach a fetch task whose caller stopped waiting: hold a strong
+        reference (asyncio only keeps weak ones, so an unreferenced task can be
+        garbage-collected mid-run) and consume its eventual result so a late
+        failure is logged instead of surfacing as "exception was never
+        retrieved" noise at loop shutdown.
+        """
+        self._abandoned_fetches.add(task)
+
+        def _consume(done_task: "asyncio.Task") -> None:
+            self._abandoned_fetches.discard(done_task)
+            if done_task.cancelled():
+                # Loop shutdown cancelled it; nothing to report.
+                return
+            exc = done_task.exception()
+            if exc is not None:
+                logger.warning("MCP auth: abandoned token fetch for %s failed: %r", server_url, exc)
+            else:
+                logger.info("MCP auth: abandoned token fetch for %s completed after the wait was given up", server_url)
+
+        task.add_done_callback(_consume)
 
     @staticmethod
     def _refresh_failure_needs_reauth(exc: BaseException) -> bool:

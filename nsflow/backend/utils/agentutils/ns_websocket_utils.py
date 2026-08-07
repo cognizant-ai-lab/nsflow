@@ -61,13 +61,6 @@ _SENSITIVE_HEADER_NAMES = frozenset(
 # with a fresh token rather than sent to the agent verbatim.
 REDACTED_VALUE = "***redacted***"
 
-# Upper bound on proactive token work - the network-selection freshen
-# (mcp_connection_gaps_fresh) and each per-message injection fetch
-# (_fetch_tokens_bounded): a hung/unreachable MCP server or auth server must not
-# stall the gate decision or a chat message indefinitely (SDK defaults allow up
-# to 30s connect / 300s read).
-MCP_FRESHEN_TIMEOUT_SECONDS = 15
-
 
 # pylint: disable=too-many-instance-attributes
 class NsWebsocketUtils:
@@ -264,7 +257,7 @@ class NsWebsocketUtils:
         """
         return AgentSessionFactory()
 
-    async def inject_mcp_auth_headers(  # pylint: disable=too-many-locals,too-many-branches  # header-merge logic over many optional fields
+    async def inject_mcp_auth_headers(  # pylint: disable=too-many-branches  # scoping logic over many optional fields
         self, sly_data: Dict[str, Any]
     ) -> None:
         """
@@ -281,10 +274,11 @@ class NsWebsocketUtils:
         rather than a schema-scoped subset. Any header the user already supplied
         for a given URL is left untouched.
 
-        Token fetches run concurrently, each bounded by
-        ``MCP_FRESHEN_TIMEOUT_SECONDS``, so one hung MCP/auth server can neither
-        stall the chat message indefinitely nor hold up the other servers'
-        tokens.
+        Token fetches run concurrently through the OAuth manager's
+        ``get_fresh_token_bounded``, which owns the timeout and concurrency
+        policy: one hung MCP/auth server can neither stall the chat message
+        indefinitely nor hold up the other servers' tokens, and an in-flight
+        refresh is never cancelled (it finishes in the background).
 
         :param sly_data: The sly_data dict to enrich in place.
         """
@@ -292,7 +286,7 @@ class NsWebsocketUtils:
             # Both of these do synchronous disk I/O (reading tokens.json and
             # restoring/parsing the network HOCON) and run on every chat message,
             # so offload them to a worker thread to keep the websocket handler's
-            # event loop responsive. get_fresh_token below is already async.
+            # event loop responsive. The token fetches below are already async.
             connections = await asyncio.to_thread(FileTokenStorage.list_connections)
             if not connections:
                 return
@@ -369,86 +363,105 @@ class NsWebsocketUtils:
             # server must not stall the chat message, nor delay the other
             # servers' tokens (#255). The set also dedups: several header keys
             # can resolve to the same stored connection (one fetch each).
-            tokens = await self._fetch_tokens_bounded(sorted({entry[1] for entry in to_inject}))
+            tokens = await self._fetch_tokens_bounded(sorted({token_url for _, token_url in to_inject}))
 
-            # Second pass: inject whatever resolved in time.
-            for header_key, token_url, headers, auth_key in to_inject:
-                authorization = tokens.get(token_url)
-                if not authorization:
-                    logging.warning("MCP auth: no usable token for %s (connection may need re-auth)", token_url)
-                    continue
-                # Drop any differently-cased existing key so we don't end up with
-                # two Authorization headers, then set the canonical casing.
-                if auth_key and auth_key != "Authorization":
-                    headers.pop(auth_key, None)
-                headers["Authorization"] = authorization
-                http_headers[header_key] = headers
-                logging.info("MCP auth: injected Authorization header into sly_data for %s", header_key)
+            self._inject_fetched_tokens(http_headers, to_inject, tokens)
         except Exception as e:  # noqa: BLE001 - never break chat on auth injection
             logging.warning("Failed to inject MCP auth headers: %s", e)
+
+    @classmethod
+    def _existing_user_auth(cls, headers: Dict[str, Any]) -> Optional[str]:
+        """
+        Return the user-supplied Authorization value in ``headers`` (any
+        casing), or None. Our own redaction placeholder does not count: it can
+        come back from a UI that round-trips a previously surfaced (masked)
+        sly_data, and treating it as real would send "***redacted***" to the
+        agent.
+        """
+        # HTTP header names are case-insensitive, so find any existing
+        # "Authorization" regardless of casing.
+        auth_key = cls._find_header_key(headers, "Authorization")
+        value = headers.get(auth_key) if auth_key else None
+        if value and value != REDACTED_VALUE:
+            return value
+        return None
 
     @classmethod
     def _targets_needing_tokens(cls, http_headers: Dict[str, Any], targets: List[tuple]) -> List[tuple]:
         """
         First injection pass (pure dict work, no awaits): filter ``targets``
-        down to the ones that actually need a fetched token, honoring any
-        Authorization the user supplied themselves.
+        down to the ones without a user-supplied Authorization, so no token is
+        fetched for a URL the user already authenticated themselves.
 
         :param http_headers: The (already dict-coerced) ``sly_data["http_headers"]``.
         :param targets: ``(header_key, token_url)`` pairs from scoping.
-        :return: ``(header_key, token_url, headers, auth_key)`` tuples, where
-                 ``headers`` is the existing per-URL header dict (or a fresh
-                 one) and ``auth_key`` is the casing of any existing
-                 Authorization key.
+        :return: The surviving ``(header_key, token_url)`` pairs.
         """
         to_inject = []
         for header_key, token_url in targets:
             existing = http_headers.get(header_key)
             headers = existing if isinstance(existing, dict) else {}
-            # HTTP header names are case-insensitive, so find any existing
-            # "Authorization" regardless of casing.
-            auth_key = cls._find_header_key(headers, "Authorization")
-            existing_auth = headers.get(auth_key) if auth_key else None
-            # Respect a user-provided Authorization for this URL (any casing) -
-            # but ignore our own redaction placeholder, which can come back from
-            # a UI that round-trips a previously surfaced (masked) sly_data.
-            # Treating the sentinel as real would send "***redacted***" to the agent.
-            if existing_auth and existing_auth != REDACTED_VALUE:
+            if cls._existing_user_auth(headers):
                 logging.info("MCP auth: keeping user-supplied Authorization for %s", header_key)
                 continue
-            to_inject.append((header_key, token_url, headers, auth_key))
+            to_inject.append((header_key, token_url))
         return to_inject
+
+    @classmethod
+    def _inject_fetched_tokens(
+        cls, http_headers: Dict[str, Any], to_inject: List[tuple], tokens: Dict[str, str]
+    ) -> None:
+        """
+        Second injection pass (no awaits): write the fetched Authorization
+        values into ``http_headers`` in place.
+
+        The per-URL header state is re-read here rather than trusted from pass
+        1: the token fetch suspended this coroutine, and another handler
+        sharing the session's sly_data (a reconnect, a second tab) may have
+        merged headers - including a user Authorization - in the meantime.
+        Re-checking immediately before each write keeps check-and-write atomic
+        on the event loop, so a user header can never be clobbered by a stale
+        pass-1 snapshot.
+        """
+        for header_key, token_url in to_inject:
+            authorization = tokens.get(token_url)
+            if not authorization:
+                # The cause (timeout / fetch failure / needs re-auth) was
+                # already logged by get_fresh_token_bounded with its real
+                # diagnosis; this line just maps it to the schema's header key.
+                logging.info("MCP auth: no token for %s; nothing injected", header_key)
+                continue
+            existing = http_headers.get(header_key)
+            headers = existing if isinstance(existing, dict) else {}
+            if cls._existing_user_auth(headers):
+                logging.info("MCP auth: keeping user-supplied Authorization for %s", header_key)
+                continue
+            # Drop any differently-cased existing key so we don't end up with
+            # two Authorization headers, then set the canonical casing.
+            auth_key = cls._find_header_key(headers, "Authorization")
+            if auth_key and auth_key != "Authorization":
+                headers.pop(auth_key, None)
+            headers["Authorization"] = authorization
+            http_headers[header_key] = headers
+            logging.info("MCP auth: injected Authorization header into sly_data for %s", header_key)
 
     @staticmethod
     async def _fetch_tokens_bounded(token_urls: List[str]) -> Dict[str, str]:
         """
-        Fetch Authorization values for ``token_urls`` concurrently, each fetch
-        bounded by ``MCP_FRESHEN_TIMEOUT_SECONDS``.
-
-        A token that is fresh per its stored ``expires_at`` is a disk read only;
-        an expired one triggers a network refresh against its auth server, which
-        is what the bound protects against (SDK defaults allow up to 30s connect
-        / 300s read). Each fetch is bounded individually - rather than wrapping
-        the whole batch like mcp_connection_gaps_fresh does - so a hung server
-        only forfeits its own token instead of discarding the ones that resolved
-        in time.
+        Fetch Authorization values for ``token_urls`` concurrently via the
+        OAuth manager's ``get_fresh_token_bounded``, which owns the timeout and
+        concurrency policy (``TOKEN_FETCH_TIMEOUT_SECONDS`` /
+        ``MAX_CONCURRENT_TOKEN_FETCHES``) and never cancels an in-flight
+        refresh - a fetch that outlives the wait finishes in the background
+        and its tokens persist for the next message.
 
         :param token_urls: Stored connection URLs to fetch tokens for.
         :return: token_url -> Authorization value for the fetches that produced
-                 a usable token. Failures and timeouts are logged and omitted.
+                 a usable token in time. Failures and timeouts are logged by
+                 the manager and omitted here.
         """
-
-        async def fetch_one(url: str) -> Optional[str]:
-            return await asyncio.wait_for(mcp_oauth_manager.get_fresh_token(url), timeout=MCP_FRESHEN_TIMEOUT_SECONDS)
-
-        results = await asyncio.gather(*(fetch_one(url) for url in token_urls), return_exceptions=True)
-        tokens: Dict[str, str] = {}
-        for url, result in zip(token_urls, results):
-            if isinstance(result, BaseException):
-                logging.warning("MCP auth: token fetch for %s failed: %r", url, result)
-            elif result:
-                tokens[url] = result
-        return tokens
+        results = await asyncio.gather(*(mcp_oauth_manager.get_fresh_token_bounded(url) for url in token_urls))
+        return {url: token for url, token in zip(token_urls, results) if token}
 
     @staticmethod
     def _merge_user_sly_data(state_sly_data: Dict[str, Any], incoming: Any) -> None:
@@ -743,9 +756,10 @@ class NsWebsocketUtils:
         read only - no network I/O. Connections already marked ``needs_reauth``
         are not re-probed (only a reconnect can recover them, and re-probing
         would stall every selection of the network on a dead server). Refreshes
-        run concurrently and are bounded by ``MCP_FRESHEN_TIMEOUT_SECONDS`` so a
-        hung server can't block the gate; on timeout or per-URL failure the gaps
-        are computed from the state on disk.
+        run concurrently through the manager's ``get_fresh_token_bounded`` (the
+        same mechanism chat-time injection uses) so a hung server can't block
+        the gate; on timeout or per-URL failure the gaps are computed from the
+        state on disk.
         """
         required = await asyncio.to_thread(cls.collect_required_mcp_urls, agent_name)
         if required is None:
@@ -763,23 +777,12 @@ class NsWebsocketUtils:
             {by_norm[cls._normalize_mcp_url(url)] for url in required if cls._normalize_mcp_url(url) in by_norm}
         )
         if stored_urls:
-            try:
-                results = await asyncio.wait_for(
-                    asyncio.gather(
-                        *(mcp_oauth_manager.get_fresh_token(url) for url in stored_urls),
-                        return_exceptions=True,
-                    ),
-                    timeout=MCP_FRESHEN_TIMEOUT_SECONDS,
-                )
-                for url, result in zip(stored_urls, results):
-                    if isinstance(result, BaseException):
-                        logging.warning("MCP freshen for %s failed: %s", url, result)
-            except asyncio.TimeoutError:
-                logging.warning(
-                    "MCP freshen for network '%s' timed out after %ss; gating on stored state.",
-                    agent_name,
-                    MCP_FRESHEN_TIMEOUT_SECONDS,
-                )
+            # One bounded fetch per stored URL, sharing chat-time injection's
+            # mechanism (_fetch_tokens_bounded): the manager owns the timeout
+            # and concurrency policy, never cancels an in-flight refresh, and
+            # logs each failure with its cause. The token values themselves are
+            # not needed here - the refreshed state is re-read from disk below.
+            await cls._fetch_tokens_bounded(stored_urls)
             # Re-read: a successful refresh (or a newly set needs_reauth marker)
             # changes the gate decision.
             connections = await asyncio.to_thread(FileTokenStorage.list_connections)
