@@ -24,7 +24,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from nsflow.backend.models.config_model import ConfigRequest
-from nsflow.backend.utils.agentutils.agent_log_processor import AGENT_NETWORK_DESIGNER_NAME
+from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.tools.auth_utils import AuthUtils
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 from nsflow.backend.utils.version import DISTRIBUTION_NAME

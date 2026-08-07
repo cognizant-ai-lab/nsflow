@@ -31,10 +31,10 @@ from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 from neuro_san.client.agent_session_factory import AgentSessionFactory
 
-from nsflow.backend.utils.agentutils.agent_log_processor import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.async_streaming_input_processor import AsyncStreamingInputProcessor
+from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 from nsflow.backend.utils.mcp.mcp_oauth_manager import mcp_oauth_manager
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
@@ -322,11 +322,20 @@ class NsWebsocketUtils:
                     token_url = connected_by_norm.get(self._normalize_mcp_url(ref))
                     if token_url is not None:
                         targets.append((ref, token_url))
+            # What we scoped injection to, for the log line: the designer and the
+            # unreadable-HOCON fallback both inject every connection (referenced is
+            # None); a normal network logs its declared subset.
+            if is_designer:
+                referenced_label = "ALL(designer)"
+            elif referenced is None:
+                referenced_label = "ALL(fallback)"
+            else:
+                referenced_label = sorted(referenced)
             logging.info(
                 "MCP auth injection for network '%s': connected=%s referenced=%s targets=%s",
                 self.agent_name,
                 sorted(connected_urls),
-                "ALL(designer)" if is_designer else ("ALL(fallback)" if referenced is None else sorted(referenced)),
+                referenced_label,
                 sorted({header_key for header_key, _ in targets}),
             )
             if not targets:

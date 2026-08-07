@@ -420,7 +420,7 @@ def test_gaps_fresh_tolerates_refresh_errors(monkeypatch):
     assert gaps == {"missing": [], "needs_reauth": []}
 
 
-# --------------------------- inject_mcp_auth_headers --------------------------- #
+# ----------------- inject_mcp_auth_headers: Agent Network Designer ----------------- #
 
 
 def test_designer_injects_all_connected_tokens(monkeypatch):

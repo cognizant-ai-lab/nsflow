@@ -25,18 +25,9 @@ from neuro_san.internals.messages.chat_message_type import ChatMessageType
 from neuro_san.message_processing.message_processor import MessageProcessor
 
 from nsflow.backend.trust.rai_service import RaiService
+from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
-
-# Single source of truth for the Agent Network Designer (the "wand") network
-# name. The designer builds *other* networks, so several places key off this
-# exact value: this log processor (rendering its copilot state updates), the MCP
-# token injector (ns_websocket_utils, which sends the designer every connected
-# token), and the runtime-config endpoint (app_configs, which serves the same
-# value to the UI). Defining it once means the network the frontend routes to
-# and the one the backend treats as the designer can never silently drift. Read
-# once at import time, matching how the backend logic consumes it.
-AGENT_NETWORK_DESIGNER_NAME = os.getenv("NSFLOW_WAND_NAME", "agent_network_designer")
 
 EDITOR_TOOLS = {
     "create_new_network",
