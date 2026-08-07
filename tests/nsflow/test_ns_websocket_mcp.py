@@ -27,6 +27,8 @@ these methods touch are set. External dependencies (token storage, the OAuth
 manager, the network loader) are patched.
 """
 
+# pylint: disable=too-many-lines
+
 import asyncio
 import time
 from unittest.mock import AsyncMock
@@ -743,6 +745,40 @@ def test_inject_timeout_does_not_cancel_fetch(monkeypatch):
 
     asyncio.run(main())
     assert events == ["completed"]  # finished in the background, never cancelled
+
+
+def test_bounded_fetch_coalesces_concurrent_callers(monkeypatch):
+    """
+    Concurrent bounded fetches for the same URL share ONE in-flight task, each
+    caller waiting with its own budget. Without coalescing, every caller would
+    spawn another task queued on the same per-server refresh lock - each
+    holding a fetch-semaphore slot - so a few messages against one hung server
+    would starve every other server's fetches and grow an abandoned backlog.
+    """
+    url = "https://hang.example.com/mcp"
+    calls = {"n": 0}
+
+    async def get_token(_url):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            await asyncio.sleep(0.2)  # outlives both callers' 0.05s wait budgets
+        return "Bearer tok"
+
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+    monkeypatch.setattr(om, "TOKEN_FETCH_TIMEOUT_SECONDS", 0.05)
+
+    async def main():
+        results = await asyncio.gather(
+            nw.mcp_oauth_manager.get_fresh_token_bounded(url),
+            nw.mcp_oauth_manager.get_fresh_token_bounded(url),
+        )
+        assert results == [None, None]  # both callers gave up waiting
+        await asyncio.sleep(0.5)  # let the shared background fetch finish
+        # A later call after completion starts a FRESH fetch (no stale reuse).
+        assert await nw.mcp_oauth_manager.get_fresh_token_bounded(url) == "Bearer tok"
+
+    asyncio.run(main())
+    assert calls["n"] == 2  # 1 shared by the two concurrent callers + 1 fresh
 
 
 def test_inject_fetches_tokens_concurrently(monkeypatch):

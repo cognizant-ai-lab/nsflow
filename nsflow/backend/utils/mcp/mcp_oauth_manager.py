@@ -175,6 +175,10 @@ class MCPOAuthManager:
         self._refresh_locks: Dict[str, asyncio.Lock] = {}
         # Bounds concurrent token fetches (see get_fresh_token_bounded).
         self._fetch_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TOKEN_FETCHES)
+        # One shared in-flight fetch task per stored URL, so concurrent callers
+        # coalesce instead of stacking duplicate tasks (and semaphore slots)
+        # behind the same per-server refresh lock (see get_fresh_token_bounded).
+        self._inflight_fetches: Dict[str, asyncio.Task] = {}
         # Strong refs to fetch tasks whose caller gave up waiting, so they are
         # neither garbage-collected mid-run nor left with an unretrieved result.
         self._abandoned_fetches: set = set()
@@ -865,6 +869,15 @@ class MCPOAuthManager:
         queue time counts against ``timeout`` so the caller's latency bound
         holds regardless of how many URLs are being fetched at once.
 
+        Concurrent callers for the same URL coalesce onto one shared in-flight
+        task (each with its own wait budget). Without this, every chat message
+        or gate check against a slow server would spawn another fetch task
+        queued on the same per-server ``_refresh_lock``, each holding a
+        semaphore slot - so one hung server could starve every other server's
+        fetches and grow an unbounded abandoned-task backlog. Coalesced, a
+        hung server costs exactly one slot and one backlog entry no matter how
+        many callers time out on it.
+
         :param server_url: The stored connection URL to fetch a token for.
         :param timeout: Max seconds to wait; None means the module default
                         (read at call time so tests can shrink it).
@@ -876,11 +889,24 @@ class MCPOAuthManager:
         if timeout is None:
             timeout = TOKEN_FETCH_TIMEOUT_SECONDS
 
-        async def gated_fetch() -> Optional[str]:
-            async with self._fetch_semaphore:
-                return await self.get_fresh_token(server_url)
+        # No awaits between the lookup and the store, so this check-then-set
+        # cannot race on the single-threaded event loop.
+        task = self._inflight_fetches.get(server_url)
+        if task is None or task.done():
 
-        task = asyncio.ensure_future(gated_fetch())
+            async def gated_fetch() -> Optional[str]:
+                async with self._fetch_semaphore:
+                    return await self.get_fresh_token(server_url)
+
+            task = asyncio.ensure_future(gated_fetch())
+            self._inflight_fetches[server_url] = task
+
+            def _clear_inflight(done_task: "asyncio.Task") -> None:
+                # Guard against a newer task having already replaced this one.
+                if self._inflight_fetches.get(server_url) is done_task:
+                    del self._inflight_fetches[server_url]
+
+            task.add_done_callback(_clear_inflight)
         try:
             # wait (unlike wait_for) does NOT cancel the task on timeout.
             await asyncio.wait({task}, timeout=timeout)
@@ -916,7 +942,13 @@ class MCPOAuthManager:
         garbage-collected mid-run) and consume its eventual result so a late
         failure is logged instead of surfacing as "exception was never
         retrieved" noise at loop shutdown.
+
+        Idempotent: in-flight tasks are shared by concurrent callers
+        (coalescing in get_fresh_token_bounded), so several callers may give
+        up on the same task - it is referenced and consumed only once.
         """
+        if task in self._abandoned_fetches:
+            return
         self._abandoned_fetches.add(task)
 
         def _consume(done_task: "asyncio.Task") -> None:
