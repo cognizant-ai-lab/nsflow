@@ -28,6 +28,7 @@ manager, the network loader) are patched.
 """
 
 import asyncio
+import time
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
@@ -676,6 +677,98 @@ def test_inject_ignores_redaction_sentinel(monkeypatch):
     asyncio.run(inst.inject_mcp_auth_headers(sly))
     assert sly["http_headers"][url]["Authorization"] == "Bearer tok"
     get_token.assert_awaited_once_with(url)
+
+
+def test_inject_hung_fetch_is_bounded_and_others_still_inject(monkeypatch):
+    """
+    A hung token fetch is cut off at MCP_FRESHEN_TIMEOUT_SECONDS instead of
+    stalling the chat message, and it only forfeits its own token - the other
+    server's token is still injected (#255).
+    """
+    url_hang, url_fast = "https://hang.example.com/mcp", "https://fast.example.com/mcp"
+    _patch_connections(monkeypatch, [url_hang, url_fast])
+    monkeypatch.setattr(nw, "MCP_FRESHEN_TIMEOUT_SECONDS", 0.05)
+
+    async def get_token(url):
+        if url == url_hang:
+            await asyncio.sleep(10)  # would stall the old sequential, unbounded loop
+        return "Bearer tok"
+
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+    inst = _utils()
+    inst.get_network_mcp_urls = lambda: {url_hang, url_fast}
+
+    sly = {}
+    start = time.monotonic()
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    elapsed = time.monotonic() - start
+
+    assert sly["http_headers"] == {url_fast: {"Authorization": "Bearer tok"}}
+    assert elapsed < 5  # bounded by the (patched) timeout, not the 10s hang
+
+
+def test_inject_fetches_tokens_concurrently(monkeypatch):
+    """
+    Token fetches for multiple targets overlap instead of running one-by-one,
+    so per-server latency does not accumulate across connections (#255).
+    """
+    urls = [f"https://s{i}.example.com/mcp" for i in range(3)]
+    _patch_connections(monkeypatch, urls)
+    in_flight = {"now": 0, "max": 0}
+
+    async def get_token(_url):
+        in_flight["now"] += 1
+        in_flight["max"] = max(in_flight["max"], in_flight["now"])
+        await asyncio.sleep(0.01)
+        in_flight["now"] -= 1
+        return "Bearer tok"
+
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+    inst = _utils()
+    inst.get_network_mcp_urls = lambda: set(urls)
+
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+
+    assert in_flight["max"] == len(urls)  # all fetches were in flight together
+    assert set(sly["http_headers"]) == set(urls)
+
+
+def test_inject_one_failing_fetch_does_not_break_others(monkeypatch):
+    """
+    An exception from one server's fetch is contained to that server; the other
+    token is still injected. (Under the old sequential loop, the exception
+    aborted the entire injection via the outer catch-all.)
+    """
+    url_bad, url_good = "https://bad.example.com/mcp", "https://good.example.com/mcp"
+    _patch_connections(monkeypatch, [url_bad, url_good])
+
+    async def get_token(url):
+        if url == url_bad:
+            raise RuntimeError("refresh exploded")
+        return "Bearer tok"
+
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+    inst = _utils()
+    inst.get_network_mcp_urls = lambda: {url_bad, url_good}
+
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+
+    assert sly["http_headers"] == {url_good: {"Authorization": "Bearer tok"}}
+
+
+def test_inject_shared_connection_fetched_once(monkeypatch):
+    """Two referenced URL forms resolving to one stored connection fetch its token once."""
+    stored = "https://api.example.com/mcp"
+    ref_a, ref_b = "https://api.example.com/mcp", "https://api.example.com/mcp/"
+    inst, get_token = _patch_injection(monkeypatch, connections=[stored], referenced=[ref_a, ref_b])
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    # Both referenced forms get the header, but the shared connection is only probed once.
+    assert sly["http_headers"][ref_a] == {"Authorization": "Bearer tok"}
+    assert sly["http_headers"][ref_b] == {"Authorization": "Bearer tok"}
+    get_token.assert_awaited_once_with(stored)
 
 
 # --------------------------- redact_sly_data_for_surface --------------------------- #
