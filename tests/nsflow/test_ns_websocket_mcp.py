@@ -420,6 +420,46 @@ def test_gaps_fresh_tolerates_refresh_errors(monkeypatch):
     assert gaps == {"missing": [], "needs_reauth": []}
 
 
+# --------------------------- inject_mcp_auth_headers --------------------------- #
+
+
+def test_designer_injects_all_connected_tokens(monkeypatch):
+    """
+    The Agent Network Designer gets every connected MCP token - even ones its own
+    sly_data_schema does not declare - so it can offer them when generating
+    networks. It must not scope them via get_network_mcp_urls.
+    """
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    _patch_connections(monkeypatch, [url_a, url_b])
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", AsyncMock(return_value="Bearer tok"))
+    inst = _utils(agent_name=nw.AGENT_NETWORK_DESIGNER_NAME)
+    # A scoped schema result would drop url_b; the designer branch must ignore it.
+    inst.get_network_mcp_urls = MagicMock(return_value={url_a})
+
+    sly_data = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly_data))
+
+    assert sly_data["http_headers"] == {
+        url_a: {"Authorization": "Bearer tok"},
+        url_b: {"Authorization": "Bearer tok"},
+    }
+    inst.get_network_mcp_urls.assert_not_called()
+
+
+def test_non_designer_injection_stays_schema_scoped(monkeypatch):
+    """A normal network only gets tokens for the URLs its sly_data_schema declares."""
+    url_a, url_b = "https://a.example.com/mcp", "https://b.example.com/mcp"
+    _patch_connections(monkeypatch, [url_a, url_b])
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", AsyncMock(return_value="Bearer tok"))
+    inst = _utils(agent_name="net")
+    inst.get_network_mcp_urls = MagicMock(return_value={url_a})  # only url_a is declared
+
+    sly_data = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly_data))
+
+    assert sly_data["http_headers"] == {url_a: {"Authorization": "Bearer tok"}}
+
+
 def test_gaps_fresh_none_when_network_unreadable(monkeypatch):
     """An unreadable network yields None (caller reports nothing missing)."""
     _patch_network(monkeypatch, raise_exc=FileNotFoundError("remote"))
