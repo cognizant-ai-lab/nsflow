@@ -25,6 +25,8 @@ failed refresh must leave the stored token untouched rather than falling into
 interactive re-authentication.
 """
 
+# pylint: disable=too-many-lines
+
 import asyncio
 import json
 import time
@@ -939,9 +941,9 @@ def test_set_token_endpoint_persists_and_merges(tmp_path):
 
 
 def _guard(tmp_path):
-    """Build the guard the way _silent_refresh does: capture obtained_at first."""
-    expected = FileTokenStorage(SERVER_URL, storage_dir=tmp_path).get_metadata().get("obtained_at")
-    return RefreshGuardTokenStorage(SERVER_URL, expected_obtained_at=expected, storage_dir=tmp_path)
+    """Build the guard the way _silent_refresh does: snapshot the entry first."""
+    snapshot = FileTokenStorage(SERVER_URL, storage_dir=tmp_path).get_metadata()
+    return RefreshGuardTokenStorage(SERVER_URL, snapshot=snapshot, storage_dir=tmp_path)
 
 
 def test_guarded_refresh_write_dropped_after_remove(tmp_path):
@@ -987,3 +989,45 @@ def test_guarded_refresh_write_applies_when_unchanged(tmp_path):
     # keeps the stored one, and fresh tokens clear the needs_reauth marker.
     assert entry["tokens"]["refresh_token"] == "refresh-1"
     assert "needs_reauth" not in entry
+
+
+def test_guarded_refresh_same_second_rewrite_still_dropped(tmp_path, monkeypatch):
+    """
+    obtained_at is second-resolution, so two writes in one second collide on
+    it; the UUID generation marker must still tell them apart and drop the
+    stale refresh result.
+    """
+    import nsflow.backend.utils.mcp.mcp_token_storage as ts  # pylint: disable=import-outside-toplevel
+
+    _seed_store(tmp_path)
+    storage = FileTokenStorage(SERVER_URL, storage_dir=tmp_path)
+    monkeypatch.setattr(ts.time, "time", lambda: 1_800_000_000)  # freeze the clock
+
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="first-write", expires_in=3600)))
+    first_obtained_at = _read_store(tmp_path)["obtained_at"]
+    guard = _guard(tmp_path)  # refresh starts against the first write
+    # A re-auth lands within the SAME frozen second: obtained_at collides.
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="reauth-token", expires_in=3600)))
+    assert _read_store(tmp_path)["obtained_at"] == first_obtained_at  # the collision is real
+
+    asyncio.run(guard.set_tokens(OAuthToken(access_token="old-lineage-token", expires_in=3600)))
+
+    assert _read_store(tmp_path)["tokens"]["access_token"] == "reauth-token"
+
+
+def test_guarded_reads_are_pinned_to_snapshot(tmp_path):
+    """
+    The refresh must only ever spend the refresh token of the generation it
+    started from: a lazy disk read could pick up a concurrent re-auth's fresh
+    single-use token, consume it, and have the result dropped by the write
+    guard - bricking the new grant.
+    """
+    _seed_store(tmp_path)  # stores refresh_token="refresh-1"
+    guard = _guard(tmp_path)
+    # A re-auth lands a new grant on disk while the refresh is in flight.
+    reauth = OAuthToken(access_token="reauth-token", refresh_token="refresh-2", expires_in=3600)
+    asyncio.run(FileTokenStorage(SERVER_URL, storage_dir=tmp_path).set_tokens(reauth, preserve_refresh_token=False))
+
+    tokens = asyncio.run(guard.get_tokens())
+
+    assert tokens.refresh_token == "refresh-1"  # pinned to the old lineage

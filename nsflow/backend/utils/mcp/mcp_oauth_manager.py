@@ -1011,13 +1011,16 @@ class MCPOAuthManager:
         expires_at = _stored_expiry(meta)
         token_endpoint = meta.get("token_endpoint")
 
-        # The SDK persists the refresh response through this storage. Guard
-        # that write on the entry still being the generation the refresh
-        # started from: a refresh can outlive its trigger (bounded callers
+        # The SDK reads the refresh token from - and persists the refresh
+        # response through - this storage. Pin both to the entry's generation
+        # at refresh start: a refresh can outlive its trigger (bounded callers
         # abandon the wait but let the fetch finish), and the user may
-        # disconnect or re-authorize the server mid-flight - an unconditional
-        # write would resurrect deleted credentials or clobber the newer grant.
-        guarded_storage = RefreshGuardTokenStorage(server_url, expected_obtained_at=meta.get("obtained_at"))
+        # disconnect or re-authorize the server mid-flight. Reads come from
+        # this snapshot (never a concurrent re-auth's fresh single-use token),
+        # and the write only lands if the stored entry is still this
+        # generation - never resurrecting a removed entry or clobbering a
+        # newer grant.
+        guarded_storage = RefreshGuardTokenStorage(server_url, snapshot=meta)
         provider = SilentRefreshOAuthProvider(
             server_url=server_url,
             client_metadata=self._build_client_metadata(),
