@@ -71,6 +71,7 @@ from nsflow.backend.utils.mcp.mcp_refresh_provider import ReauthRequiredError
 from nsflow.backend.utils.mcp.mcp_refresh_provider import SilentRefreshOAuthProvider
 from nsflow.backend.utils.mcp.mcp_token_storage import FileTokenStorage
 from nsflow.backend.utils.mcp.mcp_token_storage import ReauthFlowTokenStorage
+from nsflow.backend.utils.mcp.mcp_token_storage import RefreshGuardTokenStorage
 from nsflow.backend.utils.mcp.mcp_token_storage import _stored_expiry
 
 logger = logging.getLogger(__name__)
@@ -1010,10 +1011,17 @@ class MCPOAuthManager:
         expires_at = _stored_expiry(meta)
         token_endpoint = meta.get("token_endpoint")
 
+        # The SDK persists the refresh response through this storage. Guard
+        # that write on the entry still being the generation the refresh
+        # started from: a refresh can outlive its trigger (bounded callers
+        # abandon the wait but let the fetch finish), and the user may
+        # disconnect or re-authorize the server mid-flight - an unconditional
+        # write would resurrect deleted credentials or clobber the newer grant.
+        guarded_storage = RefreshGuardTokenStorage(server_url, expected_obtained_at=meta.get("obtained_at"))
         provider = SilentRefreshOAuthProvider(
             server_url=server_url,
             client_metadata=self._build_client_metadata(),
-            storage=storage,
+            storage=guarded_storage,
             # Report the expiry with the refresh margin already applied, so a
             # token get_fresh_token deems stale is equally invalid to the SDK's
             # is_token_valid() and the proactive refresh fires.

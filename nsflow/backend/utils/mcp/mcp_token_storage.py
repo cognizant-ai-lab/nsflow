@@ -217,36 +217,40 @@ class FileTokenStorage:
 
     def _sync_set_tokens(self, tokens: OAuthToken, preserve_refresh_token: bool = True) -> None:
         with _interprocess_lock(self._lock_path):
-            blob = self._load_file()
-            entry = blob.get(self.server_url)
-            # Replace a corrupted/non-dict entry so a recovery write can't be
-            # blocked by an unindexable existing value.
-            if not isinstance(entry, dict):
-                entry = {}
-                blob[self.server_url] = entry
-            new_tokens = tokens.model_dump(mode="json")
-            if preserve_refresh_token and ("refresh_token" not in new_tokens or new_tokens["refresh_token"] is None):
-                # RFC 6749 section 6: a refresh response MAY omit the refresh
-                # token, meaning "keep using the existing one" (Salesforce and
-                # Google do this; You.com rotates instead). Overwriting with
-                # null would silently make the next refresh impossible. Only an
-                # omitted/None field means "keep" - an explicit empty string is
-                # stored as sent (a server clearing the token), not preserved.
-                old_tokens = entry.get("tokens")
-                old_refresh = old_tokens.get("refresh_token") if isinstance(old_tokens, dict) else None
-                if isinstance(old_refresh, str) and old_refresh:
-                    new_tokens["refresh_token"] = old_refresh
-            entry["tokens"] = new_tokens
-            entry["obtained_at"] = int(time.time())
-            if tokens.expires_in is not None:
-                entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
-            else:
-                entry.pop("expires_at", None)
-            # Fresh tokens mean the connection works again: clear a "reconnect
-            # required" marker left by a previously failed silent refresh
-            # (whether this write comes from a successful refresh or a re-auth).
-            entry.pop("needs_reauth", None)
-            self._write_file(blob)
+            self._locked_set_tokens(tokens, preserve_refresh_token)
+
+    def _locked_set_tokens(self, tokens: OAuthToken, preserve_refresh_token: bool) -> None:
+        """The set_tokens read-modify-write; caller must hold the inter-process lock."""
+        blob = self._load_file()
+        entry = blob.get(self.server_url)
+        # Replace a corrupted/non-dict entry so a recovery write can't be
+        # blocked by an unindexable existing value.
+        if not isinstance(entry, dict):
+            entry = {}
+            blob[self.server_url] = entry
+        new_tokens = tokens.model_dump(mode="json")
+        if preserve_refresh_token and ("refresh_token" not in new_tokens or new_tokens["refresh_token"] is None):
+            # RFC 6749 section 6: a refresh response MAY omit the refresh
+            # token, meaning "keep using the existing one" (Salesforce and
+            # Google do this; You.com rotates instead). Overwriting with
+            # null would silently make the next refresh impossible. Only an
+            # omitted/None field means "keep" - an explicit empty string is
+            # stored as sent (a server clearing the token), not preserved.
+            old_tokens = entry.get("tokens")
+            old_refresh = old_tokens.get("refresh_token") if isinstance(old_tokens, dict) else None
+            if isinstance(old_refresh, str) and old_refresh:
+                new_tokens["refresh_token"] = old_refresh
+        entry["tokens"] = new_tokens
+        entry["obtained_at"] = int(time.time())
+        if tokens.expires_in is not None:
+            entry["expires_at"] = entry["obtained_at"] + int(tokens.expires_in)
+        else:
+            entry.pop("expires_at", None)
+        # Fresh tokens mean the connection works again: clear a "reconnect
+        # required" marker left by a previously failed silent refresh
+        # (whether this write comes from a successful refresh or a re-auth).
+        entry.pop("needs_reauth", None)
+        self._write_file(blob)
 
     async def get_client_info(self) -> Optional[OAuthClientInformationFull]:
         """Return the stored OAuth client info for this server, or None if absent/unparsable."""
@@ -538,6 +542,49 @@ class FileTokenStorage:
         except OSError:
             # Best effort (e.g. on Windows); not fatal.
             pass
+
+
+class RefreshGuardTokenStorage(FileTokenStorage):
+    """
+    ``FileTokenStorage`` whose token writes only land if the stored entry is
+    still the generation the refresh started from.
+
+    A silent refresh can outlive its trigger - ``get_fresh_token_bounded``
+    abandons the wait on timeout but deliberately lets the fetch finish in the
+    background - and even a foreground refresh runs concurrently with UI
+    actions. Between the refresh grant being sent and the SDK persisting its
+    response via ``set_tokens``, the user may have disconnected the server
+    (``remove()``) or re-authorized it (a fresh grant, new ``obtained_at``).
+    An unconditional write would then resurrect deleted credentials or
+    overwrite the newer grant with tokens from the old lineage.
+
+    The write is compare-and-swap'ed on ``obtained_at`` - stamped by every
+    token write, so it identifies the entry's generation - under the same
+    inter-process lock as the write itself: the entry must still exist and
+    carry the ``obtained_at`` captured when the refresh started, else the
+    refreshed tokens are dropped and logged. Reads are inherited unchanged.
+    """
+
+    def __init__(self, server_url: str, expected_obtained_at: Any, storage_dir: Optional[Path] = None):
+        """
+        :param expected_obtained_at: The entry's ``obtained_at`` at refresh
+               start (None if the entry predates obtained_at stamping).
+        """
+        super().__init__(server_url, storage_dir)
+        self._expected_obtained_at = expected_obtained_at
+
+    def _sync_set_tokens(self, tokens: OAuthToken, preserve_refresh_token: bool = True) -> None:
+        with _interprocess_lock(self._lock_path):
+            entry = self._load_file().get(self.server_url)
+            if not isinstance(entry, dict) or entry.get("obtained_at") != self._expected_obtained_at:
+                logger.warning(
+                    "Dropping refreshed MCP tokens for %s: the stored entry was %s while the refresh "
+                    "was in flight (disconnected or re-authorized); the refresh result is stale.",
+                    self.server_url,
+                    "removed" if not isinstance(entry, dict) else "re-written",
+                )
+                return
+            self._locked_set_tokens(tokens, preserve_refresh_token)
 
 
 class ReauthFlowTokenStorage:
