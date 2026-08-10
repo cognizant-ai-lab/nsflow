@@ -27,11 +27,15 @@ these methods touch are set. External dependencies (token storage, the OAuth
 manager, the network loader) are patched.
 """
 
+# pylint: disable=too-many-lines
+
 import asyncio
+import time
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
 import nsflow.backend.utils.agentutils.ns_websocket_utils as nw
+import nsflow.backend.utils.mcp.mcp_oauth_manager as om
 
 # pylint: disable=protected-access  # these aliases exercise private methods under test
 NORM = nw.NsWebsocketUtils._normalize_mcp_url
@@ -510,14 +514,20 @@ def test_get_urls_network_none_returns_none(monkeypatch):
 # --------------------------- inject_mcp_auth_headers --------------------------- #
 
 
-def _patch_injection(monkeypatch, *, connections, referenced, token="Bearer tok"):
-    """Patch storage list, the network's referenced URLs, and the token fetch."""
+def _patch_injection(monkeypatch, *, connections, referenced, token="Bearer tok", get_token=None):
+    """
+    Patch storage list, the network's referenced URLs, and the token fetch.
+
+    ``get_token`` overrides the default constant-token AsyncMock with a custom
+    coroutine when a test needs URL-dependent behavior (hang, raise, count).
+    """
     monkeypatch.setattr(
         nw.FileTokenStorage,
         "list_connections",
         MagicMock(return_value=[{"server_url": u} for u in connections]),
     )
-    get_token = AsyncMock(return_value=token)
+    if get_token is None:
+        get_token = AsyncMock(return_value=token)
     monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
     inst = _utils()
     inst.get_network_mcp_urls = lambda: (None if referenced is None else set(referenced))
@@ -676,6 +686,207 @@ def test_inject_ignores_redaction_sentinel(monkeypatch):
     asyncio.run(inst.inject_mcp_auth_headers(sly))
     assert sly["http_headers"][url]["Authorization"] == "Bearer tok"
     get_token.assert_awaited_once_with(url)
+
+
+def test_inject_hung_fetch_is_bounded_and_others_still_inject(monkeypatch):
+    """
+    A hung token fetch stops being waited on at TOKEN_FETCH_TIMEOUT_SECONDS
+    instead of stalling the chat message, and it only forfeits its own token -
+    the other server's token is still injected (#255).
+    """
+    url_hang, url_fast = "https://hang.example.com/mcp", "https://fast.example.com/mcp"
+
+    async def get_token(url):
+        if url == url_hang:
+            await asyncio.sleep(10)  # would stall the old sequential, unbounded loop
+        return "Bearer tok"
+
+    inst, _ = _patch_injection(
+        monkeypatch, connections=[url_hang, url_fast], referenced=[url_hang, url_fast], get_token=get_token
+    )
+    monkeypatch.setattr(om, "TOKEN_FETCH_TIMEOUT_SECONDS", 0.05)
+
+    sly = {}
+    start = time.monotonic()
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    elapsed = time.monotonic() - start
+
+    assert sly["http_headers"] == {url_fast: {"Authorization": "Bearer tok"}}
+    assert elapsed < 5  # bounded by the (patched) timeout, not the 10s hang
+
+
+def test_inject_timeout_does_not_cancel_fetch(monkeypatch):
+    """
+    Giving up the wait must NOT cancel the fetch itself: cancelling a silent
+    refresh mid-flight can burn a rotation provider's single-use refresh token
+    before the rotated one is persisted, and can cancel the storage write
+    mid-flight. The abandoned fetch runs to completion in the background.
+    """
+    url = "https://slow.example.com/mcp"
+    events = []
+
+    async def get_token(_url):
+        try:
+            await asyncio.sleep(0.2)  # outlives the 0.05s wait budget below
+        except asyncio.CancelledError:
+            events.append("cancelled")
+            raise
+        events.append("completed")
+        return "Bearer tok"
+
+    inst, _ = _patch_injection(monkeypatch, connections=[url], referenced=[url], get_token=get_token)
+    monkeypatch.setattr(om, "TOKEN_FETCH_TIMEOUT_SECONDS", 0.05)
+
+    async def main():
+        sly = {}
+        await inst.inject_mcp_auth_headers(sly)
+        assert sly["http_headers"] == {}  # nothing resolved within the wait budget
+        await asyncio.sleep(0.5)  # keep the loop alive for the abandoned fetch
+
+    asyncio.run(main())
+    assert events == ["completed"]  # finished in the background, never cancelled
+
+
+def test_bounded_fetch_coalesces_concurrent_callers(monkeypatch):
+    """
+    Concurrent bounded fetches for the same URL share ONE in-flight task, each
+    caller waiting with its own budget. Without coalescing, every caller would
+    spawn another task queued on the same per-server refresh lock - each
+    holding a fetch-semaphore slot - so a few messages against one hung server
+    would starve every other server's fetches and grow an abandoned backlog.
+    """
+    url = "https://hang.example.com/mcp"
+    calls = {"n": 0}
+
+    async def get_token(_url):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            await asyncio.sleep(0.2)  # outlives both callers' 0.05s wait budgets
+        return "Bearer tok"
+
+    monkeypatch.setattr(nw.mcp_oauth_manager, "get_fresh_token", get_token)
+    monkeypatch.setattr(om, "TOKEN_FETCH_TIMEOUT_SECONDS", 0.05)
+
+    async def main():
+        results = await asyncio.gather(
+            nw.mcp_oauth_manager.get_fresh_token_bounded(url),
+            nw.mcp_oauth_manager.get_fresh_token_bounded(url),
+        )
+        assert results == [None, None]  # both callers gave up waiting
+        await asyncio.sleep(0.5)  # let the shared background fetch finish
+        # A later call after completion starts a FRESH fetch (no stale reuse).
+        assert await nw.mcp_oauth_manager.get_fresh_token_bounded(url) == "Bearer tok"
+
+    asyncio.run(main())
+    assert calls["n"] == 2  # 1 shared by the two concurrent callers + 1 fresh
+
+
+def test_inject_fetches_tokens_concurrently(monkeypatch):
+    """
+    Token fetches for multiple targets overlap instead of running one-by-one,
+    so per-server latency does not accumulate across connections (#255).
+    """
+    urls = [f"https://s{i}.example.com/mcp" for i in range(3)]  # under the concurrency cap
+    in_flight = {"now": 0, "max": 0}
+
+    async def get_token(_url):
+        in_flight["now"] += 1
+        in_flight["max"] = max(in_flight["max"], in_flight["now"])
+        await asyncio.sleep(0.01)
+        in_flight["now"] -= 1
+        return "Bearer tok"
+
+    inst, _ = _patch_injection(monkeypatch, connections=urls, referenced=urls, get_token=get_token)
+
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+
+    assert in_flight["max"] == len(urls)  # all fetches were in flight together
+    assert set(sly["http_headers"]) == set(urls)
+
+
+def test_inject_concurrent_fetches_capped(monkeypatch):
+    """
+    The fetch fan-out is capped at MAX_CONCURRENT_TOKEN_FETCHES so a pile of
+    simultaneously expired tokens can't stampede every auth server at once;
+    the queued fetches still run and inject once a slot frees up.
+    """
+    urls = [f"https://s{i}.example.com/mcp" for i in range(om.MAX_CONCURRENT_TOKEN_FETCHES + 2)]
+    in_flight = {"now": 0, "max": 0}
+
+    async def get_token(_url):
+        in_flight["now"] += 1
+        in_flight["max"] = max(in_flight["max"], in_flight["now"])
+        await asyncio.sleep(0.01)
+        in_flight["now"] -= 1
+        return "Bearer tok"
+
+    inst, _ = _patch_injection(monkeypatch, connections=urls, referenced=urls, get_token=get_token)
+
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+
+    assert in_flight["max"] == om.MAX_CONCURRENT_TOKEN_FETCHES
+    assert set(sly["http_headers"]) == set(urls)  # the queued fetches were not dropped
+
+
+def test_inject_one_failing_fetch_does_not_break_others(monkeypatch):
+    """
+    An exception from one server's fetch is contained to that server; the other
+    token is still injected. (Under the old sequential loop, the exception
+    aborted the entire injection via the outer catch-all.)
+    """
+    url_bad, url_good = "https://bad.example.com/mcp", "https://good.example.com/mcp"
+
+    async def get_token(url):
+        if url == url_bad:
+            raise RuntimeError("refresh exploded")
+        return "Bearer tok"
+
+    inst, _ = _patch_injection(
+        monkeypatch, connections=[url_bad, url_good], referenced=[url_bad, url_good], get_token=get_token
+    )
+
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+
+    assert sly["http_headers"] == {url_good: {"Authorization": "Bearer tok"}}
+
+
+def test_inject_recheck_keeps_user_auth_added_during_fetch(monkeypatch):
+    """
+    A user Authorization merged into the shared sly_data WHILE the token fetch
+    is in flight wins: the second pass re-checks the live headers right before
+    writing instead of trusting its pre-fetch snapshot, so a concurrent
+    handler's merge (reconnect, second tab) is never clobbered.
+    """
+    url = "https://api.example.com/mcp"
+    sly = {}
+
+    async def get_token(_url):
+        # Simulate another handler on the same session merging user sly_data
+        # while this injection awaits the fetch.
+        MERGE(sly, {"http_headers": {url: {"Authorization": "Bearer user-tok", "X-Api-Key": "k"}}})
+        return "Bearer fetched"
+
+    inst, _ = _patch_injection(monkeypatch, connections=[url], referenced=[url], get_token=get_token)
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+
+    # The user's headers survive; the fetched token is discarded for this URL.
+    assert sly["http_headers"][url] == {"Authorization": "Bearer user-tok", "X-Api-Key": "k"}
+
+
+def test_inject_shared_connection_fetched_once(monkeypatch):
+    """Two referenced URL forms resolving to one stored connection fetch its token once."""
+    stored = "https://api.example.com/mcp"
+    ref_a, ref_b = "https://api.example.com/mcp", "https://api.example.com/mcp/"
+    inst, get_token = _patch_injection(monkeypatch, connections=[stored], referenced=[ref_a, ref_b])
+    sly = {}
+    asyncio.run(inst.inject_mcp_auth_headers(sly))
+    # Both referenced forms get the header, but the shared connection is only probed once.
+    assert sly["http_headers"][ref_a] == {"Authorization": "Bearer tok"}
+    assert sly["http_headers"][ref_b] == {"Authorization": "Bearer tok"}
+    get_token.assert_awaited_once_with(stored)
 
 
 # --------------------------- redact_sly_data_for_surface --------------------------- #
