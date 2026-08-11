@@ -23,7 +23,7 @@ from typing import Optional
 
 from neuro_san.client.streaming_input_processor import StreamingInputProcessor
 from neuro_san.interfaces.agent_session import AgentSession
-from neuro_san.internals.messages.origination import Origination
+from neuro_san.internals.journals.origination import Origination
 
 
 # pylint: disable=too-many-locals, useless-parent-delegation
