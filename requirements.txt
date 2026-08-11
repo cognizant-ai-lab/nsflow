@@ -2,7 +2,7 @@
 # requirements-build.txt
 
 # Neuro SAN library
-neuro-san>=0.6.32,<0.7
+neuro-san>=0.6.92,<0.7
 
 # MCP client SDK - used to perform the OAuth 2.1 (auth-code + PKCE + dynamic
 # client registration) flow when connecting nsflow to OAuth-protected MCP servers.
