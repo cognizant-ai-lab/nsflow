@@ -16,7 +16,7 @@
 import unittest
 from unittest.mock import patch
 
-from neuro_san.internals.messages.chat_message_type import ChatMessageType
+from neuro_san.message.types.chat_message_type import ChatMessageType
 
 from nsflow.backend.utils.agentutils.agent_log_processor import AgentLogProcessor
 
