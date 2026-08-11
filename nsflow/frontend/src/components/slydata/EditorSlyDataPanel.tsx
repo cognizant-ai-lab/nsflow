@@ -89,7 +89,8 @@ const getLatestSlyDataFromMessages = (msgs: any[]): any | undefined => {
 /* ---------------- component ---------------- */
 
 const EditorSlyDataPanel: React.FC = () => {
-  const { slyDataMessages, targetNetwork, addSlyDataMessage, isEditorMode } = useChatContext();
+  const { slyDataMessages, targetNetwork, addSlyDataMessage, isEditorMode,
+    getEditorOutgoingSlyData, progressTick } = useChatContext();
   const { theme } = useTheme();
   const jsonEditorTheme = useJsonEditorTheme();
 
@@ -141,9 +142,14 @@ const EditorSlyDataPanel: React.FC = () => {
 
   const latestSigRef = useRef<string>('INIT');
 
-  // only use the global stream; both agent + user edits go through addSlyDataMessage
+  // In editor mode, show exactly the blob a send would carry (base + freshest
+  // definition/name overlay from ChatContext) so the panel never displays
+  // something different from what the designer receives. Outside editor mode,
+  // keep deriving from the slydata stream alone.
   useEffect(() => {
-    const latest = getLatestSlyDataFromMessages(slyDataMessages ?? []);
+    const latest = isEditorMode
+      ? getEditorOutgoingSlyData()
+      : getLatestSlyDataFromMessages(slyDataMessages ?? []);
     const sig = stableStringify(latest ?? '__EMPTY__');
 
     if (sig === latestSigRef.current) return;
@@ -155,7 +161,7 @@ const EditorSlyDataPanel: React.FC = () => {
       if (targetNetwork && !isEditorMode) saveSlyDataToCache(latest, targetNetwork, 1);
       setEditorVersion(v => v + 1);
     }
-  }, [slyDataMessages, saveSlyDataToCache, targetNetwork, isEditorMode]);
+  }, [slyDataMessages, progressTick, getEditorOutgoingSlyData, saveSlyDataToCache, targetNetwork, isEditorMode]);
 
   /* ---- actions ---- */
 

@@ -18,17 +18,18 @@ limitations under the License.
 import { useChatContext } from "../context/ChatContext";
 
 export const useChatControls = () => {
-  const { 
-    chatWs, 
-    internalChatWs, 
-    setChatWs, 
-    setInternalChatWs, 
-    setChatMessages, 
+  const {
+    chatWs,
+    internalChatWs,
+    setChatWs,
+    setInternalChatWs,
+    setChatMessages,
     setInternalChatMessages,
     setSlyDataMessages,
     addInternalChatMessage,
     addChatMessage,
-    addSlyDataMessage
+    addSlyDataMessage,
+    clearNetworkPayloadState
   } = useChatContext();
 
   const stopWebSocket = () => {
@@ -49,6 +50,9 @@ export const useChatControls = () => {
     setChatMessages([]);
     setInternalChatMessages([]);
     setSlyDataMessages([]);
+    // Also drop the recorded per-network payloads; otherwise the next editor send
+    // resurrects the definition of the network that was just cleared.
+    clearNetworkPayloadState();
     addChatMessage({ sender: "system", text: "Welcome to the chats", network: "" });
     addInternalChatMessage({ sender: "system", text: "Welcome to internal chat logs.", network: "" });
     addSlyDataMessage({ sender: "system", text: "Welcome to sly_data logs.", network: "" });

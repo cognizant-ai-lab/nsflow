@@ -26,7 +26,6 @@ import { useApiPort } from '../context/ApiPortContext';
 import { useJsonEditorTheme } from '../context/ThemeContext';
 import { JsonEditor, ThemeInput } from 'json-edit-react';
 import { useChatContext } from "../context/ChatContext";
-import { extractProgressPayload } from "../utils/progressHelper";
 
 interface NetworkAgentEditorPanelProps {
   selectedDesignId: string;
@@ -55,7 +54,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const [hasChanges, setHasChanges] = useState(false);
   const [, setOriginalData] = useState<any>(null);
   const [schema, setSchema] = useState<any>(null);
-  const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork } = useChatContext();
+  const { getLatestNetworkPayload } = useChatContext();
   
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -70,11 +69,8 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const hasChangesToSave = canEdit && hasChanges;
 
   const getViewDefinition = useCallback(() => {
-    const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
-    const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
-    const payload = extractProgressPayload(s) || extractProgressPayload(p);
-    return payload?.agent_network_definition as Record<string, any> | undefined;
-  }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
+    return getLatestNetworkPayload()?.agent_network_definition as Record<string, any> | undefined;
+  }, [getLatestNetworkPayload]);
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {

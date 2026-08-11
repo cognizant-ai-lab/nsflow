@@ -24,7 +24,6 @@ import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { getFeatureFlags, toServedNetworkPath } from "../utils/config";
-import {extractProgressPayload } from "../utils/progressHelper";
 
 
 interface EditingSession {
@@ -89,8 +88,8 @@ const EditorSidebar = ({
   const [selectedNetworkOption, setSelectedNetworkOption] = useState<NetworkOption | null>(null);
   const [agentNetworkDefinition, setAgentNetworkDefinition] = useState<Record<string, any> | null>(null);
   const { apiUrl, isReady } = useApiPort();
-  const { chatMessages, getLastProgressMessage, getLastSlyDataMessage,
-    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, targetNetwork,
+  const { chatMessages, getLatestNetworkPayload,
+    progressTick, slyDataTick, targetNetwork,
     activeNetwork, addSlyDataMessage, regenerateSessionId, waitingForAgent } = useChatContext();
   const { host, port, connectionType, isNsReady } = useNeuroSan();
   const { stopWebSocket, clearChat } = useChatControls();
@@ -263,16 +262,7 @@ const EditorSidebar = ({
   };
 
   const refreshFromLogs = () => {
-    // Prefer network-scoped latest, then fallback to global
-    const latestProgress = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
-    const latestSly = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
-
-    // Decide which one to use based on which tick was updated last basis timestamp
-    const preferProgress = lastProgressAt > lastSlyDataAt;
-
-    const payload = preferProgress
-      ? extractProgressPayload(latestProgress) || extractProgressPayload(latestSly)
-      : extractProgressPayload(latestSly) || extractProgressPayload(latestProgress);
+    const payload = getLatestNetworkPayload();
     // silently ignore; nothing to show yet
     if (!payload?.agent_network_definition) return;
 

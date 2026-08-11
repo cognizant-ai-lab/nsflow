@@ -62,13 +62,13 @@ function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefi
 
 /**
  * Pick the freshest network payload between the progress and slydata streams.
- * `preferProgress` should be `lastProgressAt > lastSlyDataAt` from ChatContext;
- * the non-preferred stream is the fallback when the preferred one has no payload.
+ * `preferProgress` decides which stream wins; the other is the fallback when
+ * the preferred one has no payload.
  *
- * This is the single definition of "the network the UI currently shows" — the
- * canvas renders from it and outgoing chat sly_data is built from it, so the
- * designer always receives what the user sees. (When editor state moves into a
- * store, reimplement this as a store selector and both consumers follow.)
+ * Pure combinator — consumers should not call this directly. The seam is
+ * ChatContext.getLatestNetworkPayload / getEditorOutgoingSlyData, which own the
+ * per-network frames and timestamps this needs. (When editor state moves into a
+ * store, those two context functions are the only places to reimplement.)
  */
 export function latestNetworkPayload(
   progressSrc: { text: string | object } | string | object | undefined,
@@ -78,6 +78,35 @@ export function latestNetworkPayload(
   return preferProgress
     ? extractProgressPayload(progressSrc) || extractProgressPayload(slyDataSrc)
     : extractProgressPayload(slyDataSrc) || extractProgressPayload(progressSrc);
+}
+
+/**
+ * Overlay a network payload onto an outgoing sly_data blob, atomically.
+ *
+ * The definition/name pair must always come from the SAME frame: the backend
+ * persists the definition under sly_data's agent_network_name, so pairing a
+ * fresh definition with a stale name can overwrite another network's file.
+ * Hence: no overlay at all unless the payload carries a definition, and when
+ * it does, the name is taken from that payload or removed — an absent name
+ * lets the designer's server-side session supply its own (which tracks the
+ * definition), never a leftover from an older blob.
+ *
+ * Values are deep-copied because payloads from the progress stream are live
+ * references into React state. NOTE: mutates and returns `base` — callers must
+ * pass a private copy, never an object shared with component or context state.
+ */
+export function overlayNetworkPayload(
+  base: Record<string, any>,
+  payload: ProgressPayload | undefined
+): Record<string, any> {
+  if (!payload?.agent_network_definition) return base;
+  base.agent_network_definition = JSON.parse(JSON.stringify(payload.agent_network_definition));
+  if (payload.agent_network_name) {
+    base.agent_network_name = payload.agent_network_name;
+  } else {
+    delete base.agent_network_name;
+  }
+  return base;
 }
 
 /**

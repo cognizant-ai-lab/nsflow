@@ -57,7 +57,6 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
-import { latestNetworkPayload } from "../utils/progressHelper";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const { apiUrl } = useApiPort();
@@ -71,17 +70,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     activeNetwork,
     targetNetwork,
     chatMessages,
-    slyDataMessages,
     addChatMessage,
     addSlyDataMessage,
     chatWs,
     isEditorMode,
     waitingForAgent,
     setWaitingForAgent,
-    getLastProgressMessage,
-    getLastSlyDataMessage,
-    lastProgressAt,
-    lastSlyDataAt,
+    getEditorOutgoingSlyData,
   } = useChatContext();
 
   const { stopWebSocket, clearChat } = useChatControls();
@@ -274,33 +269,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
   }, [chatMessages, shouldAutoPlayNextAgent]);
 
-  // Build sly_data to send: editor mode reads from slyDataMessages, home mode reads from cache
+  // Build sly_data to send: editor mode reads from the shared context builder, home mode reads from cache
   const getSlyDataForSend = useCallback((): Record<string, any> | undefined => {
     if (isEditorMode) {
-      // In editor mode, always send current sly data from the messages stream (no cache, no checkbox)
-      let base: Record<string, any> = {};
-      for (let i = (slyDataMessages ?? []).length - 1; i >= 0; i--) {
-        const msg = slyDataMessages[i];
-        const raw = typeof msg?.text === 'string' ? msg.text : undefined;
-        if (!raw) continue;
-        // Extract JSON from code-fenced or raw string
-        const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-        const jsonStr = fence?.[1] ?? raw;
-        try {
-          const parsed = JSON.parse(jsonStr);
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) { base = parsed; break; }
-        } catch { /* skip non-JSON messages */ }
-      }
-      // Overlay the freshest network definition — the same payload the canvas
-      // renders (progress or slydata, whichever arrived last) — so the designer
-      // always receives the network the user currently sees (#261). The slydata
-      // stream alone can lag progress frames within a turn.
-      const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
-      const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
-      const payload = latestNetworkPayload(p, s, lastProgressAt > lastSlyDataAt);
-      if (payload?.agent_network_definition) base.agent_network_definition = payload.agent_network_definition;
-      if (payload?.agent_network_name) base.agent_network_name = payload.agent_network_name;
-      return base; // {} when no sly data yet — still send empty object
+      // Newest sly_data blob + the freshest definition/name pair overlaid (#261),
+      // built by ChatContext so the send path and the Sly Data panel agree.
+      // {} when no sly data yet — still send empty object.
+      return getEditorOutgoingSlyData();
     }
     // Home mode: use checkbox + cache
     if (!useSlyDataChecked) return undefined;
@@ -311,8 +286,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       return cached.data;
     }
     return {};
-  }, [isEditorMode, slyDataMessages, useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache,
-      getLastProgressMessage, getLastSlyDataMessage, lastProgressAt, lastSlyDataAt]);
+  }, [isEditorMode, getEditorOutgoingSlyData, useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
 
   const handleFileAttach = () => {
     fileInputRef.current?.click();

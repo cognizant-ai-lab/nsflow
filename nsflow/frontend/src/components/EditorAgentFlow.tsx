@@ -34,7 +34,6 @@ import {
 } from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
-import { extractProgressPayload, latestNetworkPayload } from "../utils/progressHelper";
 
 export const nodeTypes = Object.freeze({
   agent: EditableAgentNode,
@@ -88,8 +87,8 @@ const EditorAgentFlow = ({
   const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
-  const { getLastProgressMessage, getLastSlyDataMessage, targetNetwork,
-    progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, waitingForAgent } = useChatContext();
+  const { getLatestNetworkPayload,
+    progressTick, slyDataTick, waitingForAgent } = useChatContext();
 
   // The launch button becomes visible as soon as the designer reports a network name,
   // but a freshly-generated network isn't actually finished/registered until the agent
@@ -120,21 +119,14 @@ const EditorAgentFlow = ({
 
   // latest definition for view-mode
   const getViewDefinition = useCallback(() => {
-    const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
-    const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
+    return getLatestNetworkPayload()?.agent_network_definition as Record<string, any> | undefined;
+  }, [getLatestNetworkPayload]);
 
-    const payload = latestNetworkPayload(p, s, lastProgressAt > lastSlyDataAt);
-
-    return payload?.agent_network_definition as Record<string, any> | undefined;
-  }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
-
-  // Get the latest agent network name for launch button
+  // Latest agent network name for the launch button — same selector as the canvas
+  // and outgoing sly_data, so all three always name the same network.
   const getLatestAgentNetworkName = useCallback(() => {
-    const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
-    const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
-    const payload = extractProgressPayload(s) || extractProgressPayload(p);
-    return payload?.agent_network_name;
-  }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
+    return getLatestNetworkPayload()?.agent_network_name;
+  }, [getLatestNetworkPayload]);
 
   // Layout manager for position caching and intelligent layout
   const layoutManager = selectedNetwork ? createLayoutManager(selectedNetwork, {
