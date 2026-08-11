@@ -63,7 +63,12 @@ function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefi
 /**
  * Pick the freshest network payload between the progress and slydata streams.
  * `preferProgress` decides which stream wins; the other is the fallback when
- * the preferred one has no payload.
+ * the preferred one has no payload — and payloads carrying an
+ * agent_network_definition outrank definition-less ones (e.g. a name-only
+ * frame), so a trailing frame without a definition cannot mask the other
+ * stream's definition. Consumers align the canvas and outgoing sly_data on
+ * the freshest *definition*; the overlay ignores definition-less payloads
+ * anyway.
  *
  * Pure combinator — consumers should not call this directly. The seam is
  * ChatContext.getLatestNetworkPayload / getEditorOutgoingSlyData, which own the
@@ -75,9 +80,11 @@ export function latestNetworkPayload(
   slyDataSrc: { text: string | object } | string | object | undefined,
   preferProgress: boolean
 ): ProgressPayload | undefined {
-  return preferProgress
-    ? extractProgressPayload(progressSrc) || extractProgressPayload(slyDataSrc)
-    : extractProgressPayload(slyDataSrc) || extractProgressPayload(progressSrc);
+  const preferred = extractProgressPayload(preferProgress ? progressSrc : slyDataSrc);
+  const fallback = extractProgressPayload(preferProgress ? slyDataSrc : progressSrc);
+  if (preferred?.agent_network_definition) return preferred;
+  if (fallback?.agent_network_definition) return fallback;
+  return preferred || fallback;
 }
 
 /**
