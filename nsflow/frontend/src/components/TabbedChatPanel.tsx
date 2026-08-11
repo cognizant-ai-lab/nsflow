@@ -196,7 +196,9 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
             }
           }
         } else if (typeof msg === "string") {
-          // AGENT_PROGRESS events arrive as a JSON string: '{"progress": {...}}'
+          // Legacy compat: older backends sent AGENT_PROGRESS as a JSON string
+          // '{"progress": {...}}'. The backend now always sends {"text": <dict>};
+          // keep this branch for one release, then remove.
           try {
             const parsed = JSON.parse(msg);
             payload = "progress" in parsed ? parsed.progress : parsed;
