@@ -61,6 +61,26 @@ function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefi
 }
 
 /**
+ * Pick the freshest network payload between the progress and slydata streams.
+ * `preferProgress` should be `lastProgressAt > lastSlyDataAt` from ChatContext;
+ * the non-preferred stream is the fallback when the preferred one has no payload.
+ *
+ * This is the single definition of "the network the UI currently shows" — the
+ * canvas renders from it and outgoing chat sly_data is built from it, so the
+ * designer always receives what the user sees. (When editor state moves into a
+ * store, reimplement this as a store selector and both consumers follow.)
+ */
+export function latestNetworkPayload(
+  progressSrc: { text: string | object } | string | object | undefined,
+  slyDataSrc: { text: string | object } | string | object | undefined,
+  preferProgress: boolean
+): ProgressPayload | undefined {
+  return preferProgress
+    ? extractProgressPayload(progressSrc) || extractProgressPayload(slyDataSrc)
+    : extractProgressPayload(slyDataSrc) || extractProgressPayload(progressSrc);
+}
+
+/**
  * Extract a { agent_network_definition, agent_network_name } payload from:
  * - a ChatContext Message-like object: { text: string|object }
  * - a raw object

@@ -34,7 +34,7 @@ import {
 } from "@mui/icons-material";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
-import {extractProgressPayload } from "../utils/progressHelper";
+import { extractProgressPayload, latestNetworkPayload } from "../utils/progressHelper";
 
 export const nodeTypes = Object.freeze({
   agent: EditableAgentNode,
@@ -123,12 +123,7 @@ const EditorAgentFlow = ({
     const p = getLastProgressMessage({ network: targetNetwork }) ?? getLastProgressMessage();
     const s = getLastSlyDataMessage({ network: targetNetwork }) ?? getLastSlyDataMessage();
 
-    // Decide which one to use based on which tick was updated last basis timestamp
-    const preferProgress = lastProgressAt > lastSlyDataAt;
-
-    const payload = preferProgress
-      ? extractProgressPayload(p) || extractProgressPayload(s)
-      : extractProgressPayload(s) || extractProgressPayload(p);
+    const payload = latestNetworkPayload(p, s, lastProgressAt > lastSlyDataAt);
 
     return payload?.agent_network_definition as Record<string, any> | undefined;
   }, [getLastProgressMessage, getLastSlyDataMessage, targetNetwork]);
