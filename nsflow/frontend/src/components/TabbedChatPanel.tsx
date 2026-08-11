@@ -223,7 +223,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
       newSlyDataWs.close();
       newProgressWs.close();
     };
-  }, [targetNetwork, wsUrl, sessionId]);
+  }, [targetNetwork, wsUrl, sessionId, isEditorMode]);
 
   const tabConfig = [
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },

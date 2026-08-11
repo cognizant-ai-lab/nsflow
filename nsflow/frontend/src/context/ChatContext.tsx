@@ -275,16 +275,22 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // The sly_data blob an editor-mode chat message should carry: the newest parseable
-  // sly_data blob as the base (non-definition keys round-trip unchanged), with the
-  // freshest definition/name pair overlaid atomically — unless the newest sly_data
-  // frame is user-authored (a Sly Data panel edit or a send echo) and no fresher
-  // progress frame exists, in which case the user's blob is authoritative as-is
-  // (deliberate key deletions must not be resurrected from older frames).
+  // sly_data blob recorded for that network as the base (non-definition keys
+  // round-trip unchanged), with the freshest definition/name pair overlaid
+  // atomically — unless the newest sly_data frame is user-authored (a Sly Data
+  // panel edit or a send echo) and no fresher progress frame exists, in which case
+  // the user's blob is authoritative as-is (deliberate key deletions must not be
+  // resurrected from older frames).
   const getEditorOutgoingSlyData = (network?: string): Record<string, any> => {
     const net = network ?? targetNetwork;
     let base: Record<string, any> = {};
     for (let i = slyDataMessages.length - 1; i >= 0; i--) {
-      const obj = asObjectText(slyDataMessages[i]?.text as any);
+      const msg = slyDataMessages[i];
+      // Scope the base to the target network's own stream: blobs recorded for a
+      // different network must not leak their keys into this send. (Also keeps the
+      // user-authored guard below consistent — it reads the same per-network stream.)
+      if (net && msg?.network !== net) continue;
+      const obj = asObjectText(msg?.text as any);
       if (obj && typeof obj === "object" && !Array.isArray(obj)) {
         base = JSON.parse(JSON.stringify(obj)); // clone: stream state must never be mutated
         break;
