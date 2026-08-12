@@ -37,8 +37,8 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const { theme } = useTheme();
   const { sessionId, activeNetwork, targetNetwork, isEditorMode: contextIsEditorMode, setIsEditorMode,
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
-    setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs, chatWs, internalChatWs,
-    slyDataWs, progressWs, setNewSlyData, setNewProgress } = useChatContext();
+    setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs,
+    setNewSlyData, setNewProgress } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
@@ -52,23 +52,11 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   useEffect(() => {
     if (!targetNetwork) return;
 
-    // Close old WebSockets before creating new ones
-    if (chatWs) {
-      console.log("Closing previous Chat WebSocket...");
-      chatWs.close();
-    }
-    if (internalChatWs) {
-      console.log("Closing previous Internal Chat WebSocket...");
-      internalChatWs.close();
-    }
-    if (slyDataWs) {
-      console.log("Closing previous Sly Data WebSocket...");
-      slyDataWs.close();
-    }
-    if (progressWs) {
-      console.log("Closing previous Progress WebSocket...");
-      progressWs.close();
-    }
+    // Set when this session's sockets are torn down. Late frames from a previous
+    // session must be dropped, not recorded: ws.close() is asynchronous, and an
+    // old frame landing after a clear/reload would repopulate the per-network
+    // payload maps that editor-mode sly_data is built from.
+    let disposed = false;
 
     // Send system message for network switch only once
     if (lastActiveNetworkRef.current !== targetNetwork) {
@@ -86,6 +74,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     const newChatWs = new WebSocket(chatWsUrl);
 
     newChatWs.onmessage = (event) => {
+      if (disposed) return;
       try {
         const data = JSON.parse(event.data);
         if (data.message && typeof data.message === "object" && data.message.type === "AI") {
@@ -101,12 +90,14 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     setChatWs(newChatWs);
 
     // Setup WebSocket for Internal Chat Panel (skip in editor mode)
+    let newInternalWs: WebSocket | null = null;
     if (!isEditorMode) {
       const internalWsUrl = `${wsUrl}/api/v1/ws/internalchat/${targetNetwork}/${sessionId}`;
       console.log("Connecting Internal Chat WebSocket:", internalWsUrl);
-      const newInternalWs = new WebSocket(internalWsUrl);
+      newInternalWs = new WebSocket(internalWsUrl);
 
       newInternalWs.onmessage = (event) => {
+        if (disposed) return;
         try {
           const data = JSON.parse(event.data);
           if (data.message && typeof data.message === "object") {
@@ -136,6 +127,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     const newSlyDataWs = new WebSocket(slyDataWsUrl);
 
     newSlyDataWs.onmessage = (event) => {
+      if (disposed) return;
       try {
         const data = JSON.parse(event.data);
         if (data.message && typeof data.message === "object") {
@@ -176,6 +168,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     const newProgressWs = new WebSocket(progressWsUrl);
 
     newProgressWs.onmessage = (event) => {
+      if (disposed) return;
       try {
         const data = JSON.parse(event.data);
         // Expect a shape like { message: { text: string | object, ... } } OR other
@@ -223,9 +216,14 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     setProgressWs(newProgressWs);
 
     return () => {
-      console.log("WebSockets for old network are closed.");
+      disposed = true;
+      console.log("Closing WebSockets for previous session/network...");
+      newChatWs.close();
+      newInternalWs?.close();
+      newSlyDataWs.close();
+      newProgressWs.close();
     };
-  }, [targetNetwork, wsUrl, sessionId]);
+  }, [targetNetwork, wsUrl, sessionId, isEditorMode]);
 
   const tabConfig = [
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },

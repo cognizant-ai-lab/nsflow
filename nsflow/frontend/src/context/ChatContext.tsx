@@ -17,6 +17,12 @@ limitations under the License.
 import { createContext, useContext, useState, ReactNode, useRef } from "react";
 import { getWandName } from "../utils/config";
 import { getCruseAgentNames } from "../utils/config";
+import {
+  ProgressPayload,
+  asObjectText,
+  latestNetworkPayload,
+  overlayNetworkPayload,
+} from "../utils/progressHelper";
 
 // Generate a unique session ID for this browser session
 // const generateSessionId = (): string => {
@@ -107,6 +113,10 @@ type ChatContextType = {
   getLastLogMessage: (opts?: { network?: string; connectionId?: string }) => Message | undefined;
   getLastProgressMessage: (opts?: { network?: string; connectionId?: string }) => Message | undefined;
 
+  getLatestNetworkPayload: (network?: string) => ProgressPayload | undefined;
+  getEditorOutgoingSlyData: (network?: string) => Record<string, any>;
+  clearNetworkPayloadState: () => void;
+
   makeSlyDataConnectionId: () => string;
   makeLogConnectionId: () => string;
   makeProgressConnectionId: () => string;
@@ -182,6 +192,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [lastLogByConn, setLastLogByConn] = useState<Record<string, Message | undefined>>({});
   const [lastProgressByNetwork, setLastProgressByNetwork] = useState<Record<string, Message | undefined>>({});
   const [lastProgressByConn, setLastProgressByConn] = useState<Record<string, Message | undefined>>({});
+  // Per-network arrival times. Freshness between the progress and slydata streams is
+  // decided with these, never with the global lastProgressAt/lastSlyDataAt: the globals
+  // are bumped by messages that skip the byNetwork maps (e.g. clearChat's network:""
+  // welcome), which would otherwise flip the preference toward a staler frame.
+  const [lastProgressAtByNetwork, setLastProgressAtByNetwork] = useState<Record<string, number>>({});
+  const [lastSlyDataAtByNetwork, setLastSlyDataAtByNetwork] = useState<Record<string, number>>({});
 
   // Connection-id generator (no crypto)
   const connSeq = useRef(0);
@@ -193,6 +209,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     setSlyDataMessages(prev => [...prev, { ...msg }]);
     if (msg.network) {
       setLastSlyDataByNetwork(prev => ({ ...prev, [msg.network!]: msg }));
+      setLastSlyDataAtByNetwork(prev => ({ ...prev, [msg.network!]: Date.now() }));
     }
     if (msg.connectionId) {
       setLastSlyDataByConn(prev => ({ ...prev, [msg.connectionId!]: msg }));
@@ -227,6 +244,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     setProgressMessages(prev => [...prev, { ...msg }]);
     if (msg.network) {
       setLastProgressByNetwork(prev => ({ ...prev, [msg.network!]: msg }));
+      setLastProgressAtByNetwork(prev => ({ ...prev, [msg.network!]: Date.now() }));
     }
     if (msg.connectionId) {
       setLastProgressByConn(prev => ({ ...prev, [msg.connectionId!]: msg }));
@@ -240,7 +258,66 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     if (opts?.network) return lastProgressByNetwork[opts.network];
     return progressMessages[progressMessages.length - 1]; // global latest
   };
-  
+
+  // The freshest {agent_network_definition, agent_network_name} payload for a network,
+  // taken from whichever stream (progress vs slydata) delivered a frame last. This is
+  // what the editor canvas renders in view mode and what outgoing sly_data derives
+  // from. NOTE: in the manual-editor plugin mode the canvas renders from the andeditor
+  // session instead, and manual edits never reach these streams — this selector cannot
+  // see them. (When editor state moves into a store, reimplement this selector and
+  // getEditorOutgoingSlyData; all consumers follow.)
+  const getLatestNetworkPayload = (network?: string): ProgressPayload | undefined => {
+    const net = network ?? targetNetwork;
+    if (!net) return undefined;
+    const preferProgress =
+      (lastProgressAtByNetwork[net] ?? 0) > (lastSlyDataAtByNetwork[net] ?? 0);
+    return latestNetworkPayload(lastProgressByNetwork[net], lastSlyDataByNetwork[net], preferProgress);
+  };
+
+  // The sly_data blob an editor-mode chat message should carry: the newest parseable
+  // sly_data blob recorded for that network as the base (non-definition keys
+  // round-trip unchanged), with the freshest definition/name pair overlaid
+  // atomically — unless the newest sly_data frame is user-authored (a Sly Data
+  // panel edit or a send echo) and no fresher progress frame exists, in which case
+  // the user's blob is authoritative as-is (deliberate key deletions must not be
+  // resurrected from older frames).
+  const getEditorOutgoingSlyData = (network?: string): Record<string, any> => {
+    const net = network ?? targetNetwork;
+    let base: Record<string, any> = {};
+    for (let i = slyDataMessages.length - 1; i >= 0; i--) {
+      const msg = slyDataMessages[i];
+      // Scope the base to the target network's own stream: blobs recorded for a
+      // different network must not leak their keys into this send. (Also keeps the
+      // user-authored guard below consistent — it reads the same per-network stream.)
+      if (net && msg?.network !== net) continue;
+      const obj = asObjectText(msg?.text as any);
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+        base = JSON.parse(JSON.stringify(obj)); // clone: stream state must never be mutated
+        break;
+      }
+    }
+    if (!net) return base;
+    const preferProgress =
+      (lastProgressAtByNetwork[net] ?? 0) > (lastSlyDataAtByNetwork[net] ?? 0);
+    if (lastSlyDataByNetwork[net]?.sender === "user" && !preferProgress) return base;
+    return overlayNetworkPayload(base, getLatestNetworkPayload(net));
+  };
+
+  // Forget every recorded network payload. Without this, clearing a chat session
+  // leaves the byNetwork maps/timestamps populated and the next send resurrects the
+  // abandoned network's definition.
+  const clearNetworkPayloadState = () => {
+    setProgressMessages([]);
+    setLastSlyDataByNetwork({});
+    setLastProgressByNetwork({});
+    setLastSlyDataByConn({});
+    setLastProgressByConn({});
+    setLastProgressAtByNetwork({});
+    setLastSlyDataAtByNetwork({});
+    setLastProgressAt(0);
+    setLastSlyDataAt(0);
+  };
+
 
   return (
     <ChatContext.Provider value={{
@@ -260,6 +337,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       newSlyData, setNewSlyData, newLog, setNewLog, newProgress, setNewProgress,
 
       getLastSlyDataMessage, getLastLogMessage, getLastProgressMessage,
+
+      getLatestNetworkPayload, getEditorOutgoingSlyData, clearNetworkPayloadState,
 
       makeSlyDataConnectionId, makeLogConnectionId, makeProgressConnectionId,
       progressTick, slyDataTick, lastProgressAt, lastSlyDataAt,
