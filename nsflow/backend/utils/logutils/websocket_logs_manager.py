@@ -97,6 +97,9 @@ class WebsocketLogsManager:  # pylint: disable=too-many-instance-attributes  # a
         """
         Send a structured message to all connected clients.
         :param message: A dictionary representing the chat message and metadata.
+            Must be a dict of the form {"text": <dict payload>} — the canonical wire
+            shape on the progress channel is {"message": {"text": {...}}}; never pass
+            a JSON-encoded string, clients only dual-parse strings for legacy compat.
         """
         entry = {"message": message}
         self.logger.debug(message)
@@ -187,14 +190,10 @@ class WebsocketLogsManager:  # pylint: disable=too-many-instance-attributes  # a
         """
         await websocket.accept()
         self.active_progress_connections.append(websocket)
-        await self.progress_event(
-            {"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})}
-        )
+        await self.progress_event({"text": {"event": "progress_client_connected", "agent": self.agent_name}})
         try:
             while True:
                 await asyncio.sleep(ASYNCIO_SLEEP_INTERVAL)
         except WebSocketDisconnect:
             self.active_progress_connections.remove(websocket)
-            await self.progress_event(
-                {"text": json.dumps({"event": "progress_client_connected", "agent": self.agent_name})}
-            )
+            await self.progress_event({"text": {"event": "progress_client_disconnected", "agent": self.agent_name}})

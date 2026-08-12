@@ -112,7 +112,7 @@ class AgentLogProcessor(MessageProcessor):
             # log progress messages if any
             progress = chat_message_dict.get("structure", progress)
             if progress:
-                await self.logs_manager.progress_event(json.dumps({"progress": progress}))
+                await self.logs_manager.progress_event({"text": progress})
 
                 # Process with state manager only if the manual editor plugin is enabled
                 if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
