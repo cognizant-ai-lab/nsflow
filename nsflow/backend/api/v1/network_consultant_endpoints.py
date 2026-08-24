@@ -34,14 +34,21 @@ from typing import Optional
 from fastapi import APIRouter
 from fastapi import HTTPException
 
+from nsflow.backend.models.network_consultant_models import AnswerJobRequest
 from nsflow.backend.models.network_consultant_models import GenerateTestsRequest
 from nsflow.backend.models.network_consultant_models import ImproveNetworkRequest
+from nsflow.backend.models.network_consultant_models import JobAnswerResponse
 from nsflow.backend.models.network_consultant_models import JobStartResponse
 from nsflow.backend.models.network_consultant_models import JobStatusResponse
 from nsflow.backend.models.network_consultant_models import JobStopResponse
+from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 # How long to wait for a graceful SIGTERM exit before escalating to SIGKILL.
 STOP_GRACE_PERIOD_SECONDS = 5
+
+# How often the tailer re-reads a job's log file to mirror new lines into nsflow's shared,
+# always-visible LogsPanel -- independent of the frontend's own job-status polling cadence.
+TAIL_POLL_INTERVAL_SECONDS = 1.0
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +66,40 @@ LOG_TAIL_LINES = 200
 class _Job:
     """One running or finished apps.network_consultant.runner invocation."""
 
-    def __init__(self, process: asyncio.subprocess.Process, log_path: str):
+    def __init__(self, process: asyncio.subprocess.Process, log_path: str, agent_name: str, session_id: str):
         self.process = process
         self.log_path = log_path
         # asyncio only updates Process.returncode once something awaits wait() -- keep our own
         # background waiter running so a status poll can read this without racing that.
         self.returncode: Optional[int] = None
         asyncio.create_task(self._wait())
+        asyncio.create_task(self._tail_to_logs_panel(agent_name, session_id))
 
     async def _wait(self) -> None:
         self.returncode = await self.process.wait()
+
+    async def _tail_to_logs_panel(self, agent_name: str, session_id: str) -> None:
+        """Mirror new lines appended to this job's log file into nsflow's shared LogsPanel --
+        the same WebsocketLogsManager channel chat/internal-chat logs already use -- instead of
+        only being readable through this job's own status-poll response."""
+        manager = LogsRegistry.register(agent_name, session_id)
+        position = 0
+        while True:
+            new_lines: list = []
+            try:
+                with open(self.log_path, "r", encoding="utf-8", errors="replace") as log_file:
+                    log_file.seek(position)
+                    new_lines = log_file.readlines()
+                    position = log_file.tell()
+            except FileNotFoundError:
+                pass
+            for line in new_lines:
+                line = line.rstrip("\n")
+                if line:
+                    await manager.log_event(line, source="NetworkConsultant")
+            if self.returncode is not None:
+                break
+            await asyncio.sleep(TAIL_POLL_INTERVAL_SECONDS)
 
 
 _JOBS: Dict[str, _Job] = {}
@@ -79,12 +110,28 @@ def _network_hocon_file(network_name: str) -> str:
     return network_name if network_name.endswith(".hocon") else f"{network_name}.hocon"
 
 
-async def _start_job(args: list) -> JobStartResponse:
+def _clear_finished_job_files(log_dir: str) -> None:
+    """Delete leftover files (log, question, answer, tool_issues) from previous jobs that have
+    already finished, so this directory doesn't just accumulate forever across runs. Leaves
+    alone any job still tracked as running -- its files may be actively read/written."""
+    for name in os.listdir(log_dir):
+        existing_job_id = name.split(".", 1)[0]
+        job = _JOBS.get(existing_job_id)
+        if job is not None and job.returncode is None:
+            continue
+        try:
+            os.remove(os.path.join(log_dir, name))
+        except OSError as exc:
+            logger.warning("Could not remove leftover job file %s: %s", name, exc)
+
+
+async def _start_job(args: list, agent_name: str, session_id: str) -> JobStartResponse:
     """Launch `python -m apps.network_consultant.runner <args>` as a background process,
     redirecting its combined output to a per-job log file under CONSULTANT_REPO_PATH/logs/."""
     job_id = uuid.uuid4().hex
     log_dir = os.path.join(CONSULTANT_REPO_PATH, "logs", "network_consultant_jobs")
     os.makedirs(log_dir, exist_ok=True)
+    _clear_finished_job_files(log_dir)
     log_path = os.path.join(log_dir, f"{job_id}.log")
 
     with open(log_path, "wb") as log_file:
@@ -100,12 +147,16 @@ async def _start_job(args: list) -> JobStartResponse:
                 cwd=CONSULTANT_REPO_PATH,
                 stdout=log_file,
                 stderr=asyncio.subprocess.STDOUT,
+                # This subprocess has no interactive stdin, so runner.py can't use input() to ask
+                # a NEEDS_CLARIFICATION question -- these two vars tell it to exchange the
+                # question/answer via files in log_dir instead (see get_job_status/answer_job).
+                env={**os.environ, "NSFLOW_JOB_ID": job_id, "NSFLOW_JOB_DIR": log_dir},
             )
         except OSError as exc:
             logger.error("Failed to start network_consultant job: %s", exc)
             raise HTTPException(status_code=500, detail=f"Failed to start job: {exc}") from exc
 
-    _JOBS[job_id] = _Job(process, log_path)
+    _JOBS[job_id] = _Job(process, log_path, agent_name, session_id)
     logger.info("Started network_consultant job %s (pid=%s): %s", job_id, process.pid, args)
     return JobStartResponse(job_id=job_id, message="Job started.")
 
@@ -126,7 +177,9 @@ async def generate_tests(request: GenerateTestsRequest):
             request.test_level,
             "--max-iterations",
             "0",
-        ]
+        ],
+        agent_name=request.network_name,
+        session_id=request.session_id,
     )
 
 
@@ -146,7 +199,9 @@ async def improve_network(request: ImproveNetworkRequest):
             str(request.max_iterations),
             "--success-ratio",
             request.success_ratio,
-        ]
+        ],
+        agent_name=request.network_name,
+        session_id=request.session_id,
     )
 
 
@@ -168,12 +223,54 @@ async def get_job_status(job_id: str):
     except FileNotFoundError:
         pass
 
+    job_dir = os.path.dirname(job.log_path)
+
+    pending_question: Optional[str] = None
+    question_path = os.path.join(job_dir, f"{job_id}.question.txt")
+    try:
+        with open(question_path, "r", encoding="utf-8") as question_file:
+            pending_question = question_file.read()
+    except FileNotFoundError:
+        pass
+
+    tool_issues: list = []
+    issues_path = os.path.join(job_dir, f"{job_id}.tool_issues.txt")
+    try:
+        with open(issues_path, "r", encoding="utf-8") as issues_file:
+            tool_issues = [line for line in issues_file.read().splitlines() if line]
+    except FileNotFoundError:
+        pass
+
     return JobStatusResponse(
         job_id=job_id,
         running=running,
         returncode=returncode,
         log_tail=[line.rstrip("\n") for line in log_tail],
+        pending_question=pending_question,
+        tool_issues=tool_issues,
     )
+
+
+@router.post("/jobs/{job_id}/answer", response_model=JobAnswerResponse)
+async def answer_job(job_id: str, request: AnswerJobRequest):
+    """Answer a NEEDS_CLARIFICATION question the job's consultant_editor is currently blocked
+    on (see runner.py's _ask_headless) -- a no-op error if it isn't actually waiting on one."""
+    job = _JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    if job.returncode is not None:
+        raise HTTPException(status_code=400, detail="Job has already finished.")
+
+    job_dir = os.path.dirname(job.log_path)
+    question_path = os.path.join(job_dir, f"{job_id}.question.txt")
+    if not os.path.isfile(question_path):
+        raise HTTPException(status_code=400, detail="This job isn't waiting on a clarification question.")
+
+    answer_path = os.path.join(job_dir, f"{job_id}.answer.txt")
+    with open(answer_path, "w", encoding="utf-8") as answer_file:
+        answer_file.write(request.answer)
+
+    return JobAnswerResponse(job_id=job_id, message="Answer submitted.")
 
 
 @router.post("/jobs/{job_id}/stop", response_model=JobStopResponse)

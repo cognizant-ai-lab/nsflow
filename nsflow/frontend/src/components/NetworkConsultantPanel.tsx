@@ -25,10 +25,12 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
+  Divider,
   useTheme,
   alpha,
 } from "@mui/material";
 import { useApiPort } from "../context/ApiPortContext";
+import { useChatContext } from "../context/ChatContext";
 
 const TEST_LEVELS = ["minimum", "normal", "max"] as const;
 type TestLevel = (typeof TEST_LEVELS)[number];
@@ -42,6 +44,7 @@ const POLL_INTERVAL_MS = 2000;
 
 const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl } = useApiPort();
+  const { sessionId } = useChatContext();
   const theme = useTheme();
 
   const [direction, setDirection] = useState("");
@@ -52,10 +55,12 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
   const [jobId, setJobId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [returncode, setReturncode] = useState<number | null>(null);
-  const [logTail, setLogTail] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const [answerText, setAnswerText] = useState("");
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [toolIssues, setToolIssues] = useState<string[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -66,10 +71,6 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
 
   useEffect(() => stopPolling, []);
 
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ block: "end" });
-  }, [logTail]);
-
   const pollJob = (id: string) => {
     stopPolling();
     pollRef.current = setInterval(async () => {
@@ -79,7 +80,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
         const data = await res.json();
         setRunning(data.running);
         setReturncode(data.returncode);
-        setLogTail(data.log_tail ?? []);
+        setPendingQuestion(data.pending_question ?? null);
+        setToolIssues(data.tool_issues ?? []);
         if (!data.running) stopPolling();
       } catch (err: any) {
         setError(err.message);
@@ -90,14 +92,16 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
 
   const startJob = async (endpoint: string, body: Record<string, unknown>) => {
     setError(null);
-    setLogTail([]);
     setReturncode(null);
     setJobId(null);
+    setPendingQuestion(null);
+    setAnswerText("");
+    setToolIssues([]);
     try {
       const res = await fetch(`${apiUrl}/api/v1/network_consultant/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, session_id: sessionId }),
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
@@ -123,6 +127,28 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       max_iterations: maxIterations,
       success_ratio: successRatio,
     });
+
+  const handleSubmitAnswer = async () => {
+    if (!jobId || !answerText.trim()) return;
+    setSubmittingAnswer(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/network_consultant/jobs/${jobId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answer: answerText }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail ?? `Request failed (${res.status})`);
+      }
+      setAnswerText("");
+      // The next poll tick picks up pending_question clearing once the job consumes the answer.
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  };
 
   const [stopping, setStopping] = useState(false);
 
@@ -176,97 +202,181 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
         </Alert>
       )}
 
-      <TextField
-        label="What do you want this network to do? (direction for Improve Agent Network)"
-        placeholder="e.g. Preserve order lookup, but stop asking for a ZIP code unless the user gives a location"
-        value={direction}
-        onChange={(e) => setDirection(e.target.value)}
-        multiline
-        minRows={3}
-        fullWidth
-        sx={{ mb: 2 }}
-      />
+      <Box sx={{ overflowY: "auto", flexGrow: 1 }}>
+        {pendingQuestion && (
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              mb: 2,
+              borderRadius: 2,
+              backgroundColor: alpha(theme.palette.warning.main, 0.08),
+              borderColor: alpha(theme.palette.warning.main, 0.4),
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
+              Question From Consultant
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.palette.text.primary, mb: 2 }}>
+              {pendingQuestion}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+              <TextField
+                label="Your answer"
+                value={answerText}
+                onChange={(e) => setAnswerText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmitAnswer();
+                  }
+                }}
+                fullWidth
+                multiline
+                minRows={1}
+              />
+              <Button
+                variant="contained"
+                color="warning"
+                disabled={!answerText.trim() || submittingAnswer}
+                onClick={handleSubmitAnswer}
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                {submittingAnswer ? "Sending..." : "Send Answer"}
+              </Button>
+            </Box>
+          </Paper>
+        )}
 
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          select
-          label="Test level"
-          value={testLevel}
-          onChange={(e) => setTestLevel(e.target.value as TestLevel)}
-          sx={{ minWidth: 160 }}
+        {toolIssues.length > 0 && (
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              mb: 2,
+              borderRadius: 2,
+              backgroundColor: alpha(theme.palette.error.main, 0.08),
+              borderColor: alpha(theme.palette.error.main, 0.4),
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
+              Tool Issue -- Run Stopped
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 1 }}>
+              A required coded tool is broken. This needs a human code fix -- no instructions or fixture change can
+              resolve it, so the run stopped here. Fix the code, then start a new run.
+            </Typography>
+            {toolIssues.map((issue, index) => (
+              <Typography
+                key={index}
+                variant="body2"
+                sx={{ fontFamily: "monospace", fontSize: "0.85rem", color: theme.palette.text.primary, mt: 1 }}
+              >
+                {issue}
+              </Typography>
+            ))}
+          </Paper>
+        )}
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            mb: 2,
+            borderRadius: 2,
+            backgroundColor: alpha(theme.palette.info.main, 0.04),
+            borderColor: alpha(theme.palette.info.main, 0.3),
+          }}
         >
-          {TEST_LEVELS.map((level) => (
-            <MenuItem key={level} value={level}>
-              {level}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          type="number"
-          label="Max iterations"
-          value={maxIterations}
-          onChange={(e) => setMaxIterations(Math.max(1, Number(e.target.value) || 1))}
-          sx={{ minWidth: 160 }}
-        />
-        <TextField
-          label="Success ratio (Improve only)"
-          placeholder="3/3"
-          value={successRatio}
-          onChange={(e) => setSuccessRatio(e.target.value)}
-          error={!SUCCESS_RATIO_PATTERN.test(successRatio)}
-          helperText={SUCCESS_RATIO_PATTERN.test(successRatio) ? " " : "Must look like N/M, e.g. 3/3"}
-          sx={{ minWidth: 160 }}
-        />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
+            Generate Tests
+          </Typography>
+          <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
+            Generate ANTeGen test fixtures for this network. No fix loop is run.
+          </Typography>
+          <TextField
+            select
+            label="Test level"
+            value={testLevel}
+            onChange={(e) => setTestLevel(e.target.value as TestLevel)}
+            helperText="Also used by Improve Agent Network below."
+            sx={{ minWidth: 160, mb: 2 }}
+          >
+            {TEST_LEVELS.map((level) => (
+              <MenuItem key={level} value={level}>
+                {level}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Box>
+            <Button variant="outlined" disabled={!canSubmit} onClick={handleGenerateTests}>
+              Generate Tests
+            </Button>
+          </Box>
+        </Paper>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            borderRadius: 2,
+            backgroundColor: alpha(theme.palette.secondary.main, 0.04),
+            borderColor: alpha(theme.palette.secondary.main, 0.3),
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
+            Self Improvement
+          </Typography>
+          <TextField
+            label="What do you want this network to do?"
+            placeholder="e.g. Preserve order lookup, but stop asking for a ZIP code unless the user gives a location"
+            value={direction}
+            onChange={(e) => setDirection(e.target.value)}
+            multiline
+            minRows={3}
+            fullWidth
+            sx={{ mb: 2 }}
+          />
+          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <TextField
+              type="number"
+              label="Max iterations"
+              value={maxIterations}
+              onChange={(e) => setMaxIterations(Math.max(1, Number(e.target.value) || 1))}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              label="Success ratio"
+              placeholder="3/3"
+              value={successRatio}
+              onChange={(e) => setSuccessRatio(e.target.value)}
+              error={!SUCCESS_RATIO_PATTERN.test(successRatio)}
+              helperText={SUCCESS_RATIO_PATTERN.test(successRatio) ? " " : "Must look like N/M, e.g. 3/3"}
+              sx={{ minWidth: 160 }}
+            />
+          </Box>
+          <Button
+            variant="contained"
+            disabled={!canSubmit || !direction.trim() || !SUCCESS_RATIO_PATTERN.test(successRatio)}
+            onClick={handleImprove}
+          >
+            Improve Agent Network
+          </Button>
+        </Paper>
       </Box>
 
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <Button variant="outlined" disabled={!canSubmit} onClick={handleGenerateTests}>
-          Generate Tests
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!canSubmit || !direction.trim() || !SUCCESS_RATIO_PATTERN.test(successRatio)}
-          onClick={handleImprove}
-        >
-          Improve Agent Network
-        </Button>
-        <Button
-          variant="outlined"
-          color="error"
-          disabled={!running || stopping}
-          onClick={handleStop}
-        >
+      <Divider sx={{ my: 2 }} />
+
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Button variant="outlined" color="error" disabled={!running || stopping} onClick={handleStop}>
           {stopping ? "Stopping..." : "Stop"}
         </Button>
-        {running && <CircularProgress size={24} sx={{ alignSelf: "center" }} />}
-      </Box>
-
-      {jobId && (
-        <Typography variant="caption" sx={{ color: theme.palette.text.secondary, mb: 1 }}>
-          Job {jobId} -- {running ? "running" : `finished (exit code ${returncode})`}
-        </Typography>
-      )}
-
-      <Box
-        sx={{
-          flexGrow: 1,
-          overflow: "auto",
-          backgroundColor: alpha(theme.palette.background.default, 0.5),
-          borderRadius: 1,
-          p: 1,
-          fontFamily: "monospace",
-          fontSize: "0.75rem",
-          whiteSpace: "pre-wrap",
-        }}
-      >
-        {logTail.length > 0 ? (
-          logTail.map((line, index) => <div key={index}>{line}</div>)
-        ) : (
-          <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontStyle: "italic" }}>
-            No job run yet.
+        {running && <CircularProgress size={24} />}
+        {jobId && (
+          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+            Job {jobId} -- {running ? "running" : `finished (exit code ${returncode})`} -- see the Logs panel for live output.
           </Typography>
         )}
-        <div ref={logEndRef} />
       </Box>
     </Paper>
   );

@@ -27,6 +27,9 @@ class GenerateTestsRequest(BaseModel):
 
     network_name: str = Field(..., description="Network name relative to registries/, e.g. 'basic/coffee_finder'.")
     test_level: Literal["minimum", "normal", "max"] = "normal"
+    session_id: str = Field(
+        default="global", description="Chat session ID -- job logs are mirrored to this session's LogsPanel channel."
+    )
 
 
 class ImproveNetworkRequest(BaseModel):
@@ -37,6 +40,9 @@ class ImproveNetworkRequest(BaseModel):
     test_level: Literal["minimum", "normal", "max"] = "normal"
     max_iterations: int = Field(default=20, ge=1, le=100)
     success_ratio: str = Field(default="3/3", pattern=r"^\d+/\d+$")
+    session_id: str = Field(
+        default="global", description="Chat session ID -- job logs are mirrored to this session's LogsPanel channel."
+    )
 
 
 class JobStartResponse(BaseModel):
@@ -53,6 +59,16 @@ class JobStatusResponse(BaseModel):
     running: bool
     returncode: Optional[int] = None
     log_tail: List[str] = Field(default_factory=list)
+    pending_question: Optional[str] = Field(
+        default=None,
+        description="A NEEDS_CLARIFICATION question consultant_editor is currently blocked on, if any -- "
+        "submit it via POST /jobs/{job_id}/answer to let the job continue.",
+    )
+    tool_issues: List[str] = Field(
+        default_factory=list,
+        description="TOOL_ISSUE lines consultant_editor reported before stopping the run -- a broken coded "
+        "tool needs a human code fix; not something an answer can resolve.",
+    )
 
 
 class JobStopResponse(BaseModel):
@@ -60,4 +76,17 @@ class JobStopResponse(BaseModel):
 
     job_id: str
     stopped: bool
+    message: str
+
+
+class AnswerJobRequest(BaseModel):
+    """Request to answer a job's currently pending NEEDS_CLARIFICATION question."""
+
+    answer: str = Field(..., description="The human's answer to the job's current pending_question.")
+
+
+class JobAnswerResponse(BaseModel):
+    """Returned after successfully submitting an answer."""
+
+    job_id: str
     message: str
