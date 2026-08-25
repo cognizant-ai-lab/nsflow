@@ -243,7 +243,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
     { id: "connectors", label: "Connectors", icon: <HubIcon />, component: <McpConnectorsPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
-    ...(!isEditorMode ? [{ id: "consultant", label: "Validation", icon: <ConsultantIcon />, component: <NetworkConsultantPanel selectedNetwork={activeNetwork} /> }] : []),
+    ...(!isEditorMode ? [{ id: "consultant", label: "Self Improvement", icon: <ConsultantIcon />, component: <NetworkConsultantPanel selectedNetwork={activeNetwork} /> }] : []),
   ];
 
   const activeTabIndex = tabConfig.findIndex(tab => tab.id === activeTab);

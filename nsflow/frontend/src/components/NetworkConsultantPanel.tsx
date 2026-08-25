@@ -35,8 +35,22 @@ import { useChatContext } from "../context/ChatContext";
 const TEST_LEVELS = ["minimum", "normal", "max"] as const;
 type TestLevel = (typeof TEST_LEVELS)[number];
 
+// Scenario-count ranges the test generator's own instructions target per level (see
+// registries/agent_network_test_generator.hocon) -- not enforced here, just surfaced as a hint.
+const TEST_LEVEL_HINTS: Record<TestLevel, string> = {
+  minimum: "2-3 tests",
+  normal: "5-7 tests",
+  max: "10-15 tests",
+};
+
+// Matches Config/Connectors section headings (variant="subtitle1", fontWeight 600, default size).
+const SECTION_HEADING_SX = { fontWeight: 600, mb: 2 };
+
 // Matches the backend's ImproveNetworkRequest.success_ratio pattern (^\d+/\d+$).
 const SUCCESS_RATIO_PATTERN = /^\d+\/\d+$/;
+
+// Matches the backend's ImproveNetworkRequest.max_iterations default.
+const DEFAULT_MAX_ITERATIONS = 10;
 
 // Polling cadence while a job is running -- fast enough to feel live, cheap enough not to
 // hammer the backend since a run can take many minutes.
@@ -49,7 +63,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
 
   const [direction, setDirection] = useState("");
   const [testLevel, setTestLevel] = useState<TestLevel>("normal");
-  const [maxIterations, setMaxIterations] = useState(20);
+  const [maxIterations, setMaxIterations] = useState(DEFAULT_MAX_ITERATIONS);
   const [successRatio, setSuccessRatio] = useState("3/3");
 
   const [jobId, setJobId] = useState<string | null>(null);
@@ -60,6 +74,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
   const [answerText, setAnswerText] = useState("");
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [toolIssues, setToolIssues] = useState<string[]>([]);
+  const [progressChart, setProgressChart] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {
@@ -75,13 +90,14 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     stopPolling();
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/v1/network_consultant/jobs/${id}`);
+        const res = await fetch(`${apiUrl}/api/v1/network_consultant/jobs/${id}?theme=${theme.palette.mode}`);
         if (!res.ok) throw new Error(`Status check failed (${res.status})`);
         const data = await res.json();
         setRunning(data.running);
         setReturncode(data.returncode);
         setPendingQuestion(data.pending_question ?? null);
         setToolIssues(data.tool_issues ?? []);
+        setProgressChart(data.progress_chart ?? null);
         if (!data.running) stopPolling();
       } catch (err: any) {
         setError(err.message);
@@ -97,6 +113,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     setPendingQuestion(null);
     setAnswerText("");
     setToolIssues([]);
+    setProgressChart(null);
     try {
       const res = await fetch(`${apiUrl}/api/v1/network_consultant/${endpoint}`, {
         method: "POST",
@@ -288,28 +305,25 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
             borderColor: alpha(theme.palette.info.main, 0.3),
           }}
         >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
+          <Typography variant="subtitle1" sx={{ ...SECTION_HEADING_SX, color: theme.palette.text.primary }}>
             Generate Tests
           </Typography>
-          <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
-            Generate ANTeGen test fixtures for this network. No fix loop is run.
-          </Typography>
-          <TextField
-            select
-            label="Test level"
-            value={testLevel}
-            onChange={(e) => setTestLevel(e.target.value as TestLevel)}
-            helperText="Also used by Improve Agent Network below."
-            sx={{ minWidth: 160, mb: 2 }}
-          >
-            {TEST_LEVELS.map((level) => (
-              <MenuItem key={level} value={level}>
-                {level}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Box>
-            <Button variant="outlined" disabled={!canSubmit} onClick={handleGenerateTests}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center" }}>
+            <TextField
+              select
+              size="small"
+              label="Test level"
+              value={testLevel}
+              onChange={(e) => setTestLevel(e.target.value as TestLevel)}
+              sx={{ width: 190 }}
+            >
+              {TEST_LEVELS.map((level) => (
+                <MenuItem key={level} value={level}>
+                  {level} ({TEST_LEVEL_HINTS[level]})
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button variant="contained" disabled={!canSubmit} onClick={handleGenerateTests}>
               Generate Tests
             </Button>
           </Box>
@@ -320,48 +334,84 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
           sx={{
             p: 2,
             borderRadius: 2,
-            backgroundColor: alpha(theme.palette.secondary.main, 0.04),
-            borderColor: alpha(theme.palette.secondary.main, 0.3),
+            backgroundColor: alpha(theme.palette.info.main, 0.04),
+            borderColor: alpha(theme.palette.info.main, 0.3),
           }}
         >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
-            Self Improvement
+          <Typography variant="subtitle1" sx={{ ...SECTION_HEADING_SX, color: theme.palette.text.primary }}>
+            Improve Network
           </Typography>
-          <TextField
-            label="What do you want this network to do?"
-            placeholder="e.g. Preserve order lookup, but stop asking for a ZIP code unless the user gives a location"
-            value={direction}
-            onChange={(e) => setDirection(e.target.value)}
-            multiline
-            minRows={3}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "center" }}>
             <TextField
+              required
+              size="small"
               type="number"
               label="Max iterations"
               value={maxIterations}
               onChange={(e) => setMaxIterations(Math.max(1, Number(e.target.value) || 1))}
-              sx={{ minWidth: 160 }}
+              sx={{ width: 120 }}
             />
             <TextField
+              required
+              size="small"
               label="Success ratio"
               placeholder="3/3"
               value={successRatio}
               onChange={(e) => setSuccessRatio(e.target.value)}
               error={!SUCCESS_RATIO_PATTERN.test(successRatio)}
-              helperText={SUCCESS_RATIO_PATTERN.test(successRatio) ? " " : "Must look like N/M, e.g. 3/3"}
-              sx={{ minWidth: 160 }}
+              helperText={SUCCESS_RATIO_PATTERN.test(successRatio) ? undefined : "Must look like N/M, e.g. 3/3"}
+              sx={{ width: 110 }}
             />
+            <Button
+              variant="contained"
+              disabled={!canSubmit || !SUCCESS_RATIO_PATTERN.test(successRatio)}
+              onClick={handleImprove}
+              sx={{ flexShrink: 1, minWidth: 0 }}
+            >
+              Self-Improve
+            </Button>
           </Box>
-          <Button
-            variant="contained"
-            disabled={!canSubmit || !direction.trim() || !SUCCESS_RATIO_PATTERN.test(successRatio)}
-            onClick={handleImprove}
-          >
-            Improve Agent Network
-          </Button>
+          <TextField
+            label="What do you want this network to do? (optional)"
+            placeholder="e.g. Preserve order lookup, but stop asking for a ZIP code unless the user gives a location"
+            value={direction}
+            onChange={(e) => setDirection(e.target.value)}
+            size="small"
+            fullWidth
+            sx={{
+              mt: 1,
+              "& .MuiInputBase-input": { fontSize: "0.8rem" },
+              "& .MuiInputLabel-root": { fontSize: "0.8rem" },
+            }}
+          />
+
+          {progressChart ? (
+            <Box
+              component="img"
+              src={progressChart}
+              alt="Tests passing per iteration"
+              sx={{ maxWidth: "100%", display: "block", mx: "auto", mt: 2, borderRadius: 1 }}
+            />
+          ) : (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: theme.palette.text.primary, mt: 2, mb: 1.5 }}>
+                Tests Passing Per Iteration
+              </Typography>
+              <Box
+                sx={{
+                  height: 160,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 1,
+                  border: `1px dashed ${theme.palette.divider}`,
+                  color: theme.palette.text.secondary,
+                }}
+              >
+                <Typography variant="body2">Chart appears here once an iteration completes.</Typography>
+              </Box>
+            </>
+          )}
         </Paper>
       </Box>
 

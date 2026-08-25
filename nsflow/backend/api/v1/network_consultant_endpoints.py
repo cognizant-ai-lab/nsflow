@@ -24,12 +24,20 @@ iteration/plateau/ratio logic, so the two stay in sync automatically.
 """
 
 import asyncio
+import base64
+import json
 import logging
 import os
 import sys
 import uuid
+from io import BytesIO
 from typing import Dict
 from typing import Optional
+
+import matplotlib
+
+matplotlib.use("Agg")  # headless -- this process has no display
+from matplotlib import pyplot as plt  # noqa: E402  (must follow matplotlib.use)
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -42,6 +50,11 @@ from nsflow.backend.models.network_consultant_models import JobStartResponse
 from nsflow.backend.models.network_consultant_models import JobStatusResponse
 from nsflow.backend.models.network_consultant_models import JobStopResponse
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
+
+# Used when the UI's optional "direction" field is left blank -- runner.py requires
+# --direction with --hocon-file so defects are never guessed from current behavior, so an
+# empty UI field still needs to send *something* that doesn't imply a behavior change.
+DEFAULT_DIRECTION = "Fix any currently failing tests without changing the network's intended behavior."
 
 # How long to wait for a graceful SIGTERM exit before escalating to SIGKILL.
 STOP_GRACE_PERIOD_SECONDS = 5
@@ -69,6 +82,7 @@ class _Job:
     def __init__(self, process: asyncio.subprocess.Process, log_path: str, agent_name: str, session_id: str):
         self.process = process
         self.log_path = log_path
+        self.agent_name = agent_name
         # asyncio only updates Process.returncode once something awaits wait() -- keep our own
         # background waiter running so a status poll can read this without racing that.
         self.returncode: Optional[int] = None
@@ -108,6 +122,65 @@ _JOBS: Dict[str, _Job] = {}
 def _network_hocon_file(network_name: str) -> str:
     """'basic/coffee_finder' or 'basic/coffee_finder.hocon' -> 'basic/coffee_finder.hocon'."""
     return network_name if network_name.endswith(".hocon") else f"{network_name}.hocon"
+
+
+# Mirrors the frontend's MUI theme (ThemeContext.tsx) so this server-rendered chart doesn't
+# clash with either mode -- a plain white matplotlib default looks broken embedded in dark mode.
+_CHART_PALETTE = {
+    "light": {"fg": "#475569", "grid": "#e2e8f0", "bar": "#2563eb", "bar_done": "#16a34a"},
+    "dark": {"fg": "#cbd5e1", "grid": "#334155", "bar": "#3b82f6", "bar_done": "#22c55e"},
+}
+
+
+# Every iteration's chart is saved here (keyed by network + job + iteration) so past runs stay
+# browsable even after network_consultant_jobs/ gets cleared out for the next job.
+CHARTS_DIR_NAME = "network_consultant_charts"
+
+
+def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
+    """Bar chart of tests passing per iteration, rendered as raw PNG bytes."""
+    colors = _CHART_PALETTE.get(theme, _CHART_PALETTE["light"])
+    iterations = [entry["iteration"] for entry in progress]
+    passed = [entry["passed"] for entry in progress]
+    total = progress[-1]["total"]
+
+    fig, ax = plt.subplots(figsize=(max(4.0, len(iterations) * 0.55), 2.6), dpi=130)
+    fig.patch.set_alpha(0)
+    ax.set_facecolor("none")
+
+    bar_colors = [colors["bar_done"] if p == total else colors["bar"] for p in passed]
+    bars = ax.bar(iterations, passed, color=bar_colors, width=0.6, zorder=3)
+    ax.bar_label(bars, labels=[f"{p}/{total}" for p in passed], padding=3, color=colors["fg"], fontsize=9)
+
+    ax.set_title("Tests Passing Per Iteration", color=colors["fg"], fontsize=12, fontweight="bold", loc="left", pad=10)
+    ax.set_ylim(0, total * 1.18 if total else 1)
+    ax.set_xticks(iterations)
+    ax.set_xlabel("Iteration", color=colors["fg"], fontsize=10)
+    ax.tick_params(colors=colors["fg"], labelsize=9, length=0)
+    ax.yaxis.set_visible(False)
+    ax.grid(axis="y", color=colors["grid"], linewidth=0.8, zorder=0)
+    for spine in ("top", "right", "left"):
+        ax.spines[spine].set_visible(False)
+    ax.spines["bottom"].set_color(colors["grid"])
+    fig.tight_layout()
+
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", transparent=True)
+    plt.close(fig)
+    return buffer.getvalue()
+
+
+def _save_chart_snapshot(agent_name: str, job_id: str, progress: list, png_bytes: bytes) -> None:
+    """Persist this iteration's chart under logs/network_consultant_charts/ -- a no-op if
+    already saved (only the theme of the first poll to reach this iteration is kept)."""
+    charts_dir = os.path.join(CONSULTANT_REPO_PATH, "logs", CHARTS_DIR_NAME)
+    os.makedirs(charts_dir, exist_ok=True)
+    latest_iteration = progress[-1]["iteration"]
+    safe_name = agent_name.replace("/", "_")
+    path = os.path.join(charts_dir, f"{safe_name}_{job_id}_iter{latest_iteration:03d}.png")
+    if not os.path.exists(path):
+        with open(path, "wb") as png_file:
+            png_file.write(png_bytes)
 
 
 def _clear_finished_job_files(log_dir: str) -> None:
@@ -192,7 +265,7 @@ async def improve_network(request: ImproveNetworkRequest):
             "--hocon-file",
             hocon_file,
             "--direction",
-            request.direction,
+            request.direction.strip() or DEFAULT_DIRECTION,
             "--test-level",
             request.test_level,
             "--max-iterations",
@@ -206,7 +279,7 @@ async def improve_network(request: ImproveNetworkRequest):
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, theme: str = "light"):
     """Poll a job's running state and the tail of its combined stdout/stderr log, live while
     it's still running."""
     job = _JOBS.get(job_id)
@@ -241,6 +314,29 @@ async def get_job_status(job_id: str):
     except FileNotFoundError:
         pass
 
+    progress: list = []
+    progress_path = os.path.join(job_dir, f"{job_id}.progress.jsonl")
+    try:
+        with open(progress_path, "r", encoding="utf-8") as progress_file:
+            for line in progress_file:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    progress.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # A torn read of the last line while runner.py is mid-append -- it'll be
+                    # complete on the next poll, so just skip it here rather than error out.
+                    continue
+    except FileNotFoundError:
+        pass
+
+    progress_chart: Optional[str] = None
+    if progress:
+        png_bytes = _chart_png_bytes(progress, theme)
+        _save_chart_snapshot(job.agent_name, job_id, progress, png_bytes)
+        progress_chart = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
+
     return JobStatusResponse(
         job_id=job_id,
         running=running,
@@ -248,6 +344,7 @@ async def get_job_status(job_id: str):
         log_tail=[line.rstrip("\n") for line in log_tail],
         pending_question=pending_question,
         tool_issues=tool_issues,
+        progress_chart=progress_chart,
     )
 
 

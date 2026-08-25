@@ -36,9 +36,13 @@ class ImproveNetworkRequest(BaseModel):
     """Request to run the iterative generate/test/diagnose/repair loop against a network."""
 
     network_name: str = Field(..., description="Network name relative to registries/, e.g. 'basic/coffee_finder'.")
-    direction: str = Field(..., description="What the user wants -- the intended behavior to fix/improve toward.")
+    direction: str = Field(
+        default="",
+        description="What the user wants -- the intended behavior to fix/improve toward. Optional; if omitted, "
+        "the run just fixes currently failing tests without changing existing behavior.",
+    )
     test_level: Literal["minimum", "normal", "max"] = "normal"
-    max_iterations: int = Field(default=20, ge=1, le=100)
+    max_iterations: int = Field(default=10, ge=1, le=100)
     success_ratio: str = Field(default="3/3", pattern=r"^\d+/\d+$")
     session_id: str = Field(
         default="global", description="Chat session ID -- job logs are mirrored to this session's LogsPanel channel."
@@ -68,6 +72,11 @@ class JobStatusResponse(BaseModel):
         default_factory=list,
         description="TOOL_ISSUE lines consultant_editor reported before stopping the run -- a broken coded "
         "tool needs a human code fix; not something an answer can resolve.",
+    )
+    progress_chart: Optional[str] = Field(
+        default=None,
+        description="'data:image/png;base64,...' bar chart of tests passing per iteration so far, rendered "
+        "server-side with matplotlib; None until at least one iteration has completed.",
     )
 
 
