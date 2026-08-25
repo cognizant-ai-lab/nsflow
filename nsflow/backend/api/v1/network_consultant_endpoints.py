@@ -38,6 +38,7 @@ import matplotlib
 
 matplotlib.use("Agg")  # headless -- this process has no display
 from matplotlib import pyplot as plt  # noqa: E402  (must follow matplotlib.use)
+from matplotlib.ticker import MaxNLocator  # noqa: E402  (must follow matplotlib.use)
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -126,10 +127,21 @@ def _network_hocon_file(network_name: str) -> str:
 
 # Mirrors the frontend's MUI theme (ThemeContext.tsx) so this server-rendered chart doesn't
 # clash with either mode -- a plain white matplotlib default looks broken embedded in dark mode.
+# red/yellow/green are a pass-rate traffic light: <20% passing, 20-80%, >=80% (see _bar_color).
 _CHART_PALETTE = {
-    "light": {"fg": "#475569", "grid": "#e2e8f0", "bar": "#2563eb", "bar_done": "#16a34a"},
-    "dark": {"fg": "#cbd5e1", "grid": "#334155", "bar": "#3b82f6", "bar_done": "#22c55e"},
+    "light": {"fg": "#475569", "grid": "#e2e8f0", "red": "#dc2626", "yellow": "#d97706", "green": "#16a34a"},
+    "dark": {"fg": "#cbd5e1", "grid": "#334155", "red": "#f87171", "yellow": "#fbbf24", "green": "#4ade80"},
 }
+
+
+def _bar_color(passed: int, total: int, colors: dict) -> str:
+    """Red below 20% of tests passing, green at 80%+ passing, yellow in between."""
+    pct = passed / total if total else 0.0
+    if pct >= 0.8:
+        return colors["green"]
+    if pct < 0.2:
+        return colors["red"]
+    return colors["yellow"]
 
 
 # Every iteration's chart is saved here (keyed by network + job + iteration) so past runs stay
@@ -144,25 +156,31 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
     passed = [entry["passed"] for entry in progress]
     total = progress[-1]["total"]
 
-    fig, ax = plt.subplots(figsize=(max(4.0, len(iterations) * 0.55), 2.6), dpi=130)
+    fig, ax = plt.subplots(figsize=(max(4.5, len(iterations) * 0.7), 3.2), dpi=130)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    bar_colors = [colors["bar_done"] if p == total else colors["bar"] for p in passed]
-    bars = ax.bar(iterations, passed, color=bar_colors, width=0.6, zorder=3)
-    ax.bar_label(bars, labels=[f"{p}/{total}" for p in passed], padding=3, color=colors["fg"], fontsize=9)
+    bar_colors = [_bar_color(p, total, colors) for p in passed]
+    bars = ax.bar(iterations, passed, color=bar_colors, width=0.5, zorder=3)
+    pct_labels = [f"{p}/{total} ({round(100 * p / total) if total else 0}%)" for p in passed]
+    ax.bar_label(bars, labels=pct_labels, padding=3, color=colors["fg"], fontsize=9)
 
-    ax.set_title("Tests Passing Per Iteration", color=colors["fg"], fontsize=12, fontweight="bold", loc="left", pad=10)
-    ax.set_ylim(0, total * 1.18 if total else 1)
+    fig.suptitle("Tests Passing Per Iteration", color=colors["fg"], fontsize=12, fontweight="bold")
+    # Fixed x-margin around the bars (rather than matplotlib's auto range) so a single
+    # iteration doesn't get stretched into a full-width bar with no visible whitespace.
+    ax.set_xlim(min(iterations) - 0.6, max(iterations) + 0.6)
+    ax.set_ylim(0, total * 1.2 if total else 1)
     ax.set_xticks(iterations)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=min(total, 8) or 1))
     ax.set_xlabel("Iteration", color=colors["fg"], fontsize=10)
+    ax.set_ylabel(f"Tests Passed (of {total})", color=colors["fg"], fontsize=10)
     ax.tick_params(colors=colors["fg"], labelsize=9, length=0)
-    ax.yaxis.set_visible(False)
     ax.grid(axis="y", color=colors["grid"], linewidth=0.8, zorder=0)
-    for spine in ("top", "right", "left"):
+    for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color(colors["grid"])
     ax.spines["bottom"].set_color(colors["grid"])
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
 
     buffer = BytesIO()
     fig.savefig(buffer, format="png", transparent=True)
