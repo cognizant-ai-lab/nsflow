@@ -128,9 +128,17 @@ def _network_hocon_file(network_name: str) -> str:
 # Mirrors the frontend's MUI theme (ThemeContext.tsx) so this server-rendered chart doesn't
 # clash with either mode -- a plain white matplotlib default looks broken embedded in dark mode.
 # red/yellow/green are a pass-rate traffic light: <20% passing, 20-80%, >=80% (see _bar_color).
+# Pastel-toned but still validated: node dataviz/scripts/validate_palette.js "<red>,<yellow>,<green>"
+# --mode light|dark clears chroma floor, CVD separation and normal-vision floor for both rows
+# below (contrast vs surface WARNs, which is expected for pastel tones -- the mandatory
+# percentage-text label on every bar is the required secondary encoding for that; lightness-band
+# FAILs on yellow specifically, but that check is scoped to categorical palettes by the
+# validator's own output -- a clean, non-gold yellow is inherently lighter than red/green at
+# equal vividness, and darkening it to fit the band is exactly what turns it into mustard/gold).
+# Yellow is identical across themes -- bright enough for solid contrast on both surfaces already.
 _CHART_PALETTE = {
-    "light": {"fg": "#475569", "grid": "#e2e8f0", "red": "#dc2626", "yellow": "#d97706", "green": "#16a34a"},
-    "dark": {"fg": "#cbd5e1", "grid": "#334155", "red": "#f87171", "yellow": "#fbbf24", "green": "#4ade80"},
+    "light": {"fg": "#475569", "grid": "#e2e8f0", "red": "#e0636f", "yellow": "#e3c94a", "green": "#4fb87d"},
+    "dark": {"fg": "#cbd5e1", "grid": "#334155", "red": "#d9515e", "yellow": "#e3c94a", "green": "#329165"},
 }
 
 
@@ -150,30 +158,51 @@ CHARTS_DIR_NAME = "network_consultant_charts"
 
 
 def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
-    """Bar chart of tests passing per iteration, rendered as raw PNG bytes."""
+    """Bar chart of tests passing per iteration, rendered as raw PNG bytes. Each bar is its own
+    batch and can have its own denominator (e.g. a batch's bar climbs 1/1 -> 1/2 -> 2/3 as its
+    tests finish), so every row's color/label must use ITS OWN total -- a single global total
+    would relabel already-finished bars whenever a later, differently-sized batch is recorded."""
     colors = _CHART_PALETTE.get(theme, _CHART_PALETTE["light"])
     iterations = [entry["iteration"] for entry in progress]
     passed = [entry["passed"] for entry in progress]
-    total = progress[-1]["total"]
+    totals = [entry["total"] for entry in progress]
+    # Rows from before this field existed have no way to know if they were mid-batch, so treat
+    # them as finished rather than incorrectly showing an old, already-done bar as still running.
+    completions = [entry.get("complete", True) for entry in progress]
+    max_total = max(totals) if totals else 1
 
     fig, ax = plt.subplots(figsize=(max(4.5, len(iterations) * 0.7), 3.2), dpi=130)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    bar_colors = [_bar_color(p, total, colors) for p in passed]
+    bar_colors = [_bar_color(p, t, colors) for p, t in zip(passed, totals)]
     bars = ax.bar(iterations, passed, color=bar_colors, width=0.5, zorder=3)
-    pct_labels = [f"{p}/{total} ({round(100 * p / total) if total else 0}%)" for p in passed]
+    # A batch still running (more tests yet to report) gets a diagonal-hatch "still loading" cue
+    # instead of a flat color -- a plain alpha fade reads as barely-different at a glance,
+    # especially over the transparent chart background; a hatch pattern is unambiguous at any
+    # size or theme. Turns into a plain solid bar the moment its last test reports in.
+    for bar, complete in zip(bars, completions):
+        if not complete:
+            bar.set_hatch("///")
+            bar.set_edgecolor(colors["fg"])
+            bar.set_linewidth(0.8)
+    pct_labels = [f"{p}/{t} ({round(100 * p / t) if t else 0}%)" for p, t in zip(passed, totals)]
     ax.bar_label(bars, labels=pct_labels, padding=3, color=colors["fg"], fontsize=9)
 
     fig.suptitle("Tests Passing Per Iteration", color=colors["fg"], fontsize=12, fontweight="bold")
     # Fixed x-margin around the bars (rather than matplotlib's auto range) so a single
     # iteration doesn't get stretched into a full-width bar with no visible whitespace.
     ax.set_xlim(min(iterations) - 0.6, max(iterations) + 0.6)
-    ax.set_ylim(0, total * 1.2 if total else 1)
+    # Scaled off the largest total seen so far -- a fixed limit from just one row clips any bar
+    # from a batch with a bigger denominator.
+    ax.set_ylim(0, max_total * 1.2 if max_total else 1)
     ax.set_xticks(iterations)
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=min(total, 8) or 1))
-    ax.set_xlabel("Iteration", color=colors["fg"], fontsize=10)
-    ax.set_ylabel(f"Tests Passed (of {total})", color=colors["fg"], fontsize=10)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=min(max_total, 8) or 1))
+    # "Check #", not "Iteration" -- a subset re-check and its full-suite confirmation are two
+    # bars within one fix-loop iteration, so this axis doesn't line up with the loop's own
+    # iteration count shown in the log panel.
+    ax.set_xlabel("Check #", color=colors["fg"], fontsize=10)
+    ax.set_ylabel("Tests Passed", color=colors["fg"], fontsize=10)
     ax.tick_params(colors=colors["fg"], labelsize=9, length=0)
     ax.grid(axis="y", color=colors["grid"], linewidth=0.8, zorder=0)
     for spine in ("top", "right"):
@@ -190,7 +219,12 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
 
 def _save_chart_snapshot(agent_name: str, job_id: str, progress: list, png_bytes: bytes) -> None:
     """Persist this iteration's chart under logs/network_consultant_charts/ -- a no-op if
-    already saved (only the theme of the first poll to reach this iteration is kept)."""
+    already saved (only the theme of the first poll to reach this iteration is kept). Skipped
+    entirely while the latest batch is still running (see the `complete` flag runner.py writes
+    per row) -- otherwise the first poll to catch a batch mid-test would permanently cache its
+    unfinished, faded bar instead of waiting for the final result."""
+    if not progress[-1].get("complete", True):
+        return
     charts_dir = os.path.join(CONSULTANT_REPO_PATH, "logs", CHARTS_DIR_NAME)
     os.makedirs(charts_dir, exist_ok=True)
     latest_iteration = progress[-1]["iteration"]
@@ -255,8 +289,8 @@ async def _start_job(args: list, agent_name: str, session_id: str) -> JobStartRe
 @router.post("/generate-tests", response_model=JobStartResponse)
 async def generate_tests(request: GenerateTestsRequest):
     """Generate ANTeGen test fixtures for a network, with no fix loop -- max_iterations=0 makes
-    the runner do its normal generate-tests-if-missing step, one full test run for a baseline
-    pass/fail read, then stop before ever calling consultant_editor."""
+    the runner do its normal generate-tests-if-missing step, then stop: the fix loop (which
+    contains the only run_all_tests call) never executes, so no test is actually run."""
     hocon_file = _network_hocon_file(request.network_name)
     return await _start_job(
         [
@@ -351,8 +385,10 @@ async def get_job_status(job_id: str, theme: str = "light"):
 
     progress_chart: Optional[str] = None
     if progress:
-        png_bytes = _chart_png_bytes(progress, theme)
-        _save_chart_snapshot(job.agent_name, job_id, progress, png_bytes)
+        # Rendering is synchronous, CPU-bound matplotlib work (~100ms+ at many iterations) --
+        # off the event loop so it doesn't stall every other concurrent request on this server.
+        png_bytes = await asyncio.to_thread(_chart_png_bytes, progress, theme)
+        await asyncio.to_thread(_save_chart_snapshot, job.agent_name, job_id, progress, png_bytes)
         progress_chart = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
 
     return JobStatusResponse(

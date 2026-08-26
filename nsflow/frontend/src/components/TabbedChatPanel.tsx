@@ -241,9 +241,9 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },
     ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
     { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
+    ...(!isEditorMode ? [{ id: "consultant", label: "Self Improvement", icon: <ConsultantIcon />, component: <NetworkConsultantPanel selectedNetwork={activeNetwork} /> }] : []),
     { id: "connectors", label: "Connectors", icon: <HubIcon />, component: <McpConnectorsPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
-    ...(!isEditorMode ? [{ id: "consultant", label: "Self Improvement", icon: <ConsultantIcon />, component: <NetworkConsultantPanel selectedNetwork={activeNetwork} /> }] : []),
   ];
 
   const activeTabIndex = tabConfig.findIndex(tab => tab.id === activeTab);

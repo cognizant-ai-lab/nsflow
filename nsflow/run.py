@@ -343,6 +343,13 @@ The type of connection to initiate. Choices are to connect to:
             "--log-level",
             self.config["nsflow_log_level"],
             "--reload",
+            # Without this, uvicorn defaults to watching the process's cwd -- whatever directory
+            # `nsflow` was launched from (e.g. a target repo like consultant/). A running
+            # network_consultant job writes into that same tree (the hocon it's editing,
+            # generated fixtures), so every write triggers a reload that wipes the in-memory
+            # _JOBS dict mid-job, and the next status poll 404s on a job that's still running.
+            "--reload-dir",
+            os.path.join(self.root_dir, "nsflow"),
         ]
 
         self.fastapi_process = self.start_process(

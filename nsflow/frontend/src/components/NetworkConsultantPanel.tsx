@@ -403,12 +403,16 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  gap: 1.5,
                   borderRadius: 1,
                   border: `1px dashed ${theme.palette.divider}`,
                   color: theme.palette.text.secondary,
                 }}
               >
-                <Typography variant="body2">Chart appears here once an iteration completes.</Typography>
+                {running && <CircularProgress size={20} />}
+                <Typography variant="body2">
+                  {running ? "Waiting for the first test result..." : "Chart appears here once an iteration completes."}
+                </Typography>
               </Box>
             </>
           )}
