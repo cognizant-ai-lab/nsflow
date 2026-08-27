@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { useEffect } from "react";
-import { Node, Edge, EdgeMarkerType, FitViewOptions, useStore } from "reactflow";
+import { Node, Edge, EdgeMarkerType, FitViewOptions, useStore } from "@xyflow/react";
 
 interface UseAgentFlowDataProps {
   selectedNetwork: string | null;
