@@ -16,15 +16,9 @@ limitations under the License.
 */
 
 import { memo } from "react";
-import { getBezierPath, useStore, EdgeProps, Node, ReactFlowState } from "reactflow";
+import { getBezierPath, useStore, EdgeProps, ReactFlowState } from "@xyflow/react";
 import { useTheme } from "@mui/material/styles";
-import { getEdgeParams } from "../utils/utils";
-
-// Define a type for the node with required properties
-interface CustomNode extends Node {
-  width: number;
-  height: number;
-}
+import { getEdgeParams, MeasuredNode } from "../utils/utils";
 
 // Explicitly type the FloatingEdge component using ReactFlow's EdgeProps
 const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, style }) => {
@@ -33,8 +27,9 @@ const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, styl
   // Look the two endpoints up directly from the store's node map (O(1) each) rather
   // than useNodes() + Array.find() (O(N) each, O(N*E) across all edges per render).
   // This is the single biggest cost for large graphs on every highlight/drag tick.
-  const sourceNode = useStore((s: ReactFlowState) => s.nodeInternals.get(source)) as CustomNode | undefined;
-  const targetNode = useStore((s: ReactFlowState) => s.nodeInternals.get(target)) as CustomNode | undefined;
+  // (@xyflow/react 12 renamed this map from `nodeInternals` to `nodeLookup`.)
+  const sourceNode = useStore((s: ReactFlowState) => s.nodeLookup.get(source)) as MeasuredNode | undefined;
+  const targetNode = useStore((s: ReactFlowState) => s.nodeLookup.get(target)) as MeasuredNode | undefined;
 
   if (!sourceNode || !targetNode) {
     return null;
