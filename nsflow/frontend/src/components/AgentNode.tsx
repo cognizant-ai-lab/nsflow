@@ -17,7 +17,7 @@ limitations under the License.
 
 import * as React from "react";
 import { useState, useMemo, useEffect } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { FaRobot, FaCogs, FaBrain, FaMicrochip, FaNetworkWired, FaUserSecret } from "react-icons/fa";
 import { Box, Paper, Typography, Button, IconButton, List, ListItem, 
   ListItemIcon, ListItemText, Tooltip, useTheme, alpha, Collapse } from "@mui/material";
@@ -42,8 +42,10 @@ const LlmConfigDisplay: React.FC<{ config: Record<string, unknown> }> = ({ confi
   return <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>{text}</Typography>;
 };
 
-// Define the structure of the `data` prop
-interface AgentNodeData {
+// Define the structure of the `data` prop. The index signature is what
+// @xyflow/react 12 requires of a node's data (it must satisfy
+// Record<string, unknown>).
+interface AgentNodeData extends Record<string, unknown> {
   id: string;
   label: string;
   isActive?: boolean;
@@ -51,10 +53,8 @@ interface AgentNodeData {
   selectedNetwork: string;
 }
 
-// Extend NodeProps to include AgentNodeData
-interface AgentNodeProps extends NodeProps {
-  data: AgentNodeData;
-}
+// In v12 the NodeProps generic is the NODE type, not the data type.
+type AgentNodeProps = NodeProps<Node<AgentNodeData>>;
 
 // Available icons
 const icons = [FaRobot, FaCogs, FaBrain, FaMicrochip, FaNetworkWired, FaUserSecret];
