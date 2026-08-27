@@ -15,12 +15,23 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* ui-common controller alias — mirrors the Vite resolve.alias so `tsc` can
-       type the neuro-san controller import. We alias straight to dist because the
-       package `exports` only exposes "." and "./const" (deep imports are blocked). */
+    /* ui-common aliases — mirrors the Vite resolve.alias in ./aliases.ts so `tsc`
+       can type these imports. We alias straight to dist because the package
+       `exports` only exposes "." and "./const" (deep imports are blocked), and the
+       barrel pulls in next-auth/next-router. Keep this list in sync with
+       ./aliases.ts. */
     "baseUrl": ".",
     "paths": {
-      "@ui-common/agent": ["./node_modules/@cognizant-ai-lab/ui-common/dist/controller/agent/Agent.d.ts"]
+      "@ui-common/agent": ["./node_modules/@cognizant-ai-lab/ui-common/dist/controller/agent/Agent.d.ts"],
+      "@ui-common/llm": ["./node_modules/@cognizant-ai-lab/ui-common/dist/controller/llm/LlmChat.d.ts"],
+      "@ui-common/state/Environment": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/Environment.d.ts"],
+      "@ui-common/state/ChatHistory": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/ChatHistory.d.ts"],
+      "@ui-common/state/IndexedDBStorage": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/IndexedDBStorage.d.ts"],
+      "@ui-common/mac/const": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/const.d.ts"],
+      "@ui-common/mac/AgentNetworkDesigner": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/AgentNetworkDesigner.d.ts"],
+      "@ui-common/graph/GraphStructure": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/AgentFlow/GraphStructure.d.ts"],
+      "@ui-common/graph/AgentFlow": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/AgentFlow/AgentFlow.d.ts"],
+      "@ui-common/types": ["./node_modules/@cognizant-ai-lab/ui-common/dist/generated/neuro-san/NeuroSanClient.d.ts"]
     },
 
     /* Linting */
