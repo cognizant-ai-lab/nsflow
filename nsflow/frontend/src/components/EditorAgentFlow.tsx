@@ -850,7 +850,7 @@ const EditorAgentFlow = ({
                             }}
                           >
                             <HomeIcon fontSize="small" color="action" />
-                            <Typography variant="body2" fontWeight={500}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
                               Launch in Home
                             </Typography>
                           </MenuItem>
