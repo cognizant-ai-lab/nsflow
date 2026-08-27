@@ -52,11 +52,13 @@ const FileViewerDialog: React.FC<FileViewerDialogProps> = ({ file, onClose }) =>
       onClose={onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: {
-          maxHeight: "90vh",
-          height: file?.isPdf ? "90vh" : "auto",
-          backgroundColor: theme.palette.background.paper,
+      slotProps={{
+        paper: {
+          sx: {
+            maxHeight: "90vh",
+            height: file?.isPdf ? "90vh" : "auto",
+            backgroundColor: theme.palette.background.paper,
+          },
         },
       }}
     >
