@@ -250,9 +250,13 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
                     </ListItemIcon>
                     <ListItemText 
                       primary={tool} 
-                      primaryTypographyProps={{ 
-                        fontSize: '0.7rem',
-                        color: theme.palette.text.primary
+                      slotProps={{
+                        primary: {
+                          sx: {
+                            fontSize: '0.7rem',
+                            color: theme.palette.text.primary
+                          }
+                        }
                       }}
                     />
                   </ListItem>
