@@ -969,10 +969,14 @@ export function ThreadList({
                       }
                       slotProps={{
                         primary: {
-                          fontWeight: isActive ? 600 : 400,
+                          // MUI 9 removed system props from Typography; only real
+                          // props (noWrap) stay outside sx.
                           noWrap: true,
-                          fontSize: '0.7rem',
-                          lineHeight: 1,
+                          sx: {
+                            fontWeight: isActive ? 600 : 400,
+                            fontSize: '0.7rem',
+                            lineHeight: 1,
+                          },
                         },
                         secondary: {
                           component: 'div',
