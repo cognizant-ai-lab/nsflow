@@ -155,11 +155,11 @@ export function FileUploadField({
           {isDragActive ? 'Drop files here...' : 'Drag & drop files here, or click to select'}
         </Typography>
         {accept && (
-          <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
             Accepted: {accept}
           </Typography>
         )}
-        <Typography variant="caption" color="text.secondary" display="block">
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
           Max {maxFiles} file{maxFiles > 1 ? 's' : ''}, {formatFileSize(maxSize)} each
         </Typography>
       </Box>
