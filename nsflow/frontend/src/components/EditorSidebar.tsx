@@ -763,11 +763,13 @@ const EditorSidebar = ({
                   size="small"
                   slotProps={{
                     input: {
-                      ...params.InputProps,
+                      // MUI 9 moved Autocomplete's renderInput params from
+                      // params.InputProps to params.slotProps.input.
+                      ...params.slotProps.input,
                       endAdornment: (
                         <>
                           {(loadingNetworks || loadingDefinition) && <CircularProgress size={16} />}
-                          {params.InputProps.endAdornment}
+                          {params.slotProps.input.endAdornment}
                         </>
                       ),
                     },
