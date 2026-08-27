@@ -54,7 +54,7 @@ export function SliderField({
         <FormLabel error={!!error}>
           {label}{required ? ' *' : ''}
         </FormLabel>
-        <Typography variant="body2" color="primary" fontWeight="bold">
+        <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold' }}>
           {numericValue}
         </Typography>
       </Box>
