@@ -16,7 +16,7 @@ limitations under the License.
 */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import ReactFlow, {
+import { ReactFlow,
   Background,
   Controls,
   useEdgesState,
@@ -25,8 +25,8 @@ import ReactFlow, {
   Node,
   Edge,
   EdgeMarkerType,
-} from "reactflow";
-import "reactflow/dist/style.css";
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { 
   Box, 
   Button, 
@@ -55,8 +55,8 @@ const edgeTypes = { floating: FloatingEdge };
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl, wsUrl } = useApiPort();
   const { sessionId } = useChatContext();
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
 
