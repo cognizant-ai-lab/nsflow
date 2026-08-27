@@ -116,20 +116,22 @@ const ZenModeSettings: React.FC = () => {
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
         sx={{ zIndex: 10001 }}
-        PaperProps={{
-          sx: {
-            width: 320,
-            maxHeight: 500,
-            overflow: "auto",
-            p: 2,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-            borderRadius: 2,
+        slotProps={{
+          paper: {
+            sx: {
+              width: 320,
+              maxHeight: 500,
+              overflow: "auto",
+              p: 2,
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+              borderRadius: 2,
+            },
           },
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ color: theme.palette.text.primary }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
             Zen Mode Settings
           </Typography>
           <Tooltip title="Reset to Default">
