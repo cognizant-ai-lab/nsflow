@@ -72,19 +72,22 @@ export function TextareaField({
       helperText={error || undefined}
       placeholder={placeholder}
       {...rowsProps}
-      inputProps={{
-        minLength,
-        maxLength,
-        pattern,
-      }}
-      InputProps={{
-        endAdornment: hasValue && !disabled ? (
-          <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
-            <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
-              <ClearIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </InputAdornment>
-        ) : undefined,
+      slotProps={{
+        // MUI 9: inputProps -> slotProps.htmlInput, InputProps -> slotProps.input
+        htmlInput: {
+          minLength,
+          maxLength,
+          pattern,
+        },
+        input: {
+          endAdornment: hasValue && !disabled ? (
+            <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
+              <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+                <ClearIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        },
       }}
       variant="outlined"
       size="small"
