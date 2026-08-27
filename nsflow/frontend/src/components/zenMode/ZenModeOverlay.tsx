@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { useEffect, useState, useMemo, useCallback, memo } from "react";
-import { ReactFlowProvider } from "reactflow";
+import { ReactFlowProvider } from "@xyflow/react";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
   Box,
