@@ -65,14 +65,17 @@ export function SelectField({
       variant="outlined"
       size="small"
       sx={{ mb: 1 }}
-      InputProps={{
-        endAdornment: hasValue && !disabled ? (
-          <InputAdornment position="end" sx={{ mr: 2 }}>
-            <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
-              <ClearIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </InputAdornment>
-        ) : undefined,
+      slotProps={{
+        // MUI 9: InputProps -> slotProps.input
+        input: {
+          endAdornment: hasValue && !disabled ? (
+            <InputAdornment position="end" sx={{ mr: 2 }}>
+              <IconButton size="small" onClick={() => onChange('')} edge="end" sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+                <ClearIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        },
       }}
     >
       {options.map((option) => (
