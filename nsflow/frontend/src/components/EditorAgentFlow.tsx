@@ -15,9 +15,9 @@ limitations under the License.
 */
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import ReactFlow, { Background, Controls, useEdgesState, useNodesState, useReactFlow, 
-  Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "reactflow";
-import "reactflow/dist/style.css";
+import { ReactFlow, Background, Controls, useEdgesState, useNodesState, useReactFlow, 
+  Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Grow, Popper, MenuList, MenuItem } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
@@ -68,8 +68,9 @@ const EditorAgentFlow = ({
 }) => {
   // console.log('EditorAgentFlow: Received props:', { selectedNetwork, selectedDesignId });
   const { apiUrl } = useApiPort();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
 
@@ -196,9 +197,11 @@ const EditorAgentFlow = ({
         type: "floating",
       }));
 
-      // Apply intelligent layout with position caching
-      let finalNodes = rawNodes;
-      
+      // Apply intelligent layout with position caching. Annotated as Node[] so the
+      // layout manager's return value is assignable (rawNodes alone infers a narrower
+      // literal type under @xyflow/react 12's generics).
+      let finalNodes: Node[] = rawNodes;
+
       if (layoutManager && rawNodes.length > 0) {
         try {
           const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
@@ -261,7 +264,7 @@ const EditorAgentFlow = ({
   // Handle edge connection
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
+      const newEdge: Edge = {
         ...params,
         id: `edge-${params.source}-${params.target}`,
         markerEnd: "arrowclosed" as EdgeMarkerType,
