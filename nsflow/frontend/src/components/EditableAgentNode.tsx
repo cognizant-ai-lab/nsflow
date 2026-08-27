@@ -15,10 +15,12 @@ limitations under the License.
 */
 
 import React from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { FaRobot, FaCog, FaQuestionCircle } from "react-icons/fa";
 
-interface EditableAgentNodeData {
+// The index signature is what @xyflow/react 12 requires of a node's data
+// (it must satisfy Record<string, unknown>).
+interface EditableAgentNodeData extends Record<string, unknown> {
   label: string;
   instructions?: string;
   is_defined?: boolean;
@@ -27,7 +29,8 @@ interface EditableAgentNodeData {
   depth?: number;
 }
 
-const EditableAgentNode: React.FC<NodeProps<EditableAgentNodeData>> = ({ data, selected }) => {
+// In v12 the NodeProps generic is the NODE type, not the data type.
+const EditableAgentNode: React.FC<NodeProps<Node<EditableAgentNodeData>>> = ({ data, selected }) => {
   const isSelected = data.selected || selected;
   const isDefined = data.is_defined !== false; // Default to true if not specified
 
