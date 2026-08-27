@@ -16,7 +16,7 @@ limitations under the License.
 
 import * as React from "react";
 import { useState, useEffect } from "react";
-import { ReactFlowProvider } from "reactflow";
+import { ReactFlowProvider } from "@xyflow/react";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import EditorAgentFlow from "../../components/EditorAgentFlow";
 import EditorSidebar from "../../components/EditorSidebar";
