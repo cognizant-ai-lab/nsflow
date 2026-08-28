@@ -14,6 +14,8 @@
 #
 # END COPYRIGHT
 
+from typing import Any
+from typing import Dict
 from typing import List
 from typing import Literal
 from typing import Optional
@@ -44,6 +46,12 @@ class ImproveNetworkRequest(BaseModel):
     test_level: Literal["minimum", "normal", "max"] = "normal"
     max_iterations: int = Field(default=10, ge=1, le=100)
     success_ratio: str = Field(default="3/3", pattern=r"^\d+/\d+$")
+    git_versions: bool = Field(
+        default=False,
+        description="Commit the network hocon to a dedicated consultant-versions/<network>/<run-id> branch and "
+        "push it to origin at each test checkpoint, preserving every version tried in git history. Off by "
+        "default -- this pushes to the repo's 'origin' remote repeatedly during the run.",
+    )
     session_id: str = Field(
         default="global", description="Chat session ID -- job logs are mirrored to this session's LogsPanel channel."
     )
@@ -78,6 +86,11 @@ class JobStatusResponse(BaseModel):
         description="'data:image/png;base64,...' bar chart of tests passing per iteration so far, rendered "
         "server-side with matplotlib; None until at least one iteration has completed.",
     )
+    git_branch: Optional[str] = Field(
+        default=None,
+        description="The consultant-versions/<network>/<run-id> branch --git-versions is committing this run's "
+        "hocon snapshots to, if the request asked for it and versioning started successfully; None otherwise.",
+    )
 
 
 class JobStopResponse(BaseModel):
@@ -99,3 +112,66 @@ class JobAnswerResponse(BaseModel):
 
     job_id: str
     message: str
+
+
+class FixtureInteraction(BaseModel):
+    """One turn of a (possibly multi-turn) fixture conversation."""
+
+    text: str
+    timeout_in_seconds: Optional[int] = None
+    response_checks: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="interactions[].response.text verbatim -- one entry per assertion neuro-san's "
+        "AgentEvaluatorFactory supports (gist/not_gist, value/not_value, keywords/not_keywords, "
+        "greater/not_greater, less/not_less), keyed by assertion type. Passed through as-is rather than "
+        "assuming 'gist' is the only shape -- a fixture can use any of these.",
+    )
+    sly_data: dict = Field(default_factory=dict)
+
+
+class Fixture(BaseModel):
+    """One parsed tests/fixtures/<network>/<name>.hocon file."""
+
+    name: str
+    agent: Optional[str] = None
+    success_ratio: Optional[str] = None
+    connections: List[str] = Field(default_factory=list)
+    interactions: List[FixtureInteraction] = Field(default_factory=list)
+    raw_hocon: str
+    parse_error: Optional[str] = Field(
+        default=None, description="Set instead of the parsed fields above if this file failed to parse."
+    )
+
+
+class FixturesResponse(BaseModel):
+    """Every ANTeGen fixture currently generated for a network."""
+
+    network_name: str
+    fixtures: List[Fixture] = Field(default_factory=list)
+
+
+class FixtureSaveRequest(BaseModel):
+    """A hand-edited fixture to write to disk, replacing (or creating) one file."""
+
+    fixture: Dict[str, Any] = Field(
+        ..., description="Full fixture object: agent, success_ratio, connections, interactions."
+    )
+
+
+class FixtureSaveResponse(BaseModel):
+    """Returned after a fixture is written to disk."""
+
+    message: str
+
+
+class FixtureDeleteResponse(BaseModel):
+    """Returned after a fixture is removed from disk."""
+
+    message: str
+
+
+class SlyDataKeysResponse(BaseModel):
+    """Best-effort sly_data override keys discovered from a network's own coded tools."""
+
+    network_name: str
+    keys: List[str] = Field(default_factory=list)

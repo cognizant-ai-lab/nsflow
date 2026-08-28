@@ -25,12 +25,15 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
+  Checkbox,
+  FormControlLabel,
   Divider,
   useTheme,
   alpha,
 } from "@mui/material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import TestFixturesDialog from "./TestFixturesDialog";
 
 const TEST_LEVELS = ["minimum", "normal", "max"] as const;
 type TestLevel = (typeof TEST_LEVELS)[number];
@@ -65,6 +68,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
   const [testLevel, setTestLevel] = useState<TestLevel>("normal");
   const [maxIterations, setMaxIterations] = useState(DEFAULT_MAX_ITERATIONS);
   const [successRatio, setSuccessRatio] = useState("3/3");
+  const [gitVersions, setGitVersions] = useState(false);
+  const [fixturesDialogOpen, setFixturesDialogOpen] = useState(false);
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -75,6 +80,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [toolIssues, setToolIssues] = useState<string[]>([]);
   const [progressChart, setProgressChart] = useState<string | null>(null);
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {
@@ -97,7 +103,16 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
         setReturncode(data.returncode);
         setPendingQuestion(data.pending_question ?? null);
         setToolIssues(data.tool_issues ?? []);
-        setProgressChart(data.progress_chart ?? null);
+        // Only overwrite with real data. A running job's own progress file starts out empty
+        // (subprocess startup -- imports, opening sessions -- easily outlasts one poll tick
+        // before the first row is ever written), so nulling the chart out on every data-less
+        // poll blanks the screen for a few seconds even when nothing has actually changed
+        // (e.g. Self-Improve right after Generate Tests, reusing that exact baseline). Leaving
+        // the previous chart up until a fresher one arrives avoids that flash; once the job
+        // finishes, whatever was last shown stays -- if it never produced any data at all, the
+        // returncode text below still tells the story.
+        if (data.progress_chart) setProgressChart(data.progress_chart);
+        setGitBranch(data.git_branch ?? null);
         if (!data.running) stopPolling();
       } catch (err: any) {
         setError(err.message);
@@ -113,7 +128,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     setPendingQuestion(null);
     setAnswerText("");
     setToolIssues([]);
-    setProgressChart(null);
+    setGitBranch(null);
+    // Deliberately not clearing progressChart here -- see the poll handler above for why.
     try {
       const res = await fetch(`${apiUrl}/api/v1/network_consultant/${endpoint}`, {
         method: "POST",
@@ -143,6 +159,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       test_level: testLevel,
       max_iterations: maxIterations,
       success_ratio: successRatio,
+      git_versions: gitVersions,
     });
 
   const handleSubmitAnswer = async () => {
@@ -326,6 +343,13 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
             <Button variant="contained" disabled={!canSubmit} onClick={handleGenerateTests}>
               Generate Tests
             </Button>
+            <Button
+              variant="contained"
+              disabled={!selectedNetwork}
+              onClick={() => setFixturesDialogOpen(true)}
+            >
+              View Tests
+            </Button>
           </Box>
         </Paper>
 
@@ -384,6 +408,26 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
               "& .MuiInputLabel-root": { fontSize: "0.8rem" },
             }}
           />
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={gitVersions}
+                onChange={(e) => setGitVersions(e.target.checked)}
+                disabled={!canSubmit}
+              />
+            }
+            label="Save each version to GitHub (requires an active GitHub MCP connection)"
+            sx={{ mt: 0.5, "& .MuiFormControlLabel-label": { fontSize: "0.8rem", color: theme.palette.text.secondary } }}
+          />
+          {gitBranch && (
+            <Typography
+              variant="caption"
+              sx={{ display: "block", fontFamily: "monospace", color: theme.palette.text.secondary, mt: 0.5 }}
+            >
+              Versions pushed to branch: {gitBranch}
+            </Typography>
+          )}
 
           {progressChart ? (
             <Box
@@ -432,6 +476,12 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
           </Typography>
         )}
       </Box>
+
+      <TestFixturesDialog
+        open={fixturesDialogOpen}
+        onClose={() => setFixturesDialogOpen(false)}
+        networkName={selectedNetwork}
+      />
     </Paper>
   );
 };
