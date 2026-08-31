@@ -41,9 +41,17 @@ type TestLevel = (typeof TEST_LEVELS)[number];
 // Scenario-count ranges the test generator's own instructions target per level (see
 // registries/agent_network_test_generator.hocon) -- not enforced here, just surfaced as a hint.
 const TEST_LEVEL_HINTS: Record<TestLevel, string> = {
-  minimum: "2-3 tests",
-  normal: "5-7 tests",
-  max: "10-15 tests",
+  minimum: "2-3",
+  normal: "5-7",
+  max: "10-15",
+};
+
+// Display-only labels -- "max" stays the wire value (backend/registry enum), "Maximum" is just
+// how it reads in the dropdown.
+const TEST_LEVEL_LABELS: Record<TestLevel, string> = {
+  minimum: "minimum",
+  normal: "normal",
+  max: "maximum",
 };
 
 // Matches Config/Connectors section headings (variant="subtitle1", fontWeight 600, default size).
@@ -92,6 +100,10 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
 
   useEffect(() => stopPolling, []);
 
+  // A chart belongs to one network. Preserve it between Generate and Improve for that network,
+  // but never let it linger after the user selects a different one.
+  useEffect(() => setProgressChart(null), [selectedNetwork]);
+
   const pollJob = (id: string) => {
     stopPolling();
     pollRef.current = setInterval(async () => {
@@ -103,14 +115,6 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
         setReturncode(data.returncode);
         setPendingQuestion(data.pending_question ?? null);
         setToolIssues(data.tool_issues ?? []);
-        // Only overwrite with real data. A running job's own progress file starts out empty
-        // (subprocess startup -- imports, opening sessions -- easily outlasts one poll tick
-        // before the first row is ever written), so nulling the chart out on every data-less
-        // poll blanks the screen for a few seconds even when nothing has actually changed
-        // (e.g. Self-Improve right after Generate Tests, reusing that exact baseline). Leaving
-        // the previous chart up until a fresher one arrives avoids that flash; once the job
-        // finishes, whatever was last shown stays -- if it never produced any data at all, the
-        // returncode text below still tells the story.
         if (data.progress_chart) setProgressChart(data.progress_chart);
         setGitBranch(data.git_branch ?? null);
         if (!data.running) stopPolling();
@@ -129,7 +133,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     setAnswerText("");
     setToolIssues([]);
     setGitBranch(null);
-    // Deliberately not clearing progressChart here -- see the poll handler above for why.
+    if (endpoint === "generate-tests") setProgressChart(null);
     try {
       const res = await fetch(`${apiUrl}/api/v1/network_consultant/${endpoint}`, {
         method: "POST",
@@ -336,19 +340,19 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
             >
               {TEST_LEVELS.map((level) => (
                 <MenuItem key={level} value={level}>
-                  {level} ({TEST_LEVEL_HINTS[level]})
+                  {TEST_LEVEL_LABELS[level]} ({TEST_LEVEL_HINTS[level]})
                 </MenuItem>
               ))}
             </TextField>
             <Button variant="contained" disabled={!canSubmit} onClick={handleGenerateTests}>
-              Generate Tests
+              Generate
             </Button>
             <Button
               variant="contained"
               disabled={!selectedNetwork}
               onClick={() => setFixturesDialogOpen(true)}
             >
-              View Tests
+              View
             </Button>
           </Box>
         </Paper>
@@ -392,7 +396,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
               onClick={handleImprove}
               sx={{ flexShrink: 1, minWidth: 0 }}
             >
-              Self-Improve
+              Improve
             </Button>
           </Box>
           <TextField
@@ -429,21 +433,33 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
             </Typography>
           )}
 
+        </Paper>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            mt: 2,
+            borderRadius: 2,
+            backgroundColor: alpha(theme.palette.info.main, 0.04),
+            borderColor: alpha(theme.palette.info.main, 0.3),
+          }}
+        >
           {progressChart ? (
             <Box
               component="img"
               src={progressChart}
-              alt="Tests passing per iteration"
-              sx={{ maxWidth: "100%", display: "block", mx: "auto", mt: 2, borderRadius: 1 }}
+              alt="Tests passing per improvement iteration"
+              sx={{ width: "100%", maxWidth: 900, display: "block", mx: "auto", borderRadius: 1 }}
             />
           ) : (
             <>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: theme.palette.text.primary, mt: 2, mb: 1.5 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1.5 }}>
                 Tests Passing Per Iteration
               </Typography>
               <Box
                 sx={{
-                  height: 160,
+                  minHeight: 160,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -455,7 +471,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
               >
                 {running && <CircularProgress size={20} />}
                 <Typography variant="body2">
-                  {running ? "Waiting for the first test result..." : "Chart appears here once an iteration completes."}
+                  {running ? "Waiting for the first test result..." : "Run Generate or Improve to see test progress."}
                 </Typography>
               </Box>
             </>

@@ -39,12 +39,11 @@ from typing import Optional
 
 import matplotlib
 
-matplotlib.use("Agg")  # headless -- this process has no display
-from matplotlib import pyplot as plt  # noqa: E402  (must follow matplotlib.use)
-from matplotlib.ticker import MaxNLocator  # noqa: E402  (must follow matplotlib.use)
-
+matplotlib.use("Agg")
 from fastapi import APIRouter
 from fastapi import HTTPException
+from matplotlib import pyplot as plt  # noqa: E402  (must follow matplotlib.use)
+from matplotlib.ticker import MaxNLocator  # noqa: E402  (must follow matplotlib.use)
 from pyhocon import ConfigFactory
 
 from nsflow.backend.models.network_consultant_models import AnswerJobRequest
@@ -55,12 +54,12 @@ from nsflow.backend.models.network_consultant_models import FixtureSaveRequest
 from nsflow.backend.models.network_consultant_models import FixtureSaveResponse
 from nsflow.backend.models.network_consultant_models import FixturesResponse
 from nsflow.backend.models.network_consultant_models import GenerateTestsRequest
-from nsflow.backend.models.network_consultant_models import SlyDataKeysResponse
 from nsflow.backend.models.network_consultant_models import ImproveNetworkRequest
 from nsflow.backend.models.network_consultant_models import JobAnswerResponse
 from nsflow.backend.models.network_consultant_models import JobStartResponse
 from nsflow.backend.models.network_consultant_models import JobStatusResponse
 from nsflow.backend.models.network_consultant_models import JobStopResponse
+from nsflow.backend.models.network_consultant_models import SlyDataKeysResponse
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 # Used when the UI's optional "direction" field is left blank -- runner.py requires
@@ -387,200 +386,126 @@ async def delete_fixture(network_name: str, fixture_name: str):
     return FixtureDeleteResponse(message=f"Deleted {safe_name}.")
 
 
-# Mirrors the frontend's MUI theme (ThemeContext.tsx) so this server-rendered chart doesn't
-# clash with either mode -- a plain white matplotlib default looks broken embedded in dark mode.
-# red/yellow/green are a pass-rate traffic light: <20% passing, 20-80%, >=80% (see _bar_color).
-# Pastel-toned but still validated: node dataviz/scripts/validate_palette.js "<red>,<yellow>,<green>"
-# --mode light|dark clears chroma floor, CVD separation and normal-vision floor for both rows
-# below (contrast vs surface WARNs, which is expected for pastel tones -- the mandatory
-# percentage-text label on every bar is the required secondary encoding for that; lightness-band
-# FAILs on yellow specifically, but that check is scoped to categorical palettes by the
-# validator's own output -- a clean, non-gold yellow is inherently lighter than red/green at
-# equal vividness, and darkening it to fit the band is exactly what turns it into mustard/gold).
-# Yellow is identical across themes -- bright enough for solid contrast on both surfaces already.
+# Mirrors the MUI light/dark surfaces around the transparent chart. Improvement bars use one
+# sequential blue scale so their stacked segments communicate *when* each cohort began passing;
+# authoritative Before/After bars use only the requested 80% red/green threshold.
 _CHART_PALETTE = {
-    "light": {"fg": "#475569", "grid": "#e2e8f0", "red": "#e0636f", "yellow": "#e3c94a", "green": "#4fb87d"},
-    "dark": {"fg": "#cbd5e1", "grid": "#334155", "red": "#d9515e", "yellow": "#e3c94a", "green": "#329165"},
+    "light": {
+        "fg": "#475569",
+        "grid": "#e2e8f0",
+        "red": "#e0636f",
+        "green": "#4fb87d",
+        "blues": ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"],
+    },
+    "dark": {
+        "fg": "#cbd5e1",
+        "grid": "#334155",
+        "red": "#d9515e",
+        "green": "#329165",
+        "blues": ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf"],
+    },
 }
-
-
-def _bar_color(passed: int, total: int, colors: dict) -> str:
-    """Red below 20% of tests passing, green at 80%+ passing, yellow in between."""
-    pct = passed / total if total else 0.0
-    if pct >= 0.8:
-        return colors["green"]
-    if pct < 0.2:
-        return colors["red"]
-    return colors["yellow"]
-
-
-# Every iteration's chart is saved here (keyed by network + job + iteration) so past runs stay
-# browsable even after network_consultant_jobs/ gets cleared out for the next job.
 CHARTS_DIR_NAME = "network_consultant_charts"
 
 
-def _full_suite_roles(full_suite_flags: list) -> dict:
-    """Map row index -> "before"/"after"/"full_suite" for every full-suite row (a subset-recheck
-    row is absent from the result). The first full-suite check is "before", the last is "after"
-    -- but only when there's more than one check overall; with just one, calling it both is more
-    confusing than informative, so it's left as a plain "full_suite" (no forced before/after
-    color, no forced label)."""
-    indices = [i for i, is_full in enumerate(full_suite_flags) if is_full]
-    if len(full_suite_flags) < 2 or not indices:
-        return {}
-    roles = {i: "full_suite" for i in indices}
-    roles[indices[0]] = "before"
-    if indices[-1] != indices[0]:
-        roles[indices[-1]] = "after"
-    return roles
+def _threshold_color(passed: int, total: int, colors: dict) -> str:
+    """Green at 80% or higher, red below 80%; an empty result is red."""
+    return colors["green"] if total > 0 and passed / total >= 0.8 else colors["red"]
 
 
-def _bar_labels(full_suite_flags: list) -> list:
-    """X-axis label per bar: the check number, always -- plus "(Before)"/"(After)" on the
-    bookend full-suite checks or "(Full Suite)" on any other one. The number stays on every
-    bar (not just the plain-numbered subset rechecks) so the sequence never looks like it
-    skipped one just because bar 1 also happens to be the "Before" checkpoint."""
-    roles = _full_suite_roles(full_suite_flags)
-    role_suffix = {"before": " (Before)", "after": " (After)", "full_suite": " (Full Suite)"}
-    return [f"{i + 1}{role_suffix.get(roles.get(i), '')}" for i in range(len(full_suite_flags))]
-
-
-def _full_suite_color(role: Optional[str], passed: int, total: int, colors: dict) -> str:
-    """Before is always red (the starting, not-yet-fixed state) and After is always green (the
-    confirmed final state) -- fixed by convention regardless of their actual pass rate, which
-    the bar's own percentage label already states plainly. Any other full-suite check (an
-    interior regression confirmation, or the only check in a run too short to have a distinct
-    before/after) falls back to the pass-rate traffic light."""
-    if role == "before":
-        return colors["red"]
-    if role == "after":
-        return colors["green"]
-    return _bar_color(passed, total, colors)
-
-
-# Which round a subset-retest cohort started passing is ORDER, not identity (dataviz skill:
-# "cohort buckets" is the textbook ordinal example) -- one hue, monotone lightness, rather than
-# a categorical multi-hue set. Blue: distinct from the red/yellow/green pass-rate scale already
-# used on full-suite bars, and unused elsewhere in this chart. Every-other step of the
-# reference sequential-blue ramp (skill's palette.md), clipped to each surface's 2:1 ordinal
-# floor (light starts no lighter than step 250, dark goes no darker than step 600) -- spacing
-# skips ticks so adjacent cohorts in the same stacked bar clear the ordinal adjacent-ΔL gate
-# (validated: node validate_palette.js ... --ordinal). 5 prepared; clamps to the darkest shade
-# past that many rounds in one retest chain.
-_COHORT_RAMP = {
-    "light": ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"],
-    "dark": ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf"],
-}
-
-
-def _cohort_color(level: int, theme: str) -> str:
-    ramp = _COHORT_RAMP.get(theme, _COHORT_RAMP["light"])
-    return ramp[min(level, len(ramp) - 1)]
-
-
-def _cohort_segments(progress: list) -> list:
-    """Per-row list of stacked segment sizes summing to that row's `passed`. A full-suite row is
-    always a single segment (drawn solid in its before/after/pass-rate color). A subset-recheck
-    row is broken down by WHEN each passing fixture most recently joined: the baseline carried
-    into this recheck chain (from the last full-suite check), each earlier round's own cohort
-    within the chain (locked in once that round finished, so it keeps appearing as its own
-    segment in every later bar of the chain), and this round's own still-growing cohort on top.
-    Chains reset at every full-suite row -- that check re-establishes a fresh authoritative
-    baseline no earlier subset cohort should blend into.
-    """
-    segments = []
-    chain_locked: list = []
-    chain_start = 0
+def _chart_x_labels(progress: list) -> list[str]:
+    """Use the reference's compact 1, 2, ... ticks, with named full-suite bookends."""
+    labels = []
     for entry in progress:
-        passed = entry["passed"]
-        if entry.get("full_suite", True):
-            segments.append([passed])
-            chain_locked = []
-            chain_start = passed
-            continue
-        own = max(passed - chain_start - sum(chain_locked), 0)
-        segments.append([chain_start, *chain_locked, own])
-        if entry.get("complete", True):
-            chain_locked.append(own)
-    return segments
+        checkpoint = entry.get("checkpoint", "iteration")
+        if checkpoint == "before":
+            labels.append("Before")
+        elif checkpoint == "after":
+            labels.append("After")
+        elif checkpoint == "generated":
+            labels.append("1")
+        else:
+            labels.append(str(entry.get("improvement_iteration") or entry.get("check") or len(labels) + 1))
+    return labels
+
+
+def _normalized_segments(entry: dict) -> list[int]:
+    """Return stack segments that exactly sum to `passed`, tolerating older progress rows."""
+    passed = max(int(entry.get("passed", 0)), 0)
+    if entry.get("checkpoint") != "iteration":
+        return [passed]
+    raw_segments = entry.get("segments")
+    if not isinstance(raw_segments, list):
+        return [passed]
+
+    remaining = passed
+    segments = []
+    for value in raw_segments:
+        segment = min(max(int(value), 0), remaining)
+        segments.append(segment)
+        remaining -= segment
+    if remaining:
+        segments.append(remaining)
+    return segments or [0]
 
 
 def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
-    """Bar chart of tests passing per iteration, rendered as raw PNG bytes. Each bar is its own
-    batch and can have its own denominator (e.g. a batch's bar climbs 1/1 -> 1/2 -> 2/3 as its
-    tests finish), so every row's color/label must use ITS OWN total -- a single global total
-    would relabel already-finished bars whenever a later, differently-sized batch is recorded."""
+    """Render the requested tests-passing chart as a transparent PNG."""
     colors = _CHART_PALETTE.get(theme, _CHART_PALETTE["light"])
-    iterations = [entry["iteration"] for entry in progress]
-    passed = [entry["passed"] for entry in progress]
-    totals = [entry["total"] for entry in progress]
-    # Rows from before this field existed have no way to know if they were mid-batch, so treat
-    # them as finished rather than incorrectly showing an old, already-done bar as still running.
-    completions = [entry.get("complete", True) for entry in progress]
-    # Same reasoning for rows from before full_suite existed -- every batch used to check every
-    # fixture, so absence of the field means "yes, this was a full suite".
-    full_suite_flags = [entry.get("full_suite", True) for entry in progress]
-    max_total = max(totals) if totals else 1
-    roles = _full_suite_roles(full_suite_flags)
-    row_segments = _cohort_segments(progress)
-    max_levels = max((len(segs) for segs in row_segments), default=1)
+    x_positions = list(range(1, len(progress) + 1))
+    passed = [max(int(entry.get("passed", 0)), 0) for entry in progress]
+    totals = [max(int(entry.get("total", 0)), 0) for entry in progress]
+    max_total = max(totals, default=1) or 1
+    row_segments = [_normalized_segments(entry) for entry in progress]
+    max_levels = max((len(segments) for segments in row_segments), default=1)
 
-    fig, ax = plt.subplots(figsize=(max(4.5, len(iterations) * 0.7), 3.2), dpi=130)
+    fig, ax = plt.subplots(figsize=(max(4.5, len(progress) * 0.85), 3.2), dpi=130)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    # One ax.bar() call per stack level: level 0 is every bar's bottom segment, level 1 sits on
-    # top of it, and so on. A full-suite row only ever occupies level 0 (solid before/after/
-    # pass-rate color); a subset row's lower levels are cohorts locked in from past rounds and
-    # its topmost non-empty level is this round's still-growing one. A thin border in the grid
-    # color separates every segment regardless (see _COHORT_RAMP), so stacked layers never read
-    # as one solid blob even when two adjacent shades are close.
-    level_containers = []
     for level in range(max_levels):
-        heights = [segs[level] if level < len(segs) else 0 for segs in row_segments]
-        bottoms = [sum(segs[:level]) if level < len(segs) else 0 for segs in row_segments]
-        level_colors = [
-            _full_suite_color(roles.get(i), p, t, colors) if full_suite else _cohort_color(level, theme)
-            for i, (p, t, full_suite) in enumerate(zip(passed, totals, full_suite_flags))
-        ]
-        level_containers.append(
-            ax.bar(
-                iterations, heights, bottom=bottoms, color=level_colors, width=0.5, zorder=3,
-                edgecolor=colors["grid"], linewidth=1.0,
-            )
+        heights = [segments[level] if level < len(segments) else 0 for segments in row_segments]
+        bottoms = [sum(segments[:level]) for segments in row_segments]
+        bar_colors = []
+        for entry, passed_count, total_count in zip(progress, passed, totals):
+            checkpoint = entry.get("checkpoint", "iteration")
+            if checkpoint in {"before", "after"}:
+                bar_colors.append(_threshold_color(passed_count, total_count, colors))
+            else:
+                blue_ramp = colors["blues"]
+                bar_colors.append(blue_ramp[min(level, len(blue_ramp) - 1)])
+        ax.bar(
+            x_positions,
+            heights,
+            bottom=bottoms,
+            color=bar_colors,
+            width=0.55,
+            edgecolor=colors["grid"],
+            linewidth=0.8,
+            zorder=3,
         )
 
-    # A batch still running (more tests yet to report) gets a diagonal-hatch "still loading" cue
-    # on just its topmost (currently growing) segment -- the segments below it are already locked
-    # in from earlier, finished rounds and shouldn't read as unfinished.
-    for i, (complete, segs) in enumerate(zip(completions, row_segments)):
-        if complete:
-            continue
-        top_level = len(segs) - 1
-        bar = level_containers[top_level][i]
-        bar.set_hatch("///")
-        bar.set_edgecolor(colors["fg"])
-        bar.set_linewidth(0.8)
-
-    # Manual labels (rather than ax.bar_label on one container) since the total is split across
-    # a variable number of stacked segments per bar -- there's no single container whose bars
-    # all sit at each row's true top.
-    for x, p, t in zip(iterations, passed, totals):
-        label = f"{p}/{t} ({round(100 * p / t) if t else 0}%)"
-        ax.text(x, p + max_total * 0.03, label, ha="center", va="bottom", color=colors["fg"], fontsize=9)
+    for x_position, passed_count, total_count in zip(x_positions, passed, totals):
+        percentage = round(100 * passed_count / total_count) if total_count else 0
+        ax.text(
+            x_position,
+            passed_count + max_total * 0.03,
+            f"{passed_count}/{total_count} ({percentage}%)",
+            ha="center",
+            va="bottom",
+            color=colors["fg"],
+            fontsize=9,
+        )
 
     fig.suptitle("Tests Passing Per Iteration", color=colors["fg"], fontsize=12, fontweight="bold")
-    # Fixed x-margin around the bars (rather than matplotlib's auto range) so a single
-    # iteration doesn't get stretched into a full-width bar with no visible whitespace.
-    ax.set_xlim(min(iterations) - 0.6, max(iterations) + 0.6)
-    # Scaled off the largest total seen so far -- a fixed limit from just one row clips any bar
-    # from a batch with a bigger denominator.
-    ax.set_ylim(0, max_total * 1.2 if max_total else 1)
-    ax.set_xticks(iterations)
-    # "Before"/"After"/"Full Suite" on the authoritative all-fixture checks; a bare check number
-    # on a narrower failing-only recheck (see _bar_labels) -- distinguishes an official
-    # before/after result from the fix loop's own in-between retries at a glance.
-    ax.set_xticklabels(_bar_labels(full_suite_flags), rotation=0 if len(iterations) <= 6 else 30, ha="right" if len(iterations) > 6 else "center")
+    ax.set_xlim(0.4, len(progress) + 0.6)
+    ax.set_ylim(0, max_total * 1.2)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(
+        _chart_x_labels(progress),
+        rotation=30 if len(progress) > 6 else 0,
+        ha="right" if len(progress) > 6 else "center",
+    )
     ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=min(max_total, 8) or 1))
     ax.set_xlabel("Improvement Iterations", color=colors["fg"], fontsize=10)
     ax.set_ylabel("Tests Passed", color=colors["fg"], fontsize=10)
@@ -599,18 +524,12 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
 
 
 def _save_chart_snapshot(agent_name: str, job_id: str, progress: list, png_bytes: bytes) -> None:
-    """Persist this iteration's chart under logs/network_consultant_charts/ -- a no-op if
-    already saved (only the theme of the first poll to reach this iteration is kept). Skipped
-    entirely while the latest batch is still running (see the `complete` flag runner.py writes
-    per row) -- otherwise the first poll to catch a batch mid-test would permanently cache its
-    unfinished, faded bar instead of waiting for the final result."""
-    if not progress[-1].get("complete", True):
-        return
+    """Keep the latest complete graph from each checkpoint under logs/ for later review."""
     charts_dir = os.path.join(CONSULTANT_REPO_PATH, "logs", CHARTS_DIR_NAME)
     os.makedirs(charts_dir, exist_ok=True)
-    latest_iteration = progress[-1]["iteration"]
     safe_name = agent_name.replace("/", "_")
-    path = os.path.join(charts_dir, f"{safe_name}_{job_id}_iter{latest_iteration:03d}.png")
+    check_number = int(progress[-1].get("check", len(progress)))
+    path = os.path.join(charts_dir, f"{safe_name}_{job_id}_check{check_number:03d}.png")
     if not os.path.exists(path):
         with open(path, "wb") as png_file:
             png_file.write(png_bytes)
@@ -670,8 +589,8 @@ async def _start_job(args: list, agent_name: str, session_id: str) -> JobStartRe
 @router.post("/generate-tests", response_model=JobStartResponse)
 async def generate_tests(request: GenerateTestsRequest):
     """Generate ANTeGen test fixtures for a network, with no fix loop -- max_iterations=0 makes
-    the runner do its normal generate-tests-if-missing step, then stop: the fix loop (which
-    contains the only run_all_tests call) never executes, so no test is actually run."""
+    the runner do its normal generate-tests-if-missing step, then stop: the fix loop itself
+    never executes."""
     hocon_file = _network_hocon_file(request.network_name)
     return await _start_job(
         [
@@ -761,22 +680,19 @@ async def get_job_status(job_id: str, theme: str = "light"):
     try:
         with open(progress_path, "r", encoding="utf-8") as progress_file:
             for line in progress_file:
-                line = line.strip()
-                if not line:
-                    continue
                 try:
-                    progress.append(json.loads(line))
+                    entry = json.loads(line)
                 except json.JSONDecodeError:
-                    # A torn read of the last line while runner.py is mid-append -- it'll be
-                    # complete on the next poll, so just skip it here rather than error out.
+                    # The subprocess may be between writes during a poll; the next poll will
+                    # receive the complete line.
                     continue
+                if isinstance(entry, dict):
+                    progress.append(entry)
     except FileNotFoundError:
         pass
 
     progress_chart: Optional[str] = None
     if progress:
-        # Rendering is synchronous, CPU-bound matplotlib work (~100ms+ at many iterations) --
-        # off the event loop so it doesn't stall every other concurrent request on this server.
         png_bytes = await asyncio.to_thread(_chart_png_bytes, progress, theme)
         await asyncio.to_thread(_save_chart_snapshot, job.agent_name, job_id, progress, png_bytes)
         progress_chart = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
@@ -830,7 +746,9 @@ async def stop_job(job_id: str):
     try:
         await asyncio.wait_for(job.process.wait(), timeout=STOP_GRACE_PERIOD_SECONDS)
     except asyncio.TimeoutError:
-        logger.warning("Job %s did not exit within %ss of SIGTERM; sending SIGKILL.", job_id, STOP_GRACE_PERIOD_SECONDS)
+        logger.warning(
+            "Job %s did not exit within %ss of SIGTERM; sending SIGKILL.", job_id, STOP_GRACE_PERIOD_SECONDS
+        )
         job.process.kill()
         await job.process.wait()
 

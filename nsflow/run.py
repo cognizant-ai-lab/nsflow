@@ -350,6 +350,11 @@ The type of connection to initiate. Choices are to connect to:
             # _JOBS dict mid-job, and the next status poll 404s on a job that's still running.
             "--reload-dir",
             os.path.join(self.root_dir, "nsflow"),
+            # prebuilt_frontend/ is inside that same watched dir but is build OUTPUT (rebuilt via
+            # build_scripts/build_frontend.sh), not backend source -- without this exclusion,
+            # rebuilding the frontend UI mid-job restarts the server for the same reason as above.
+            "--reload-exclude",
+            os.path.join(self.root_dir, "nsflow", "prebuilt_frontend", "*"),
         ]
 
         self.fastapi_process = self.start_process(

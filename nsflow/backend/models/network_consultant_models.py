@@ -83,8 +83,8 @@ class JobStatusResponse(BaseModel):
     )
     progress_chart: Optional[str] = Field(
         default=None,
-        description="'data:image/png;base64,...' bar chart of tests passing per iteration so far, rendered "
-        "server-side with matplotlib; None until at least one iteration has completed.",
+        description="A data:image/png;base64 URI for the tests-passing chart, or None before the first test "
+        "checkpoint completes.",
     )
     git_branch: Optional[str] = Field(
         default=None,

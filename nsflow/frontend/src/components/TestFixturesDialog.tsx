@@ -60,6 +60,14 @@ const STOCK_TEST_KEYS = [
   "greater", "not_greater",
 ] as const;
 
+// Display-only -- the wire value stays snake_case (e.g. "not_gist"); this is just how it reads
+// in the Type dropdown and the read-only check summary.
+const formatCheckTypeLabel = (key: string): string =>
+  key
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
 // These take a single number (assertLess/assertGreater/assertEqual, or their negations);
 // everything else (gist, keywords) takes a list of strings.
 const NUMERIC_CHECK_TYPES = new Set(["value", "not_value", "less", "not_less", "greater", "not_greater"]);
@@ -100,7 +108,7 @@ const CheckValue = ({ value }: { value: unknown }) => {
   const theme = useTheme();
   if (Array.isArray(value)) {
     return (
-      <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+      <Box component="ul" sx={{ m: 0, pl: 4 }}>
         {value.map((item, index) => (
           <Typography key={index} component="li" variant="body2" sx={{ color: theme.palette.text.primary }}>
             {String(item)}
@@ -188,7 +196,7 @@ const emptyDraftFixture = (): DraftFixture => ({
 });
 
 // Shared editor for a fixture's interactions/turns -- used both for an existing fixture's edit
-// form and for the "New test" creation form, so add/remove-turn and add/remove-check logic
+// form and for the "New Test" creation form, so add/remove-turn and add/remove-check logic
 // lives in exactly one place.
 const InteractionsEditor = ({
   interactions,
@@ -206,25 +214,11 @@ const InteractionsEditor = ({
   return (
     <>
       {interactions.map((interaction, index) => (
-        <Box key={interaction.id} sx={{ p: 1.5, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
-          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1 }}>
-            <TextField
-              label={`Turn ${index + 1}: user text`}
-              size="small"
-              fullWidth
-              multiline
-              minRows={2}
-              value={interaction.text}
-              onChange={(e) => updateOne(interaction.id, (i) => ({ ...i, text: e.target.value }))}
-            />
-            <TextField
-              label="Timeout (s)"
-              size="small"
-              type="number"
-              value={interaction.timeoutInSeconds}
-              onChange={(e) => updateOne(interaction.id, (i) => ({ ...i, timeoutInSeconds: e.target.value }))}
-              sx={{ width: 130 }}
-            />
+        <Box key={interaction.id} sx={{ p: 2, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: theme.palette.text.primary, flexGrow: 1 }}>
+              Turn {index + 1}
+            </Typography>
             <IconButton
               size="small"
               title="Remove this turn"
@@ -235,151 +229,187 @@ const InteractionsEditor = ({
             </IconButton>
           </Box>
 
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-            Expected response checks
-          </Typography>
-          {interaction.checks.map((check) => {
-            const usedElsewhere = new Set(
-              interaction.checks.filter((c) => c.id !== check.id).map((c) => c.checkType)
-            );
-            return (
-              <Box key={check.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mt: 0.5 }}>
-                <TextField
-                  select
-                  size="small"
-                  label="Type"
-                  value={check.checkType}
-                  sx={{ width: 150 }}
-                  onChange={(e) =>
-                    updateOne(interaction.id, (i) => ({
-                      ...i,
-                      checks: i.checks.map((c) => (c.id === check.id ? { ...c, checkType: e.target.value } : c)),
-                    }))
-                  }
-                >
-                  {STOCK_TEST_KEYS.map((key) => (
-                    <MenuItem key={key} value={key} disabled={usedElsewhere.has(key)}>
-                      {key}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  size="small"
-                  fullWidth
-                  multiline={!NUMERIC_CHECK_TYPES.has(check.checkType)}
-                  minRows={NUMERIC_CHECK_TYPES.has(check.checkType) ? 1 : 2}
-                  type={NUMERIC_CHECK_TYPES.has(check.checkType) ? "number" : "text"}
-                  label={NUMERIC_CHECK_TYPES.has(check.checkType) ? "Value" : "Value (one per line)"}
-                  value={check.value}
-                  onChange={(e) =>
-                    updateOne(interaction.id, (i) => ({
-                      ...i,
-                      checks: i.checks.map((c) => (c.id === check.id ? { ...c, value: e.target.value } : c)),
-                    }))
-                  }
-                />
-                <IconButton
-                  size="small"
-                  title="Remove this check"
-                  disabled={interaction.checks.length <= 1}
-                  onClick={() =>
-                    updateOne(interaction.id, (i) => ({
-                      ...i,
-                      checks: i.checks.filter((c) => c.id !== check.id),
-                    }))
-                  }
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            );
-          })}
-          <Button
-            size="small"
-            startIcon={<AddIcon />}
-            sx={{ mt: 0.5 }}
-            disabled={interaction.checks.length >= STOCK_TEST_KEYS.length}
-            onClick={() => {
-              const used = new Set(interaction.checks.map((c) => c.checkType));
-              const nextType = STOCK_TEST_KEYS.find((key) => !used.has(key)) ?? STOCK_TEST_KEYS[0];
-              updateOne(interaction.id, (i) => ({
-                ...i,
-                checks: [...i.checks, { id: newDraftId(), checkType: nextType, value: "" }],
-              }));
-            }}
-          >
-            Add check
-          </Button>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 1 }}>
+              Input
+            </Typography>
+            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, pl: 2 }}>
+              <TextField
+                label="Prompt"
+                size="small"
+                fullWidth
+                multiline
+                value={interaction.text}
+                onChange={(e) => updateOne(interaction.id, (i) => ({ ...i, text: e.target.value }))}
+              />
+              <TextField
+                label="Timeout (s)"
+                size="small"
+                type="number"
+                value={interaction.timeoutInSeconds}
+                onChange={(e) => updateOne(interaction.id, (i) => ({ ...i, timeoutInSeconds: e.target.value }))}
+                sx={{ width: 160 }}
+              />
+            </Box>
+          </Box>
 
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, display: "block", mt: 1 }}>
-            Sly Data Input
-          </Typography>
-          {interaction.slyData.map((entry) => {
-            // The dropdown is restricted to variable names actually found in this network's
-            // coded tools -- but a saved fixture's existing key always stays selectable even if
-            // it's since fallen out of that list (a tool changed, or it was hand-typed before).
-            const options = entry.key && !slyDataKeys.includes(entry.key) ? [...slyDataKeys, entry.key] : slyDataKeys;
-            return (
-              <Box key={entry.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mt: 0.5 }}>
-                <TextField
-                  select
-                  size="small"
-                  label="Variable"
-                  value={entry.key}
-                  sx={{ width: 170 }}
-                  onChange={(e) =>
-                    updateOne(interaction.id, (i) => ({
-                      ...i,
-                      slyData: i.slyData.map((s) => (s.id === entry.id ? { ...s, key: e.target.value } : s)),
-                    }))
-                  }
-                >
-                  {options.map((key) => (
-                    <MenuItem key={key} value={key}>
-                      {key}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  size="small"
-                  fullWidth
-                  label="Text"
-                  value={entry.value}
-                  onChange={(e) =>
-                    updateOne(interaction.id, (i) => ({
-                      ...i,
-                      slyData: i.slyData.map((s) => (s.id === entry.id ? { ...s, value: e.target.value } : s)),
-                    }))
-                  }
-                />
-                <IconButton
-                  size="small"
-                  title="Remove this sly_data entry"
-                  onClick={() =>
-                    updateOne(interaction.id, (i) => ({
-                      ...i,
-                      slyData: i.slyData.filter((s) => s.id !== entry.id),
-                    }))
-                  }
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            );
-          })}
-          <Button
-            size="small"
-            startIcon={<AddIcon />}
-            sx={{ mt: 0.5 }}
-            onClick={() =>
-              updateOne(interaction.id, (i) => ({
-                ...i,
-                slyData: [...i.slyData, { id: newDraftId(), key: "", value: "" }],
-              }))
-            }
-          >
-            Add sly_data
-          </Button>
+          <Divider sx={{ mb: 2 }} />
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 1 }}>
+              Expected Response
+            </Typography>
+            <Box sx={{ pl: 2 }}>
+              {interaction.checks.map((check, checkIndex) => {
+                const usedElsewhere = new Set(
+                  interaction.checks.filter((c) => c.id !== check.id).map((c) => c.checkType)
+                );
+                return (
+                  <Box key={check.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 0.5 }}>
+                    <TextField
+                      select
+                      size="small"
+                      label={checkIndex === 0 ? "Type" : undefined}
+                      value={check.checkType}
+                      sx={{ width: 160 }}
+                      onChange={(e) =>
+                        updateOne(interaction.id, (i) => ({
+                          ...i,
+                          checks: i.checks.map((c) => (c.id === check.id ? { ...c, checkType: e.target.value } : c)),
+                        }))
+                      }
+                    >
+                      {STOCK_TEST_KEYS.map((key) => (
+                        <MenuItem key={key} value={key} disabled={usedElsewhere.has(key)}>
+                          {formatCheckTypeLabel(key)}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      multiline={!NUMERIC_CHECK_TYPES.has(check.checkType)}
+                      type={NUMERIC_CHECK_TYPES.has(check.checkType) ? "number" : "text"}
+                      label={checkIndex === 0 ? "Expected" : undefined}
+                      value={check.value}
+                      onChange={(e) =>
+                        updateOne(interaction.id, (i) => ({
+                          ...i,
+                          checks: i.checks.map((c) => (c.id === check.id ? { ...c, value: e.target.value } : c)),
+                        }))
+                      }
+                    />
+                    <IconButton
+                      size="small"
+                      title="Remove this check"
+                      disabled={interaction.checks.length <= 1}
+                      onClick={() =>
+                        updateOne(interaction.id, (i) => ({
+                          ...i,
+                          checks: i.checks.filter((c) => c.id !== check.id),
+                        }))
+                      }
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                );
+              })}
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                sx={{ mt: 0.5 }}
+                disabled={interaction.checks.length >= STOCK_TEST_KEYS.length}
+                onClick={() => {
+                  const used = new Set(interaction.checks.map((c) => c.checkType));
+                  const nextType = STOCK_TEST_KEYS.find((key) => !used.has(key)) ?? STOCK_TEST_KEYS[0];
+                  updateOne(interaction.id, (i) => ({
+                    ...i,
+                    checks: [...i.checks, { id: newDraftId(), checkType: nextType, value: "" }],
+                  }));
+                }}
+              >
+                Add Check
+              </Button>
+            </Box>
+          </Box>
+
+          <Divider sx={{ mb: 2 }} />
+
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 1 }}>
+              Sly Data Input
+            </Typography>
+            <Box sx={{ pl: 2 }}>
+              {interaction.slyData.map((entry, entryIndex) => {
+                // The dropdown is restricted to variable names actually found in this network's
+                // coded tools -- but a saved fixture's existing key always stays selectable even if
+                // it's since fallen out of that list (a tool changed, or it was hand-typed before).
+                const options =
+                  entry.key && !slyDataKeys.includes(entry.key) ? [...slyDataKeys, entry.key] : slyDataKeys;
+                return (
+                  <Box key={entry.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 0.5 }}>
+                    <TextField
+                      select
+                      size="small"
+                      label={entryIndex === 0 ? "Key" : undefined}
+                      value={entry.key}
+                      sx={{ width: 160 }}
+                      onChange={(e) =>
+                        updateOne(interaction.id, (i) => ({
+                          ...i,
+                          slyData: i.slyData.map((s) => (s.id === entry.id ? { ...s, key: e.target.value } : s)),
+                        }))
+                      }
+                    >
+                      {options.map((key) => (
+                        <MenuItem key={key} value={key}>
+                          {key}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label={entryIndex === 0 ? "Value" : undefined}
+                      value={entry.value}
+                      onChange={(e) =>
+                        updateOne(interaction.id, (i) => ({
+                          ...i,
+                          slyData: i.slyData.map((s) => (s.id === entry.id ? { ...s, value: e.target.value } : s)),
+                        }))
+                      }
+                    />
+                    <IconButton
+                      size="small"
+                      title="Remove this sly_data entry"
+                      onClick={() =>
+                        updateOne(interaction.id, (i) => ({
+                          ...i,
+                          slyData: i.slyData.filter((s) => s.id !== entry.id),
+                        }))
+                      }
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                );
+              })}
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                sx={{ mt: 0.5 }}
+                onClick={() =>
+                  updateOne(interaction.id, (i) => ({
+                    ...i,
+                    slyData: [...i.slyData, { id: newDraftId(), key: "", value: "" }],
+                  }))
+                }
+              >
+                Add Sly Data
+              </Button>
+            </Box>
+          </Box>
         </Box>
       ))}
 
@@ -389,7 +419,7 @@ const InteractionsEditor = ({
         sx={{ alignSelf: "flex-start" }}
         onClick={() => onChange([...interactions, emptyInteraction()])}
       >
-        Add turn
+        Add Turn
       </Button>
     </>
   );
@@ -719,7 +749,7 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
               setNewFixtureErrors([]);
             }}
           >
-            New test
+            New Test
           </Button>
           {fixtures.some((f) => !f.parse_error) && (
             <Button size="small" startIcon={<EditIcon fontSize="small" />} onClick={toggleEditAll}>
@@ -753,13 +783,13 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
               }}
             >
               <AccordionSummary>
-                <Typography sx={{ fontWeight: 600, color: theme.palette.text.primary }}>New test</Typography>
+                <Typography sx={{ fontWeight: 600, color: theme.palette.text.primary }}>New Test</Typography>
               </AccordionSummary>
               <AccordionDetails>
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <Box sx={{ display: "flex", gap: 2 }}>
                     <TextField
-                      label="File name"
+                      label="File Name"
                       size="small"
                       autoFocus
                       placeholder="my_new_test"
@@ -768,7 +798,7 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                       sx={{ flex: 1 }}
                     />
                     <TextField
-                      label="Success ratio"
+                      label="Success Ratio"
                       size="small"
                       value={newFixture.successRatio}
                       error={!SUCCESS_RATIO_PATTERN.test(newFixture.successRatio)}
@@ -821,7 +851,7 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                 color: theme.palette.text.secondary,
               }}
             >
-              <Typography variant="body2">No tests generated yet -- use Generate Tests above, or New test.</Typography>
+              <Typography variant="body2">No tests generated yet -- use Generate Tests above, or New Test.</Typography>
             </Box>
           ) : (
             fixtures.map((fixture) => {
@@ -852,7 +882,7 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                         <>
                           <TextField
                             size="small"
-                            label="File name"
+                            label="File Name"
                             value={draft.fileName}
                             onClick={(e) => e.stopPropagation()}
                             onChange={(e) => updateDraft(fixture.name, (d) => ({ ...d, fileName: e.target.value }))}
@@ -860,7 +890,7 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                           />
                           <TextField
                             size="small"
-                            label="Success ratio"
+                            label="Success Ratio"
                             value={draft.successRatio}
                             error={!ratioValid}
                             helperText={ratioValid ? "" : "N/M, e.g. 1/1"}
@@ -871,9 +901,6 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                         </>
                       ) : (
                         fixture.success_ratio && <Chip size="small" color="primary" label={fixture.success_ratio} />
-                      )}
-                      {fixture.interactions.length > 1 && (
-                        <Chip size="small" variant="outlined" label={`${fixture.interactions.length} turns`} />
                       )}
                       <Box sx={{ flexGrow: 1 }} />
                       {!fixture.parse_error && (
@@ -953,19 +980,33 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                         {fixture.interactions.map((interaction, index) => (
                           <Box key={index} sx={{ mb: index < fixture.interactions.length - 1 ? 2 : 0 }}>
                             <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
-                              User:
+                              Question:
                             </Typography>
                             <Typography variant="body2" sx={{ mb: 1, color: theme.palette.text.primary }}>
                               {interaction.text}
                             </Typography>
-                            {Object.entries(interaction.response_checks).map(([checkType, checkValue]) => (
-                              <Box key={checkType} sx={{ mb: 0.5 }}>
-                                <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
-                                  Expected ({checkType}):
-                                </Typography>
-                                <CheckValue value={checkValue} />
-                              </Box>
-                            ))}
+                            {Object.keys(interaction.response_checks).length > 0 && (
+                              <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                                Expected Response:
+                              </Typography>
+                            )}
+                            {Object.entries(interaction.response_checks).map(([checkType, checkValue]) =>
+                              Array.isArray(checkValue) ? (
+                                <Box key={checkType} sx={{ mb: 0.5 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                                    {formatCheckTypeLabel(checkType)} -
+                                  </Typography>
+                                  <CheckValue value={checkValue} />
+                                </Box>
+                              ) : (
+                                <Box key={checkType} sx={{ display: "flex", gap: 0.5, alignItems: "flex-start", mb: 0.5 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                                    {formatCheckTypeLabel(checkType)} -
+                                  </Typography>
+                                  <CheckValue value={checkValue} />
+                                </Box>
+                              )
+                            )}
                             {index < fixture.interactions.length - 1 && <Divider sx={{ mt: 2 }} />}
                           </Box>
                         ))}
