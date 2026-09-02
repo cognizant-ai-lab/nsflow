@@ -215,7 +215,13 @@ const EditorAgentFlow = ({
 
       setNodes(finalNodes);
       setEdges(transformedEdges);
-      fitView({ padding: 0.1, duration: 800 });
+      // Only setViewport here, deliberately. @xyflow/react 12 no longer runs
+      // fitView synchronously: it sets fitViewQueued and executes once the fresh
+      // nodes are measured, i.e. AFTER setViewport's animation has started, so a
+      // fitView() on this line would interrupt and override the pinned viewport
+      // (and this runs on every designer progress frame in view mode). Under v11
+      // fitView was a no-op against unmeasured nodes and setViewport always won,
+      // so dropping it preserves the pre-upgrade behaviour exactly.
       setViewport({ x: -70, y: 100, zoom: 0.5 }, { duration: 800 });
 
     } catch (error) {
