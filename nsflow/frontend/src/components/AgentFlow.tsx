@@ -122,10 +122,11 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         setNodes(finalNodes);
         setEdges(transformedEdges);
 
-        // Fit view/viewport exactly as before
-        fitView();
-        // console.log("received data", data);
-        // You can change zoom and center values as needed
+        // Only setViewport here, deliberately. @xyflow/react 12 queues fitView
+        // until the fresh nodes are measured, so it would land after (and override)
+        // setViewport's animation. Under v11 fitView was a no-op against unmeasured
+        // nodes and setViewport always won, so dropping it preserves the
+        // pre-upgrade behaviour. You can change zoom and center values as needed.
         setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
