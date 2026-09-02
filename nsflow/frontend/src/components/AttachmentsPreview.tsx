@@ -29,7 +29,7 @@ const AttachmentsPreview: React.FC<AttachmentsPreviewProps> = ({ files, onOpen, 
   const theme = useTheme();
   if (files.length === 0) return null;
   return (
-    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+    <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap" }}>
       {files.map((af, index) => (
         <Chip
           key={`${af.file.name}-${index}`}

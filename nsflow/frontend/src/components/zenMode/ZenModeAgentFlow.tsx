@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { useEffect } from "react";
-import ReactFlow, {
+import { ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -24,8 +24,8 @@ import ReactFlow, {
   useReactFlow,
   Node,
   Edge,
-} from "reactflow";
-import "reactflow/dist/style.css";
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { Box, Typography, alpha, Tooltip, Button } from "@mui/material";
 import { AutoFixHigh as AutoArrangeIcon } from "@mui/icons-material";
 import AgentNode from "../AgentNode";
@@ -58,8 +58,8 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
   const { config } = useZenMode();
   const { theme } = useTheme();
   
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport, zoomTo } = useReactFlow();
 
   // Layout settings - using fixed values for cleaner presentation
@@ -211,6 +211,13 @@ const ZenModeAgentFlow = ({ zoomLevel = 1 }: ZenModeAgentFlowProps) => {
 
       {/* React Flow */}
       <ReactFlow
+        // @xyflow/react 12 defaults --xy-controls-button-color-default to
+        // `inherit`, so the Controls icons pick up the app's text colour (white
+        // under the dark theme) while the button background stays on v12's light
+        // palette, rendering them white-on-white. Handing v12 the palette mode
+        // switches it to its own .dark variables. (v11 hardcoded the icon fill,
+        // which is why this only appeared after the upgrade.)
+        colorMode={theme.palette.mode}
         nodes={nodes.map((node) => ({
           ...node,
           data: {

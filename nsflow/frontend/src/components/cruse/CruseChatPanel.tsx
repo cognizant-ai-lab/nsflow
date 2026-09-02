@@ -618,7 +618,7 @@ const CruseChatPanel: React.FC<CruseChatPanelProps> = ({ currentThread, cruseThe
                       pr: 0.5,
                     }}
                   >
-                    <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+                    <Stack direction="row" useFlexGap spacing={0.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
                       {sampleQueries.map((query, index) => (
                         <Chip
                           key={`${query}-${index}`}

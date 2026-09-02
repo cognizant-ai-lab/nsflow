@@ -174,14 +174,16 @@ export function DynamicWidgetCard({
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         {/* Header */}
         <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          mb={expanded ? 1 : 0}
-          sx={{ cursor: 'pointer' }}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: expanded ? 1 : 0,
+            cursor: 'pointer',
+          }}
           onClick={() => setExpanded(!expanded)}
         >
-          <Box display="flex" alignItems="center" gap={0.75}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             {IconComponent && (
               <Box
                 sx={{
@@ -203,7 +205,7 @@ export function DynamicWidgetCard({
               </Box>
             )}
             <Box>
-              <Typography variant="body2" fontWeight="bold" sx={{ lineHeight: 1.2, color: 'text.secondary' }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', lineHeight: 1.2, color: 'text.secondary' }}>
                 {title}
               </Typography>
               {description && !expanded && (
@@ -213,7 +215,7 @@ export function DynamicWidgetCard({
               )}
             </Box>
           </Box>
-          <Box display="flex" alignItems="center" gap={0.5}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             {expanded && description && (
               <Tooltip title={description} placement="top" arrow>
                 <IconButton

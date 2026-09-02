@@ -127,30 +127,32 @@ const ConfigPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
         value={searchTerm}
         onChange={handleSearch}
         sx={{ mb: 2 }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 20 }} />
-            </InputAdornment>
-          ),
-          endAdornment: searchTerm && (
-            <InputAdornment position="end">
-              <IconButton
-                size="small"
-                onClick={clearSearch}
-                sx={{ color: theme.palette.text.secondary }}
-              >
-                <ClearIcon fontSize="small" />
-              </IconButton>
-            </InputAdornment>
-          ),
-          sx: {
-            backgroundColor: alpha(theme.palette.background.default, 0.5),
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: theme.palette.divider
-            },
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: theme.palette.primary.main
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 20 }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={clearSearch}
+                  sx={{ color: theme.palette.text.secondary }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+            sx: {
+              backgroundColor: alpha(theme.palette.background.default, 0.5),
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: theme.palette.divider
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: theme.palette.primary.main
+              }
             }
           }
         }}
@@ -234,11 +236,15 @@ const TreeView = ({ tree, onToggle }: { tree: TreeNode[]; onToggle: (key: string
               </ListItemIcon>
               <ListItemText 
                 primary={node.key}
-                primaryTypographyProps={{
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                  color: theme.palette.text.primary,
-                  fontWeight: 500
+                slotProps={{
+                  primary: {
+                    sx: {
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      color: theme.palette.text.primary,
+                      fontWeight: 500
+                    }
+                  }
                 }}
               />
             </ListItemButton>
@@ -249,10 +255,14 @@ const TreeView = ({ tree, onToggle }: { tree: TreeNode[]; onToggle: (key: string
               </ListItemIcon>
               <ListItemText 
                 primary={node.key}
-                primaryTypographyProps={{
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                  color: theme.palette.text.primary
+                slotProps={{
+                  primary: {
+                    sx: {
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      color: theme.palette.text.primary
+                    }
+                  }
                 }}
               />
             </ListItem>

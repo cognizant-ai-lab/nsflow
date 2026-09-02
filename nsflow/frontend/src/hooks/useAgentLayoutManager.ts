@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { useCallback, useMemo } from "react";
-import { Node, Edge, NodeChange } from "reactflow";
+import { Node, Edge, NodeChange } from "@xyflow/react";
 import { createLayoutManager } from "../utils/agentLayoutManager";
 
 interface UseAgentLayoutManagerProps {

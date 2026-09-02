@@ -891,7 +891,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
                       }
                     }}
                   >
-                    <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+                    <Stack direction="row" useFlexGap spacing={0.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
                       {sampleQueries.map((query, index) => (
                         <Chip
                           key={`${query}-${index}`}
@@ -922,7 +922,7 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
 
             {/* Attached files display */}
             {attachedFiles.length > 0 && (
-              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+              <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap" }}>
                 {attachedFiles.map((af, index) => (
                   <Chip
                     key={`${af.file.name}-${index}`}
@@ -1172,11 +1172,13 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
         onClose={closeFileViewer}
         maxWidth="md"
         fullWidth
-        PaperProps={{
-          sx: {
-            maxHeight: "90vh",
-            height: viewingFile?.isPdf ? "90vh" : "auto",
-            backgroundColor: theme.palette.background.paper,
+        slotProps={{
+          paper: {
+            sx: {
+              maxHeight: "90vh",
+              height: viewingFile?.isPdf ? "90vh" : "auto",
+              backgroundColor: theme.palette.background.paper,
+            }
           }
         }}
       >

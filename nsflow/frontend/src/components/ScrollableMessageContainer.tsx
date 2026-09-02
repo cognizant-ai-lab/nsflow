@@ -292,7 +292,7 @@ const ScrollableMessageContainer: React.FC<Props> = ({
               {/* Attached Files Display */}
               {msg.attachedFiles && msg.attachedFiles.length > 0 && (
                 <Box sx={{ mb: 1, mt: 0.5 }}>
-                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                  <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap" }}>
                     {msg.attachedFiles.map((fileData, fileIdx) => {
                       const isPdf = fileData.file.name.toLowerCase().endsWith('.pdf');
                       

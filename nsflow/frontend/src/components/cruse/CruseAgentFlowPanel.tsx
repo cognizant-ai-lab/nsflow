@@ -16,7 +16,7 @@ limitations under the License.
 
 import { useRef, useState, useEffect } from "react";
 import { Box, Typography, useTheme } from "@mui/material";
-import { ReactFlowProvider } from "reactflow";
+import { ReactFlowProvider } from "@xyflow/react";
 import AgentFlow from "../AgentFlow";
 
 const INTERNAL_WIDTH = 750;

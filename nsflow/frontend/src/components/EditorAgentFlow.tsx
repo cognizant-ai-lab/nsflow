@@ -15,9 +15,9 @@ limitations under the License.
 */
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import ReactFlow, { Background, Controls, useEdgesState, useNodesState, useReactFlow, 
-  Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "reactflow";
-import "reactflow/dist/style.css";
+import { ReactFlow, Background, Controls, useEdgesState, useNodesState, useReactFlow, 
+  Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Grow, Popper, MenuList, MenuItem } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
@@ -68,8 +68,9 @@ const EditorAgentFlow = ({
 }) => {
   // console.log('EditorAgentFlow: Received props:', { selectedNetwork, selectedDesignId });
   const { apiUrl } = useApiPort();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
 
@@ -196,9 +197,11 @@ const EditorAgentFlow = ({
         type: "floating",
       }));
 
-      // Apply intelligent layout with position caching
-      let finalNodes = rawNodes;
-      
+      // Apply intelligent layout with position caching. Annotated as Node[] so the
+      // layout manager's return value is assignable (rawNodes alone infers a narrower
+      // literal type under @xyflow/react 12's generics).
+      let finalNodes: Node[] = rawNodes;
+
       if (layoutManager && rawNodes.length > 0) {
         try {
           const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
@@ -212,7 +215,13 @@ const EditorAgentFlow = ({
 
       setNodes(finalNodes);
       setEdges(transformedEdges);
-      fitView({ padding: 0.1, duration: 800 });
+      // Only setViewport here, deliberately. @xyflow/react 12 no longer runs
+      // fitView synchronously: it sets fitViewQueued and executes once the fresh
+      // nodes are measured, i.e. AFTER setViewport's animation has started, so a
+      // fitView() on this line would interrupt and override the pinned viewport
+      // (and this runs on every designer progress frame in view mode). Under v11
+      // fitView was a no-op against unmeasured nodes and setViewport always won,
+      // so dropping it preserves the pre-upgrade behaviour exactly.
       setViewport({ x: -70, y: 100, zoom: 0.5 }, { duration: 800 });
 
     } catch (error) {
@@ -261,7 +270,7 @@ const EditorAgentFlow = ({
   // Handle edge connection
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
+      const newEdge: Edge = {
         ...params,
         id: `edge-${params.source}-${params.target}`,
         markerEnd: "arrowclosed" as EdgeMarkerType,
@@ -619,6 +628,13 @@ const EditorAgentFlow = ({
       }}>
         <ReactFlow
         nodes={nodes}
+        // @xyflow/react 12 defaults --xy-controls-button-color-default to
+        // `inherit`, so the Controls icons pick up the app's text colour (white
+        // under the dark theme) while the button background stays on v12's light
+        // palette, rendering them white-on-white. Handing v12 the palette mode
+        // switches it to its own .dark variables. (v11 hardcoded the icon fill,
+        // which is why this only appeared after the upgrade.)
+        colorMode={theme.palette.mode}
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
@@ -847,7 +863,7 @@ const EditorAgentFlow = ({
                             }}
                           >
                             <HomeIcon fontSize="small" color="action" />
-                            <Typography variant="body2" fontWeight={500}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
                               Launch in Home
                             </Typography>
                           </MenuItem>
