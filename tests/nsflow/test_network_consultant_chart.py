@@ -29,6 +29,15 @@ class TestNetworkConsultantChart(unittest.TestCase):
         self.assertEqual(_threshold_color(8, 10, colors), colors["green"])
         self.assertEqual(_threshold_color(10, 10, colors), colors["green"])
 
+    def test_generate_tests_bar_is_named_and_threshold_coloured(self):
+        """Generate Tests charts one full-suite bar of its own, labelled "Test run". It is not
+        "Before" -- that name is the Self-Improve run's -- but it is a real-ratio result, so it
+        is red/green, not blue."""
+        progress = [{"check": 1, "checkpoint": "generated", "passed": 3, "total": 4, "segments": [3]}]
+        self.assertEqual(_chart_x_labels(progress), ["Test run"])
+        self.assertEqual(_normalized_segments(progress[0]), [3])
+        self.assertTrue(_chart_png_bytes(progress, "light").startswith(b"\x89PNG\r\n\x1a\n"))
+
     def test_labels_support_repeated_after_checkpoints(self):
         progress = [
             {"checkpoint": "before", "check": 1},

@@ -73,12 +73,12 @@ class JobStatusResponse(BaseModel):
     log_tail: List[str] = Field(default_factory=list)
     pending_question: Optional[str] = Field(
         default=None,
-        description="A NEEDS_CLARIFICATION question consultant_editor is currently blocked on, if any -- "
+        description="A NEEDS_CLARIFICATION question consultant is currently blocked on, if any -- "
         "submit it via POST /jobs/{job_id}/answer to let the job continue.",
     )
     tool_issues: List[str] = Field(
         default_factory=list,
-        description="TOOL_ISSUE lines consultant_editor reported before stopping the run -- a broken coded "
+        description="TOOL_ISSUE lines consultant reported before stopping the run -- a broken coded "
         "tool needs a human code fix; not something an answer can resolve.",
     )
     progress_chart: Optional[str] = Field(

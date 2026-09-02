@@ -230,8 +230,8 @@ const InteractionsEditor = ({
           </Box>
 
           <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 1 }}>
-              Input
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 2 }}>
+              User Input
             </Typography>
             <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, pl: 2 }}>
               <TextField
@@ -256,11 +256,11 @@ const InteractionsEditor = ({
           <Divider sx={{ mb: 2 }} />
 
           <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 2 }}>
               Expected Response
             </Typography>
             <Box sx={{ pl: 2 }}>
-              {interaction.checks.map((check, checkIndex) => {
+              {interaction.checks.map((check) => {
                 const usedElsewhere = new Set(
                   interaction.checks.filter((c) => c.id !== check.id).map((c) => c.checkType)
                 );
@@ -269,7 +269,7 @@ const InteractionsEditor = ({
                     <TextField
                       select
                       size="small"
-                      label={checkIndex === 0 ? "Type" : undefined}
+                      label="Type"
                       value={check.checkType}
                       sx={{ width: 160 }}
                       onChange={(e) =>
@@ -290,7 +290,7 @@ const InteractionsEditor = ({
                       fullWidth
                       multiline={!NUMERIC_CHECK_TYPES.has(check.checkType)}
                       type={NUMERIC_CHECK_TYPES.has(check.checkType) ? "number" : "text"}
-                      label={checkIndex === 0 ? "Expected" : undefined}
+                      label="Expected"
                       value={check.value}
                       onChange={(e) =>
                         updateOne(interaction.id, (i) => ({
@@ -337,11 +337,11 @@ const InteractionsEditor = ({
           <Divider sx={{ mb: 2 }} />
 
           <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 2 }}>
               Sly Data Input
             </Typography>
             <Box sx={{ pl: 2 }}>
-              {interaction.slyData.map((entry, entryIndex) => {
+              {interaction.slyData.map((entry) => {
                 // The dropdown is restricted to variable names actually found in this network's
                 // coded tools -- but a saved fixture's existing key always stays selectable even if
                 // it's since fallen out of that list (a tool changed, or it was hand-typed before).
@@ -352,7 +352,7 @@ const InteractionsEditor = ({
                     <TextField
                       select
                       size="small"
-                      label={entryIndex === 0 ? "Key" : undefined}
+                      label="Key"
                       value={entry.key}
                       sx={{ width: 160 }}
                       onChange={(e) =>
@@ -371,7 +371,7 @@ const InteractionsEditor = ({
                     <TextField
                       size="small"
                       fullWidth
-                      label={entryIndex === 0 ? "Value" : undefined}
+                      label="Override Value"
                       value={entry.value}
                       onChange={(e) =>
                         updateOne(interaction.id, (i) => ({

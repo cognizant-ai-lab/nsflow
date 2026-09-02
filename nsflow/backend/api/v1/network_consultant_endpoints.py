@@ -386,23 +386,39 @@ async def delete_fixture(network_name: str, fixture_name: str):
     return FixtureDeleteResponse(message=f"Deleted {safe_name}.")
 
 
-# Mirrors the MUI light/dark surfaces around the transparent chart. Improvement bars use one
-# sequential blue scale so their stacked segments communicate *when* each cohort began passing;
-# authoritative Before/After bars use only the requested 80% red/green threshold.
+# Validated against the data-viz palette rather than picked by eye, on the surfaces this chart
+# actually renders on (the Network Consultant panel: info.main at 4% over MUI's paper).
+#
+# `blues` is an ORDINAL ramp -- one hue, monotone lightness, dark at the bottom of a stack and
+# lightening upward, so a segment's shade says when that cohort started passing and the newest
+# progress is always the pale cap. Both directions pass the ordinal gates (monotone L, adjacent
+# dL >= 0.06, light end >= 2:1 vs surface); the dark ramp starts at step 500 rather than 600
+# because MUI's slate paper is lighter than the palette's own dark surface and 600 fell to 1.8:1.
+# Step 450 (#2a78d6) is the agent-node blue to the eye, and sits mid-ramp.
+#
+# `red`/`green` are the palette's fixed status steps -- critical and good -- deliberately NOT
+# themed. They flag the authoritative full-suite bars against the 80% threshold. Red-vs-green is
+# the one pair colour-vision deficiency collapses (deutan dE 4.1), so it is never the only
+# channel here: every bar carries its own "n/m (x%)" label and the bookends are named on the
+# x-axis, which is the icon+label pairing the palette requires of a status colour.
 _CHART_PALETTE = {
     "light": {
-        "fg": "#475569",
-        "grid": "#e2e8f0",
-        "red": "#e0636f",
-        "green": "#4fb87d",
-        "blues": ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"],
+        "fg": "#0b0b0b",
+        "grid": "#e1e0d9",
+        "axis": "#c3c2b7",
+        "surface": "#f5fafd",
+        "red": "#d03b3b",
+        "green": "#0ca30c",
+        "blues": ["#104281", "#1c5cab", "#2a78d6", "#5598e7", "#86b6ef"],
     },
     "dark": {
-        "fg": "#cbd5e1",
-        "grid": "#334155",
-        "red": "#d9515e",
-        "green": "#329165",
-        "blues": ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf"],
+        "fg": "#ffffff",
+        "grid": "#2c2c2a",
+        "axis": "#383835",
+        "surface": "#1e2f42",
+        "red": "#d03b3b",
+        "green": "#0ca30c",
+        "blues": ["#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
     },
 }
 CHARTS_DIR_NAME = "network_consultant_charts"
@@ -423,7 +439,9 @@ def _chart_x_labels(progress: list) -> list[str]:
         elif checkpoint == "after":
             labels.append("After")
         elif checkpoint == "generated":
-            labels.append("1")
+            # Generate Tests names its single bar for what it is. Not "Before" -- that name is the
+            # Self-Improve run's, and this run creates the very fixtures it measures.
+            labels.append("Test run")
         else:
             labels.append(str(entry.get("improvement_iteration") or entry.get("check") or len(labels) + 1))
     return labels
@@ -469,7 +487,7 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
         bar_colors = []
         for entry, passed_count, total_count in zip(progress, passed, totals):
             checkpoint = entry.get("checkpoint", "iteration")
-            if checkpoint in {"before", "after"}:
+            if checkpoint in {"generated", "before", "after"}:
                 bar_colors.append(_threshold_color(passed_count, total_count, colors))
             else:
                 blue_ramp = colors["blues"]
@@ -480,8 +498,8 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
             bottom=bottoms,
             color=bar_colors,
             width=0.55,
-            edgecolor=colors["grid"],
-            linewidth=0.8,
+            edgecolor=colors["surface"],
+            linewidth=1.2,
             zorder=3,
         )
 
@@ -497,7 +515,15 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
             fontsize=9,
         )
 
-    fig.suptitle("Tests Passing Per Iteration", color=colors["fg"], fontsize=12, fontweight="bold")
+    # Generate Tests charts a single full-suite bar with no fix loop behind it, so naming
+    # iterations there (in the title or on the x-axis) describes something that didn't happen.
+    has_iterations = any(entry.get("checkpoint", "iteration") == "iteration" for entry in progress)
+    fig.suptitle(
+        "Tests Passing Per Iteration" if has_iterations else "Tests Passing",
+        color=colors["fg"],
+        fontsize=12,
+        fontweight="bold",
+    )
     ax.set_xlim(0.4, len(progress) + 0.6)
     ax.set_ylim(0, max_total * 1.2)
     ax.set_xticks(x_positions)
@@ -507,14 +533,14 @@ def _chart_png_bytes(progress: list, theme: str = "light") -> bytes:
         ha="right" if len(progress) > 6 else "center",
     )
     ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=min(max_total, 8) or 1))
-    ax.set_xlabel("Improvement Iterations", color=colors["fg"], fontsize=10)
+    ax.set_xlabel("Improvement Iterations" if has_iterations else "", color=colors["fg"], fontsize=10)
     ax.set_ylabel("Tests Passed", color=colors["fg"], fontsize=10)
     ax.tick_params(colors=colors["fg"], labelsize=9, length=0)
     ax.grid(axis="y", color=colors["grid"], linewidth=0.8, zorder=0)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
-    ax.spines["left"].set_color(colors["grid"])
-    ax.spines["bottom"].set_color(colors["grid"])
+    ax.spines["left"].set_color(colors["axis"])
+    ax.spines["bottom"].set_color(colors["axis"])
     fig.tight_layout(rect=(0, 0, 1, 0.92))
 
     buffer = BytesIO()
@@ -711,7 +737,7 @@ async def get_job_status(job_id: str, theme: str = "light"):
 
 @router.post("/jobs/{job_id}/answer", response_model=JobAnswerResponse)
 async def answer_job(job_id: str, request: AnswerJobRequest):
-    """Answer a NEEDS_CLARIFICATION question the job's consultant_editor is currently blocked
+    """Answer a NEEDS_CLARIFICATION question the job's consultant is currently blocked
     on (see runner.py's _ask_headless) -- a no-op error if it isn't actually waiting on one."""
     job = _JOBS.get(job_id)
     if not job:
