@@ -400,6 +400,13 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       {/* React Flow Component */}
       <ReactFlow
         key={diagramKey} // Force remount on network change
+        // @xyflow/react 12 defaults --xy-controls-button-color-default to
+        // `inherit`, so the Controls icons pick up the app's text colour (white
+        // under the dark theme) while the button background stays on v12's light
+        // palette, rendering them white-on-white. Handing v12 the palette mode
+        // switches it to its own .dark variables. (v11 hardcoded the icon fill,
+        // which is why this only appeared after the upgrade.)
+        colorMode={theme.palette.mode}
         nodes={displayNodes}
         edges={displayEdges}
         onNodesChange={handleNodesChange}
