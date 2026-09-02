@@ -628,6 +628,13 @@ const EditorAgentFlow = ({
       }}>
         <ReactFlow
         nodes={nodes}
+        // @xyflow/react 12 defaults --xy-controls-button-color-default to
+        // `inherit`, so the Controls icons pick up the app's text colour (white
+        // under the dark theme) while the button background stays on v12's light
+        // palette, rendering them white-on-white. Handing v12 the palette mode
+        // switches it to its own .dark variables. (v11 hardcoded the icon fill,
+        // which is why this only appeared after the upgrade.)
+        colorMode={theme.palette.mode}
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
