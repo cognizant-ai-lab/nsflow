@@ -30,5 +30,15 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    server: {
+      deps: {
+        // vitest externalizes node_modules to native Node ESM, which cannot
+        // resolve ui-common's bare lodash-es subpath imports (e.g.
+        // "lodash-es/startCase"). Inlining both makes vitest transform them the
+        // way the vite build already does, so importing ui-common's visual
+        // modules works here too.
+        inline: ["@cognizant-ai-lab/ui-common", "lodash-es"],
+      },
+    },
   },
 });
