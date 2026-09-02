@@ -18,16 +18,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      # cognizant-ai-lab/build-common 1.0.11 -- setup-python-env
-      - name: Set up Python and install build tools
-        uses: cognizant-ai-lab/build-common/actions/setup-python-env@a70df67b0d623e56f34159de26c38989cd315d26
+      # cognizant-ai-lab/build-common 1.0.11 -- build-python-dists
+      - name: Build wheel and sdist
+        uses: cognizant-ai-lab/build-common/actions/build-python-dists@a70df67b0d623e56f34159de26c38989cd315d26
         with:
           python-version: '3.10'
-          requirements-file: ''
-          install-extras: 'build'
-
-      - name: Build wheel and sdist
-        run: python -m build
 
       # pypa/gh-action-pypi-publish v1.14.0
       - name: Publish to PyPI
