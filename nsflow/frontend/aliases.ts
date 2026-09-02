@@ -23,9 +23,26 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 // `exports`, and the barrel `export *`s modules that import next-auth/react and
 // next/router. We therefore bypass the barrel entirely and alias stable specifiers
 // straight at built modules inside dist. THIS FILE IS THE ONLY PLACE dist paths may
-// appear — a ui-common bump is a one-file fix here (1.5.1 -> 1.11.0 already moved
+// appear. A ui-common bump is a one-file fix here (1.5.1 -> 1.11.0 already moved
 // AgentFlow.js into an AgentFlow/ subdirectory).
 const uiCommonDist = path.resolve(dirname, "node_modules/@cognizant-ai-lab/ui-common/dist");
+
+// Version coupling, kept here because package.json cannot carry comments:
+//
+//   package.json `resolutions` pins "@xyflow/react" and "zustand" to the EXACT
+//   versions ui-common depends on. That is what guarantees a single React Flow /
+//   zustand store instance shared between nsflow's canvas and ui-common's graph
+//   components; two copies would each get their own module-scoped store and the
+//   components would silently fail to interoperate.
+//
+//   Because they are `resolutions`, they also override whatever a future
+//   ui-common release asks for. So when bumping @cognizant-ai-lab/ui-common,
+//   read its dependencies and move those two pins in lockstep:
+//
+//     npm view @cognizant-ai-lab/ui-common@<version> dependencies
+//
+//   (use npm view rather than requiring the package.json: ui-common's `exports`
+//   map does not expose ./package.json.)
 
 const mac = "components/MultiAgentAccelerator";
 
