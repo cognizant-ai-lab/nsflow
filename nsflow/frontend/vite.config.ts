@@ -17,18 +17,8 @@ limitations under the License.
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 
-const dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// ui-common (@cognizant-ai-lab/ui-common) only exposes its barrel ("." -> dist/index.js)
-// and "./const" in its package `exports`, so deep subpath imports are blocked. We consume
-// ONLY the framework-agnostic neuro-san controller (Agent.ts: sendChatQuery, getConnectivity,
-// sendNetworkDesignerUpdate, ...) — not the visual components — by aliasing a stable
-// specifier straight to the built controller module. This keeps the bundle free of the
-// package's Next/MUI-coupled modules (verified: controller pulls no React/MUI/Next/node).
-const uiCommonDist = path.resolve(dirname, "node_modules/@cognizant-ai-lab/ui-common/dist");
+import { uiCommonAliases } from "./aliases";
 
 // Vite's default esbuild target is [es2020, edge88, firefox78, chrome87, safari14].
 // esbuild >= 0.28 has a regression where it tries to transform destructuring for
@@ -46,9 +36,9 @@ export default defineConfig(() => {
     plugins: [react()],
     base: "/",
     resolve: {
-      alias: {
-        "@ui-common/agent": path.join(uiCommonDist, "controller/agent/Agent.js"),
-      },
+      // Deep dist paths live in ./aliases.ts — see the comment there for why we
+      // bypass ui-common's barrel entirely.
+      alias: { ...uiCommonAliases },
     },
     esbuild: {
       target: ESBUILD_TARGET,

@@ -622,7 +622,7 @@ const McpConnectorsPanel: React.FC = () => {
                 )}
                 <ListItemText
                   primary={conn.server_url}
-                  primaryTypographyProps={{ sx: { wordBreak: 'break-all', fontSize: '0.85rem' } }}
+                  slotProps={{ primary: { sx: { wordBreak: 'break-all', fontSize: '0.85rem' } } }}
                   secondary={
                     <Box component="span" sx={{ display: 'inline-flex', gap: 0.5, mt: 0.5 }}>
                       {conn.needs_reauth ? (

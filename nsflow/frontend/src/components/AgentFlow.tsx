@@ -16,7 +16,7 @@ limitations under the License.
 */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import ReactFlow, {
+import { ReactFlow,
   Background,
   Controls,
   useEdgesState,
@@ -25,8 +25,8 @@ import ReactFlow, {
   Node,
   Edge,
   EdgeMarkerType,
-} from "reactflow";
-import "reactflow/dist/style.css";
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { 
   Box, 
   Button, 
@@ -55,8 +55,8 @@ const edgeTypes = { floating: FloatingEdge };
 const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl, wsUrl } = useApiPort();
   const { sessionId } = useChatContext();
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
 
@@ -122,10 +122,11 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         setNodes(finalNodes);
         setEdges(transformedEdges);
 
-        // Fit view/viewport exactly as before
-        fitView();
-        // console.log("received data", data);
-        // You can change zoom and center values as needed
+        // Only setViewport here, deliberately. @xyflow/react 12 queues fitView
+        // until the fresh nodes are measured, so it would land after (and override)
+        // setViewport's animation. Under v11 fitView was a no-op against unmeasured
+        // nodes and setViewport always won, so dropping it preserves the
+        // pre-upgrade behaviour. You can change zoom and center values as needed.
         setViewport({ x: 0, y: 0, zoom: 0.5 }, { duration: 800 });
       })
       .catch((err) => console.error("Error loading network:", err));
@@ -399,6 +400,13 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       {/* React Flow Component */}
       <ReactFlow
         key={diagramKey} // Force remount on network change
+        // @xyflow/react 12 defaults --xy-controls-button-color-default to
+        // `inherit`, so the Controls icons pick up the app's text colour (white
+        // under the dark theme) while the button background stays on v12's light
+        // palette, rendering them white-on-white. Handing v12 the palette mode
+        // switches it to its own .dark variables. (v11 hardcoded the icon fill,
+        // which is why this only appeared after the upgrade.)
+        colorMode={theme.palette.mode}
         nodes={displayNodes}
         edges={displayEdges}
         onNodesChange={handleNodesChange}

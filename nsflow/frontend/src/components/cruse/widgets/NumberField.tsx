@@ -63,10 +63,13 @@ export function NumberField({
       onChange={handleChange}
       error={!!error}
       helperText={error || undefined}
-      inputProps={{
-        min: minimum,
-        max: maximum,
-        step: multipleOf || (isInteger ? 1 : 'any'),
+      slotProps={{
+        // MUI 9 renamed the native input attrs prop: inputProps -> slotProps.htmlInput
+        htmlInput: {
+          min: minimum,
+          max: maximum,
+          step: multipleOf || (isInteger ? 1 : 'any'),
+        },
       }}
       variant="outlined"
       size="small"

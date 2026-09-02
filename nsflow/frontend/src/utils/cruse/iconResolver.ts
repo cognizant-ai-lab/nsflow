@@ -49,8 +49,8 @@ export function resolveIcon(iconName?: string): SvgIconComponent | undefined {
   // Log when icon is not found to help with debugging
   console.warn(`Icon "${iconName}" not found in @mui/icons-material. Using fallback HelpOutline.`);
 
-  // Default icon if not found
-  return MuiIcons.HelpOutline;
+  // Default icon if not found. MUI 9 renamed HelpOutline to HelpOutlined.
+  return MuiIcons.HelpOutlined;
 }
 
 /**

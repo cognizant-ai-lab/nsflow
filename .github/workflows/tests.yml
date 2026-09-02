@@ -13,9 +13,11 @@ permissions:
 jobs:
   test:
     if: github.repository == 'cognizant-ai-lab/nsflow'
-    # 1.0.9
-    uses: cognizant-ai-lab/build-common/.github/workflows/_python-quality-gate.yml@b14b3de23cb9aca02b2165e57542335e0c8f5304
+    # 1.0.11
+    uses: cognizant-ai-lab/build-common/.github/workflows/_python-quality-gate.yml@a70df67b0d623e56f34159de26c38989cd315d26
     with:
+      # 1.0.11
+      build-common-ref: 'a70df67b0d623e56f34159de26c38989cd315d26'
       python-version: '3.12'
       lint-command-override: |
         set -e
@@ -27,4 +29,24 @@ jobs:
     secrets:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-
+  # The Python gate above runs in a Python-only container, so the frontend suite
+  # needs its own job. Deliberately no `yarn lint` step: eslint 9 currently
+  # crashes on this repo's `ajv: ^8.18.0` resolution (@eslint/eslintrc needs
+  # ajv 6), which predates this workflow and is tracked separately.
+  frontend:
+    if: github.repository == 'cognizant-ai-lab/nsflow'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nsflow/frontend
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: nsflow/frontend/yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: yarn test
+      # tsc -b runs here, so this is what catches type regressions in CI.
+      - run: yarn build

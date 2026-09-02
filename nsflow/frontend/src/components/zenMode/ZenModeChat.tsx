@@ -418,7 +418,7 @@ const ZenModeChat = () => {
                       },
                     }}
                   >
-                    <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
+                    <Stack direction="row" useFlexGap spacing={0.5} sx={{ flexWrap: "wrap" }}>
                       {sampleQueries.map((query, index) => (
                         <Chip
                           key={`${query}-${index}`}

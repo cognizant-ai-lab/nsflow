@@ -521,7 +521,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                 }
               }}
             >
-              <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} alignItems="center">
+              <Stack direction="row" useFlexGap spacing={0.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
                 {/* Clear-all chip shows only when at least one tag is selected */}
                 {selectedTags.size > 0 && (
                   <Tooltip title="Clear all selected tags" placement="bottom" arrow enterDelay={400} >

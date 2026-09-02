@@ -55,6 +55,9 @@ TopicMemory.json
 # local brainstorming/design specs (working artifacts, not committed)
 docs/superpowers/
 
+# local Claude analysis reports (working artifacts, not committed)
+docs/claude-reports/
+
 # Playwright MCP scratch output (local, not committed)
 .playwright-mcp/
 

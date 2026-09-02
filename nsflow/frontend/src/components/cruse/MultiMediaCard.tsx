@@ -329,16 +329,16 @@ export function MultiMediaCard({ url, type, isEmbed = false, originalUrl, index 
         <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
           {/* Header */}
           <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="space-between"
-            mb={expanded ? 1 : 0}
             sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: expanded ? 1 : 0,
               flexWrap: 'wrap',
               gap: 1,
             }}
           >
-            <Box display="flex" alignItems="center" gap={1} sx={{ minWidth: 0, flex: '1 1 auto' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: '1 1 auto' }}>
               <Box
                 sx={{
                   width: 32,
@@ -356,8 +356,7 @@ export function MultiMediaCard({ url, type, isEmbed = false, originalUrl, index 
               <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
                 <Typography
                   variant="body2"
-                  fontWeight={600}
-                  sx={{ color: theme.palette.text.primary, lineHeight: 1.2 }}
+                  sx={{ fontWeight: 600, color: theme.palette.text.primary, lineHeight: 1.2 }}
                 >
                   {config.label}
                 </Typography>
@@ -378,9 +377,9 @@ export function MultiMediaCard({ url, type, isEmbed = false, originalUrl, index 
 
             {/* Controls */}
             <Box
-              display="flex"
-              gap={0.5}
               sx={{
+                display: 'flex',
+                gap: 0.5,
                 opacity: showControls ? 1 : 0,
                 transition: 'opacity 0.2s ease',
                 flexShrink: 0,
@@ -488,10 +487,12 @@ export function MultiMediaCard({ url, type, isEmbed = false, originalUrl, index 
         onClose={handleMinimize}
         maxWidth="lg"
         fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: alpha(theme.palette.background.paper, 0.95),
-            backgroundImage: 'none',
+        slotProps={{
+          paper: {
+            sx: {
+              backgroundColor: alpha(theme.palette.background.paper, 0.95),
+              backgroundImage: 'none',
+            },
           },
         }}
       >

@@ -15,25 +15,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { Position, Node } from "reactflow";
+import { Position, Node } from "@xyflow/react";
 
-// Define a type for a node with position and dimensions
-interface CustomNode extends Node {
-  position: { x: number; y: number };
-  width: number;
-  height: number;
+// A node as it comes out of the React Flow store. @xyflow/react 12 moved the
+// rendered dimensions from `width`/`height` onto `measured`, so read that first
+// and fall back to the user-set props for nodes that were given explicit sizes.
+export type MeasuredNode = Node & {
+  measured?: { width?: number; height?: number };
+};
+
+function getNodeSize(node: MeasuredNode): { width: number; height: number } {
+  return {
+    width: node.measured?.width ?? node.width ?? 0,
+    height: node.measured?.height ?? node.height ?? 0,
+  };
 }
 
 // Get the center of a node
-function getNodeCenter(node: CustomNode): { x: number; y: number } {
+function getNodeCenter(node: MeasuredNode): { x: number; y: number } {
+  const { width, height } = getNodeSize(node);
   return {
-    x: node.position.x + node.width / 2,
-    y: node.position.y + node.height / 2,
+    x: node.position.x + width / 2,
+    y: node.position.y + height / 2,
   };
 }
 
 // Determine the closest handle position based on node proximity
-function getParams(nodeA: CustomNode, nodeB: CustomNode): [number, number, Position] {
+function getParams(nodeA: MeasuredNode, nodeB: MeasuredNode): [number, number, Position] {
   const centerA = getNodeCenter(nodeA);
   const centerB = getNodeCenter(nodeB);
 
@@ -52,11 +60,10 @@ function getParams(nodeA: CustomNode, nodeB: CustomNode): [number, number, Posit
 }
 
 // Get handle coordinates dynamically based on node size
-function getHandleCoordsByPosition(node: CustomNode, handlePosition: Position): [number, number] {
+function getHandleCoordsByPosition(node: MeasuredNode, handlePosition: Position): [number, number] {
   const nodeX = node.position.x;
   const nodeY = node.position.y;
-  const nodeWidth = node.width;
-  const nodeHeight = node.height;
+  const { width: nodeWidth, height: nodeHeight } = getNodeSize(node);
 
   let x = nodeX;
   let y = nodeY;
@@ -84,7 +91,7 @@ function getHandleCoordsByPosition(node: CustomNode, handlePosition: Position): 
 }
 
 // Get edge params for dynamic edge placement
-export function getEdgeParams(source: CustomNode, target: CustomNode) {
+export function getEdgeParams(source: MeasuredNode, target: MeasuredNode) {
   const [sx, sy, sourcePos] = getParams(source, target);
   const [tx, ty, targetPos] = getParams(target, source);
 
