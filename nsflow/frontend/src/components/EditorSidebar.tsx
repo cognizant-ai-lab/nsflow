@@ -762,9 +762,15 @@ const EditorSidebar = ({
                   variant="outlined"
                   size="small"
                   slotProps={{
+                    // Spread params.slotProps FIRST, then override only `input`.
+                    // MUI 9 carries all of Autocomplete's input wiring under
+                    // params.slotProps (input, htmlInput, inputLabel), and
+                    // {...params} above spreads it. Replacing the object wholesale
+                    // would drop htmlInput -- getInputProps(), which holds the value
+                    // binding, keyboard handlers and the input ref -- severing the
+                    // field from useAutocomplete at runtime while still type-checking.
+                    ...params.slotProps,
                     input: {
-                      // MUI 9 moved Autocomplete's renderInput params from
-                      // params.InputProps to params.slotProps.input.
                       ...params.slotProps.input,
                       endAdornment: (
                         <>
