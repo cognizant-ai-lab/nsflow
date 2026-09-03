@@ -11,8 +11,7 @@
 # END COPYRIGHT
 
 PYTHON := python3
-REQUIRED_VERSION := 3.10
-MAX_VERSION := 3.13
+REQUIRED_VERSION := 3.12
 
 PYTHON_VERSION := $(shell $(PYTHON) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 
@@ -32,8 +31,9 @@ RUFF_IMPORTS_FIX := --select I --fix
 check_python_version:
 	@echo "Checking Python version..."
 	@$(PYTHON) -c 'import sys; v=sys.version_info; \
-		assert (v.major == 3 and 10 <= v.minor < 13), \
-		f"Python >=3.10,<3.13 required, but found {v.major}.{v.minor}"; \
+		req=tuple(int(p) for p in "$(REQUIRED_VERSION)".split(".")); \
+		assert (v.major, v.minor) >= req, \
+		f"Python >=$(REQUIRED_VERSION) required, but found {v.major}.{v.minor}"; \
 		print(f"{v}\n✔ Python version is compatible.")'
 
 venv: check_python_version ## Set up a virtual environment in project
