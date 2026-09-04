@@ -75,7 +75,7 @@ cd nsflow
 
 #### **Step 2: Install Dependencies**
 
-- Make sure you have python (preferably **Python 3.12**) installed.
+- Make sure you have **Python 3.12 or newer** installed.
 
     ```bash
     python -m venv .venv
