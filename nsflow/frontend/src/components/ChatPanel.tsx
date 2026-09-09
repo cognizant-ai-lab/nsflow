@@ -136,7 +136,10 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
       }
       const g = localStorage.getItem(slyTogglePrefix);
       if (g != null) return g === 'true';
-    } catch {}
+    } catch {
+      // localStorage can be unavailable (private mode, blocked storage). The
+      // default below is the right answer then, so there is nothing to report.
+    }
     return false;
   };
   // NEW: "Use Sly Data" checkbox state — always false in editor mode (no cache persistence)
@@ -236,7 +239,10 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
         localStorage.setItem(slyToggleNetworkKey, String(useSlyDataChecked));
       }
       localStorage.setItem(slyToggleGlobalKey, String(useSlyDataChecked));
-    } catch {}
+    } catch {
+      // Persisting the toggle is a convenience; failing to do so must not break the
+      // panel, and the user's current choice is already applied in state.
+    }
   }, [useSlyDataChecked, slyToggleNetworkKey, isEditorMode]);
 
   // Network loading and auto-load from URL are now handled by EditorSidebar
