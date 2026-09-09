@@ -200,7 +200,7 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     try {
       JSON.parse(str);
       return true;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   };
