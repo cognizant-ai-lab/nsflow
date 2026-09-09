@@ -34,7 +34,6 @@ type AppRuntimeConfig = {
   NSFLOW_PLUGIN_CRUSE: boolean;
   NSFLOW_PLUGIN_WAND: boolean;
   NSFLOW_PLUGIN_MULTIMEDIACARD: boolean;
-  NSFLOW_PLUGIN_EXPORT: boolean;
   NSFLOW_PLUGIN_ZENMODE: boolean;
 };
 
@@ -72,7 +71,6 @@ export function getFeatureFlags() {
     pluginCruse: !!c.NSFLOW_PLUGIN_CRUSE,
     pluginWand: !!c.NSFLOW_PLUGIN_WAND,
     pluginMultiMediaCard: !!c.NSFLOW_PLUGIN_MULTIMEDIACARD,
-    pluginExport: !!c.NSFLOW_PLUGIN_EXPORT,
     pluginZenMode: !!c.NSFLOW_PLUGIN_ZENMODE,
     viteUseSpeech: !!c.VITE_USE_SPEECH
   };
