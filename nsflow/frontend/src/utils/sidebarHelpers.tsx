@@ -18,7 +18,7 @@ limitations under the License.
 import * as React from "react";
 import { alpha } from "@mui/material/styles";
 import { Box, Paper, Tooltip, Typography } from "@mui/material";
-import { Folder, FolderOpen, AccountTreeTwoTone, EditOutlined, FileUploadOutlined } from "@mui/icons-material";
+import { Folder, FolderOpen, AccountTreeTwoTone, DeleteOutlined, EditOutlined, FileUploadOutlined } from "@mui/icons-material";
 import { TreeItem, treeItemClasses } from "@mui/x-tree-view";
 
 export type TreeNode = Record<
@@ -88,7 +88,10 @@ export const renderTree = (
   theme: any,
   onSelect: (n: string) => void,
   onEditNetwork?: (n: string) => void,
-  onExportNetwork?: (n: string) => void
+  onExportNetwork?: (n: string) => void,
+  onDeleteNetwork?: (n: string) => void,
+  /** Whether this network may be deleted. Deciding that is the caller's business. */
+  isDeletable?: (n: string) => boolean
 ): React.ReactNode[] => {
   return sortNodeEntries(node).map(([key, value]) => {
     const fullPath = [...path, key].join("/");
@@ -256,6 +259,47 @@ export const renderTree = (
                     </Box>
                   </Tooltip>
                 )}
+                {onDeleteNetwork && isDeletable?.(fullPath) && (
+                  <Tooltip title="Delete this generated agent network" placement="bottom">
+                    <Box
+                      className="row-action"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        onDeleteNetwork(fullPath);
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        opacity: 0,
+                        transition: "all 200ms ease",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        // Warning rather than error: it needs to read as destructive
+                        // without shouting on every hover of every generated network.
+                        backgroundColor: alpha(theme.palette.warning.main, 0.14),
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.error.main, 0.28),
+                          transform: "scale(1.1)",
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.3)}`,
+                        },
+                        "&:active": {
+                          transform: "scale(0.95)",
+                        },
+                      }}
+                    >
+                      <DeleteOutlined
+                        sx={{
+                          fontSize: 13,
+                          color: theme.palette.warning.main,
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                )}
               </Box>
             </Paper>
           }
@@ -327,7 +371,17 @@ export const renderTree = (
           action for every nested network, which is most of them, while leaving it
           working on the top level: the action appears to exist but only sometimes.
         */}
-        {renderTree(children, [...path, key], activeNetwork, theme, onSelect, onEditNetwork, onExportNetwork)}
+        {renderTree(
+          children,
+          [...path, key],
+          activeNetwork,
+          theme,
+          onSelect,
+          onEditNetwork,
+          onExportNetwork,
+          onDeleteNetwork,
+          isDeletable
+        )}
       </TreeItem>
     );
   });
