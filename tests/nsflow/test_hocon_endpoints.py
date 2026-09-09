@@ -18,6 +18,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from nsflow.backend.api.v1 import hocon_endpoints
 from nsflow.backend.main import app
 
 NETWORK = """{
@@ -82,3 +83,17 @@ def test_refuses_what_it_cannot_open(client: TestClient, body: str, filename: st
     response = _post(client, body, filename)
     assert response.status_code == status
     assert response.json()["detail"]
+
+
+def test_reports_a_clash_only_inside_the_designer_subdirectory(client: TestClient, tmp_path, monkeypatch):
+    """A same-named network elsewhere in the registry is served under a different path."""
+    monkeypatch.setattr(hocon_endpoints, "REGISTRY_DIR", str(tmp_path))
+    monkeypatch.setenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "generated")
+
+    # Same name, but at the registry root rather than in generated/: not at risk.
+    (tmp_path / "demo.hocon").write_text(NETWORK, encoding="utf-8")
+    assert _post(client, NETWORK, "demo.hocon").json()["name_is_taken"] is False
+
+    (tmp_path / "generated").mkdir()
+    (tmp_path / "generated" / "demo.hocon").write_text(NETWORK, encoding="utf-8")
+    assert _post(client, NETWORK, "demo.hocon").json()["name_is_taken"] is True
