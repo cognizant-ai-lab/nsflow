@@ -59,24 +59,40 @@ const NetworkFileActions = ({
   const theme = useTheme();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const buttonSx = {
-    width: size,
-    height: size,
-    backgroundColor: alpha(theme.palette.background.paper, 0.95),
-    backdropFilter: "blur(8px)",
-    border: `1px solid ${theme.palette.divider}`,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-    color: theme.palette.text.secondary,
-    "&:hover": {
-      backgroundColor: theme.palette.action.hover,
-      color: theme.palette.primary.main,
-    },
-    "&.Mui-disabled": {
-      backgroundColor: alpha(theme.palette.background.paper, 0.6),
-      color: theme.palette.action.disabled,
-      border: `1px solid ${theme.palette.divider}`,
-    },
-  } as const;
+  /**
+   * One button, tinted.
+   *
+   * Fixed pastels rather than palette roles, matching the palette notch's source
+   * icons: these sit on the canvas in both themes, and a theme-derived colour would
+   * either wash out on one or change meaning between the two. Export and import get
+   * different hues so the pair is told apart by colour as well as by arrow direction,
+   * which is the thing that was previously easy to misread.
+   */
+  const buttonSx = (tint: string) =>
+    ({
+      width: size,
+      height: size,
+      color: tint,
+      backgroundColor: alpha(tint, theme.palette.mode === "dark" ? 0.16 : 0.14),
+      backdropFilter: "blur(8px)",
+      border: `1px solid ${alpha(tint, 0.35)}`,
+      boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+      transition: "background-color 160ms, transform 160ms",
+      "&:hover": {
+        backgroundColor: alpha(tint, 0.3),
+        color: tint,
+        transform: "translateY(-1px)",
+      },
+      "&.Mui-disabled": {
+        color: alpha(tint, 0.35),
+        backgroundColor: alpha(theme.palette.background.paper, 0.6),
+        border: `1px solid ${theme.palette.divider}`,
+      },
+    }) as const;
+
+  /** Export sends a file out; import brings one in. Two hues, same family. */
+  const EXPORT_TINT = "#8ec5ff";
+  const IMPORT_TINT = "#a5e3c0";
 
   // Deliberately smaller than the button, so a row of these reads as a compact
   // toolbar rather than as full-size page actions.
@@ -92,7 +108,7 @@ const NetworkFileActions = ({
               disabled={Boolean(exportDisabledReason)}
               aria-label="Export agent network"
               onClick={onExportHocon}
-              sx={buttonSx}
+              sx={buttonSx(EXPORT_TINT)}
             >
               <ExportIcon sx={iconSx} />
             </IconButton>
@@ -106,7 +122,7 @@ const NetworkFileActions = ({
             <IconButton
               aria-label="Import agent network"
               onClick={() => inputRef.current?.click()}
-              sx={buttonSx}
+              sx={buttonSx(IMPORT_TINT)}
             >
               <ImportIcon sx={iconSx} />
             </IconButton>
