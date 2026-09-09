@@ -15,68 +15,49 @@ limitations under the License.
 */
 
 /**
- * Getting an agent network in and out of nsflow as a file.
+ * Getting an agent network in and out of nsflow as a .hocon file.
  *
  * These used to live in a dropdown in the app header, behind a feature flag that
  * defaulted to off, so no default install ever showed them. They belong on the canvas
- * instead: the thing being exported is the thing on screen, and on the Editor the
- * natural place to look is beside the other canvas actions.
+ * instead: the thing being exported is the thing on screen.
  *
  * One component for both pages so the two cannot drift. What differs is only what each
- * page can offer, which the caller decides by passing handlers: the Editor exports the
- * network under design and can import; the Home page exports a network that already
- * exists in the registry, and its import hands over to the Editor, because Home has no
- * canvas to edit on.
+ * page does with a file, which the caller decides by passing handlers.
+ *
+ * Arrows point the way the file moves relative to the machine: export sends it out and
+ * up, import brings it in and down.
  */
 
-import { useRef, useState } from "react";
-import {
-  Box,
-  IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Tooltip,
-  alpha,
-  useTheme,
-} from "@mui/material";
-import DownloadIcon from "@mui/icons-material/FileDownloadTwoTone";
-import HoconIcon from "@mui/icons-material/DataObjectTwoTone";
-import NotebookIcon from "@mui/icons-material/ScienceTwoTone";
-import UploadIcon from "@mui/icons-material/FileUploadTwoTone";
+import { useRef } from "react";
+import { Box, IconButton, Tooltip, alpha, useTheme } from "@mui/material";
+import ExportIcon from "@mui/icons-material/FileUploadOutlined";
+import ImportIcon from "@mui/icons-material/FileDownloadOutlined";
 
 /** What a .hocon file may be called. Kept in step with the import endpoint. */
 export const HOCON_ACCEPT = ".hocon,.json";
 
 export interface NetworkFileActionsProps {
-  /** Download the network as HOCON. Omitted or undefined disables export. */
+  /** Download the network as HOCON. Omitted hides the button. */
   onExportHocon?: () => void;
-  /** Download the network as a Jupyter notebook. Omitted hides the option. */
-  onExportNotebook?: () => void;
-  /** Open a chosen file. Omitted hides the import button. */
+  /** Open a chosen file. Omitted hides the button. */
   onImport?: (file: File) => void;
-  /** Why export is unavailable, for the tooltip. */
+  /** Why export is unavailable, for the tooltip. Renders it disabled rather than gone. */
   exportDisabledReason?: string;
-  /** Matches the surrounding buttons: the Editor uses 56, the Home canvas 40. */
+  /** What import does on this page, since it differs between the Editor and Home. */
+  importTooltip?: string;
+  /** Matches the surrounding buttons. */
   size?: number;
 }
 
 const NetworkFileActions = ({
   onExportHocon,
-  onExportNotebook,
   onImport,
   exportDisabledReason,
-  size = 56,
+  importTooltip = "Import an agent network from a .hocon file",
+  size = 40,
 }: NetworkFileActionsProps) => {
   const theme = useTheme();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-
-  // A menu only earns its place when there is a choice to make. With notebook export
-  // absent, the export button just exports.
-  const hasChoice = Boolean(onExportHocon && onExportNotebook);
-  const exportDisabled = Boolean(exportDisabledReason) || !onExportHocon;
 
   const buttonSx = {
     width: size,
@@ -84,7 +65,7 @@ const NetworkFileActions = ({
     backgroundColor: alpha(theme.palette.background.paper, 0.95),
     backdropFilter: "blur(8px)",
     border: `1px solid ${theme.palette.divider}`,
-    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
     color: theme.palette.text.secondary,
     "&:hover": {
       backgroundColor: theme.palette.action.hover,
@@ -97,75 +78,37 @@ const NetworkFileActions = ({
     },
   } as const;
 
+  // Deliberately smaller than the button, so a row of these reads as a compact
+  // toolbar rather than as full-size page actions.
+  const iconSx = { fontSize: Math.round(size * 0.5) } as const;
+
   return (
-    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
       {onExportHocon && (
-        <Tooltip
-          title={
-            exportDisabledReason ??
-            (hasChoice ? "Export this agent network" : "Download this agent network as HOCON")
-          }
-        >
+        <Tooltip title={exportDisabledReason ?? "Download this agent network as a .hocon file"}>
           {/* The span keeps the tooltip alive while the button is disabled. */}
           <span style={{ display: "inline-flex" }}>
             <IconButton
-              disabled={exportDisabled}
+              disabled={Boolean(exportDisabledReason)}
               aria-label="Export agent network"
-              onClick={(event) =>
-                hasChoice ? setMenuAnchor(event.currentTarget) : onExportHocon()
-              }
+              onClick={onExportHocon}
               sx={buttonSx}
             >
-              <DownloadIcon />
+              <ExportIcon sx={iconSx} />
             </IconButton>
           </span>
         </Tooltip>
       )}
 
-      {hasChoice && (
-        <Menu
-          open={Boolean(menuAnchor)}
-          anchorEl={menuAnchor}
-          onClose={() => setMenuAnchor(null)}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-          transformOrigin={{ vertical: "top", horizontal: "right" }}
-        >
-          <MenuItem
-            dense
-            onClick={() => {
-              setMenuAnchor(null);
-              onExportHocon?.();
-            }}
-          >
-            <ListItemIcon>
-              <HoconIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Download HOCON" secondary="The agent network file" />
-          </MenuItem>
-          <MenuItem
-            dense
-            onClick={() => {
-              setMenuAnchor(null);
-              onExportNotebook?.();
-            }}
-          >
-            <ListItemIcon>
-              <NotebookIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Download notebook" secondary="A Jupyter notebook that calls it" />
-          </MenuItem>
-        </Menu>
-      )}
-
       {onImport && (
         <>
-          <Tooltip title="Import an agent network from a .hocon file">
+          <Tooltip title={importTooltip}>
             <IconButton
               aria-label="Import agent network"
               onClick={() => inputRef.current?.click()}
               sx={buttonSx}
             >
-              <UploadIcon />
+              <ImportIcon sx={iconSx} />
             </IconButton>
           </Tooltip>
           <input
