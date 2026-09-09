@@ -27,13 +27,15 @@ import { ReactFlow,
   EdgeMarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { 
-  Box, 
-  Button, 
-  Slider, 
-  Typography, 
-  Paper, 
-  Tooltip, 
+import {
+  Alert,
+  Box,
+  Button,
+  Slider,
+  Snackbar,
+  Typography,
+  Paper,
+  Tooltip,
   useTheme,
   alpha
 } from "@mui/material";
@@ -45,6 +47,9 @@ import {
 } from "@mui/icons-material";
 import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
+import { useNavigate } from "react-router-dom";
+import NetworkFileActions from "./NetworkFileActions";
+import { stashImportedNetwork } from "../state/importHandoff";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
@@ -59,6 +64,9 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
+  const navigate = useNavigate();
+  /** Why the last import failed, or undefined. */
+  const [importError, setImportError] = useState<string | undefined>(undefined);
 
   // ** State for highlighting active agents & edges **
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
@@ -195,6 +203,55 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     }
   }, [onNodesChange, layoutManager, setNodes]);
 
+  /** Download a file the backend serves, named for the network. */
+  const downloadFromApi = useCallback(
+    async (path: string, extension: string) => {
+      if (!selectedNetwork) return;
+      const response = await fetch(`${apiUrl}${path}/${selectedNetwork}`);
+      if (!response.ok) return;
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${selectedNetwork}.${extension}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    [apiUrl, selectedNetwork]
+  );
+
+  const handleExportHocon = useCallback(
+    () => void downloadFromApi("/api/v1/export/agent_network", "hocon"),
+    [downloadFromApi]
+  );
+
+  const handleExportNotebook = useCallback(
+    () => void downloadFromApi("/api/v1/export/notebook", "ipynb"),
+    [downloadFromApi]
+  );
+
+  /**
+   * Parse a chosen .hocon and open it in the Editor.
+   *
+   * Parsed here rather than after navigating, so a file the backend rejects reports
+   * the reason on the page the user is already looking at instead of bouncing them
+   * to an empty Editor.
+   */
+  const handleImportToEditor = useCallback(
+    async (file: File) => {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch(`${apiUrl}/api/v1/hocon/import`, { method: "POST", body });
+      const payload = await response.json().catch(() => undefined);
+      if (!response.ok) {
+        setImportError(payload?.detail || "Could not read that file.");
+        return;
+      }
+      stashImportedNetwork(payload);
+      navigate("/editor");
+    },
+    [apiUrl, navigate]
+  );
+
   // Utility function to validate JSON
   const isValidJson = (str: string): boolean => {
     try {
@@ -243,11 +300,41 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       display: 'flex',
       flexDirection: 'column'
     }}>
+      {/*
+        File actions, top right. Home shows a network that already exists, so export
+        reads it from the registry; import has nowhere to go on this page, so it
+        parses the file and hands over to the Editor, which is where a network under
+        design lives.
+      */}
+      {(
+        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 20 }}>
+          <NetworkFileActions
+            size={40}
+            onExportHocon={selectedNetwork ? handleExportHocon : undefined}
+            onExportNotebook={selectedNetwork ? handleExportNotebook : undefined}
+            onImport={handleImportToEditor}
+            exportDisabledReason={selectedNetwork ? undefined : "Select an agent network first"}
+          />
+        </Box>
+      )}
+
+      {/* Why an import failed, reported before navigating away. */}
+      <Snackbar
+        open={Boolean(importError)}
+        autoHideDuration={8000}
+        onClose={() => setImportError(undefined)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setImportError(undefined)} sx={{ maxWidth: 520 }}>
+          {importError}
+        </Alert>
+      </Snackbar>
+
       {/* Top Controls Bar */}
-      <Box sx={{ 
-        position: 'absolute', 
-        top: 8, 
-        left: 8, 
+      <Box sx={{
+        position: 'absolute',
+        top: 8,
+        left: 8,
         zIndex: 20,
         display: 'flex',
         gap: 1
