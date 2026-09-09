@@ -49,6 +49,8 @@ from fastapi import HTTPException
 from fastapi import UploadFile
 from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
 
+from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR
+
 router = APIRouter(prefix="/api/v1")
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,28 @@ def _definition_from_tools(tools: List[Dict[str, Any]]) -> Dict[str, Any]:
     return definition
 
 
+def _name_is_taken(network_name: str) -> bool:
+    """
+    Whether saving this import would replace an existing generated network.
+
+    Only the designer's subdirectory is checked, because that is the only place an
+    import can land. A network of the same name elsewhere in the registry, say
+    ``registries/music_nerd.hocon``, is served under a different path and is not at
+    risk, so warning about it would be a false alarm.
+
+    Checked here rather than in the client because the registry is a server concern,
+    and because the name is derived from the filename by this module: asking the client
+    to reproduce that derivation would be two copies of one rule, free to disagree.
+
+    ``AGENT_NETWORK_DESIGNER_SUBDIRECTORY`` is read rather than assumed, and mirrors
+    the variable neuro-san-studio uses, so nsflow and the designer agree on where
+    generated networks live even when studio is embedded in another project.
+    """
+    subdirectory = os.getenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "generated")
+    candidate = os.path.join(REGISTRY_DIR, subdirectory, f"{network_name}.hocon")
+    return os.path.isfile(candidate)
+
+
 @router.post("/hocon/import")
 async def import_hocon(file: UploadFile = File(...)) -> Dict[str, Any]:
     """Parse an uploaded agent network HOCON and return it as an editable definition."""
@@ -163,8 +187,14 @@ async def import_hocon(file: UploadFile = File(...)) -> Dict[str, Any]:
     if not definition:
         raise HTTPException(status_code=400, detail="No named agents found under `tools`.")
 
+    network_name = _network_name_from(filename)
+
     return {
-        "network_name": _network_name_from(filename),
+        "network_name": network_name,
+        # Whether saving this import would replace a network that already exists. The
+        # client asks before overwriting, and the filename is what decides it, so the
+        # answer belongs with the code that derives the name.
+        "name_is_taken": _name_is_taken(network_name),
         "definition": definition,
         # The original text, so the editor can offer it straight back for export
         # before the designer has echoed a canonical version.
