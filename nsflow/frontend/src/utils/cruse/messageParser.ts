@@ -207,14 +207,14 @@ export function parseMultimediaFromText(text: string): MultimediaItem[] {
 
   // Regex to match URLs (http/https/file protocols and relative paths)
   // Updated to include parentheses and other URL-safe characters
-  const urlRegex = /(?:https?:\/\/|file:\/\/|\.\.?\/)[^\s<>"{}|\\^`\[\]]+/g;
+  const urlRegex = /(?:https?:\/\/|file:\/\/|\.\.?\/)[^\s<>"{}|\\^`[\]]+/g;
   const matches = text.match(urlRegex);
 
   if (!matches) return [];
 
   for (let url of matches) {
     // Trim trailing punctuation that's likely not part of the URL (including markdown closing parens/brackets)
-    url = url.replace(/[\.,;:!?\)\]]+$/, '');
+    url = url.replace(/[.,;:!?)\]]+$/, '');
 
     let matched = false;
 
