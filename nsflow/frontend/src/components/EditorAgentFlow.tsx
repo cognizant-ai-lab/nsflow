@@ -43,8 +43,8 @@ import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore"
 import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
-import { takeImportedNetwork } from "../state/importHandoff";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
+import { waitForServedNetwork } from "../state/servedNetworks";
 import type { ChatMessage } from "../uiCommon";
 import { useEditorProgressBridge } from "../state/progressBridge";
 import type { ConnectivityInfo } from "../uiCommon";
@@ -817,17 +817,36 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
    * assemble its own: the designer already owns that job, and a second writer here
    * would be a second answer to the same question, free to drift from the first.
    */
-  const handleExportHocon = useCallback(() => {
-    const hocon = entry?.hocon;
-    if (!hocon) return;
+  const handleExportHocon = useCallback(async () => {
     const name = launchableNetworkName || selectedNetwork || "agent_network";
-    const url = URL.createObjectURL(new Blob([hocon], { type: "text/plain;charset=utf-8" }));
+
+    // The store's copy first, then the served registry file. Two sources because the
+    // store's copy is keyed on `selectedNetwork || draftKey` and there is no
+    // migration between those keys, so selecting a network the store knew as a draft
+    // moves the lookup to an entry that has no HOCON yet. Falling back means export
+    // stays available on exactly the same condition as Launch, rather than blinking
+    // out whenever the key changes underneath it.
+    let text = entry?.hocon;
+    if (!text && launchableNetworkName && apiUrl) {
+      try {
+        const response = await fetch(
+          `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(launchableNetworkName)}`
+        );
+        if (response.ok) text = await response.text();
+      } catch {
+        // Offline or the network is not served yet. Nothing to download, and the
+        // button reporting failure is more noise than a no-op.
+      }
+    }
+    if (!text) return;
+
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = `${name}.hocon`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [entry?.hocon, launchableNetworkName, selectedNetwork]);
+  }, [apiUrl, entry?.hocon, launchableNetworkName, selectedNetwork]);
 
   /**
    * Open a .hocon file as the network under design.
@@ -854,40 +873,47 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           setImportError("That file parsed but produced no agents.");
           return;
         }
-        // Straight into the store, exactly as a designer frame would arrive. No edit
-        // is sent, so nothing is persisted until the user actually changes something:
-        // importing to look at a network should not write it to the server.
+        // Into the store first, exactly as a designer frame would arrive, so the
+        // canvas draws immediately.
         useEditorNetworkStore.getState().reconcileFromServer(networkId, {
           definition,
           networkName: payload.network_name,
           hocon: payload.hocon,
         });
         setImportError(undefined);
+
+        // Then persist it, which is what makes it a real agent network rather than a
+        // picture of one. Until the designer has saved it under its name, neuro-san
+        // does not serve it, so Launch has nothing to open and Home and Cruse cannot
+        // see it. Doing this on import rather than waiting for the user's first edit
+        // is the difference between "imported" and "imported and usable".
+        //
+        // `skip_designer` is set inside sendEditorUpdate, so this saves the network
+        // exactly as imported without the LLM restructuring it.
+        // Hold Launch while the server picks the file up, using the same gate that
+        // covers a chat-generated network. Saved is not servable until neuro-san's
+        // next registry reload, and Launch before then opens nothing.
+        setRegistryReloadPending(true);
+        try {
+          await sendEditorUpdate({
+            apiUrl,
+            networkId,
+            agentName: definition[0]?.origin ?? "",
+            definition,
+            networkName: payload.network_name,
+            message: `Import agent network "${payload.network_name}"`,
+            onFrame: publishSlyData,
+          });
+          await waitForServedNetwork(apiUrl, payload.network_name);
+        } finally {
+          setRegistryReloadPending(false);
+        }
       } catch (error) {
         setImportError(error instanceof Error ? error.message : "Could not read that file.");
       }
     },
-    [apiUrl, networkId]
+    [apiUrl, networkId, publishSlyData]
   );
-
-  /**
-   * Adopt a network the Home page imported and handed over.
-   *
-   * Applied without confirmation: the user's last action was choosing that file, and
-   * arriving here is the result of it, so a prompt would be asking them to confirm
-   * what they just did. `takeImportedNetwork` clears the handoff, so it applies once.
-   */
-  useEffect(() => {
-    const imported = takeImportedNetwork();
-    if (!imported) return;
-    const definition = toConnectivityList(imported.definition);
-    if (!definition) return;
-    useEditorNetworkStore.getState().reconcileFromServer(networkId, {
-      definition,
-      networkName: imported.network_name,
-      hocon: imported.hocon,
-    });
-  }, [networkId]);
 
   /**
    * Ask before importing over work in progress.
@@ -1371,10 +1397,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                 variant="contained"
                 color="primary"
                 sx={{
-                  borderRadius: '28px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  borderRadius: '20px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
                   '& .MuiButton-root': {
-                    height: 56,
+                    height: 40,
                     '&:hover': {
                       backgroundColor: theme.palette.primary.dark,
                       transform: 'scale(1.02)',
@@ -1495,11 +1521,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                   onClick={handleLaunchHome}
                   disabled={launchDisabled}
                   sx={{
-                    height: 56,
-                    minWidth: 100,
-                    px: 2.5,
+                    height: 40,
+                    minWidth: 88,
+                    px: 2,
                     textTransform: 'none',
-                    borderRadius: '28px',
+                    borderRadius: '20px',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                     backgroundColor: theme.palette.primary.main,
                     '&:hover': {
@@ -1521,9 +1547,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             the most natural place to open a file.
           */}
           <NetworkFileActions
-            onExportHocon={hasNetworkToLaunch && entry?.hocon ? handleExportHocon : undefined}
+            onExportHocon={hasNetworkToLaunch ? handleExportHocon : undefined}
             onImport={handleImportRequested}
-            size={56}
+            importTooltip="Import a .hocon file, saved and opened here for editing"
+            size={40}
           />
 
           {/*
@@ -1542,12 +1569,12 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                     setPendingFirstItem(FRONTMAN_ITEM);
                   }}
                   sx={{
-                    width: 56,
-                    height: 56,
+                    width: 40,
+                    height: 40,
                     backgroundColor: alpha(theme.palette.background.paper, 0.95),
                     backdropFilter: 'blur(8px)',
                     border: `1px solid ${theme.palette.divider}`,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
                     color: theme.palette.text.secondary,
                     '&:hover': {
                       backgroundColor: theme.palette.action.hover,
@@ -1555,7 +1582,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                     },
                   }}
                 >
-                <NewDraftIcon />
+                <NewDraftIcon sx={{ fontSize: 20 }} />
               </IconButton>
             </span>
           </Tooltip>
