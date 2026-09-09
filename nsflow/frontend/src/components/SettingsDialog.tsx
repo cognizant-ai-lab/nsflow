@@ -33,6 +33,7 @@ import {
   Alert,
   Box,
   Button,
+  Collapse,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -283,7 +284,12 @@ const SettingsDialog = ({ open, onClose }: SettingsDialogProps) => {
           sx={{ mb: 1 }}
         />
 
-        {/* The same toggles the Zen overlay's own gear offers, from the same list. */}
+        {/*
+          The same toggles the Zen overlay's own gear offers, from the same list, and
+          only while Zen Mode is on. Off, they configure a view that is not showing,
+          which reads as settings that do nothing.
+        */}
+        <Collapse in={isZenMode}>
         {Object.entries(zenCategories).map(([category, toggles]) => (
           <Box key={category} sx={{ mb: 1 }}>
             <Typography
@@ -312,6 +318,7 @@ const SettingsDialog = ({ open, onClose }: SettingsDialogProps) => {
             ))}
           </Box>
         ))}
+        </Collapse>
       </DialogContent>
     </Dialog>
   );
