@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { memo } from "react";
-import { getBezierPath, useStore, EdgeProps, ReactFlowState } from "@xyflow/react";
+import { getBezierPath, useStore, EdgeProps, Position, ReactFlowState } from "@xyflow/react";
 import { useTheme } from "@mui/material/styles";
 import { getEdgeParams, MeasuredNode } from "../utils/utils";
 
@@ -55,12 +55,17 @@ const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, styl
   const strokeWidth = selected ? 5 : 3;
 
   // A bar across the source end and an arrow at the target end, so the direction of
-  // the chain is readable without following the curve. The bar is drawn
-  // perpendicular to the line leaving the source rather than using a marker, because
-  // neuro-san's flow direction is the point and xyflow only ships arrow markers.
-  const angle = Math.atan2(ty - sy, tx - sx);
-  const barDx = Math.sin(angle) * SOURCE_BAR_HALF_LENGTH;
-  const barDy = Math.cos(angle) * SOURCE_BAR_HALF_LENGTH;
+  // the chain is readable without following the curve. A bar rather than a marker
+  // because neuro-san's flow direction is the point and xyflow only ships arrows.
+  //
+  // Squared to the side it leaves from, not to the straight line between the two
+  // nodes. Those disagree whenever the curve leaves one face and arrives at another,
+  // which is most of the time, and the bar then sat at an angle against the node's
+  // edge and read as a stray tick. Keyed off `sourcePos` so it stays square as nodes
+  // move and the chosen face changes.
+  const leavesSideways = sourcePos === Position.Left || sourcePos === Position.Right;
+  const barDx = leavesSideways ? 0 : SOURCE_BAR_HALF_LENGTH;
+  const barDy = leavesSideways ? SOURCE_BAR_HALF_LENGTH : 0;
 
   return (
     <g>
@@ -84,9 +89,9 @@ const FloatingEdge: React.FC<EdgeProps> = ({ id, source, target, markerEnd, styl
       */}
       <line
         x1={sx - barDx}
-        y1={sy + barDy}
+        y1={sy - barDy}
         x2={sx + barDx}
-        y2={sy - barDy}
+        y2={sy + barDy}
         stroke={stroke}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
