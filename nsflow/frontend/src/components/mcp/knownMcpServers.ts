@@ -209,7 +209,9 @@ export const KNOWN_MCP_SERVERS: KnownMcpServer[] = [
     id: 'salesforce',
     name: 'Salesforce',
     url: 'https://api.salesforce.com/platform/mcp/v1/platform/sobject-all',
-    iconUrl: 'https://www.salesforce.com/favicon.ico',
+    // No iconUrl: salesforce.com/favicon.ico now 404s, and every render of this row
+    // logged that failure to the console. The Avatar falls back to the initial,
+    // which is better than a request we know will fail.
     auth: 'pre_registered',
   },
   {
