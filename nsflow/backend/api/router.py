@@ -21,6 +21,7 @@ from .v1 import agent_flows
 from .v1 import app_configs
 from .v1 import audio_endpoints
 from .v1 import cruse_endpoints
+from .v1 import designer_endpoints
 from .v1 import editor_endpoints
 from .v1 import export_endpoints
 from .v1 import fast_websocket
@@ -28,6 +29,7 @@ from .v1 import fastapi_concierge_endpoints
 from .v1 import mcp_oauth_endpoints
 from .v1 import oneshot_endpoints
 from .v1 import pdf_endpoints
+from .v1 import toolbox_endpoints
 from .v1 import vqa_endpoints
 
 NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
@@ -44,6 +46,8 @@ router.include_router(editor_endpoints.router, tags=["Agent Network Designer"])
 router.include_router(cruse_endpoints.router, prefix="/api/v1", tags=["CRUSE Threads"])
 router.include_router(oneshot_endpoints.router, tags=["One-Shot Chat"])
 router.include_router(pdf_endpoints.router, tags=["PDF Processing"])
+router.include_router(toolbox_endpoints.router, tags=["Toolbox"])
+router.include_router(designer_endpoints.router, tags=["Designer"])
 router.include_router(mcp_oauth_endpoints.router, tags=["MCP OAuth"])
 if NSFLOW_PLUGIN_VQA_ENDPOINT:
     router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
