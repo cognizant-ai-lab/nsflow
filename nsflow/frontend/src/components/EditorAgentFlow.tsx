@@ -89,6 +89,15 @@ const EDITING_RULES: string[] = [
   "A change that leaves an agent with no parent is kept on the canvas but not saved until you reconnect it.",
 ];
 
+/** A .hocon the backend has parsed, held while we decide whether to ask about it. */
+type ParsedImport = {
+  readonly definition: ConnectivityInfo[];
+  readonly networkName: string;
+  readonly hocon?: string;
+  /** The file's own name, which is what the user recognises in a prompt. */
+  readonly fileName: string;
+};
+
 const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl } = useApiPort();
   // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
@@ -144,8 +153,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
   /** Why the last import failed, or undefined. */
   const [importError, setImportError] = useState<string | undefined>(undefined);
-  /** A chosen file waiting on confirmation, because importing it would replace work. */
-  const [pendingImport, setPendingImport] = useState<File | undefined>(undefined);
+  /** A parsed import waiting on confirmation, because it would overwrite a network. */
+  const [pendingImport, setPendingImport] = useState<ParsedImport | undefined>(undefined);
   const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
@@ -856,9 +865,67 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
    * browser would mean a second HOCON dialect that agrees with neuro-san only until
    * someone uses a feature it does not implement.
    */
-  const performImport = useCallback(
+  /**
+   * Save a parsed import and open it on the canvas.
+   *
+   * Saving is the step that makes it a real agent network rather than a picture of
+   * one: until the designer has written it under its name, neuro-san does not serve
+   * it, so Launch has nothing to open and Home and Cruse cannot see it. Doing this on
+   * import rather than waiting for the user's first edit is the whole difference
+   * between "imported" and "imported and usable".
+   */
+  const applyImport = useCallback(
+    async (parsed: ParsedImport) => {
+      if (!apiUrl) return;
+      // Into the store first, exactly as a designer frame would arrive, so the canvas
+      // draws immediately rather than after the round trip.
+      useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+        definition: parsed.definition,
+        networkName: parsed.networkName,
+        hocon: parsed.hocon,
+      });
+      setImportError(undefined);
+
+      // Hold Launch while the server picks the file up, using the same gate that
+      // covers a chat-generated network. Saved is not servable until neuro-san's next
+      // registry reload, and Launch before then opens nothing. `skip_designer` is set
+      // inside sendEditorUpdate, so this saves the network exactly as imported.
+      setRegistryReloadPending(true);
+      try {
+        await sendEditorUpdate({
+          apiUrl,
+          networkId,
+          agentName: parsed.definition[0]?.origin ?? "",
+          definition: parsed.definition,
+          networkName: parsed.networkName,
+          message: `Import agent network "${parsed.networkName}"`,
+          onFrame: publishSlyData,
+        });
+        await waitForServedNetwork(apiUrl, parsed.networkName);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : "Could not save that network.");
+      } finally {
+        setRegistryReloadPending(false);
+      }
+    },
+    [apiUrl, networkId, publishSlyData]
+  );
+
+  /**
+   * Parse a chosen file, and ask first only when the import would overwrite.
+   *
+   * Parsing has to happen before the question can be asked, because the answer turns
+   * on the imported network's name and that is inside the file.
+   *
+   * A differently named import is not destructive: the network currently on the
+   * canvas has already been saved under its own name, so it survives untouched and
+   * remains in the sidebar. Only an import of the SAME name replaces something, and
+   * that is the only case worth interrupting for.
+   */
+  const handleImportRequested = useCallback(
     async (file: File) => {
       if (!apiUrl) return;
+      setImportError(undefined);
       const body = new FormData();
       body.append("file", file);
       try {
@@ -869,70 +936,26 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           return;
         }
         const definition = toConnectivityList(payload.definition);
-        if (!definition) {
+        const networkName: string | undefined = payload.network_name;
+        if (!definition || !networkName) {
           setImportError("That file parsed but produced no agents.");
           return;
         }
-        // Into the store first, exactly as a designer frame would arrive, so the
-        // canvas draws immediately.
-        useEditorNetworkStore.getState().reconcileFromServer(networkId, {
-          definition,
-          networkName: payload.network_name,
-          hocon: payload.hocon,
-        });
-        setImportError(undefined);
 
-        // Then persist it, which is what makes it a real agent network rather than a
-        // picture of one. Until the designer has saved it under its name, neuro-san
-        // does not serve it, so Launch has nothing to open and Home and Cruse cannot
-        // see it. Doing this on import rather than waiting for the user's first edit
-        // is the difference between "imported" and "imported and usable".
-        //
-        // `skip_designer` is set inside sendEditorUpdate, so this saves the network
-        // exactly as imported without the LLM restructuring it.
-        // Hold Launch while the server picks the file up, using the same gate that
-        // covers a chat-generated network. Saved is not servable until neuro-san's
-        // next registry reload, and Launch before then opens nothing.
-        setRegistryReloadPending(true);
-        try {
-          await sendEditorUpdate({
-            apiUrl,
-            networkId,
-            agentName: definition[0]?.origin ?? "",
-            definition,
-            networkName: payload.network_name,
-            message: `Import agent network "${payload.network_name}"`,
-            onFrame: publishSlyData,
-          });
-          await waitForServedNetwork(apiUrl, payload.network_name);
-        } finally {
-          setRegistryReloadPending(false);
+        const parsed: ParsedImport = { definition, networkName, hocon: payload.hocon, fileName: file.name };
+        // The server decides, because it is the one that knows the registry. Comparing
+        // against the network on this canvas was too narrow: importing a name that is
+        // already served overwrites it whether or not it happens to be open here.
+        if (payload.name_is_taken) {
+          setPendingImport(parsed);
+          return;
         }
+        await applyImport(parsed);
       } catch (error) {
         setImportError(error instanceof Error ? error.message : "Could not read that file.");
       }
     },
-    [apiUrl, networkId, publishSlyData]
-  );
-
-  /**
-   * Ask before importing over work in progress.
-   *
-   * An import replaces the whole canvas, and an accidental one on a network the user
-   * has been drawing for a while is not undoable by any obvious gesture. Onto an
-   * empty canvas there is nothing to lose, so it just happens.
-   */
-  const handleImportRequested = useCallback(
-    (file: File) => {
-      setImportError(undefined);
-      const existing = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
-      if (existing.length > 0) {
-        setPendingImport(file);
-        return;
-      }
-      void performImport(file);
-    },
-    [networkId, performImport]
+    [apiUrl, applyImport]
   );
 
   // Handle launch to Cruse (default)
@@ -1196,20 +1219,19 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       </Dialog>
 
       {/*
-        Confirm before an import replaces work.
-        Named rather than generic: "this will be replaced" is easy to skim past, the
-        name of the network you have been drawing is not.
+        Confirm only when an import would overwrite the network it names.
+        A differently named import replaces nothing: the current network stays saved
+        under its own name. Asking then would be a question with no stakes.
       */}
       <Dialog open={Boolean(pendingImport)} onClose={() => setPendingImport(undefined)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>Replace the network on the canvas?</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>Overwrite {pendingImport?.networkName}?</DialogTitle>
         <DialogContent sx={{ pb: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            Importing <strong>{pendingImport?.name}</strong> replaces
+            <strong>{pendingImport?.fileName}</strong> is also called
             {" "}
-            <strong>{launchableNetworkName || selectedNetwork || "the network under design"}</strong>
+            <strong>{pendingImport?.networkName}</strong>, so importing it replaces the
             {" "}
-            and its {entry?.definition?.length ?? 0} agents on this canvas. Nothing is saved to the
-            server until you make a change, so the imported network is yours to discard.
+            {entry?.definition?.length ?? 0} agents currently saved under that name.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
@@ -1218,14 +1240,15 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           </Button>
           <Button
             variant="contained"
+            color="warning"
             onClick={() => {
-              const file = pendingImport;
+              const parsed = pendingImport;
               setPendingImport(undefined);
-              if (file) void performImport(file);
+              if (parsed) void applyImport(parsed);
             }}
             sx={{ textTransform: 'none' }}
           >
-            Replace
+            Overwrite
           </Button>
         </DialogActions>
       </Dialog>
@@ -1589,8 +1612,13 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         </Box>
       )}
 
-      {/* Layout Controls Panel */}
-      {selectedNetwork && (
+      {/*
+        Layout Controls Panel.
+        Always shown. Gating this on `selectedNetwork` meant it vanished for exactly
+        the networks most in need of arranging: a fresh draft and a freshly imported
+        one, both of which live under a draft key and so have no selected network.
+      */}
+      {(
         <Paper
           elevation={1}
           sx={{
