@@ -16,7 +16,8 @@ limitations under the License.
 
 import * as React from 'react';
 import { IconButton, Tooltip, useTheme as useMuiTheme } from '@mui/material';
-import { Brightness4, Brightness7 } from '@mui/icons-material';
+import LightMode from "@mui/icons-material/LightMode";
+import DarkMode from "@mui/icons-material/DarkMode";
 import { useTheme } from '../context/ThemeContext';
 
 const MuiThemeToggle: React.FC = () => {
@@ -37,7 +38,7 @@ const MuiThemeToggle: React.FC = () => {
           transition: 'all 0.2s ease-in-out',
         }}
       >
-        {isDarkMode ? <Brightness7 /> : <Brightness4 />}
+        {isDarkMode ? <LightMode /> : <DarkMode />}
       </IconButton>
     </Tooltip>
   );
