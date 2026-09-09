@@ -459,6 +459,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // response arriving afterwards and reconciling a definition that is now stale,
   // which would undo the newer edit on the canvas. It also stops a queue building up
   // when a user adds several agents in quick succession.
+  /** Set when the naming dialog is closing in order to hand over to the chat. */
+  const focusChatOnCloseRef = useRef(false);
   const inFlightEditRef = useRef<AbortController | null>(null);
   /**
    * How many edits are being saved right now.
@@ -1229,6 +1231,23 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         onClose={() => setPendingFirstItem(null)}
         maxWidth="xs"
         fullWidth
+        /*
+          Focus the chat only once this dialog has finished leaving.
+          MUI restores focus to whatever opened a dialog when it unmounts, which is the
+          right thing for Cancel and the wrong thing here: asking for chat focus while
+          the dialog was still closing meant MUI took it straight back, so the input
+          lit up but had no caret. Keyed off the transition rather than a timeout, so
+          it does not depend on guessing how long the animation takes.
+        */
+        slotProps={{
+          transition: {
+            onExited: () => {
+              if (!focusChatOnCloseRef.current) return;
+              focusChatOnCloseRef.current = false;
+              requestChatFocus();
+            },
+          },
+        }}
       >
         <DialogTitle sx={{ pb: 1 }}>Name this agent network</DialogTitle>
         <DialogContent sx={{ pb: 1 }}>
@@ -1263,8 +1282,9 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             size="small"
             startIcon={<ChatIcon fontSize="small" />}
             onClick={() => {
+              // Requested on exit, not here: see the dialog's onExited above.
+              focusChatOnCloseRef.current = true;
               setPendingFirstItem(null);
-              requestChatFocus();
             }}
             sx={{ textTransform: 'none' }}
           >
@@ -1447,26 +1467,23 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       )}
 
       {/*
-        Launch, file actions, and starting over. The container is always rendered
-        because importing a .hocon has to be reachable on an empty canvas, which is
-        exactly when a user has a file and nothing drawn yet. Each button keeps its
-        own condition.
+        Launch, on its own and centred.
+        It is the one action that is about the network rather than about the canvas, so
+        it reads better as a primary call to action than as one more icon in a corner
+        row. Centred horizontally and held at the bottom rather than the true middle,
+        which would sit on top of the front man in a radial layout.
       */}
-      {(
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 76,
-            // Below the layout controls rather than beside them. Those became a
-            // single wide row and were sitting on top of these buttons; stacking is
-            // what keeps both readable whatever the canvas width.
-            right: 60,
-            zIndex: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
+      <Box
+        sx={{
+          position: 'absolute',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
           {(showLaunchButton || hasNetworkToLaunch) && (pluginCruse ? (
             // Cruse enabled: Show Launch to Cruse with dropdown for Home
             <>
@@ -1618,6 +1635,29 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               </span>
             </Tooltip>
           ))}
+      </Box>
+
+      {/*
+        File actions and starting over. The container is always rendered
+        because importing a .hocon has to be reachable on an empty canvas, which is
+        exactly when a user has a file and nothing drawn yet. Each button keeps its
+        own condition.
+      */}
+      {(
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 76,
+            // Below the layout controls rather than beside them. Those became a
+            // single wide row and were sitting on top of these buttons; stacking is
+            // what keeps both readable whatever the canvas width.
+            right: 60,
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
 
           {/*
             Export appears on the same condition as Launch: both need a network that
