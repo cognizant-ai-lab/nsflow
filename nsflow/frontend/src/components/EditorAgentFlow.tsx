@@ -1492,16 +1492,19 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       )}
 
       {/*
-        Launch, on its own and centred.
-        It is the one action that is about the network rather than about the canvas, so
-        it reads better as a primary call to action than as one more icon in a corner
-        row. Top centre: clear of the front man that a radial layout puts in the middle,
-        and clear of the logs panel along the bottom.
+        Launch, centred on the second row.
+        It is the one action about the network rather than about the canvas, so it reads
+        better as a primary call to action than as one more icon in a corner row.
+
+        Second row rather than the first: the network info panel sits top left and grows
+        rightward with the name, so a long name ran into a top-centre button. This row
+        already holds the file actions on the right and is empty in the middle. Not the
+        true centre of the canvas either, which a radial layout fills with the front man.
       */}
       <Box
         sx={{
           position: 'absolute',
-          top: 16,
+          top: 76,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 20,
