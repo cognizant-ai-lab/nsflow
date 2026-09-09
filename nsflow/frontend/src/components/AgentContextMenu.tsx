@@ -37,6 +37,7 @@ import {
 import DuplicateIcon from "@mui/icons-material/ContentCopy";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import ViewIcon from "@mui/icons-material/VisibilityOutlined";
 import AddChildIcon from "@mui/icons-material/Add";
 
 /** Roughly the menu's own size, used to keep it inside the viewport. */
@@ -70,6 +71,16 @@ interface AgentContextMenuProps {
    * entry point and has no parent to promote its children to.
    */
   canDelete?: boolean;
+  /**
+   * True while the agent network designer is mid-turn.
+   *
+   * Everything that changes the network is withheld, because the designer is
+   * rewriting the same definition and a manual edit sent into that would either be
+   * overwritten or, worse, be canonicalised on top of a half-built network. Viewing
+   * stays available: reading an agent while the designer works is useful and safe,
+   * so the edit action becomes "View" rather than disappearing.
+   */
+  readOnly?: boolean;
 }
 
 const AgentContextMenu = ({
@@ -85,6 +96,7 @@ const AgentContextMenu = ({
   canAddChild = true,
   canDuplicate = true,
   canDelete = true,
+  readOnly = false,
 }: AgentContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -136,8 +148,14 @@ const AgentContextMenu = ({
   const adjustedY = Math.min(y, window.innerHeight - MENU_HEIGHT);
 
   const actions = [
-    { icon: <EditIcon fontSize="small" />, label: "Edit Agent", onClick: () => onEdit(nodeId) },
-    ...(canDuplicate
+    {
+      icon: readOnly ? <ViewIcon fontSize="small" /> : <EditIcon fontSize="small" />,
+      // "View" rather than a disabled "Edit": the panel it opens is read-only while
+      // the designer is working, and the label should say what will happen.
+      label: readOnly ? "View Agent" : "Edit Agent",
+      onClick: () => onEdit(nodeId),
+    },
+    ...(canDuplicate && !readOnly
       ? [
           {
             icon: <DuplicateIcon fontSize="small" />,
@@ -146,7 +164,7 @@ const AgentContextMenu = ({
           },
         ]
       : []),
-    ...(canAddChild
+    ...(canAddChild && !readOnly
       ? [
           {
             icon: <AddChildIcon fontSize="small" />,
@@ -198,7 +216,7 @@ const AgentContextMenu = ({
           </MenuItem>
         ))}
 
-        {canDelete && (
+        {canDelete && !readOnly && (
           <>
             <Divider sx={{ my: 0.5 }} />
             <MenuItem
