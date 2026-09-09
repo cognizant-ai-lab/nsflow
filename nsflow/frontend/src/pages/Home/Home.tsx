@@ -87,7 +87,7 @@ const HomeContent: React.FC = () => {
               style={{ display: isZenMode ? "none" : "flex", flexDirection: "column", height: "100%" }}
             >
               <div className="h-14">
-                <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
+                <Header isEditorPage={false}/>
               </div>
               <StarStudioPopup />
 
