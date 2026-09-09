@@ -90,6 +90,20 @@ const EDITING_RULES: string[] = [
   "A change that leaves an agent with no parent is kept on the canvas but not saved until you reconnect it.",
 ];
 
+/**
+ * Padding for every fit-to-screen on this canvas.
+ *
+ * React Flow fits the graph to the viewport less this padding, so a larger value means
+ * a smaller graph. The default 0.1 leaves the content filling 1/(1+2*0.1) of the
+ * viewport; 0.25 leaves 1/(1+2*0.25), which is 80% of that zoom.
+ *
+ * 80% on purpose: the canvas corners now carry the info panel, the layout row, the
+ * launch and file actions and React Flow's own controls, and a full-bleed fit put the
+ * outermost agents underneath them. Applied to the mount fit and the force-layout fit
+ * from one constant, so the two cannot drift apart.
+ */
+const FIT_VIEW_PADDING = 0.25;
+
 /** Starting over is a third kind of action, so a third hue. */
 const NEW_DRAFT_TINT = "#c3b1f5";
 
@@ -458,10 +472,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // Edges are already transformed, so only the nodes are replaced.
       setNodes(layoutManager.forceLayout(currentNodes, getEdges()).nodes);
       setTimeout(() => {
-        // Padding rather than a zoom cap, because it scales with the graph. 0.17
-        // lands at roughly 90% of the zoom 0.1 gave, which keeps the outermost nodes
-        // clear of the layout row and the canvas actions in the top corners.
-        fitView({ padding: 0.17, duration: 800 });
+        fitView({ padding: FIT_VIEW_PADDING, duration: 800 });
       }, 100);
     } catch (error) {
       console.warn('Failed to force layout:', error);
@@ -1217,6 +1228,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           markerEnd: "arrowclosed" as EdgeMarkerType,
         }}
         fitView
+        fitViewOptions={{ padding: FIT_VIEW_PADDING }}
         onlyRenderVisibleElements
         attributionPosition="bottom-left"
         minZoom={0.01}
