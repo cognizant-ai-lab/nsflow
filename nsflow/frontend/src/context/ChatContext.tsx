@@ -23,6 +23,7 @@ import {
   latestNetworkPayload,
   overlayNetworkPayload,
 } from "../utils/progressHelper";
+import { withoutByokText } from "../state/byok";
 
 // Generate a unique session ID for this browser session
 // const generateSessionId = (): string => {
@@ -205,7 +206,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const makeLogConnectionId = () => `logws_${Date.now()}_${++connSeq.current}`;
   const makeProgressConnectionId = () => `progressws_${Date.now()}_${++connSeq.current}`;
 
-  const addSlyDataMessage = (msg: Message) => {
+  const addSlyDataMessage = (rawMsg: Message) => {
+    // The single choke point for sly_data reaching the panel and the per-network
+    // cache, so the user's LLM keys are removed here rather than at each call site.
+    // Both directions matter: the panel records what was sent, which carries the keys,
+    // and a network can echo llm_config back.
+    const msg: Message = rawMsg.text ? { ...rawMsg, text: withoutByokText(rawMsg.text) } : rawMsg;
     setSlyDataMessages(prev => [...prev, { ...msg }]);
     if (msg.network) {
       setLastSlyDataByNetwork(prev => ({ ...prev, [msg.network!]: msg }));
