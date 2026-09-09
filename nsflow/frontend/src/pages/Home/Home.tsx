@@ -101,7 +101,15 @@ const HomeContent: React.FC = () => {
                   <PanelGroup direction="vertical">
                     <Panel defaultSize={66} minSize={50} maxSize={85}>
                       {/* AgentFlow */}
-                      <AgentFlow selectedNetwork={selectedNetwork} />
+                      <AgentFlow
+                        selectedNetwork={selectedNetwork}
+                        onNetworkImported={(networkName) => {
+                          // Select it the same way the sidebar does, so the canvas
+                          // and the chat both point at what was just imported.
+                          setSelectedNetwork(networkName);
+                          setActiveNetwork(networkName);
+                        }}
+                      />
                     </Panel>
                     <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
 
