@@ -166,6 +166,11 @@ export const renderTree = (
                       whiteSpace: "nowrap",
                       display: "block",
                       flexGrow: 1,
+                      // Without this a flex item will not shrink below its content
+                      // width, so a long name pushed the row actions past the
+                      // container's `overflow: hidden` and clipped them. Survivable
+                      // with one icon, not with two.
+                      minWidth: 0,
                     }}
                   >
                     {key}
