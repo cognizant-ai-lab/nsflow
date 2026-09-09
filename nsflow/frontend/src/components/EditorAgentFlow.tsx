@@ -18,13 +18,14 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { ReactFlow, Background, Controls, useEdgesState, useNodesState, useReactFlow, 
   Node, Edge, EdgeMarkerType, Connection, NodeChange, NodeMouseHandler } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem } from "@mui/material";
+import { Alert, Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem, Snackbar } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
 import EdgeContextMenu from "./EdgeContextMenu";
 import EditorPalette from "./EditorPalette";
 import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
+import NetworkFileActions from "./NetworkFileActions";
 import NetworkNameField from "./NetworkNameField";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
@@ -41,6 +42,8 @@ import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from 
 import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
 import { buildEditorGraph } from "../state/editorGraph";
+import { toConnectivityList } from "../state/definitionShape";
+import { takeImportedNetwork } from "../state/importHandoff";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
 import type { ChatMessage } from "../uiCommon";
 import { useEditorProgressBridge } from "../state/progressBridge";
@@ -139,6 +142,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const lastSeenNameRef = useRef<string | null>(null);
   const [showLaunchButton, setShowLaunchButton] = useState(false);
   const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
+  /** Why the last import failed, or undefined. */
+  const [importError, setImportError] = useState<string | undefined>(undefined);
+  /** A chosen file waiting on confirmation, because importing it would replace work. */
+  const [pendingImport, setPendingImport] = useState<File | undefined>(undefined);
   const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
@@ -802,6 +809,106 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     // canvas on its own.
   };
 
+  /**
+   * Download the network as a .hocon file.
+   *
+   * The text is whatever the designer last assembled and sent back as
+   * `agent_network_hocon_text`, kept in the store. nsflow deliberately does not
+   * assemble its own: the designer already owns that job, and a second writer here
+   * would be a second answer to the same question, free to drift from the first.
+   */
+  const handleExportHocon = useCallback(() => {
+    const hocon = entry?.hocon;
+    if (!hocon) return;
+    const name = launchableNetworkName || selectedNetwork || "agent_network";
+    const url = URL.createObjectURL(new Blob([hocon], { type: "text/plain;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${name}.hocon`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [entry?.hocon, launchableNetworkName, selectedNetwork]);
+
+  /**
+   * Open a .hocon file as the network under design.
+   *
+   * The backend parses it, because neuro-san's own restorer is what resolves
+   * `include` and `${substitution}` the way a real load would. Parsing it in the
+   * browser would mean a second HOCON dialect that agrees with neuro-san only until
+   * someone uses a feature it does not implement.
+   */
+  const performImport = useCallback(
+    async (file: File) => {
+      if (!apiUrl) return;
+      const body = new FormData();
+      body.append("file", file);
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/hocon/import`, { method: "POST", body });
+        const payload = await response.json();
+        if (!response.ok) {
+          setImportError(payload?.detail || "Could not read that file.");
+          return;
+        }
+        const definition = toConnectivityList(payload.definition);
+        if (!definition) {
+          setImportError("That file parsed but produced no agents.");
+          return;
+        }
+        // Straight into the store, exactly as a designer frame would arrive. No edit
+        // is sent, so nothing is persisted until the user actually changes something:
+        // importing to look at a network should not write it to the server.
+        useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+          definition,
+          networkName: payload.network_name,
+          hocon: payload.hocon,
+        });
+        setImportError(undefined);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : "Could not read that file.");
+      }
+    },
+    [apiUrl, networkId]
+  );
+
+  /**
+   * Adopt a network the Home page imported and handed over.
+   *
+   * Applied without confirmation: the user's last action was choosing that file, and
+   * arriving here is the result of it, so a prompt would be asking them to confirm
+   * what they just did. `takeImportedNetwork` clears the handoff, so it applies once.
+   */
+  useEffect(() => {
+    const imported = takeImportedNetwork();
+    if (!imported) return;
+    const definition = toConnectivityList(imported.definition);
+    if (!definition) return;
+    useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+      definition,
+      networkName: imported.network_name,
+      hocon: imported.hocon,
+    });
+  }, [networkId]);
+
+  /**
+   * Ask before importing over work in progress.
+   *
+   * An import replaces the whole canvas, and an accidental one on a network the user
+   * has been drawing for a while is not undoable by any obvious gesture. Onto an
+   * empty canvas there is nothing to lose, so it just happens.
+   */
+  const handleImportRequested = useCallback(
+    (file: File) => {
+      setImportError(undefined);
+      const existing = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
+      if (existing.length > 0) {
+        setPendingImport(file);
+        return;
+      }
+      void performImport(file);
+    },
+    [networkId, performImport]
+  );
+
   // Handle launch to Cruse (default)
   const handleLaunchCruse = useCallback(() => {
     const agentNetworkName = launchableNetworkName;
@@ -1062,6 +1169,57 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         </DialogActions>
       </Dialog>
 
+      {/*
+        Confirm before an import replaces work.
+        Named rather than generic: "this will be replaced" is easy to skim past, the
+        name of the network you have been drawing is not.
+      */}
+      <Dialog open={Boolean(pendingImport)} onClose={() => setPendingImport(undefined)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Replace the network on the canvas?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Importing <strong>{pendingImport?.name}</strong> replaces
+            {" "}
+            <strong>{launchableNetworkName || selectedNetwork || "the network under design"}</strong>
+            {" "}
+            and its {entry?.definition?.length ?? 0} agents on this canvas. Nothing is saved to the
+            server until you make a change, so the imported network is yours to discard.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
+          <Button onClick={() => setPendingImport(undefined)} sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              const file = pendingImport;
+              setPendingImport(undefined);
+              if (file) void performImport(file);
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            Replace
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/*
+        Why an import failed. A snackbar rather than a dialog: the file is simply not
+        one we can open, there is nothing to decide, and the reason comes from the
+        backend so it names the actual problem.
+      */}
+      <Snackbar
+        open={Boolean(importError)}
+        autoHideDuration={8000}
+        onClose={() => setImportError(undefined)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setImportError(undefined)} sx={{ maxWidth: 520 }}>
+          {importError}
+        </Alert>
+      </Snackbar>
+
       {/* Connection Context Menu */}
       <EdgeContextMenu
         visible={edgeMenu.visible}
@@ -1184,8 +1342,13 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         </Paper>
       )}
 
-      {/* Launch Button with Dropdown, and starting over */}
-      {(showLaunchButton || hasNetworkToLaunch) && (
+      {/*
+        Launch, file actions, and starting over. The container is always rendered
+        because importing a .hocon has to be reachable on an empty canvas, which is
+        exactly when a user has a file and nothing drawn yet. Each button keeps its
+        own condition.
+      */}
+      {(
         <Box
           sx={{
             position: 'absolute',
@@ -1200,7 +1363,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             gap: 1,
           }}
         >
-          {pluginCruse ? (
+          {(showLaunchButton || hasNetworkToLaunch) && (pluginCruse ? (
             // Cruse enabled: Show Launch to Cruse with dropdown for Home
             <>
               <ButtonGroup
@@ -1350,7 +1513,18 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                 </Button>
               </span>
             </Tooltip>
-          )}
+          ))}
+
+          {/*
+            Export appears on the same condition as Launch: both need a network that
+            actually exists. Import has no such condition, since an empty canvas is
+            the most natural place to open a file.
+          */}
+          <NetworkFileActions
+            onExportHocon={hasNetworkToLaunch && entry?.hocon ? handleExportHocon : undefined}
+            onImport={handleImportRequested}
+            size={56}
+          />
 
           {/*
             Always available, not only while a draft is open: once a chat turn names
