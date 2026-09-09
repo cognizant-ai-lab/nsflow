@@ -14,8 +14,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useEffect, useRef } from "react";
-import { FaEdit, FaTrash, FaPlus, FaCopy, FaEye } from "react-icons/fa";
+/**
+ * Right-click actions for an agent on the editor canvas.
+ *
+ * Styled from the MUI theme rather than with fixed colours. It used to hardcode dark
+ * Tailwind greys and white text, which is unreadable under the light theme.
+ */
+
+import { useEffect, useRef } from "react";
+import {
+  Box,
+  Divider,
+  ListItemIcon,
+  ListItemText,
+  MenuItem,
+  MenuList,
+  Paper,
+  Typography,
+  alpha,
+  useTheme,
+} from "@mui/material";
+import DuplicateIcon from "@mui/icons-material/ContentCopy";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import AddChildIcon from "@mui/icons-material/Add";
+
+/** Roughly the menu's own size, used to keep it inside the viewport. */
+const MENU_WIDTH = 200;
+const MENU_HEIGHT = 210;
 
 interface AgentContextMenuProps {
   visible: boolean;
@@ -27,10 +53,26 @@ interface AgentContextMenuProps {
   onDuplicate: (nodeId: string) => void;
   onAddChild: (nodeId: string) => void;
   onClose: () => void;
-  enableEditing?: boolean;
+  /**
+   * Whether this agent may be given a down-chain agent. False for a toolbox tool or
+   * an external reference, which cannot have children: such a network fails
+   * validation and the designer LLM is summoned to repair it, so hiding the action is
+   * what keeps a new user from building that by accident.
+   */
+  canAddChild?: boolean;
+  /**
+   * Whether this agent may be duplicated. False for the frontman: a copy inherits the
+   * original's parents, and the frontman has none, so the copy would be a second root.
+   */
+  canDuplicate?: boolean;
+  /**
+   * Whether this agent may be deleted. False for the frontman, which is the network's
+   * entry point and has no parent to promote its children to.
+   */
+  canDelete?: boolean;
 }
 
-const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
+const AgentContextMenu = ({
   visible,
   x,
   y,
@@ -40,10 +82,12 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
   onDuplicate,
   onAddChild,
   onClose,
-  enableEditing = false,
-}) => {
+  canAddChild = true,
+  canDuplicate = true,
+  canDelete = true,
+}: AgentContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
-  const canEdit = !!enableEditing;
+  const theme = useTheme();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -79,93 +123,108 @@ const AgentContextMenu: React.FC<AgentContextMenuProps> = ({
 
   if (!visible) return null;
 
-  // Adjust position to keep menu within viewport
-  const adjustedX = Math.min(x, window.innerWidth - 200);
-  const adjustedY = Math.min(y, window.innerHeight - 200);
+  // The frontman is checked first: it is the more specific case, and saying "cannot
+  // have down-chain agents" about it would be wrong as well as unhelpful.
+  const hint = !canDelete
+    ? "The frontman is the network's entry point, so it cannot be removed or copied."
+    : !canAddChild
+      ? "This agent cannot have down-chain agents."
+      : undefined;
 
-  // Build menu items based on flag
-  const menuItems = canEdit
-    ? [
-        {
-          icon: FaEdit,
-          label: "Edit Agent",
-          onClick: () => onEdit(nodeId),
-          className: "hover:bg-blue-600",
-        },
-        {
-          icon: FaCopy,
-          label: "Duplicate",
-          onClick: () => onDuplicate(nodeId),
-          className: "hover:bg-green-600",
-        },
-        {
-          icon: FaPlus,
-          label: "Add Child Agent",
-          onClick: () => onAddChild(nodeId),
-          className: "hover:bg-purple-600",
-        },
-        {
-          icon: FaTrash,
-          label: "Delete Agent",
-          onClick: () => onDelete(nodeId),
-          className: "hover:bg-red-600 text-red-300",
-          divider: true,
-        },
-      ]
-    : [
-        {
-          icon: FaEye,
-          label: "View Agent",
-          onClick: () => onEdit(nodeId),    // opens panel in read-only (since enableEditing=false there)
-          className: "hover:bg-gray-700",
-        },
-      ];
+  // Keep the menu within the viewport
+  const adjustedX = Math.min(x, window.innerWidth - MENU_WIDTH);
+  const adjustedY = Math.min(y, window.innerHeight - MENU_HEIGHT);
+
+  const actions = [
+    { icon: <EditIcon fontSize="small" />, label: "Edit Agent", onClick: () => onEdit(nodeId) },
+    ...(canDuplicate
+      ? [
+          {
+            icon: <DuplicateIcon fontSize="small" />,
+            label: "Duplicate",
+            onClick: () => onDuplicate(nodeId),
+          },
+        ]
+      : []),
+    ...(canAddChild
+      ? [
+          {
+            icon: <AddChildIcon fontSize="small" />,
+            label: "Add Child Agent",
+            onClick: () => onAddChild(nodeId),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div
+    <Paper
       ref={menuRef}
-      className="fixed z-50 bg-gray-800 border border-gray-600 rounded-lg shadow-xl min-w-[160px]"
-      style={{
+      elevation={8}
+      sx={{
+        position: "fixed",
         left: adjustedX,
         top: adjustedY,
+        zIndex: theme.zIndex.tooltip,
+        minWidth: MENU_WIDTH,
+        borderRadius: 2,
+        border: `1px solid ${theme.palette.divider}`,
+        overflow: "hidden",
       }}
     >
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-600 bg-gray-750">
-        <div className="text-xs text-gray-300 font-medium">Agent Actions</div>
+      <Box
+        sx={{
+          px: 1.5,
+          py: 1,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          backgroundColor: alpha(theme.palette.primary.main, 0.08),
+        }}
+      >
+        <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
+          Agent Actions
+        </Typography>
         {nodeId && (
-          <div className="text-xs text-gray-400 truncate">{nodeId}</div>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
+            {nodeId}
+          </Typography>
         )}
-      </div>
+      </Box>
 
-      {/* Menu Items */}
-      <div className="py-1">
-        {menuItems.map((item, index) => (
-          <React.Fragment key={index}>
-            {item.divider && (
-              <div className="border-t border-gray-600 my-1" />
-            )}
-            <button
-              onClick={item.onClick}
-              className={`
-                w-full flex items-center px-3 py-2 text-sm text-white transition-colors
-                ${item.className || "hover:bg-gray-700"}
-              `}
-            >
-              <item.icon className="mr-3 text-sm" />
-              {item.label}
-            </button>
-          </React.Fragment>
+      <MenuList dense disablePadding sx={{ py: 0.5 }}>
+        {actions.map((action) => (
+          <MenuItem key={action.label} onClick={action.onClick}>
+            <ListItemIcon sx={{ color: theme.palette.text.secondary }}>{action.icon}</ListItemIcon>
+            <ListItemText primary={action.label} />
+          </MenuItem>
         ))}
-      </div>
 
-      {/* Footer tip */}
-      <div className="px-3 py-2 border-t border-gray-600 bg-gray-750">
-        <div className="text-xs text-gray-400">
-          Right-click for context menu
-        </div>
-      </div>
-    </div>
+        {canDelete && (
+          <>
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem
+              onClick={() => onDelete(nodeId)}
+              sx={{
+                color: theme.palette.error.main,
+                "&:hover": { backgroundColor: alpha(theme.palette.error.main, 0.12) },
+              }}
+            >
+              <ListItemIcon sx={{ color: theme.palette.error.main }}>
+                <DeleteIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="Delete Agent" />
+            </MenuItem>
+          </>
+        )}
+      </MenuList>
+
+      {hint && (
+        <Box sx={{ px: 1.5, py: 1, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="caption" color="text.secondary">
+            {hint}
+          </Typography>
+        </Box>
+      )}
+    </Paper>
   );
 };
 
