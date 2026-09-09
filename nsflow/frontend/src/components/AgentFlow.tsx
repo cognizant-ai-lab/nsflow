@@ -520,7 +520,14 @@ const AgentFlow = ({ selectedNetwork, onNetworkImported }: AgentFlowProps) => {
         // style={{ backgroundColor: theme.palette.background.default }}
       >
         <Background/>
-        <Controls>
+        <Controls
+          position="top-right"
+          style={{
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: '8px'
+          }}
+        >
           <div className="react-flow__controls-button">
             <Tooltip title={useCompactMode ? "Switch to full connectivity" : "Switch to compact connectivity"}>
               <span style={{ display: 'inline-block' }}>
