@@ -18,7 +18,7 @@ limitations under the License.
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, RadioGroup, FormControlLabel,
   Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip, Dialog, DialogTitle,
-  DialogContent, DialogActions, Snackbar } from "@mui/material";
+  DialogContent, DialogActions, Snackbar, CircularProgress } from "@mui/material";
 import { HubTwoTone as NetworkIcon, Search as SearchIcon, CloseRounded } from "@mui/icons-material";
 import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
@@ -27,6 +27,15 @@ import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { buildTree, renderTree, getAncestorDirs } from "../utils/sidebarHelpers";
 import { getGeneratedSubdir } from "../utils/config";
+
+/**
+ * How long the delete toast stays before the page reloads.
+ *
+ * Long enough for neuro-san's registry poll to notice the manifest change, so the
+ * reloaded page does not list the network again, and long enough for the toast to be
+ * read rather than flash.
+ */
+const RELOAD_AFTER_DELETE_MS = 2500;
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [loading, setLoading] = useState(true);
@@ -53,6 +62,8 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   /** A generated network awaiting confirmation before it is deleted. */
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** Progress text while a delete settles, cleared by the reload that follows. */
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -199,13 +210,20 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         setDeleteError(payload?.detail || `Could not delete "${networkName}".`);
         return;
       }
-      // Deleting a served network changes the manifest, which neuro-san rereads on its
-      // own schedule, so the list is refetched rather than assumed.
-      await fetchNetworks(tempConnectionType, tempHost ?? "", tempPort ?? 0);
+      // Reload rather than refetch.
+      //
+      // Deleting changes the manifest, and neuro-san only stops serving the network on
+      // its next registry reload, so refetching the list immediately can still return
+      // the network that was just deleted. A reload also clears the several places the
+      // deleted name may still be held: the selected network, the chat's active
+      // network, the sockets open on it. The toast stays up until the page goes, so
+      // the wait is visible rather than looking like nothing happened.
+      setDeleteStatus(`Deleting "${networkName}". Reloading shortly...`);
+      window.setTimeout(() => window.location.reload(), RELOAD_AFTER_DELETE_MS);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : `Could not delete "${networkName}".`);
     }
-  }, [pendingDelete, apiUrl, fetchNetworks, tempConnectionType, tempHost, tempPort]);
+  }, [pendingDelete, apiUrl]);
 
   const handleNetworkSelection = (network: string) => {
     if (network === activeNetwork) return;
@@ -750,6 +768,15 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={Boolean(deleteStatus)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="info" icon={<CircularProgress size={16} />} sx={{ maxWidth: 520 }}>
+          {deleteStatus}
+        </Alert>
+      </Snackbar>
 
       <Snackbar
         open={Boolean(deleteError)}
