@@ -26,6 +26,7 @@ import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
 import HomeIcon from "@mui/icons-material/Home";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 import AccountIcon from "@mui/icons-material/AccountCircle";
+import SettingsIcon from "@mui/icons-material/SettingsOutlined";
 import WandIcon from "@mui/icons-material/DrawTwoTone";
 import HelpIcon from "@mui/icons-material/HelpOutlined";
 import ChatIcon from "@mui/icons-material/QuickreplyTwoTone";
@@ -33,6 +34,7 @@ import DrawIcon from "@mui/icons-material/Draw";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 
 import MuiThemeToggle from "./MuiThemeToggle";
+import SettingsDialog from "./SettingsDialog";
 import { useTheme } from "../context/ThemeContext";
 import { useZenMode } from "../hooks/useZenMode";
 import { getFeatureFlags } from "../utils/config";
@@ -46,6 +48,7 @@ const Header: React.FC<HeaderProps> = ({ isEditorPage = false, isCrusePage = fal
   const { activeNetwork } = useChatContext();
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [accountAnchorEl, setAccountAnchorEl] = useState<null | HTMLElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
@@ -309,6 +312,20 @@ const Header: React.FC<HeaderProps> = ({ isEditorPage = false, isCrusePage = fal
             </Tooltip>
           )}
           <MuiThemeToggle />
+          <Tooltip title="Settings">
+            <IconButton
+              onClick={() => setIsSettingsOpen(true)}
+              aria-label="Open settings"
+              sx={{
+                color: muiTheme.palette.text.primary,
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1)
+                }
+              }}
+            >
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Account and help">
             <IconButton
               onClick={(e) => setAccountAnchorEl(e.currentTarget)}
@@ -354,7 +371,8 @@ const Header: React.FC<HeaderProps> = ({ isEditorPage = false, isCrusePage = fal
             </MenuItem>
           </Menu>
 
-          <HelpDialog open={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+          <SettingsDialog open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <HelpDialog open={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
         </Box>
       </Toolbar>
     </AppBar>
