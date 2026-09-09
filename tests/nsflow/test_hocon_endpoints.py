@@ -97,3 +97,52 @@ def test_reports_a_clash_only_inside_the_designer_subdirectory(client: TestClien
     (tmp_path / "generated").mkdir()
     (tmp_path / "generated" / "demo.hocon").write_text(NETWORK, encoding="utf-8")
     assert _post(client, NETWORK, "demo.hocon").json()["name_is_taken"] is True
+
+
+class TestDeleteGeneratedNetwork:
+    """Deletion is destructive and URL-driven, so its scope is what matters most."""
+
+    @pytest.fixture(name="generated")
+    def generated_fixture(self, tmp_path, monkeypatch):
+        """A registry with a generated subdirectory and its own manifest."""
+        monkeypatch.setattr(hocon_endpoints, "REGISTRY_DIR", str(tmp_path))
+        monkeypatch.setenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "generated")
+        generated = tmp_path / "generated"
+        generated.mkdir()
+        (generated / "demo.hocon").write_text(NETWORK, encoding="utf-8")
+        (generated / "manifest.hocon").write_text(
+            '{\n    # keep me\n    "generated/demo.hocon": true\n    "generated/other.hocon": true\n}\n',
+            encoding="utf-8",
+        )
+        # Outside the generated directory: part of the deployment, not ours to remove.
+        (tmp_path / "deployment.hocon").write_text(NETWORK, encoding="utf-8")
+        return tmp_path
+
+    def test_removes_the_file_and_its_manifest_entry(self, client: TestClient, generated):
+        """The file goes, its manifest line goes, and nothing else in the file moves."""
+        response = client.delete("/api/v1/hocon/generated/demo")
+        assert response.status_code == 200
+        assert not (generated / "generated" / "demo.hocon").exists()
+
+        manifest = (generated / "generated" / "manifest.hocon").read_text(encoding="utf-8")
+        assert "demo.hocon" not in manifest
+        # Everything else in the file survives, including comments.
+        assert "other.hocon" in manifest
+        assert "# keep me" in manifest
+
+    @pytest.mark.usefixtures("generated")
+    def test_accepts_the_name_with_or_without_its_directory(self, client: TestClient):
+        """The sidebar knows networks by their served path, so both spellings work."""
+        assert client.delete("/api/v1/hocon/generated/demo").status_code == 200
+
+    def test_refuses_a_network_outside_the_generated_directory(self, client: TestClient, generated):
+        """Deletion is scoped to what the designer generated, not the whole registry."""
+        # Percent-encoded, because a plain "../" is normalised away before it reaches
+        # the handler and so would prove nothing about the guard.
+        assert client.delete("/api/v1/hocon/generated/%2e%2e%2fdeployment").status_code == 404
+        assert (generated / "deployment.hocon").exists()
+
+    @pytest.mark.usefixtures("generated")
+    def test_reports_a_missing_network_rather_than_pretending(self, client: TestClient):
+        """A 404 rather than a cheerful 200 that deleted nothing."""
+        assert client.delete("/api/v1/hocon/generated/never_existed").status_code == 404
