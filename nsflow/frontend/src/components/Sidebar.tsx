@@ -17,7 +17,8 @@ limitations under the License.
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, RadioGroup, FormControlLabel,
-  Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip } from "@mui/material";
+  Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip, Dialog, DialogTitle,
+  DialogContent, DialogActions, Snackbar } from "@mui/material";
 import { HubTwoTone as NetworkIcon, Search as SearchIcon, CloseRounded } from "@mui/icons-material";
 import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
@@ -25,6 +26,7 @@ import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { buildTree, renderTree, getAncestorDirs } from "../utils/sidebarHelpers";
+import { getGeneratedSubdir } from "../utils/config";
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,9 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const clearAllTags = () => setSelectedTags(new Set());
+  /** A generated network awaiting confirmation before it is deleted. */
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -171,6 +176,36 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       setLoading(false);
     }
   };
+
+
+  /**
+   * Delete a generated network, once confirmed.
+   *
+   * Refreshes the list afterwards rather than removing the row locally: the server is
+   * the authority on what it serves, and a local removal would diverge from it if the
+   * delete half-succeeded.
+   */
+  const confirmDelete = useCallback(async () => {
+    const networkName = pendingDelete;
+    setPendingDelete(null);
+    if (!networkName || !apiUrl) return;
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/v1/hocon/${encodeURI(networkName)}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => undefined);
+        setDeleteError(payload?.detail || `Could not delete "${networkName}".`);
+        return;
+      }
+      // Deleting a served network changes the manifest, which neuro-san rereads on its
+      // own schedule, so the list is refetched rather than assumed.
+      await fetchNetworks(tempConnectionType, tempHost ?? "", tempPort ?? 0);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : `Could not delete "${networkName}".`);
+    }
+  }, [pendingDelete, apiUrl, fetchNetworks, tempConnectionType, tempHost, tempPort]);
 
   const handleNetworkSelection = (network: string) => {
     if (network === activeNetwork) return;
@@ -672,14 +707,61 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                     anchor.download = `${networkName.replace(/\//g, "_")}.hocon`;
                     anchor.click();
                     URL.revokeObjectURL(url);
-                  }
+                  },
+                  // Deleting is confirmed first, so this only opens the dialog.
+                  (networkName: string) => setPendingDelete(networkName),
+                  // Only what the designer generated. Everything else in the registry
+                  // is part of the deployment and is not nsflow's to remove, which the
+                  // endpoint enforces too; this keeps the icon from appearing where it
+                  // would only ever fail.
+                  (networkName: string) => networkName.startsWith(`${getGeneratedSubdir()}/`)
                 )}
               </SimpleTreeView>
             )}
           </Box>
 
           <div ref={networksEndRef} />
-        </Box>
+        
+      {/*
+        Confirm before deleting, and name what is being deleted.
+        This removes a file from the server's registry, so it is not undoable from here
+        and the network stops being servable to anyone.
+      */}
+      <Dialog open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Delete {pendingDelete}?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            This removes the agent network from the server's registry. It will stop being
+            available in Home, Cruse and the Editor, and this cannot be undone from here.
+            Export it first if you might want it back.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
+          <Button onClick={() => setPendingDelete(null)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => void confirmDelete()}
+            sx={{ textTransform: "none" }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(deleteError)}
+        autoHideDuration={8000}
+        onClose={() => setDeleteError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ maxWidth: 520 }}>
+          {deleteError}
+        </Alert>
+      </Snackbar>
+    </Box>
       </Paper>
     </Paper>
   );
