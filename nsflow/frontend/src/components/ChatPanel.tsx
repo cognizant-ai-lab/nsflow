@@ -58,6 +58,7 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 
 // NEW: use cache + converter to source sly_data from the editor
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
+import { withByok } from "../state/byok";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   // Focused when the editor hands over ("describe it in chat instead"). The input
@@ -301,7 +302,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   }, [chatMessages, shouldAutoPlayNextAgent]);
 
   // Build sly_data to send: editor mode reads from the shared context builder, home mode reads from cache
-  const getSlyDataForSend = useCallback((): Record<string, any> | undefined => {
+  //
+  // The user's own LLM keys are merged in last, by withByok. They have to travel on
+  // every request, including Home mode with the sly_data checkbox off, because a BYOK
+  // deployment has no keys of its own and would otherwise refuse every turn.
+  const buildSlyDataForSend = useCallback((): Record<string, any> | undefined => {
     if (isEditorMode) {
       // Newest sly_data blob + the freshest definition/name pair overlaid (#261),
       // built by ChatContext so the send path and the Sly Data panel agree.
@@ -318,6 +323,11 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
     }
     return {};
   }, [isEditorMode, getEditorOutgoingSlyData, useSlyDataChecked, targetNetwork, activeNetwork, loadSlyDataFromCache]);
+
+  const getSlyDataForSend = useCallback((): Record<string, any> | undefined => {
+    return withByok(buildSlyDataForSend());
+  }, [buildSlyDataForSend]);
+
 
   const handleFileAttach = () => {
     fileInputRef.current?.click();
