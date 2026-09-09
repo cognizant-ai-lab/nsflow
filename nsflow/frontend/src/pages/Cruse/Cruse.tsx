@@ -249,7 +249,7 @@ const CruseContent: React.FC = () => {
               zIndex: 0,
             }}
           >
-            <Header selectedNetwork="" isCrusePage={true} />
+            <Header isCrusePage={true} />
             <StarStudioPopup />
 
             <Box sx={{
