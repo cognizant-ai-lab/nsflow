@@ -30,6 +30,7 @@ import {
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
+import { useEditorActivityStore } from "../state/editorActivity";
 
 type LogEntry = {
   timestamp: string;
@@ -55,6 +56,38 @@ const LogsPanel = () => {
     // Auto-scroll to latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
+
+  /**
+   * Fold manual editing into the same log as the agent's own output.
+   *
+   * Manual edits produce no server chatter to log, so without this the panel goes
+   * quiet exactly when the user is doing the most. Interleaving them with the agent's
+   * lines is the point: what a progress frame did and what the user did belong in one
+   * timeline, or neither explains the other.
+   *
+   * Appended by index rather than replaced wholesale, so the websocket's lines and
+   * these keep their relative order instead of one class jumping ahead of the other.
+   */
+  const activityEntries = useEditorActivityStore((state) => state.entries);
+  const consumedActivityRef = useRef(0);
+  useEffect(() => {
+    if (activityEntries.length <= consumedActivityRef.current) {
+      // The store was cleared. Reset so a later entry is not skipped as already seen.
+      consumedActivityRef.current = activityEntries.length;
+      return;
+    }
+    const fresh = activityEntries.slice(consumedActivityRef.current);
+    consumedActivityRef.current = activityEntries.length;
+    setLogs((previous) => [
+      ...previous,
+      ...fresh.map((entry) => ({
+        timestamp: new Date(entry.at).toLocaleTimeString(),
+        agent: "You",
+        source: "Editor",
+        message: entry.text,
+      })),
+    ]);
+  }, [activityEntries]);
 
   useEffect(() => {
     if (!wsUrl || !targetNetwork) return; // Prevents WebSocket from connecting before port is set
