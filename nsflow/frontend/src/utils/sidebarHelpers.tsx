@@ -177,7 +177,7 @@ export const renderTree = (
                   </Typography>
                 </Tooltip>
                 {onExportNetwork && (
-                  <Tooltip title="Download as .hocon" placement="right">
+                  <Tooltip title="Export as .hocon" placement="right">
                     <Box
                       className="row-action"
                       onClick={(e: React.MouseEvent) => {
@@ -322,7 +322,12 @@ export const renderTree = (
           },
         }}
       >
-        {renderTree(children, [...path, key], activeNetwork, theme, onSelect, onEditNetwork)}
+        {/*
+          Every handler has to be forwarded here. Dropping one silently disables that
+          action for every nested network, which is most of them, while leaving it
+          working on the top level: the action appears to exist but only sometimes.
+        */}
+        {renderTree(children, [...path, key], activeNetwork, theme, onSelect, onEditNetwork, onExportNetwork)}
       </TreeItem>
     );
   });
