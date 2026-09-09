@@ -36,17 +36,20 @@ def registry_fixture(tmp_path: Path, monkeypatch) -> Path:
 
 @pytest.fixture(name="client")
 def client_fixture() -> TestClient:
+    """A client against the real app, so route registration is covered too."""
     return TestClient(app)
 
 
-def test_serves_a_network_from_the_configured_registry(client: TestClient, registry: Path):
+@pytest.mark.usefixtures("registry")
+def test_serves_a_network_from_the_configured_registry(client: TestClient):
     """The registry comes from AGENT_MANIFEST_FILE, not from the process working directory."""
     response = client.get("/api/v1/export/agent_network/top_level")
     assert response.status_code == 200
     assert response.text == '{"tools": []}'
 
 
-def test_serves_a_nested_network(client: TestClient, registry: Path):
+@pytest.mark.usefixtures("registry")
+def test_serves_a_nested_network(client: TestClient):
     """Networks are listed by their path in the registry, so the route has to accept one."""
     response = client.get("/api/v1/export/agent_network/generated/made_by_designer")
     assert response.status_code == 200
