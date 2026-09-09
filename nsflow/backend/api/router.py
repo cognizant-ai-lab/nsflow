@@ -31,6 +31,7 @@ from .v1 import oneshot_endpoints
 from .v1 import pdf_endpoints
 from .v1 import toolbox_endpoints
 from .v1 import vqa_endpoints
+from .v1.neuro_san import agent as neuro_san_agent
 
 NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
 
@@ -51,3 +52,12 @@ router.include_router(designer_endpoints.router, tags=["Designer"])
 router.include_router(mcp_oauth_endpoints.router, tags=["MCP OAuth"])
 if NSFLOW_PLUGIN_VQA_ENDPOINT:
     router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
+
+# KEEP LAST. The neuro-san-shaped facade routes on "/api/v1/{agent_name:path}/..."
+# put a greedy path parameter where nsflow's own routes have a literal first
+# segment (e.g. "/api/v1/connectivity/{network_name}"). Starlette matches in
+# registration order, so registering this after everything else is what keeps
+# every existing endpoint winning for its own consumers. Adding a router below
+# this line, or moving this line up, will silently shadow existing endpoints.
+# tests/nsflow/test_neuro_san_facade.py asserts this ordering.
+router.include_router(neuro_san_agent.router, tags=["neuro-san API"])
