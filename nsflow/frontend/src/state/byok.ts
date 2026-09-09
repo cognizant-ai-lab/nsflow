@@ -85,3 +85,39 @@ export const withByok = (
     llm_config: { ...byok.llm_config, ...existing },
   };
 };
+
+/**
+ * Remove the user's keys from a sly_data blob before it is stored or displayed.
+ *
+ * The sly_data panel shows this text and can export it, and the per-network cache
+ * persists it, so a key left in would be visible on screen and written to disk. That
+ * applies in both directions: the panel records what was SENT, which now carries the
+ * keys, and a network may echo `llm_config` straight back.
+ *
+ * ui-common does the same thing on its side (`const { llm_config: _, ...rest }` before
+ * `updateSlyData`), for the same reason.
+ *
+ * Takes and returns the serialised form, because that is what the message carries.
+ * Anything that is not a JSON object is passed through untouched rather than guessed at.
+ */
+export const withoutByokText = <T extends string | object>(text: T): T => {
+  // A sly_data message's text is a JSON string in most paths but an object in some, so
+  // both are handled rather than assuming the common one.
+  if (text && typeof text === "object") {
+    if (Array.isArray(text) || !("llm_config" in text)) return text;
+    const { llm_config: _dropped, ...rest } = text as Record<string, unknown>;
+    return rest as T;
+  }
+  if (typeof text !== "string" || !text.includes("llm_config")) return text;
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return text;
+    if (!("llm_config" in parsed)) return text;
+    const { llm_config: _stripped, ...rest } = parsed as Record<string, unknown>;
+    return JSON.stringify(rest, null, 2) as T;
+  } catch {
+    // Not JSON, so there is no structure to remove a key from. Returning the original
+    // is right: this function redacts, it does not validate.
+    return text;
+  }
+};
