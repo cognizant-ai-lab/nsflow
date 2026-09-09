@@ -18,7 +18,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { ReactFlow, Background, Controls, useEdgesState, useNodesState, useReactFlow, 
   Node, Edge, EdgeMarkerType, Connection, NodeChange, NodeMouseHandler } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Alert, Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem, Snackbar } from "@mui/material";
+import { Alert, Box, Chip, CircularProgress, Fade, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem, Snackbar } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
@@ -453,6 +453,18 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // which would undo the newer edit on the canvas. It also stops a queue building up
   // when a user adds several agents in quick succession.
   const inFlightEditRef = useRef<AbortController | null>(null);
+  /**
+   * How many edits are being saved right now.
+   *
+   * A count rather than a boolean because edits supersede each other, so the
+   * indicator has to survive one finishing while another is still going.
+   *
+   * This exists instead of slowing edits down. Rapid clicks are safe now that each
+   * edit path reads the live definition, so the only thing missing was telling the
+   * user their change registered. A delay would make every single edit feel worse
+   * to fix a case that no longer misbehaves.
+   */
+  const [savingCount, setSavingCount] = useState(0);
 
   // Manual edits go over HTTP, so nothing about them reaches the sly_data websocket
   // the Sly Data panel listens to, and the panel sat on whatever the last chat turn
@@ -493,6 +505,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       const controller = new AbortController();
       inFlightEditRef.current = controller;
 
+      setSavingCount((count) => count + 1);
       try {
         await sendEditorUpdate({
           apiUrl,
@@ -509,6 +522,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           console.error(`Failed to persist edit for ${agentName}:`, error);
         }
       } finally {
+        setSavingCount((count) => Math.max(0, count - 1));
         if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
       }
     },
@@ -524,7 +538,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // effect draws the edge once the definition holds it.
   const onConnect = useCallback(
     (params: Connection) => {
-      const definition = entry?.definition ?? [];
+      // Read from the store, not from this render's `entry`. Two clicks inside one
+      // render cycle would otherwise both build on the same stale definition and the
+      // first edit would be silently lost, which is exactly what a double click does.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       const next = connectAgentsInDefinition(definition, params.source ?? "", params.target ?? "");
       // Unchanged means the edge was refused: a toolbox tool or external reference
       // cannot have down-chains, and a duplicate or self-edge is nothing to do.
@@ -550,7 +567,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   };
 
   const handleDuplicateAgent = async (nodeId: string) => {
-    const definition = entry?.definition ?? [];
+    // Read from the store, not from this render's `entry`. Two clicks inside one
+    // render cycle would otherwise both build on the same stale definition and the
+    // first edit would be silently lost, which is exactly what a double click does.
+    const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
     // Uniquified, or a second copy would collide with the first and addAgent's
     // duplicate-name guard would silently make the action do nothing.
     const newAgentName = uniqueAgentName(definition, `${nodeId}_copy`);
@@ -560,7 +580,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   };
 
   const handleAddChildAgent = async (nodeId: string) => {
-    const definition = entry?.definition ?? [];
+    // Read from the store, not from this render's `entry`. Two clicks inside one
+    // render cycle would otherwise both build on the same stale definition and the
+    // first edit would be silently lost, which is exactly what a double click does.
+    const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
     // Uniquified for the same reason as duplicate: a fixed "<parent>_child" meant an
     // agent could be given exactly one child, and every attempt after the first was
     // rejected as a duplicate name with nothing to show for it.
@@ -629,7 +652,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const handleDeleteConnection = useCallback(
     async (source: string, target: string) => {
       closeEdgeMenu();
-      const definition = entry?.definition ?? [];
+      // Read from the store, not from this render's `entry`. Two clicks inside one
+      // render cycle would otherwise both build on the same stale definition and the
+      // first edit would be silently lost, which is exactly what a double click does.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       const next = disconnectAgentsInDefinition(definition, source, target);
       if (next !== definition) await applyAndSync(next, source, `Disconnect "${target}" from "${source}"`);
     },
@@ -641,7 +667,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // would produce.
   const onReconnect = useCallback(
     (oldEdge: Edge, connection: Connection) => {
-      const definition = entry?.definition ?? [];
+      // Read from the store, not from this render's `entry`. Two clicks inside one
+      // render cycle would otherwise both build on the same stale definition and the
+      // first edit would be silently lost, which is exactly what a double click does.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       // Only the parent end is meaningful here: the child keeps its identity, and
       // what changes is which agent chains down to it.
       const next = reparentAgentInDefinition(
@@ -1569,6 +1598,32 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             actually exists. Import has no such condition, since an empty canvas is
             the most natural place to open a file.
           */}
+          {/*
+            Says an edit registered, without taking the canvas away to say it.
+            Non-modal and non-blocking on purpose: the alternative considered was
+            slowing edits down so a double click could not outrun them, which would
+            have made every edit feel worse to fix a case that reading the live
+            definition already fixed. This only closes the feedback gap that made
+            clicking again feel necessary.
+          */}
+          {/* Quick in, quicker out: it should be gone the moment the change lands, not
+              linger and imply work that has finished. */}
+          <Fade in={savingCount > 0} timeout={{ enter: 100, exit: 160 }}>
+            <Chip
+              size="small"
+              icon={<CircularProgress size={12} thickness={6} sx={{ color: 'inherit' }} />}
+              label="Saving"
+              sx={{
+                height: 26,
+                backgroundColor: alpha(theme.palette.background.paper, 0.95),
+                backdropFilter: 'blur(8px)',
+                border: `1px solid ${theme.palette.divider}`,
+                color: theme.palette.text.secondary,
+                '& .MuiChip-icon': { ml: 1, color: theme.palette.primary.main },
+              }}
+            />
+          </Fade>
+
           <NetworkFileActions
             onExportHocon={hasNetworkToLaunch ? handleExportHocon : undefined}
             onImport={handleImportRequested}
