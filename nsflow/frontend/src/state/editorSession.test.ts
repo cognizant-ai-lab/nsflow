@@ -15,7 +15,13 @@ limitations under the License.
 */
 
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// The server instance id, controllable so a restart can be simulated.
+let serverInstanceId = "server-a";
+vi.mock("../utils/config", () => ({
+  getServerInstanceId: () => serverInstanceId,
+}));
 
 import { useEditorNetworkStore } from "./editorNetworkStore";
 import { draftKeyFor, isDraftKey, useEditorDraftSession } from "./editorSession";
@@ -25,6 +31,7 @@ const SESSION_KEY = "nsflow.editorDraftSession";
 describe("useEditorDraftSession", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    serverInstanceId = "server-a";
   });
 
   it("continues the session across a reload", () => {
@@ -75,5 +82,36 @@ describe("useEditorDraftSession", () => {
     expect(entries[stale]).toBeUndefined();
     // A real network is not a draft and must survive.
     expect(entries.coffee_shop).toBeDefined();
+  });
+
+  it("ends the session when the server has restarted", () => {
+    // The draft only means something against the server that was persisting it: after
+    // a restart the network it referred to may be gone, so reopening it would show
+    // agents that no longer exist anywhere.
+    const first = renderHook(() => useEditorDraftSession());
+    const key = first.result.current.draftKey;
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    first.unmount();
+
+    serverInstanceId = "server-b";
+    const second = renderHook(() => useEditorDraftSession());
+    expect(second.result.current.draftKey).not.toBe(key);
+    expect(isDraftKey(second.result.current.draftKey)).toBe(true);
+  });
+
+  it("continues the session when the server has not restarted", () => {
+    // The counterpart, so the restart rule cannot be satisfied by simply always
+    // starting fresh, which would lose work to an accidental reload.
+    const first = renderHook(() => useEditorDraftSession());
+    const key = first.result.current.draftKey;
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    first.unmount();
+
+    const second = renderHook(() => useEditorDraftSession());
+    expect(second.result.current.draftKey).toBe(key);
   });
 });
