@@ -204,6 +204,17 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // A network with no name has not been persisted, so there is nothing on the server
   // to launch yet. Showing the button but disabling it says that much more clearly
   // than hiding it.
+  /**
+   * True while the agent network designer is mid-turn.
+   *
+   * Manual editing is withheld throughout: the designer is rewriting the same
+   * definition, so an edit sent into that is either overwritten or canonicalised on
+   * top of a half-built network. The Launch button already used this condition; the
+   * rest of the manual surface now uses the same one rather than each gate inventing
+   * its own idea of "busy".
+   */
+  const designerBusy = waitingForAgent;
+
   const launchDisabled = waitingForAgent || registryReloadPending || !launchableNetworkName;
 
   // Latest agent network name for the launch button — same selector as the canvas
@@ -239,8 +250,16 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   
   // Agent editor state
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
-  const [autoExpandPanel, setAutoExpandPanel] = useState(false);
-  const isPanelOpenRef = useRef(false);
+  /**
+   * Counts explicit requests to open the agent panel.
+   *
+   * A counter, not a boolean. As a boolean this said "the panel may auto-expand",
+   * which stayed true after the user closed the panel, so the next time the panel
+   * reloaded its data (which happens on every progress frame while the designer
+   * works) it opened itself again. A counter says "open now", once, and closing is
+   * therefore final until the user asks again.
+   */
+  const [panelOpenRequests, setPanelOpenRequests] = useState(0);
 
   // Render the canvas from the store.
   //
@@ -347,9 +366,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   // Handle node double-click — expand panel
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
-    setAutoExpandPanel(true);
     setSelectedAgentName(node.id);
-    isPanelOpenRef.current = true;
+    setPanelOpenRequests((count) => count + 1);
   }, []);
 
   const [edgeMenu, setEdgeMenu] = useState<{
@@ -573,9 +591,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
-    setAutoExpandPanel(true);
     setSelectedAgentName(nodeId);
-    isPanelOpenRef.current = true;
+    setPanelOpenRequests((count) => count + 1);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
@@ -756,8 +773,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   // A click adds under the selected agent, so a selection that cannot take children
   // disables the palette rather than having the click land somewhere unexpected.
-  const paletteDisabledReason =
-    selectedNodeId && !canHaveChildren(entry?.definition ?? [], selectedNodeId)
+  // The designer takes precedence: while it is rewriting the network, nothing about
+  // the current selection matters, and this is the reason the user needs to see.
+  const paletteDisabledReason = designerBusy
+    ? "The agent network designer is working. Manual editing resumes when it finishes."
+    : selectedNodeId && !canHaveChildren(entry?.definition ?? [], selectedNodeId)
       ? `"${selectedNodeId}" cannot have down-chain agents. Deselect it to add elsewhere.`
       : undefined;
 
@@ -1179,7 +1199,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         // Both, because the key a user calls "delete" differs by keyboard: the Mac
         // key labelled delete reports "Backspace", while "Delete" is a PC delete or
         // Mac fn+delete. xyflow binds only Backspace by default.
-        deleteKeyCode={["Delete", "Backspace"]}
+        /*
+          No delete key while the designer works. The context menu already withholds
+          Delete, and leaving the keyboard route open would be a way round it.
+        */
+        deleteKeyCode={designerBusy ? null : ["Delete", "Backspace"]}
         onReconnect={onReconnect}
         edgesReconnectable
         onPaneClick={onPaneClick}
@@ -1223,6 +1247,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         canAddChild={canHaveChildren(entry?.definition ?? [], contextMenu.nodeId)}
         canDuplicate={canDuplicate(entry?.definition ?? [], contextMenu.nodeId)}
         canDelete={canDelete(entry?.definition ?? [], contextMenu.nodeId)}
+        readOnly={designerBusy}
       />
 
       {/* Name the network before its first agent exists */}
@@ -1470,13 +1495,13 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         Launch, on its own and centred.
         It is the one action that is about the network rather than about the canvas, so
         it reads better as a primary call to action than as one more icon in a corner
-        row. Centred horizontally and held at the bottom rather than the true middle,
-        which would sit on top of the front man in a radial layout.
+        row. Top centre: clear of the front man that a radial layout puts in the middle,
+        and clear of the logs panel along the bottom.
       */}
       <Box
         sx={{
           position: 'absolute',
-          bottom: 24,
+          top: 16,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 20,
@@ -1872,8 +1897,9 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           setSelectedAgentName(newName);
           setSelectedNodeId(newName);
         }}
-        onClose={() => { setSelectedAgentName(null); setAutoExpandPanel(false); isPanelOpenRef.current = false; }}
-        autoExpand={autoExpandPanel}
+        onClose={() => setSelectedAgentName(null)}
+        openRequest={panelOpenRequests}
+        readOnly={designerBusy}
       />
     </Box>
   );
