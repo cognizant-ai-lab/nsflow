@@ -18,7 +18,7 @@ limitations under the License.
 import * as React from "react";
 import { alpha } from "@mui/material/styles";
 import { Box, Paper, Tooltip, Typography } from "@mui/material";
-import { Folder, FolderOpen, AccountTreeTwoTone, EditOutlined } from "@mui/icons-material";
+import { Folder, FolderOpen, AccountTreeTwoTone, EditOutlined, FileUploadOutlined } from "@mui/icons-material";
 import { TreeItem, treeItemClasses } from "@mui/x-tree-view";
 
 export type TreeNode = Record<
@@ -87,7 +87,8 @@ export const renderTree = (
   activeNetwork: string,
   theme: any,
   onSelect: (n: string) => void,
-  onEditNetwork?: (n: string) => void
+  onEditNetwork?: (n: string) => void,
+  onExportNetwork?: (n: string) => void
 ): React.ReactNode[] => {
   return sortNodeEntries(node).map(([key, value]) => {
     const fullPath = [...path, key].join("/");
@@ -121,7 +122,7 @@ export const renderTree = (
                 "&:hover": {
                   backgroundColor: alpha(theme.palette.primary.main, 0.05),
                   cursor: "pointer",
-                  "& .edit-icon": {
+                  "& .row-action": {
                     opacity: 1,
                   },
                 },
@@ -170,10 +171,51 @@ export const renderTree = (
                     {key}
                   </Typography>
                 </Tooltip>
+                {onExportNetwork && (
+                  <Tooltip title="Download as .hocon" placement="right">
+                    <Box
+                      className="row-action"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        onExportNetwork(fullPath);
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        opacity: 0,
+                        transition: "all 200ms ease",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        // A different hue from Edit so the two are told apart at a
+                        // glance rather than by position.
+                        backgroundColor: alpha(theme.palette.info.main, 0.12),
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.info.main, 0.25),
+                          transform: "scale(1.1)",
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.info.main, 0.3)}`,
+                        },
+                        "&:active": {
+                          transform: "scale(0.95)",
+                        },
+                      }}
+                    >
+                      <FileUploadOutlined
+                        sx={{
+                          fontSize: 13,
+                          color: theme.palette.info.main,
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                )}
                 {onEditNetwork && (
                   <Tooltip title="Open in Editor" placement="right">
                     <Box
-                      className="edit-icon"
+                      className="row-action"
                       onClick={(e: React.MouseEvent) => {
                         e.stopPropagation();
                         onEditNetwork(fullPath);
