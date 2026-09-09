@@ -16,7 +16,7 @@ limitations under the License.
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { byokSlyData, withByok } from "./byok";
+import { byokSlyData, withByok, withoutByokText } from "./byok";
 import { API_KEYS_TTL_MS, LLM_PROVIDER_API_KEY_FIELD, useSettingsStore } from "../uiCommon";
 
 /** Save a key the way the settings panel does, including a real expiry. */
@@ -71,5 +71,31 @@ describe("byok", () => {
     saveKey("OpenAI", "sk-test");
     const merged = withByok({ agent_network_name: "demo" });
     expect(merged?.agent_network_name).toBe("demo");
+  });
+});
+
+describe("withoutByokText", () => {
+  it("removes the keys from a serialised blob but keeps everything else", () => {
+    const text = JSON.stringify({ llm_config: { openai_api_key: "sk-secret" }, keep: "me" });
+    const redacted = withoutByokText(text);
+    expect(redacted).not.toContain("sk-secret");
+    expect(JSON.parse(redacted)).toEqual({ keep: "me" });
+  });
+
+  it("removes the keys from an object blob too", () => {
+    const redacted = withoutByokText({ llm_config: { openai_api_key: "sk-secret" }, keep: "me" });
+    expect(redacted).toEqual({ keep: "me" });
+  });
+
+  it("leaves a blob without keys exactly as it was", () => {
+    const text = JSON.stringify({ agent_network_name: "demo" });
+    expect(withoutByokText(text)).toBe(text);
+  });
+
+  it("passes through anything that is not a JSON object", () => {
+    // It redacts; it does not validate. Mangling a non-JSON message would lose data
+    // the sly_data panel is meant to show.
+    expect(withoutByokText("Welcome to sly_data logs.")).toBe("Welcome to sly_data logs.");
+    expect(withoutByokText("")).toBe("");
   });
 });
