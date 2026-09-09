@@ -27,6 +27,8 @@
       "@ui-common/state/Environment": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/Environment.d.ts"],
       "@ui-common/state/ChatHistory": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/ChatHistory.d.ts"],
       "@ui-common/state/IndexedDBStorage": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/IndexedDBStorage.d.ts"],
+      "@ui-common/state/Settings": ["./node_modules/@cognizant-ai-lab/ui-common/dist/state/Settings.d.ts"],
+      "@ui-common/controller/llm/Providers": ["./node_modules/@cognizant-ai-lab/ui-common/dist/controller/llm/Providers.d.ts"],
       "@ui-common/mac/const": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/const.d.ts"],
       "@ui-common/mac/AgentNetworkDesigner": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/AgentNetworkDesigner.d.ts"],
       "@ui-common/graph/GraphStructure": ["./node_modules/@cognizant-ai-lab/ui-common/dist/components/MultiAgentAccelerator/AgentFlow/GraphStructure.d.ts"],
