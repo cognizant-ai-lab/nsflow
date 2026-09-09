@@ -177,7 +177,7 @@ export const renderTree = (
                   </Typography>
                 </Tooltip>
                 {onExportNetwork && (
-                  <Tooltip title="Export as .hocon" placement="right">
+                  <Tooltip title="Export as .hocon" placement="bottom">
                     <Box
                       className="row-action"
                       onClick={(e: React.MouseEvent) => {
@@ -218,7 +218,7 @@ export const renderTree = (
                   </Tooltip>
                 )}
                 {onEditNetwork && (
-                  <Tooltip title="Open in Editor" placement="right">
+                  <Tooltip title="Open in Editor" placement="bottom">
                     <Box
                       className="row-action"
                       onClick={(e: React.MouseEvent) => {
