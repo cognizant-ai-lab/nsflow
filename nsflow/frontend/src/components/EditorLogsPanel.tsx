@@ -25,14 +25,12 @@ import {
   alpha,
   Collapse 
 } from "@mui/material";
-import { 
-  ExpandLess as ChevronUpIcon,
-  ExpandMore as ChevronDownIcon,
-  Terminal as TerminalIcon,
-  Clear as ClearIcon,
-  PushPin as PinIcon,
-  PushPinOutlined as UnpinIcon
-} from "@mui/icons-material";
+import ChevronUpIcon from "@mui/icons-material/ExpandLess";
+import ChevronDownIcon from "@mui/icons-material/ExpandMore";
+import TerminalIcon from "@mui/icons-material/Terminal";
+import ClearIcon from "@mui/icons-material/Clear";
+import PinIcon from "@mui/icons-material/PushPin";
+import UnpinIcon from "@mui/icons-material/PushPinOutlined";
 import LogsPanel from "./LogsPanel";
 
 export interface EditorLogsPanelProps {
