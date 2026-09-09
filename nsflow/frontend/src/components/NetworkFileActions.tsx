@@ -37,7 +37,7 @@ import ImportIcon from "@mui/icons-material/FileDownloadOutlined";
 export const HOCON_ACCEPT = ".hocon,.json";
 
 export interface NetworkFileActionsProps {
-  /** Download the network as HOCON. Omitted hides the button. */
+  /** Export the network as a .hocon file. Omitted hides the button. */
   onExportHocon?: () => void;
   /** Open a chosen file. Omitted hides the button. */
   onImport?: (file: File) => void;
@@ -85,7 +85,7 @@ const NetworkFileActions = ({
   return (
     <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
       {onExportHocon && (
-        <Tooltip title={exportDisabledReason ?? "Download this agent network as a .hocon file"}>
+        <Tooltip title={exportDisabledReason ?? "Export as .hocon"}>
           {/* The span keeps the tooltip alive while the button is disabled. */}
           <span style={{ display: "inline-flex" }}>
             <IconButton
