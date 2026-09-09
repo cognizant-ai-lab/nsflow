@@ -15,6 +15,7 @@
 # END COPYRIGHT
 import logging
 import os
+import uuid
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version
 
@@ -35,6 +36,16 @@ router = APIRouter(prefix="/api/v1")
 
 TRUTH_VALUES = ["1", "true", "yes", "on"]
 
+# Identifies THIS running process, regenerated on every start.
+#
+# The Editor holds an unnamed draft in the browser, and that draft is only meaningful
+# against the server that was persisting it: after a restart the network it referred to
+# may not exist any more. There is no other way for the client to notice a restart,
+# since a page reload keeps its own storage, so the server has to say so. A uuid rather
+# than a start timestamp because two servers started in the same second are still two
+# servers.
+INSTANCE_ID = str(uuid.uuid4())
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)
@@ -48,6 +59,8 @@ def get_runtime_config():
     """Router to enable variables for react app"""
     return JSONResponse(
         content={
+            # Changes on every server start; the Editor drops a stale draft when it does.
+            "NSFLOW_INSTANCE_ID": INSTANCE_ID,
             "NSFLOW_HOST": os.getenv("NSFLOW_HOST", "localhost"),
             "NSFLOW_PORT": os.getenv("NSFLOW_PORT", "4173"),
             "VITE_API_PROTOCOL": os.getenv("VITE_API_PROTOCOL", "http"),
