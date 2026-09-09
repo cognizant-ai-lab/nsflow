@@ -15,16 +15,14 @@ limitations under the License.
 */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Box,  Paper,  Typography,  IconButton,  useTheme, alpha, Collapse, Button, 
-  CircularProgress, Alert, TextField, InputAdornment, Tooltip, Dialog, DialogTitle,
-  DialogContent, DialogActions } from '@mui/material';
+import { Box,  Paper,  Typography,  IconButton,  useTheme, alpha, Collapse, Button,
+  CircularProgress, Alert, TextField, InputAdornment } from '@mui/material';
 import ChevronUpIcon from "@mui/icons-material/ExpandLess";
 import ChevronDownIcon from "@mui/icons-material/ExpandMore";
 import EditIcon from "@mui/icons-material/Edit";
 import PinIcon from "@mui/icons-material/PushPin";
 import UnpinIcon from "@mui/icons-material/PushPinOutlined";
 import SaveIcon from "@mui/icons-material/Save";
-import RenameIcon from "@mui/icons-material/DriveFileRenameOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
@@ -94,8 +92,6 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const applyEdit = useEditorNetworkStore((state) => state.applyEdit);
 
   const [searchText, setSearchText] = useState('');
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
 
   // Only an LLM agent of this network can be renamed: a tool's name is the tool it
   // resolves to, and an external reference's name is what it points at.
@@ -103,12 +99,19 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     selectedAgentName && canRename(entry?.definition ?? [], selectedAgentName)
   );
 
-  const submitRename = useCallback(async () => {
+  /**
+   * Rename the agent, following every reference to it.
+   *
+   * Applied on its own rather than with the Save button's attribute edits, because a
+   * rename also rewrites the old name wherever another agent lists it under `tools`.
+   * renameAgent returns the definition unchanged when the name is not usable, which
+   * is how an empty or duplicate name is refused without a separate validation pass.
+   */
+  const applyRename = useCallback(async (rawName: string) => {
     const definition = entry?.definition ?? [];
-    const proposed = renameValue.trim();
+    const proposed = rawName.trim();
     if (!selectedAgentName || !apiUrl) return;
     const next = renameAgent(definition, selectedAgentName, proposed);
-    setIsRenaming(false);
     if (next === definition) return;
 
     applyEdit(networkId, next);
@@ -135,7 +138,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
           : 'Renamed here but not saved.'
       );
     }
-  }, [entry?.definition, renameValue, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed]);
+  }, [entry?.definition, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed]);
 
   // Data validation helpers
   const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
@@ -241,7 +244,17 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
         return;
       }
 
-      const editable = toEditableFields(agentData);
+      // `name` first, so the agent's identity is edited in the same place as the rest
+      // of it rather than from a separate header control. cleanAgentData already
+      // excludes `name` from an attribute update, and handleJsonUpdate routes a change
+      // to it through renameAgent, which is what follows every reference to it.
+      //
+      // Omitted where a rename cannot take effect, rather than shown and ignored: a
+      // toolbox tool's name IS the tool it resolves to, and an external reference's
+      // name is what it points at, so neither is ours to change.
+      const editable = canRenameSelected
+        ? { name: selectedAgentName, ...toEditableFields(agentData) }
+        : toEditableFields(agentData);
       setJsonData(editable);
       setOriginalData(editable);
       setHasChanges(false);
@@ -392,12 +405,21 @@ const cleanAgentData = (data: any): any => {
   // Handle JSON data updates from the editor
   const handleJsonUpdate = useCallback((update: any) => {
     // `update.newData` holds the new full JSON value; `update.data` may be empty.
-    // `update.newData` contains the new full JSON value, `update.data` might be empty
     const next = update.newData ?? update.data ?? {}; // fall back to empty object if no data
-    // console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
+
+    // Editing `name` renames the agent, which is not an attribute change: every
+    // reference to the old name in some other agent's `tools` has to move with it.
+    // renameAgent does that, so the rename is applied immediately and separately
+    // rather than waiting for Save alongside the attribute edits.
+    const proposed = typeof next?.name === "string" ? next.name.trim() : "";
+    if (proposed && selectedAgentName && proposed !== selectedAgentName) {
+      void applyRename(proposed);
+      return;
+    }
+
     setJsonData(next);
     setHasChanges(true);
-  }, []);
+  }, [selectedAgentName, applyRename]);
 
   // Handle adding a new root item
   const handleAddRootItem = useCallback(() => {
@@ -485,64 +507,13 @@ const cleanAgentData = (data: any): any => {
               >
                 Agent: {selectedAgentName}
               </Typography>
-              {canRenameSelected && (
-                // Renaming is an edit like any other, but it is the one that also has
-                // to follow every reference, so it goes through renameAgent rather
-                // than the JSON editor below.
-                <Tooltip title="Rename this agent">
-                  <IconButton
-                    size="small"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setRenameValue(selectedAgentName ?? "");
-                      setIsRenaming(true);
-                    }}
-                    sx={{ ml: 0.5, color: theme.palette.text.secondary }}
-                  >
-                    <RenameIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
+              {/*
+                The name is edited in the JSON block below, as its first key, rather
+                than from a control up here. It is still applied through renameAgent,
+                which is what rewrites the old name wherever another agent lists it.
+              */}
             </Box>
-            <Dialog
-              open={isRenaming}
-              onClose={() => setIsRenaming(false)}
-              maxWidth="xs"
-              fullWidth
-              onClick={(event) => event.stopPropagation()}
-            >
-              <DialogTitle sx={{ pb: 1 }}>Rename agent</DialogTitle>
-              <DialogContent sx={{ pb: 1 }}>
-                <TextField
-                  autoFocus
-                  fullWidth
-                  size="small"
-                  value={renameValue}
-                  onChange={(event) => setRenameValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void submitRename();
-                    }
-                  }}
-                  helperText="Every agent that chains to this one follows the new name."
-                />
-              </DialogContent>
-              <DialogActions sx={{ px: 3, pb: 2 }}>
-                <Button size="small" onClick={() => setIsRenaming(false)} sx={{ textTransform: 'none' }}>
-                  Cancel
-                </Button>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => void submitRename()}
-                  disabled={!renameValue.trim() || renameValue.trim() === selectedAgentName}
-                  sx={{ textTransform: 'none' }}
-                >
-                  Rename
-                </Button>
-              </DialogActions>
-            </Dialog>
+
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 280 }}>
               {/* Search input (compact + rounded) */}
               <TextField
