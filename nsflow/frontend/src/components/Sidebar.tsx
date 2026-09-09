@@ -655,6 +655,23 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                   handleNetworkSelection,
                   (networkName: string) => {
                     window.open(`/editor?loadNetwork=${encodeURIComponent(networkName)}`, '_blank', 'noopener,noreferrer');
+                  },
+                  // Any served network can be exported, not just generated ones, so
+                  // this hangs off the sidebar row rather than off the canvas.
+                  async (networkName: string) => {
+                    if (!apiUrl) return;
+                    const response = await fetch(
+                      `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(networkName)}`
+                    );
+                    if (!response.ok) return;
+                    const url = URL.createObjectURL(await response.blob());
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    // Nested names arrive as "basic/music_nerd"; a slash in a download
+                    // name is silently dropped by the browser, so flatten it.
+                    anchor.download = `${networkName.replace(/\//g, "_")}.hocon`;
+                    anchor.click();
+                    URL.revokeObjectURL(url);
                   }
                 )}
               </SimpleTreeView>
