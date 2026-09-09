@@ -53,7 +53,11 @@ export const waitForServedNetwork = async (
   signal?: AbortSignal
 ): Promise<string | undefined> => {
   const servedPath = toServedNetworkPath(networkName);
-  const deadline = Date.now() + Math.max(getManifestUpdatePeriodMs() * 3, 6000);
+  // Generous on purpose. The configured period is a hint, not a guarantee, and a
+  // measured reload took about five seconds, which a 6s budget only just covers.
+  // Waiting a little longer costs nothing here, since polling stops the moment the
+  // network appears; giving up early strands the user with a blank canvas.
+  const deadline = Date.now() + Math.max(getManifestUpdatePeriodMs() * 5, 20000);
 
   while (Date.now() < deadline) {
     if (signal?.aborted) return undefined;
