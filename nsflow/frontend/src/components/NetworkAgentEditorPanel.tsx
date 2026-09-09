@@ -62,7 +62,24 @@ interface NetworkAgentEditorPanelProps {
   /** Called with the new name after a rename, so the caller can follow the agent. */
   onAgentRenamed?: (newName: string) => void;
   onClose?: () => void;
-  autoExpand?: boolean; // When true, panel auto-expands on agent selection
+  /**
+   * Increments each time something explicitly asks for the panel to open.
+   *
+   * A counter rather than a boolean, because "may expand" is not the same as "open
+   * now": as a boolean it stayed true after the user closed the panel, so the next
+   * data reload reopened it, which happens on every progress frame while the designer
+   * is working. Reacting to the change means closing is final until asked again.
+   */
+  openRequest?: number;
+  /**
+   * True while the agent network designer is mid-turn.
+   *
+   * The panel stays open and readable, because watching an agent change is useful,
+   * but nothing here may be edited: the designer is rewriting the same definition, so
+   * a save landing in the middle of that is either lost or applied on top of a
+   * half-built network.
+   */
+  readOnly?: boolean;
 }
 
 const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
@@ -71,7 +88,8 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   onAgentUpdated,
   onAgentRenamed,
   onClose,
-  autoExpand = false
+  openRequest = 0,
+  readOnly = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -184,12 +202,11 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     }
   }, [selectedAgentName, apiUrl, entry?.definition]);
 
-  // Expand panel when autoExpand becomes true (e.g. double-click on already-selected agent)
+  // Open on an explicit request, and only on the request changing. Deliberately not
+  // keyed on selectedAgentName as well: selecting an agent is not asking to open.
   useEffect(() => {
-    if (autoExpand && selectedAgentName && !isExpanded) {
-      setIsExpanded(true);
-    }
-  }, [autoExpand, selectedAgentName]);
+    if (openRequest > 0) setIsExpanded(true);
+  }, [openRequest]);
 
   // The editable surface of an agent is simply what a connectivity entry carries.
   // This used to be fetched from /andeditor/schemas/base-agent-properties; holding
@@ -260,7 +277,9 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setHasChanges(false);
 
       // Auto-expand the panel only when explicitly requested (double-click, right-click -> open)
-      if (autoExpand && !isExpanded) setIsExpanded(true);
+      // Deliberately does NOT expand. Loading an agent's data happens on every
+      // progress frame, and expanding here is what reopened a panel the user had
+      // just closed. Opening is the openRequest effect's job alone.
     } catch (err) {
       console.error('Error loading agent data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
@@ -507,6 +526,14 @@ const cleanAgentData = (data: any): any => {
               >
                 Agent: {selectedAgentName}
               </Typography>
+              {readOnly && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: theme.palette.warning.main, fontSize: '0.65rem', whiteSpace: 'nowrap' }}
+                >
+                  read-only while the designer works
+                </Typography>
+              )}
               {/*
                 The name is edited in the JSON block below, as its first key, rather
                 than from a control up here. It is still applied through renameAgent,
@@ -567,8 +594,8 @@ const cleanAgentData = (data: any): any => {
                 <AddIcon fontSize="small" />
               </IconButton>
 
-              {/* Save button */}
-              {hasChangesToSave && (
+              {/* Save button. Withheld while the designer works: see readOnly. */}
+              {hasChangesToSave && !readOnly && (
                 <Button
                   size="small"
                   variant="contained"
@@ -703,7 +730,15 @@ const cleanAgentData = (data: any): any => {
                 rootFontSize="14px"
                 indent={2}
                 rootName="agent"
-                restrictDrag={false}
+                /*
+                  Read-only while the designer works. json-edit-react takes predicates
+                  rather than a single flag, so all three routes to a change have to be
+                  closed: editing a value, adding a key, and deleting one.
+                */
+                restrictEdit={readOnly}
+                restrictAdd={readOnly}
+                restrictDelete={readOnly}
+                restrictDrag={true}
                 insertAtTop={false}
                 showIconTooltips={true}
                 viewOnly={false}
