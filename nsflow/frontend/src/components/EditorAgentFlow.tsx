@@ -43,6 +43,7 @@ import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore"
 import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
+import { describeEdit, recordEditorActivity } from "../state/editorActivity";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
 import { waitForServedNetwork } from "../state/servedNetworks";
 import type { ChatMessage } from "../uiCommon";
@@ -88,6 +89,9 @@ const EDITING_RULES: string[] = [
   "Right-click a connection to delete it, or drag its end onto another agent to move the child.",
   "A change that leaves an agent with no parent is kept on the canvas but not saved until you reconnect it.",
 ];
+
+/** Starting over is a third kind of action, so a third hue. */
+const NEW_DRAFT_TINT = "#c3b1f5";
 
 /** A .hocon the backend has parsed, held while we decide whether to ask about it. */
 type ParsedImport = {
@@ -436,7 +440,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // Edges are already transformed, so only the nodes are replaced.
       setNodes(layoutManager.forceLayout(currentNodes, getEdges()).nodes);
       setTimeout(() => {
-        fitView({ padding: 0.1, duration: 800 });
+        // Padding rather than a zoom cap, because it scales with the graph. 0.17
+        // lands at roughly 90% of the zoom 0.1 gave, which keeps the outermost nodes
+        // clear of the layout row and the canvas actions in the top corners.
+        fitView({ padding: 0.17, duration: 800 });
       }, 100);
     } catch (error) {
       console.warn('Failed to force layout:', error);
@@ -495,6 +502,13 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       if (!apiUrl) return;
       applyEdit(networkId, next);
 
+      // Logged on the local apply, not on the server round trip: this records what the
+      // user did, and it did happen even when the definition is held back below for
+      // being mid-rearrangement.
+      recordEditorActivity(
+        describeEdit(message ?? `Updated agent "${agentName}"`, launchableNetworkName || undefined)
+      );
+
       // Hold a half-finished rearrangement locally rather than sending it. An
       // invalid definition is not rejected by the designer, it is REPAIRED by its
       // LLM, which restructures the network and discards the edit in progress. The
@@ -526,7 +540,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
       }
     },
-    [networkId, apiUrl, applyEdit, publishSlyData]
+    [networkId, apiUrl, applyEdit, publishSlyData, launchableNetworkName]
   );
 
   // Handle edge connection.
@@ -545,7 +559,12 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       const next = connectAgentsInDefinition(definition, params.source ?? "", params.target ?? "");
       // Unchanged means the edge was refused: a toolbox tool or external reference
       // cannot have down-chains, and a duplicate or self-edge is nothing to do.
-      if (next !== definition) void applyAndSync(next, params.source ?? "");
+      if (next !== definition)
+        void applyAndSync(
+          next,
+          params.source ?? "",
+          `Connected "${params.target}" under "${params.source}"`
+        );
     },
     [entry?.definition, applyAndSync]
   );
@@ -563,7 +582,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
     setSelectedNodeId("");
     // deleteAgent returns the same array when nothing matched, so nothing to send.
-    if (next !== (entry?.definition ?? [])) await applyAndSync(next, nodeId);
+    if (next !== (entry?.definition ?? []))
+      await applyAndSync(next, nodeId, `Deleted agent "${nodeId}"`);
   };
 
   const handleDuplicateAgent = async (nodeId: string) => {
@@ -576,7 +596,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     const newAgentName = uniqueAgentName(definition, `${nodeId}_copy`);
     const next = duplicateAgentInDefinition(definition, nodeId, newAgentName);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    if (next !== definition) await applyAndSync(next, newAgentName);
+    if (next !== definition)
+      await applyAndSync(next, newAgentName, `Added agent "${newAgentName}"`);
   };
 
   const handleAddChildAgent = async (nodeId: string) => {
@@ -595,7 +616,12 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       newAgentAttributes(childAgentName)
     );
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    if (next !== definition) await applyAndSync(next, childAgentName);
+    if (next !== definition)
+      await applyAndSync(
+        next,
+        childAgentName,
+        `Added agent "${childAgentName}" under "${nodeId}"`
+      );
   };
 
   // One path for putting a palette item on the canvas, whether it was clicked or
@@ -641,7 +667,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       );
       // addAgent returns the same array when the name is taken, which is what makes
       // adding the same tool twice a no-op rather than an error.
-      if (next !== definition) await applyAndSync(next, agentName);
+      if (next !== definition) await applyAndSync(next, agentName, `Duplicated agent "${agentName}"`);
     },
     [entry?.definition, applyAndSync]
   );
@@ -1649,14 +1675,20 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                   sx={{
                     width: 40,
                     height: 40,
-                    backgroundColor: alpha(theme.palette.background.paper, 0.95),
+                    // Tinted to match the file actions beside it, in a third hue: the
+                    // three sit in a row and colour is what separates them at a
+                    // glance. Fixed pastels for the same reason as the palette notch,
+                    // since this is on the canvas in both themes.
+                    color: NEW_DRAFT_TINT,
+                    backgroundColor: alpha(NEW_DRAFT_TINT, theme.palette.mode === 'dark' ? 0.16 : 0.14),
                     backdropFilter: 'blur(8px)',
-                    border: `1px solid ${theme.palette.divider}`,
+                    border: `1px solid ${alpha(NEW_DRAFT_TINT, 0.35)}`,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                    color: theme.palette.text.secondary,
+                    transition: 'background-color 160ms, transform 160ms',
                     '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                      color: theme.palette.primary.main,
+                      backgroundColor: alpha(NEW_DRAFT_TINT, 0.3),
+                      color: NEW_DRAFT_TINT,
+                      transform: 'translateY(-1px)',
                     },
                   }}
                 >
