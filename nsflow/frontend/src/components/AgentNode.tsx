@@ -201,25 +201,6 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
           }}>
             {data.label}
           </Typography>
-          {/*
-            Pushed to the right of the name rather than under it, so it never grows the
-            node. `!== undefined` because the front man's depth is 0, which is falsy.
-          */}
-          {data.depth !== undefined && (
-            <Typography
-              variant="caption"
-              sx={{
-                ml: 'auto',
-                pl: 0.75,
-                color: alpha('#ffffff', 0.75),
-                fontSize: '0.65rem',
-                fontWeight: 600,
-                flexShrink: 0,
-              }}
-            >
-              L{data.depth}
-            </Typography>
-          )}
         </Box>
 
         {/* Coded Tools Section */}
@@ -290,6 +271,28 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
                 ))}
               </List>
             </Collapse>
+          </Box>
+        )}
+
+        {/*
+          Level, bottom right. Same place the Editor's nodes show it, so the two
+          canvases read the same way. `!== undefined` rather than a truthy check
+          because the front man is L0, and 0 is falsy, so a truthy test would hide the
+          badge on the one node you most want labelled.
+        */}
+        {data.depth !== undefined && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.25 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: theme.palette.text.secondary,
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                lineHeight: 1,
+              }}
+            >
+              L{data.depth}
+            </Typography>
           </Box>
         )}
 
