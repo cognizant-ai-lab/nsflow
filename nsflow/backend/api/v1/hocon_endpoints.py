@@ -47,6 +47,7 @@ from fastapi import APIRouter
 from fastapi import File
 from fastapi import HTTPException
 from fastapi import UploadFile
+from fastapi.responses import JSONResponse
 from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
 
 from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR
@@ -62,6 +63,13 @@ MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 # What neuro-san will load. Anything else cannot be restored, so reject it by name
 # rather than after a confusing parse failure.
 ALLOWED_SUFFIXES = (".hocon", ".json")
+
+
+# Where generated and imported networks live, relative to the registry. Read rather
+# than assumed, and mirrors the variable neuro-san-studio uses.
+def _designer_subdirectory() -> str:
+    return os.getenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "generated")
+
 
 # neuro-san's own agent name rule. A name that fails this cannot be saved later, so
 # it is better to sanitise it now than to let the first edit fail.
@@ -131,8 +139,7 @@ def _name_is_taken(network_name: str) -> bool:
     the variable neuro-san-studio uses, so nsflow and the designer agree on where
     generated networks live even when studio is embedded in another project.
     """
-    subdirectory = os.getenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "generated")
-    candidate = os.path.join(REGISTRY_DIR, subdirectory, f"{network_name}.hocon")
+    candidate = os.path.join(REGISTRY_DIR, _designer_subdirectory(), f"{network_name}.hocon")
     return os.path.isfile(candidate)
 
 
@@ -200,3 +207,73 @@ async def import_hocon(file: UploadFile = File(...)) -> Dict[str, Any]:
         # before the designer has echoed a canonical version.
         "hocon": text,
     }
+
+
+def _generated_network_path(network_name: str) -> str:
+    """
+    Resolve a generated network's file, refusing anything outside its directory.
+
+    The name arrives from the URL, so it can try to climb out with ``..``. A plain
+    ``../`` is normalised away by the HTTP layer and never reaches here, but a
+    percent-encoded one arrives intact, so containment is checked after resolving,
+    which also catches a symlink.
+
+    Deletion is scoped to the designer's subdirectory on purpose. Networks elsewhere in
+    the registry are part of the deployment, not something a user generated, and are not
+    nsflow's to remove.
+    """
+    root = os.path.realpath(os.path.join(REGISTRY_DIR, _designer_subdirectory()))
+    candidate = os.path.realpath(os.path.join(root, f"{network_name}.hocon"))
+    if not candidate.startswith(root + os.sep):
+        raise HTTPException(status_code=404, detail=f"Agent network '{network_name}' not found.")
+    return candidate
+
+
+def _drop_from_generated_manifest(network_name: str) -> bool:
+    """
+    Remove the network's line from the generated manifest.
+
+    Line-based rather than parse-and-rewrite: the manifest is hand-editable and carries
+    comments, and pyhocon's writer would drop both. Only the matching entry is touched,
+    so anything else in the file survives untouched.
+
+    :return: whether an entry was actually removed.
+    """
+    subdirectory = _designer_subdirectory()
+    manifest_path = os.path.join(REGISTRY_DIR, subdirectory, "manifest.hocon")
+    if not os.path.isfile(manifest_path):
+        return False
+
+    entry = f'"{subdirectory}/{network_name}.hocon"'
+    with open(manifest_path, "r", encoding="utf-8") as handle:
+        lines = handle.readlines()
+
+    kept = [line for line in lines if entry not in line]
+    if len(kept) == len(lines):
+        return False
+
+    with open(manifest_path, "w", encoding="utf-8") as handle:
+        handle.writelines(kept)
+    return True
+
+
+@router.delete("/hocon/generated/{network_name:path}")
+async def delete_generated_network(network_name: str) -> JSONResponse:
+    """Delete a generated agent network and drop it from the generated manifest."""
+    # Strip the subdirectory if the caller included it: the sidebar knows networks by
+    # their served path ("generated/foo"), and accepting both spellings is kinder than
+    # a 404 that looks like the network is missing.
+    prefix = f"{_designer_subdirectory()}/"
+    bare_name = network_name[len(prefix) :] if network_name.startswith(prefix) else network_name
+
+    file_path = _generated_network_path(bare_name)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail=f"Agent network '{bare_name}' not found.")
+
+    os.remove(file_path)
+    # After the file, so a failure to edit the manifest leaves a stale entry pointing at
+    # nothing (which neuro-san tolerates) rather than an orphaned network still served.
+    manifest_updated = _drop_from_generated_manifest(bare_name)
+
+    logger.info("Deleted generated agent network %s (manifest updated: %s)", bare_name, manifest_updated)
+    return JSONResponse(content={"deleted": bare_name, "manifest_updated": manifest_updated})
