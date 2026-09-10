@@ -95,6 +95,11 @@ def _fake_neuro_san(monkeypatch):
     """
     NsConfigsRegistry.set_current("http", "localhost", 8080)
     monkeypatch.setattr(nw.NsWebsocketUtils, "create_agent_session", lambda self: _FakeSession())
+    yield
+    # The registry holds its config on the class, so without this the config set here
+    # outlives the module and whichever test file runs next inherits it. Reset puts it
+    # back to how it starts the process, which is what the rest of the suite expects.
+    NsConfigsRegistry.reset()
 
 
 def test_facade_connectivity_returns_raw_neuro_san_shape():
