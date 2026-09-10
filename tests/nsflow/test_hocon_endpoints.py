@@ -131,9 +131,33 @@ class TestDeleteGeneratedNetwork:
         assert "# keep me" in manifest
 
     @pytest.mark.usefixtures("generated")
-    def test_accepts_the_name_with_or_without_its_directory(self, client: TestClient):
+    @pytest.mark.parametrize("name", ["demo", "generated/demo"])
+    def test_accepts_the_name_with_or_without_its_directory(self, client: TestClient, name: str):
         """The sidebar knows networks by their served path, so both spellings work."""
+        assert client.delete(f"/api/v1/hocon/generated/{name}").status_code == 200
+
+    def test_deletes_from_a_renamed_designer_subdirectory(self, client: TestClient, tmp_path, monkeypatch):
+        """
+        The route segment is always "generated", but the directory it means is whatever
+        AGENT_NETWORK_DESIGNER_SUBDIRECTORY says. A deployment that renames it still has
+        to be able to delete, so the two cannot be assumed to be the same word.
+        """
+        monkeypatch.setattr(hocon_endpoints, "REGISTRY_DIR", str(tmp_path))
+        monkeypatch.setenv("AGENT_NETWORK_DESIGNER_SUBDIRECTORY", "drafts")
+        drafts = tmp_path / "drafts"
+        drafts.mkdir()
+        (drafts / "demo.hocon").write_text(NETWORK, encoding="utf-8")
+
+        # What the sidebar used to send, built by pasting the served path onto the
+        # route. Once the directory is not called generated it reaches no delete route
+        # at all, so the network stays put and the user sees a failure they cannot act
+        # on. Checked by outcome rather than by status, which depends on what else is
+        # mounted at that path.
+        assert client.delete("/api/v1/hocon/drafts/demo").status_code != 200
+        assert (drafts / "demo.hocon").exists()
+
         assert client.delete("/api/v1/hocon/generated/demo").status_code == 200
+        assert not (drafts / "demo.hocon").exists()
 
     def test_refuses_a_network_outside_the_generated_directory(self, client: TestClient, generated):
         """Deletion is scoped to what the designer generated, not the whole registry."""
