@@ -42,7 +42,9 @@ import AddChildIcon from "@mui/icons-material/Add";
 
 /** Roughly the menu's own size, used to keep it inside the viewport. */
 const MENU_WIDTH = 200;
-const MENU_HEIGHT = 210;
+// Only used to keep the menu on screen near a window edge, so it tracks the
+// rendered height rather than being exact.
+const MENU_HEIGHT = 180;
 
 interface AgentContextMenuProps {
   visible: boolean;
@@ -190,22 +192,23 @@ const AgentContextMenu = ({
         overflow: "hidden",
       }}
     >
+      {/*
+        One row, showing the agent's name.
+        This used to be two stacked lines, an "Agent Actions" label above the name. The
+        label said nothing a right-click menu on an agent does not already say, so the
+        name alone is both shorter and more useful.
+      */}
       <Box
         sx={{
           px: 1.5,
-          py: 1,
+          py: 0.5,
           borderBottom: `1px solid ${theme.palette.divider}`,
           backgroundColor: alpha(theme.palette.primary.main, 0.08),
         }}
       >
-        <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
-          Agent Actions
+        <Typography variant="caption" noWrap sx={{ fontWeight: 600, display: "block" }}>
+          {nodeId || "Agent"}
         </Typography>
-        {nodeId && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-            {nodeId}
-          </Typography>
-        )}
       </Box>
 
       <MenuList dense disablePadding sx={{ py: 0.5 }}>
