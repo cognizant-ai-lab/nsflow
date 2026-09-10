@@ -201,9 +201,18 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     const networkName = pendingDelete;
     setPendingDelete(null);
     if (!networkName || !apiUrl) return;
+    // Any error still on screen is from the previous attempt, and leaving it up next
+    // to a successful delete reads as if this one failed too.
+    setDeleteError(null);
     try {
+      // The route's "generated" segment is fixed, but the subdirectory a network is
+      // served under is not: AGENT_NETWORK_DESIGNER_SUBDIRECTORY can rename it. Sending
+      // the bare name keeps the two independent, so a renamed subdirectory does not
+      // turn every delete into a 404.
+      const prefix = `${getGeneratedSubdir()}/`;
+      const bareName = networkName.startsWith(prefix) ? networkName.slice(prefix.length) : networkName;
       const response = await fetch(
-        `${apiUrl}/api/v1/hocon/${encodeURI(networkName)}`,
+        `${apiUrl}/api/v1/hocon/generated/${encodeURI(bareName)}`,
         { method: "DELETE" }
       );
       if (!response.ok) {
