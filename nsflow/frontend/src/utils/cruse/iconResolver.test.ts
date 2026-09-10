@@ -78,6 +78,20 @@ describe("hasIcon", () => {
     expect(hasIcon("NoSuchIconDelta")).toBe(false);
   });
 
+  it("agrees with resolveIcon about every name resolveIcon accepts", () => {
+    // Each icon is listed under one spelling, and resolveIcon accepts both. hasIcon
+    // used to check the raw key only, so it said false for the other spelling of all
+    // of them, which is misleading for anything validating a widget's icon name.
+    for (const name of COMMON_WIDGET_ICONS) {
+      const other = name.endsWith("Outlined") ? name.replace(/Outlined$/, "") : `${name}Outlined`;
+      // Both spellings land on the same icon, which is what resolveIcon promises.
+      // Compared to each other rather than to the fallback, because the fallback is
+      // itself one of the listed icons.
+      expect(resolveIcon(other)).toBe(resolveIcon(name));
+      expect(hasIcon(other)).toBe(true);
+    }
+  });
+
   it("lists every name it will resolve", () => {
     expect(COMMON_WIDGET_ICONS).toContain("Search");
     expect(COMMON_WIDGET_ICONS.every((name) => hasIcon(name))).toBe(true);
