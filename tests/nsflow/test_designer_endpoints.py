@@ -21,6 +21,8 @@ the designer does not recognise makes it reject the reference and rewrite the ne
 with its LLM, so every later edit breaks until that reference is removed.
 """
 
+import logging
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -110,3 +112,43 @@ def test_an_unreadable_source_empties_only_its_own_half(client, tmp_path, monkey
     else:
         assert body["networks"] != []
         assert body["mcp_servers"] == []
+
+
+def test_no_configured_manifest_and_none_shipped_offers_nothing(client, tmp_path, monkeypatch, caplog):
+    """
+    A pip installed neuro-san-studio has no `registries/` beside the server, so the
+    relative default resolves to nothing. Reporting an empty list is honest; trying to
+    read the path anyway warned on every request for a file that was never coming.
+    """
+    monkeypatch.delenv(designer_endpoints.DESIGNER_MANIFEST_ENV_VAR, raising=False)
+    monkeypatch.delenv(designer_endpoints.MCP_SERVERS_ENV_VAR, raising=False)
+    monkeypatch.chdir(tmp_path)
+    designer_endpoints.WARNED_MESSAGES.clear()
+
+    with caplog.at_level(logging.WARNING):
+        first = client.get("/api/v1/designer/references").json()
+        second = client.get("/api/v1/designer/references").json()
+
+    assert first["networks"] == []
+    assert second["networks"] == []
+    # The palette asks for this every time it opens, so the same line repeating is the
+    # part worth pinning down, not just the empty list.
+    manifest_warnings = [record for record in caplog.records if "designer" in record.message.lower()]
+    assert len(manifest_warnings) == 1
+
+
+def test_falls_back_to_the_shipped_manifest_when_it_is_actually_there(client, tmp_path, monkeypatch):
+    """
+    studio's run.py does not export the manifest variable yet, so an in-repo run has
+    the file and no variable. That deployment works today and has to keep working.
+    """
+    monkeypatch.delenv(designer_endpoints.DESIGNER_MANIFEST_ENV_VAR, raising=False)
+    monkeypatch.delenv(designer_endpoints.MCP_SERVERS_ENV_VAR, raising=False)
+    registries = tmp_path / "registries"
+    registries.mkdir()
+    (registries / "manifest_and.hocon").write_text(DESIGNER_MANIFEST, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    body = client.get("/api/v1/designer/references").json()
+
+    assert sorted(body["networks"]) == ["/generated/coffee_shop", "/industry/banking_ops"]
