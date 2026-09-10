@@ -44,8 +44,9 @@ const POLL_INTERVAL_MS = 400;
  * Both the raw name and the served path are accepted, because a generated network is
  * saved as `foo` but served as `generated/foo`, and callers know it by the former.
  *
- * Gives up after three reload periods rather than never: an import that silently
- * hangs is worse than one that reports it could not open the network.
+ * Gives up after five reload periods, or 20 seconds, whichever is longer, rather than
+ * never: an import that silently hangs is worse than one that reports it could not
+ * open the network.
  */
 export const waitForServedNetwork = async (
   apiUrl: string,
