@@ -249,6 +249,8 @@ const AgentFlow = ({ selectedNetwork, onNetworkImported }: AgentFlowProps) => {
     async (file: File) => {
       if (!apiUrl) return;
       setImporting(true);
+      // Otherwise the previous failure's snackbar is still up when this one succeeds.
+      setImportError(undefined);
       try {
         const body = new FormData();
         body.append("file", file);
