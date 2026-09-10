@@ -266,10 +266,12 @@ const EditorSidebar = ({
           definition: Array.isArray(definition)
             ? (definition as ConnectivityInfo[])
             : Object.entries(definition).map(([origin, v]) => ({
+                // Spread first. With it last it overwrote the tools computed just
+                // below, which is the one key here that has to end up an array.
+                ...((v ?? {}) as Record<string, unknown>),
                 origin,
                 tools: ((v ?? {}) as { tools?: string[]; down_chains?: string[] }).tools ??
                   ((v ?? {}) as { down_chains?: string[] }).down_chains ?? [],
-                ...(v as Record<string, unknown>),
               })) as ConnectivityInfo[],
           networkName,
         });
