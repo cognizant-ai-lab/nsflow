@@ -65,18 +65,24 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [chatHandoffHighlight, setChatHandoffHighlight] = useState(false);
 
-  useEffect(
-    () =>
-      onChatFocusRequested(() => {
-        messageInputRef.current?.focus();
-        messageInputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        // A brief ring, because focus alone is easy to miss when the user's eyes are
-        // still on the dialog that just closed.
-        setChatHandoffHighlight(true);
-        setTimeout(() => setChatHandoffHighlight(false), 1600);
-      }),
-    []
-  );
+  useEffect(() => {
+    let ringTimer: number | undefined;
+    const unsubscribe = onChatFocusRequested(() => {
+      messageInputRef.current?.focus();
+      messageInputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // A brief ring, because focus alone is easy to miss when the user's eyes are
+      // still on the dialog that just closed.
+      setChatHandoffHighlight(true);
+      window.clearTimeout(ringTimer);
+      ringTimer = window.setTimeout(() => setChatHandoffHighlight(false), 1600);
+    });
+    return () => {
+      // Cleared as well as unsubscribed, so a panel that unmounts inside the ring's
+      // 1.6s does not leave a timer running against a component that is gone.
+      window.clearTimeout(ringTimer);
+      unsubscribe();
+    };
+  }, []);
 
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
