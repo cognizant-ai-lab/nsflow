@@ -46,6 +46,11 @@ const MENU_WIDTH = 200;
 // rendered height rather than being exact.
 const MENU_HEIGHT = 180;
 
+/** Row metrics, shared so every row in the menu lines up. */
+const ITEM_SX = { minHeight: 30, px: 1.5 } as const;
+const ICON_SX = { minWidth: 28 } as const;
+const LABEL_SX = { sx: { fontSize: "0.8125rem" } } as const;
+
 interface AgentContextMenuProps {
   visible: boolean;
   x: number;
@@ -211,11 +216,18 @@ const AgentContextMenu = ({
         </Typography>
       </Box>
 
+      {/*
+        Tighter rows than MUI's dense default. The icons carry most of the meaning here,
+        so the wide gap the default leaves between icon and label just made the menu
+        cover more of the canvas than it needed to.
+      */}
       <MenuList dense disablePadding sx={{ py: 0.5 }}>
         {actions.map((action) => (
-          <MenuItem key={action.label} onClick={action.onClick}>
-            <ListItemIcon sx={{ color: theme.palette.text.secondary }}>{action.icon}</ListItemIcon>
-            <ListItemText primary={action.label} />
+          <MenuItem key={action.label} onClick={action.onClick} sx={ITEM_SX}>
+            <ListItemIcon sx={{ ...ICON_SX, color: theme.palette.text.secondary }}>
+              {action.icon}
+            </ListItemIcon>
+            <ListItemText primary={action.label} slotProps={{ primary: LABEL_SX }} />
           </MenuItem>
         ))}
 
@@ -225,14 +237,15 @@ const AgentContextMenu = ({
             <MenuItem
               onClick={() => onDelete(nodeId)}
               sx={{
+                ...ITEM_SX,
                 color: theme.palette.error.main,
                 "&:hover": { backgroundColor: alpha(theme.palette.error.main, 0.12) },
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.error.main }}>
+              <ListItemIcon sx={{ ...ICON_SX, color: theme.palette.error.main }}>
                 <DeleteIcon fontSize="small" />
               </ListItemIcon>
-              <ListItemText primary="Delete Agent" />
+              <ListItemText primary="Delete Agent" slotProps={{ primary: LABEL_SX }} />
             </MenuItem>
           </>
         )}
