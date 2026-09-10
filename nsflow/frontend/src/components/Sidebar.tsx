@@ -31,11 +31,12 @@ import { getGeneratedSubdir } from "../utils/config";
 /**
  * How long the delete toast stays before the page reloads.
  *
- * Long enough for neuro-san's registry poll to notice the manifest change, so the
- * reloaded page does not list the network again, and long enough for the toast to be
- * read rather than flash.
+ * neuro-san only stops serving a deleted network on its next registry reload, so
+ * reloading the page too early just lists it again and the delete looks like it did
+ * nothing. This waits comfortably past that reload rather than racing it. Also long
+ * enough for the toast to be read rather than flash.
  */
-const RELOAD_AFTER_DELETE_MS = 2500;
+const RELOAD_AFTER_DELETE_MS = 4500;
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [loading, setLoading] = useState(true);
