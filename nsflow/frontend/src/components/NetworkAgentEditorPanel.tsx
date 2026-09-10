@@ -125,6 +125,15 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       });
     } catch (err) {
       console.error('Failed to rename agent:', err);
+      // The canvas already shows the new name, so without this the user has no way to
+      // know the network on the server still has the old one. Not rolled back: the
+      // store is what the canvas draws from, and renaming it back underneath the user
+      // is a worse surprise than being told the save did not land.
+      setError(
+        err instanceof Error
+          ? `Renamed here but not saved: ${err.message}`
+          : 'Renamed here but not saved.'
+      );
     }
   }, [entry?.definition, renameValue, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed]);
 
@@ -261,8 +270,10 @@ const cleanAgentData = (data: any): any => {
     const cleaned: any = {};
     
     // Only include valid agent properties based on BaseAgentProperties schema
+    // `description` was missing, so the panel offered it for editing and then threw
+    // the edit away, and Save still reported success.
     const validAgentFields = [
-      'instructions', 'function', 'class', 'command', 'tools', 'toolbox', 
+      'instructions', 'description', 'function', 'class', 'command', 'tools', 'toolbox',
       'args', 'allow', 'display_as', 'max_message_history', 'verbose', 'llm_config'
     ];
     
