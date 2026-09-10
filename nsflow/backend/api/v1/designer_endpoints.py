@@ -45,6 +45,8 @@ import os
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
+from typing import Set
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -61,16 +63,43 @@ router = APIRouter(prefix="/api/v1/designer")
 DESIGNER_MANIFEST_ENV_VAR = "AGENT_NETWORK_DESIGNER_MANIFEST_FILE"
 MCP_SERVERS_ENV_VAR = "MCP_SERVERS_INFO_FILE"
 
-# What neuro-san-studio ships as the designer's manifest when the env var is unset.
-# Only resolves for an in-repo run, which is why studio exports the resolved path.
+# Where neuro-san-studio keeps the designer's manifest inside its own repo. Used only
+# when the env var is unset AND this path exists, which is true for a studio run
+# started from a clone and false for every pip installed one. Studio does not export
+# this variable yet, so removing the fallback outright would empty the list for the
+# deployments that work today. See cognizant-ai-lab/neuro-san-studio for the upstream
+# fix, after which this comes out.
 DEFAULT_DESIGNER_MANIFEST = os.path.join("registries", "manifest_and.hocon")
 
+# Already warned about, so the log does not repeat itself. The endpoint below is
+# requested every time the palette opens, and a deployment without a designer manifest
+# would otherwise print the same line hundreds of times.
+WARNED_MESSAGES: Set[str] = set()
 
-def _designer_manifest_file() -> str:
+
+def _warn_once(message: str) -> None:
     """
-    :return: The manifest naming the networks the designer may reference.
+    Log a warning the first time it comes up, then stay quiet about it.
+
+    :param message: The warning, which doubles as the key.
     """
-    return os.getenv(DESIGNER_MANIFEST_ENV_VAR) or DEFAULT_DESIGNER_MANIFEST
+    if message not in WARNED_MESSAGES:
+        WARNED_MESSAGES.add(message)
+        logging.warning(message)
+
+
+def _designer_manifest_file() -> Optional[str]:
+    """
+    :return: The manifest naming the networks the designer may reference, or None when
+             nothing configured or shipped points at one.
+    """
+    configured = os.getenv(DESIGNER_MANIFEST_ENV_VAR)
+    if configured:
+        return configured
+    # Relative, so it resolves against the server's working directory. Checking it
+    # exists is what keeps a pip installed deployment quiet rather than warning about a
+    # path it was never going to have.
+    return DEFAULT_DESIGNER_MANIFEST if os.path.isfile(DEFAULT_DESIGNER_MANIFEST) else None
 
 
 def _referenceable_networks() -> List[str]:
@@ -84,12 +113,18 @@ def _referenceable_networks() -> List[str]:
     :return: The names, or an empty list when the manifest is missing or unparseable.
     """
     manifest_file = _designer_manifest_file()
+    if manifest_file is None:
+        _warn_once(
+            f"{DESIGNER_MANIFEST_ENV_VAR} is not set and no manifest ships with this install, "
+            "so the designer has no networks to reference."
+        )
+        return []
 
     try:
         # Missing file comes back as None rather than raising.
         raw_manifest: Dict[str, Any] = RawManifestRestorer().restore(file_reference=manifest_file)
         if raw_manifest is None:
-            logging.warning("Designer manifest %s not found; no networks can be referenced", manifest_file)
+            _warn_once(f"Designer manifest {manifest_file} not found; no networks can be referenced")
             return []
 
         # Assembled rather than using ManifestFilterChain, which keeps unserved
