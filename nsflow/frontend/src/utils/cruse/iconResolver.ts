@@ -229,13 +229,21 @@ export function resolveIcon(iconName?: string): SvgIconComponent | undefined {
 }
 
 /**
- * Checks if an icon name exists in MUI icons.
+ * Whether this name resolves to a real icon rather than the fallback.
+ *
+ * Accepts the same spellings resolveIcon does. It used to check the raw key only,
+ * which made it disagree with resolveIcon on every name in the set: each is listed in
+ * one form, so the other form resolved fine and still answered false here.
  *
  * @param iconName - Name of the MUI icon
  * @returns true if the icon exists
  */
 export function hasIcon(iconName: string): boolean {
-  return iconName in WIDGET_ICONS;
+  return (
+    iconName in WIDGET_ICONS ||
+    `${iconName}Outlined` in WIDGET_ICONS ||
+    iconName.replace(/Outlined$/, '') in WIDGET_ICONS
+  );
 }
 
 /** Every name this app will resolve, for documentation and UI builders. */
