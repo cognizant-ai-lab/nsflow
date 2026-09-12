@@ -15,36 +15,25 @@ limitations under the License.
 */
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Box, Typography, TextField, Button,  Paper, Card, CardContent, Chip, InputAdornment,
-  useTheme, alpha, Popper, MenuItem, MenuList, ClickAwayListener, Grow, Autocomplete, CircularProgress, Tooltip } from "@mui/material";
-import { PolylineTwoTone as NetworkIcon, Search as SearchIcon,
-  SmartToy as RobotIcon, Refresh as RefreshIcon, WarningAmber as WarningAmberIcon, Close as CloseIcon } from "@mui/icons-material";
+import { Box, Typography, TextField, Paper, Card, CardContent, Chip, InputAdornment,
+  useTheme, alpha, Autocomplete, CircularProgress, Tooltip } from "@mui/material";
+import NetworkIcon from "@mui/icons-material/PolylineTwoTone";
+import SearchIcon from "@mui/icons-material/Search";
+import RobotIcon from "@mui/icons-material/SmartToy";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import CloseIcon from "@mui/icons-material/Close";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
-import { getFeatureFlags, toServedNetworkPath } from "../utils/config";
+import { toServedNetworkPath } from "../utils/config";
+import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { buildEditorGraph } from "../state/editorGraph";
+import { toConnectivityList } from "../state/definitionShape";
+import type { ConnectivityInfo } from "../uiCommon";
 
 
-interface EditingSession {
-  design_id: string;
-  network_name: string;
-  original_network_name?: string;
-  source: string;
-  agent_count: number;
-  created_at: string;
-  updated_at: string;
-  can_undo: boolean;
-  can_redo: boolean;
-  validation?: any;
-}
 
-interface NetworksResponse {
-  registry_networks: string[];
-  editing_sessions: EditingSession[];
-  total_registry: number;
-  total_sessions: number;
-}
 
 interface NetworkOption {
   id: string; // design_id for editing sessions, network name for registry
@@ -80,7 +69,6 @@ const EditorSidebar = ({
   refreshTrigger?: number; // trigger refresh from external components
   externalSelectedNetwork?: string; // Network selected externally (from EditorPalette)
 }) => {
-  const [networkOptions, setNetworkOptions] = useState<NetworkOption[]>([]);
   const [agents, setAgents] = useState<AgentNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -97,6 +85,10 @@ const EditorSidebar = ({
   const [lastChatMessageCount, setLastChatMessageCount] = useState(0);
   const theme = useTheme();
 
+  // The store is the authority for the definition the sidebar lists.
+  const entry = useEditorNetworkStore((state) => selectEntry(state, selectedNetworkId));
+  const reconcileFromServer = useEditorNetworkStore((state) => state.reconcileFromServer);
+
   // Load Existing Agent Network state (view mode)
   const [availableNetworks, setAvailableNetworks] = useState<string[]>([]);
   const [loadingNetworks, setLoadingNetworks] = useState(false);
@@ -106,128 +98,40 @@ const EditorSidebar = ({
   const networksEndRef = useRef<HTMLDivElement>(null);
   
   // Custom dropdown state
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [dropdownSearchQuery, setDropdownSearchQuery] = useState("");
-  const anchorRef = useRef<HTMLDivElement>(null);
 
-  // Use manual editor plugin flag
-  const { pluginManualEditor } = getFeatureFlags();
-  const canEdit = !!pluginManualEditor;
   const didAutoSelectRef = useRef(false);
   const lastSeenNameRef = useRef<string | null>(null);
   const designPlaceholderRef = useRef<string | null>(null);
 
-  // Edit-mode: Fetch networks with state
-  const fetchNetworks = async () => {
-    console.log(`canEdit value: ${canEdit}`)
-    if (!isReady || !apiUrl || !canEdit) return;
-
-    try {
-      setLoading(true);
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch networks: ${response.statusText}`);
-      }
-
-      const data: NetworksResponse = await response.json();
-      // console.log('EditorSidebar: Raw API response:', data);
-      
-      // Convert only editing sessions to network options (registry networks handled by EditorPalette)
-      const options: NetworkOption[] = [];
-      
-      // Add editing sessions only if the user canEdit
-      data.editing_sessions.forEach(session => {
-        const option = {
-          id: session.design_id,
-          display_name: session.network_name,
-          type: 'editing_session' as const,
-          agent_count: session.agent_count,
-          source: session.source,
-          design_id: session.design_id
-        };
-        // console.log('EditorSidebar: Creating network option:', option);
-        options.push(option);
-      });
-      
-      // console.log('EditorSidebar: Final network options:', options);
-      setNetworkOptions(options);
-      setError("");
-    } catch (err: any) {
-      console.error("Error fetching networks:", err);
-      setError(`Failed to load networks: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Unified: fetch agents for both modes, returning the same nodes list
-  const fetchAgents = async (networkOption?: NetworkOption, definitionOverride?: Record<string, any>) => {
-    if (!isReady || !apiUrl) return;
-
-    try {
-      let response: Response;
-
-      if (canEdit) {
-        // Edit mode requires a design_id
-        if (!networkOption?.design_id) {
-          console.warn("fetchAgents: missing design_id in edit mode");
-          return;
-        }
-        console.log("EditorSidebar: Fetching agents (edit) for", networkOption.display_name, "design_id:", networkOption.design_id);
-        response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${networkOption.design_id}/connectivity`);
-      } else {
-        // View-only mode requires an agentNetworkDefinition
-        const definition = definitionOverride ?? agentNetworkDefinition;
-        if (!definition) {
-          console.warn("fetchAgents: agentNetworkDefinition is not set in view-only mode");
-          return;
-        }
-        console.log("EditorSidebar: Fetching agents (view-only) from JSON definition");
-        response = await fetch(`${apiUrl}/api/v1/connectivity/from_json`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agent_network_definition: definition }),
-        });
-      }
-
-      if (!response.ok) {
-        const name = networkOption?.display_name || "(view-only)";
-        throw new Error(`Failed to fetch agents for ${name} — HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      // Both endpoints return { nodes: [...] } — keep sidebar identical across modes
-      if (Array.isArray(data.nodes)) {
-        const sortedNodes = [...data.nodes].sort((a, b) =>
-          a.data?.label?.localeCompare(b.data?.label ?? "", undefined, { sensitivity: "base" })
-        );
-        setAgents(sortedNodes);
-      } else {
+  // Build the sidebar's agent list from the store. This used to POST the
+  // definition to /connectivity/from_json (or GET the andeditor session) purely to
+  // turn it into nodes; buildEditorGraph does the same thing in the browser.
+  const refreshAgentsFromStore = useCallback(
+    (definitionOverride?: unknown) => {
+      // Normalised, never trusted as a list. Callers hand this the raw
+      // agent_network_definition straight off a progress frame, and the designer's
+      // default progress style reports it as a DICT keyed by agent name. A dict has
+      // no `length`, so the empty check passed and buildEditorGraph then iterated an
+      // object: "is not iterable", thrown during render, blanking the whole page.
+      const definition =
+        (definitionOverride === undefined
+          ? entry?.definition
+          : toConnectivityList(definitionOverride)) ?? [];
+      if (definition.length === 0) {
         setAgents([]);
+        return;
       }
-    } catch (err) {
-      console.error("Error fetching agents:", err);
-      setAgents([]);
-    }
-  };
-
-  // Handle network selection
-  const handleNetworkSelect = (networkId: string) => {
-    const networkOption = networkOptions.find(option => option.id === networkId);
-    if (!networkOption) return;
-
-    setSelectedNetworkId(networkId);
-    setSelectedNetworkOption(networkOption);
-    onSelectNetwork(networkOption.display_name, canEdit ? networkOption.design_id : undefined);
-
-    if (canEdit) {
-      fetchAgents(networkOption);
-    } else {
-      // use current definition; refreshFromLogs already keeps it up to date
-      fetchAgents(undefined, agentNetworkDefinition || undefined);
-    }
-  };
+      const { nodes } = buildEditorGraph(definition, entry?.networkName ?? selectedNetworkId ?? "");
+      setAgents(
+        [...nodes].sort((a, b) =>
+          String(a.data?.label ?? "").localeCompare(String(b.data?.label ?? ""), undefined, {
+            sensitivity: "base",
+          })
+        ) as unknown as AgentNode[]
+      );
+    },
+    [entry?.definition, entry?.networkName, selectedNetworkId]
+  );
 
   // Filter agents based on search query
   const filteredAgents = agents.filter((agent) => {
@@ -237,30 +141,7 @@ const EditorSidebar = ({
     return label.includes(q) || instr.includes(q);
   });
 
-  // Filter network options based on dropdown search
-  const filteredNetworkOptions = networkOptions.filter((option) =>
-    option.display_name.toLowerCase().includes(dropdownSearchQuery.toLowerCase())
-  );
-
   // Dropdown controls
-  // Handle dropdown toggle
-  const handleDropdownToggle = () => {
-    setDropdownOpen(!dropdownOpen);
-    setDropdownSearchQuery("");
-  };
-
-  // Handle dropdown close
-  const handleDropdownClose = () => {
-    setDropdownOpen(false);
-    setDropdownSearchQuery("");
-  };
-
-  // Handle network selection from dropdown
-  const handleDropdownNetworkSelect = (networkId: string) => {
-    handleNetworkSelect(networkId);
-    handleDropdownClose();
-  };
-
   const refreshFromLogs = () => {
     const payload = getLatestNetworkPayload();
     // silently ignore; nothing to show yet
@@ -302,8 +183,6 @@ const EditorSidebar = ({
       agent_count: Object.keys(payload.agent_network_definition!).length,
     };
 
-    // always replace the list with the latest single option
-    setNetworkOptions([singleOption]);
     setAgentNetworkDefinition(payload.agent_network_definition!);
 
     const nameChanged =
@@ -313,7 +192,7 @@ const EditorSidebar = ({
 
     // Keep selection semantics identical: nothing selected by default;
     // once we have a valid message, set it if not set already
-    if (!canEdit && nameChanged) {
+    if (nameChanged) {
       didAutoSelectRef.current = true;
       lastSeenNameRef.current = nameFromPayload;
 
@@ -321,13 +200,13 @@ const EditorSidebar = ({
       setSelectedNetworkOption(singleOption);
       setSelectedLoadNetwork(nameFromPayload); // Sync the Autocomplete display
       onSelectNetwork(singleOption.display_name); // no design_id in view-only
-      fetchAgents(undefined, payload.agent_network_definition!); // avoid race
+      refreshAgentsFromStore(payload.agent_network_definition); // avoid race
     }
   };
 
   // Fetch available networks for Load Existing dropdown (view mode)
   useEffect(() => {
-    if (canEdit || !isNsReady || !apiUrl) return;
+    if (!isNsReady || !apiUrl) return;
     const fetchAvailableNetworks = async () => {
       setLoadingNetworks(true);
       try {
@@ -351,12 +230,10 @@ const EditorSidebar = ({
       }
     };
     fetchAvailableNetworks();
-  }, [canEdit, isNsReady, apiUrl, connectionType, host, port]);
+  }, [isNsReady, apiUrl, connectionType, host, port]);
 
   // Handler for loading an existing network (view mode)
   const handleLoadExistingNetwork = useCallback(async (networkName: string | null) => {
-    const network = targetNetwork || activeNetwork;
-
     setSelectedLoadNetwork(networkName);
 
     if (!networkName) {
@@ -380,8 +257,26 @@ const EditorSidebar = ({
         return;
       }
       const payload = await response.json();
-      const pretty = JSON.stringify(payload, null, 2);
-      addSlyDataMessage({ sender: "user", text: `\`\`\`json\n${pretty}\n\`\`\``, network: network });
+      const definition = payload?.agent_network_definition ?? payload;
+      // Straight into the store, which the canvas and this sidebar both render
+      // from. The old code posted it back as a sly_data chat message purely so it
+      // would come back around through the stream.
+      if (definition) {
+        reconcileFromServer(networkName, {
+          definition: Array.isArray(definition)
+            ? (definition as ConnectivityInfo[])
+            : Object.entries(definition).map(([origin, v]) => ({
+                // Spread first. With it last it overwrote the tools computed just
+                // below, which is the one key here that has to end up an array.
+                ...((v ?? {}) as Record<string, unknown>),
+                origin,
+                tools: ((v ?? {}) as { tools?: string[]; down_chains?: string[] }).tools ??
+                  ((v ?? {}) as { down_chains?: string[] }).down_chains ?? [],
+              })) as ConnectivityInfo[],
+          networkName,
+        });
+        setSelectedNetworkId(networkName);
+      }
     } catch (e) {
       console.error("Error loading network definition:", e);
     } finally {
@@ -396,18 +291,14 @@ const EditorSidebar = ({
     setSelectedNetworkOption(null);
     setAgents([]);
     setError("");
-  }, [canEdit, isReady]);
+  }, [isReady]);
 
   // Initial load
   useEffect(() => {
     if (!isReady) return;
-    if (canEdit) {
-      fetchNetworks();
-    } else {
-      // reuse flow: hydrate from logs, then fetchAgents()
-      refreshFromLogs();
-    }
-  }, [isReady, apiUrl, canEdit]);
+    // hydrate from whatever the streams have already reported
+    refreshFromLogs();
+  }, [isReady, apiUrl]);
 
   // Refresh from logs
   useEffect(() => {
@@ -418,30 +309,18 @@ const EditorSidebar = ({
   // External refresh trigger
   useEffect(() => {
     if (!refreshTrigger || refreshTrigger <= 0) return;
-    if (canEdit) {
-      fetchNetworks();
-    } else {
-      refreshFromLogs();
-    }
-  }, [refreshTrigger, canEdit]);
+    refreshFromLogs();
+  }, [refreshTrigger]);
 
   // auto-select first session when none selected
+  // Select whatever the palette picked.
   useEffect(() => {
-    if (canEdit && networkOptions.length > 0 && !selectedNetworkId) {
-      const firstNetwork = networkOptions[0];
-      handleNetworkSelect(firstNetwork.id);
+    if (externalSelectedNetwork && externalSelectedNetwork !== selectedNetworkId) {
+      setSelectedNetworkId(externalSelectedNetwork);
+      onSelectNetwork(externalSelectedNetwork);
     }
-  }, [networkOptions, selectedNetworkId, canEdit]);
-
-  // EDIT MODE: handle external selection (EditorPalette)
-  useEffect(() => {
-    if (canEdit && externalSelectedNetwork && networkOptions.length > 0) {
-      const option = networkOptions.find(o => o.display_name === externalSelectedNetwork);
-      if (option && option.id !== selectedNetworkId) {
-        handleNetworkSelect(option.id);
-      }
-    }
-  }, [externalSelectedNetwork, networkOptions, selectedNetworkId, canEdit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSelectedNetwork]);
 
   // monitor and refresh sessions/agents on new messages
   useEffect(() => {
@@ -450,43 +329,32 @@ const EditorSidebar = ({
     // Only react when count increases and not the initial system message
     if (currentCount > lastChatMessageCount && currentCount > 1) {
       setTimeout(() => {
-        if (canEdit) {
-          fetchNetworks();
-          if (selectedNetworkOption) {
-            fetchAgents(selectedNetworkOption);
-          }
-        } else {
-          // reuse: update from logs, then unified fetchAgents()
-          refreshFromLogs();
-        }
+        refreshFromLogs();
       }, 1000);
     }
 
     setLastChatMessageCount(currentCount);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, slyDataTick, canEdit]);
+  }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, slyDataTick]);
 
   // keep true by default, but turn it off in view mode:
   useEffect(() => {
-    if (!canEdit) {
-      setLoading(false);
-      didAutoSelectRef.current = false;
-      lastSeenNameRef.current = null;
-    }
-  }, [targetNetwork, canEdit]);
+    setLoading(false);
+    didAutoSelectRef.current = false;
+    lastSeenNameRef.current = null;
+  }, [targetNetwork]);
 
   // Rebuild agent list whenever the raw definition changes (view-only)
   useEffect(() => {
-    if (canEdit) return;
     if (!agentNetworkDefinition) return;
-    fetchAgents(undefined, agentNetworkDefinition);
+    refreshAgentsFromStore(agentNetworkDefinition);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canEdit, agentNetworkDefinition]);
+  }, [agentNetworkDefinition]);
 
   // Auto-load network from URL query param (e.g. /editor?loadNetwork=basic/hello_world)
   const [autoLoadHandled, setAutoLoadHandled] = useState(false);
   useEffect(() => {
-    if (autoLoadHandled || canEdit || loadingNetworks || !availableNetworks.length) return;
+    if (autoLoadHandled || loadingNetworks || !availableNetworks.length) return;
     const params = new URLSearchParams(window.location.search);
     const loadNetwork = params.get('loadNetwork');
     if (loadNetwork && availableNetworks.includes(loadNetwork)) {
@@ -499,7 +367,7 @@ const EditorSidebar = ({
     } else {
       setAutoLoadHandled(true);
     }
-  }, [canEdit, loadingNetworks, availableNetworks, autoLoadHandled, handleLoadExistingNetwork]);
+  }, [loadingNetworks, availableNetworks, autoLoadHandled, handleLoadExistingNetwork]);
 
 
   /* -------------------- Render -------------------- */
@@ -536,7 +404,7 @@ const EditorSidebar = ({
         {/* Status / Errors */}
         {loading && (
           <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-            {canEdit ? "Loading sessions..." : "Waiting for activity…"}
+            Waiting for activity…
           </Typography>
         )}
         {error && (
@@ -548,109 +416,8 @@ const EditorSidebar = ({
           </Typography>
         )}
 
-        {/* Selection: Edit mode uses custom dropdown, View mode uses Load Existing Autocomplete */}
-        {!loading && canEdit && (
-          <Box ref={anchorRef}>
-            <TextField
-              size="small"
-              label="Select editing session"
-              value={selectedNetworkOption?.display_name || ""}
-              onClick={handleDropdownToggle}
-              slotProps={{ input: { readOnly: true } }}
-              fullWidth
-              sx={{
-                cursor: "pointer",
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.divider },
-                "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.primary.main },
-                "& .MuiInputBase-input": { cursor: "pointer" },
-              }}
-            />
-
-            <Popper
-              open={dropdownOpen}
-              anchorEl={anchorRef.current}
-              placement="bottom-start"
-              style={{ zIndex: 1300, width: "400px" }}
-              transition
-            >
-              {({ TransitionProps }) => (
-                <Grow {...TransitionProps}>
-                  <Paper elevation={8} sx={{ mt: 0.5, maxHeight: 300, overflow: "auto" }}>
-                    <ClickAwayListener onClickAway={handleDropdownClose}>
-                      <Box>
-                        <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                          <TextField
-                            size="small"
-                            placeholder="Search networks..."
-                            value={dropdownSearchQuery}
-                            onChange={(e) => setDropdownSearchQuery(e.target.value)}
-                            fullWidth
-                            slotProps={{
-                              input: {
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <SearchIcon sx={{ color: theme.palette.text.secondary, fontSize: 18 }} />
-                                  </InputAdornment>
-                                ),
-                              },
-                            }}
-                          />
-                        </Box>
-
-                        <MenuList>
-                          {filteredNetworkOptions.length === 0 ? (
-                            <MenuItem disabled>
-                              <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
-                                No networks found
-                              </Typography>
-                            </MenuItem>
-                          ) : (
-                            filteredNetworkOptions.map((option) => (
-                              <MenuItem
-                                key={option.id}
-                                onClick={() => { handleDropdownNetworkSelect(option.id); }}
-                                selected={option.id === selectedNetworkId}
-                                sx={{ minWidth: 350 }}
-                              >
-                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
-                                  <Box sx={{ flexGrow: 1 }}>
-                                    <Typography
-                                      variant="body2"
-                                      sx={{
-                                        color: theme.palette.text.secondary,
-                                        fontWeight: option.id === selectedNetworkId ? 600 : 400,
-                                      }}
-                                    >
-                                      {option.display_name}
-                                    </Typography>
-                                  </Box>
-                                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                    <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-                                      ({option.agent_count} agents)
-                                    </Typography>
-                                    <Chip
-                                      label="Editing"
-                                      size="small"
-                                      color="secondary"
-                                      sx={{ fontSize: "0.6rem", height: 16 }}
-                                    />
-                                  </Box>
-                                </Box>
-                              </MenuItem>
-                            ))
-                          )}
-                        </MenuList>
-                      </Box>
-                    </ClickAwayListener>
-                  </Paper>
-                </Grow>
-              )}
-            </Popper>
-          </Box>
-        )}
-
-        {/* View mode: Load Existing Agent Network Autocomplete */}
-        {!loading && !canEdit && (
+        {/* Load an existing agent network */}
+        {!loading && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Autocomplete
               size="small"
@@ -951,43 +718,13 @@ const EditorSidebar = ({
               p: 2,
             }}
           >
-            {canEdit
-              ? "Select a network to view its agents"
-              : "Waiting for activity…"}
+            Waiting for activity…
           </Typography>
         )}
 
         <div ref={networksEndRef} />
       </Box>
 
-      {/* Manual Refresh (edit mode only) */}
-      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-        <Button
-          variant="outlined"
-          color="primary"
-          fullWidth
-          size="small"
-          onClick={() => {
-            if (canEdit) {
-              fetchNetworks();
-              if (selectedNetworkOption) {
-                fetchAgents(selectedNetworkOption);
-              }
-            }
-          }}
-          disabled={loading || !canEdit}
-          startIcon={<RefreshIcon />}
-          sx={{
-            textTransform: "none",
-            fontSize: "0.75rem",
-            "&:disabled": {
-              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-            },
-          }}
-        >
-          {loading ? "Refreshing..." : "Manual Refresh"}
-        </Button>
-      </Box>
     </Paper>
   );
 };

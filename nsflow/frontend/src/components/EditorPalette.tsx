@@ -14,534 +14,473 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useState, useEffect } from 'react';
+/**
+ * The editor's node library, as a floating notch on the edge of the canvas.
+ *
+ * It used to be a permanent drawer holding a fixed slice of the width whether or not
+ * anyone was using it. Here it is a small vertical pill of icons: one to add an
+ * agent, and one per source of things to reference. Each source opens a short
+ * searchable list beside its icon and closes again on a click anywhere else, so the
+ * canvas keeps the space.
+ *
+ * Everything can be clicked or dragged. A click is quicker and is the only way in
+ * when the canvas is empty and there is nothing to drop onto; a drag lets the user
+ * pick the parent. The canvas owns the mutation either way.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import {
   Box,
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  IconButton,
-  Typography,
+  Chip,
+  ClickAwayListener,
   Divider,
-  Collapse,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  TextField,
-  Button,
+  Grow,
+  IconButton,
+  InputAdornment,
+  List,
+  ListItemButton,
+  ListItemText,
   Paper,
-  useTheme,
+  Popper,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
   alpha,
-  Autocomplete
-} from '@mui/material';
+  useTheme,
+} from "@mui/material";
+import NetworkIcon from "@mui/icons-material/AccountTree";
+import AddIcon from "@mui/icons-material/Add";
+import ClearIcon from "@mui/icons-material/Clear";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import ToolboxIcon from "@mui/icons-material/Handyman";
+import McpIcon from "@mui/icons-material/Hub";
+import SearchIcon from "@mui/icons-material/Search";
+
+import { useApiPort } from "../context/ApiPortContext";
 import {
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
-  Palette as PaletteIcon,
-  CloudDownload as EditFromRegistryIcon,
-  Add as CreateNewIcon,
-  ViewModule as TemplateIcon,
-  ExpandLess,
-  ExpandMore,
-  AccountTree as HierarchicalIcon,
-  LinearScale as SequentialIcon,
-  Person as SingleAgentIcon
-} from '@mui/icons-material';
-import { useApiPort } from '../context/ApiPortContext';
+  FRONTMAN_ITEM,
+  NEW_AGENT_ITEM,
+  PALETTE_DRAG_TYPE,
+  type PaletteCategory,
+  type PaletteItem,
+  fetchPaletteItems,
+  groupByCategory,
+  rankPaletteItems,
+} from "../state/paletteSources";
 
-const drawerWidth = 280;
+/** The three sources that open a list, in the order they appear on the notch. */
+/**
+ * One entry per source, with a colour of its own.
+ *
+ * Fixed pastels rather than palette roles: the rail is dark in both themes, so a
+ * theme-derived colour would either wash out on it or change meaning between modes.
+ * These are light enough to read on the dark rail and distinct enough to tell the
+ * three sources apart at a glance.
+ */
+const SOURCES: Array<{
+  category: PaletteCategory;
+  icon: ReactElement;
+  empty: string;
+  color: string;
+}> = [
+  {
+    category: "Agent Networks",
+    icon: <NetworkIcon />,
+    empty: "No other agent networks to reference yet.",
+    color: "#8ec5ff",
+  },
+  {
+    category: "Toolbox",
+    icon: <ToolboxIcon />,
+    empty: "No toolbox tools configured.",
+    color: "#ffd28a",
+  },
+  {
+    category: "MCP Servers",
+    icon: <McpIcon />,
+    empty: "No MCP servers connected.",
+    color: "#c3b1f5",
+  },
+];
 
-interface TemplateParams {
-  type: 'single_agent' | 'hierarchical' | 'sequential';
-  levels?: number;
-  agents_per_level?: number[];
-  sequence_length?: number;
-  agent_name?: string;
-}
+/**
+ * How tall an open list may be.
+ *
+ * Deliberately close to the height of the notch itself, so the list reads as
+ * belonging to it rather than as a panel that has taken over the canvas.
+ */
+const LIST_MAX_HEIGHT = 240;
+const LIST_WIDTH = 270;
+const NOTCH_BUTTON_SIZE = 44;
 
 interface EditorPaletteProps {
-  onNetworkCreated: () => void; // Callback to refresh sidebar
-  onNetworkSelected: (networkName: string) => void; // Callback to select network in sidebar
+  /** The network being edited, excluded from the draggable networks list. */
+  selectedNetwork?: string;
+  /**
+   * True while the canvas has no frontman. The add button then offers the frontman,
+   * since a network has exactly one and it has to come first.
+   */
+  needsFrontman: boolean;
+  /**
+   * Why nothing can be added right now, or undefined when it can. Set when the
+   * selected agent cannot take a down-chain agent, which is true of a toolbox tool
+   * and of an external reference.
+   */
+  disabledReason?: string;
+  /** Put an item on the canvas. The canvas decides what it attaches to. */
+  onAddItem: (item: PaletteItem) => void;
 }
 
-const EditorPalette = ({ onNetworkCreated, onNetworkSelected }: EditorPaletteProps) => {
+const EditorPalette = ({
+  selectedNetwork,
+  needsFrontman,
+  disabledReason,
+  onAddItem,
+}: EditorPaletteProps) => {
   const theme = useTheme();
   const { apiUrl, isReady } = useApiPort();
-  
-  const [open, setOpen] = useState(false);
-  const [registryNetworks, setRegistryNetworks] = useState<string[]>([]);
-  const [selectedRegistryNetwork, setSelectedRegistryNetwork] = useState<string>('');
-  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
-  const [templateParams, setTemplateParams] = useState<TemplateParams>({
-    type: 'single_agent',
-    levels: 2,
-    agents_per_level: [1, 2],
-    sequence_length: 3,
-    agent_name: 'frontman'
-  });
-  const [loading, setLoading] = useState(false);
 
-  // Fetch registry networks
-  const fetchRegistryNetworks = async () => {
-    if (!isReady || !apiUrl) return;
+  const [loaded, setLoaded] = useState<PaletteItem[]>([]);
+  const [openCategory, setOpenCategory] = useState<PaletteCategory | null>(null);
+  const [query, setQuery] = useState("");
+  const anchors = useRef<Partial<Record<PaletteCategory, HTMLElement | null>>>({});
 
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks`);
-      if (!response.ok) return;
+  // The add button offers the frontman on a blank canvas and a plain agent after
+  // that, which is the only thing about it that changes.
+  const addItem = needsFrontman ? FRONTMAN_ITEM : NEW_AGENT_ITEM;
 
-      const data = await response.json();
-      setRegistryNetworks(data.registry_networks || []);
-    } catch (err) {
-      console.error('Error fetching registry networks:', err);
-    }
-  };
-
+  // Loaded on first use rather than on mount, and refreshed whenever a list opens, so
+  // a network generated since the last look shows up.
   useEffect(() => {
-    if (open) {
-      fetchRegistryNetworks();
-    }
-  }, [open, isReady, apiUrl]);
+    if (!openCategory || !isReady || !apiUrl) return;
+    let cancelled = false;
+    fetchPaletteItems(apiUrl, selectedNetwork).then((items) => {
+      if (!cancelled) setLoaded(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [openCategory, isReady, apiUrl, selectedNetwork]);
 
-  const handleDrawerToggle = () => {
-    setOpen(!open);
-  };
+  const grouped = useMemo(() => groupByCategory(rankPaletteItems(loaded, query)), [loaded, query]);
 
+  const closeList = useCallback(() => {
+    setOpenCategory(null);
+    setQuery("");
+  }, []);
 
-  // Action 1: Edit from Registry
-  const handleEditFromRegistry = async () => {
-    if (!selectedRegistryNetwork || !apiUrl) return;
+  // A list left open when the last agent goes must not stay open over a canvas that
+  // can no longer accept anything from it.
+  useEffect(() => {
+    if (needsFrontman && openCategory) closeList();
+  }, [needsFrontman, openCategory, closeList]);
 
-    setLoading(true);
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/load/${selectedRegistryNetwork}`, {
-        method: 'POST'
-      });
+  const toggleList = useCallback((category: PaletteCategory) => {
+    setQuery("");
+    setOpenCategory((current) => (current === category ? null : category));
+  }, []);
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Network loaded from registry:', result);
-        
-        // Refresh sidebar and select the new network
-        onNetworkCreated();
-        
-        // The new network name should be in the response
-        if (result.network_name) {
-          onNetworkSelected(result.network_name);
-        }
-        
-        setSelectedRegistryNetwork('');
-        setOpen(false);
-      } else {
-        console.error('Failed to load network from registry');
+  const onDragStart = useCallback(
+    (event: React.DragEvent, item: PaletteItem) => {
+      if (disabledReason) {
+        event.preventDefault();
+        return;
       }
-    } catch (err) {
-      console.error('Error loading network from registry:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      event.dataTransfer.setData(PALETTE_DRAG_TYPE, JSON.stringify(item));
+      event.dataTransfer.effectAllowed = "move";
+    },
+    [disabledReason]
+  );
 
-  // Action 2: Create New Agent Network
-  const handleCreateNew = async () => {
-    if (!apiUrl) return;
+  const handleAdd = useCallback(
+    (item: PaletteItem) => {
+      if (disabledReason) return;
+      onAddItem(item);
+      closeList();
+    },
+    [disabledReason, onAddItem, closeList]
+  );
 
-    setLoading(true);
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          type: 'single_agent'
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('New network created:', result);
-        
-        // Refresh sidebar and select the new network
-        onNetworkCreated();
-        
-        if (result.network_name) {
-          onNetworkSelected(result.network_name);
-        }
-        
-        setOpen(false);
-      } else {
-        console.error('Failed to create new network');
-      }
-    } catch (err) {
-      console.error('Error creating new network:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Action 3: Create from Template
-  const handleCreateFromTemplate = async () => {
-    if (!apiUrl) return;
-
-    setLoading(true);
-    try {
-      const requestBody: any = {
-        type: templateParams.type
-      };
-
-      // Add template-specific parameters
-      if (templateParams.type === 'hierarchical') {
-        requestBody.levels = templateParams.levels;
-        requestBody.agents_per_level = templateParams.agents_per_level;
-      } else if (templateParams.type === 'sequential') {
-        requestBody.sequence_length = templateParams.sequence_length;
-      } else if (templateParams.type === 'single_agent') {
-        requestBody.agent_name = templateParams.agent_name;
-      }
-
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Template network created:', result);
-        
-        // Refresh sidebar and select the new network
-        onNetworkCreated();
-        
-        if (result.network_name) {
-          onNetworkSelected(result.network_name);
-        }
-        
-        setTemplateMenuOpen(false);
-        setOpen(false);
-      } else {
-        console.error('Failed to create template network');
-      }
-    } catch (err) {
-      console.error('Error creating template network:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateAgentsPerLevel = (level: number, value: number) => {
-    const newAgentsPerLevel = [...templateParams.agents_per_level!];
-    newAgentsPerLevel[level] = value;
-    setTemplateParams({ ...templateParams, agents_per_level: newAgentsPerLevel });
-  };
-
-  return (
-    <Drawer
-        variant="permanent"
-        open={open}
+  /** One row of an open list: click to add, or drag onto a particular agent. */
+  const renderRow = (item: PaletteItem) => (
+    <Box
+      key={`${item.category}:${item.agentName}`}
+      draggable={!disabledReason}
+      onDragStart={(event) => onDragStart(event, item)}
+      sx={{ "&:hover .palette-drag-handle": { opacity: 1 } }}
+    >
+      <ListItemButton
+        dense
+        disabled={Boolean(disabledReason)}
+        onClick={() => handleAdd(item)}
         sx={{
-          width: open ? drawerWidth : 64,
-          flexShrink: 0,
-          whiteSpace: 'nowrap',
-          boxSizing: 'border-box',
-          '& .MuiDrawer-paper': {
-            width: open ? drawerWidth : 64,
-            transition: theme.transitions.create('width', {
-              easing: theme.transitions.easing.sharp,
-              duration: theme.transitions.duration.enteringScreen,
-            }),
-            overflowX: 'hidden',
-            backgroundColor: theme.palette.background.paper,
-            borderRight: `1px solid ${theme.palette.divider}`,
-            zIndex: theme.zIndex.drawer - 1, // Below the main sidebar
-            position: 'relative'
-          }
+          cursor: disabledReason ? "not-allowed" : "grab",
+          borderRadius: 1.5,
+          py: 0.5,
+          px: 1,
+          alignItems: "flex-start",
+          gap: 0.75,
+          "&:active": { cursor: disabledReason ? "not-allowed" : "grabbing" },
         }}
       >
-      {/* Header */}
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: open ? 'space-between' : 'center',
-        p: 1,
-        minHeight: 48,
-        borderBottom: `1px solid ${theme.palette.divider}`
-      }}>
-        {open && (
-          <Typography variant="subtitle2" sx={{ 
-            fontWeight: 600, 
-            color: theme.palette.text.primary,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1
-          }}>
-            <PaletteIcon sx={{ fontSize: 18 }} color="primary" />
-            Editor Palette
-          </Typography>
-        )}
-        <IconButton onClick={handleDrawerToggle} size="small">
-          {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-        </IconButton>
-      </Box>
-
-      <Divider />
-
-      {/* Actions List */}
-      <List sx={{ pt: 1 }}>
-        {/* Action 1: Edit from Registry */}
-        <ListItem disablePadding sx={{ display: 'block' }}>
-          <ListItemButton
-            sx={{
-              minHeight: 48,
-              justifyContent: open ? 'initial' : 'center',
-              px: 2.5,
-            }}
-            onClick={() => {
-              if (!open) setOpen(true);
-            }}
-          >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                mr: open ? 3 : 'auto',
-                justifyContent: 'center',
-              }}
-            >
-              <EditFromRegistryIcon color="primary" />
-            </ListItemIcon>
-            <ListItemText
-              primary="Edit from Registry"
-              sx={{ opacity: open ? 1 : 0 }}
-            />
-          </ListItemButton>
-          
-          {/* Registry Network Selection */}
-          <Collapse in={open} timeout="auto" unmountOnExit>
-            <Box sx={{ px: 1.5, pb: 1.5 }}>
-              <Autocomplete
-                size="small"
-                options={registryNetworks}
-                getOptionLabel={(option) => option}
-                value={selectedRegistryNetwork || null}
-                onChange={(_, newValue) => {
-                  setSelectedRegistryNetwork(newValue || '');
-                }}
-                renderInput={(params) => (
-                  <TextField 
-                    {...params} 
-                    label="Select Agent Network"
-                    sx={{ mb: 1 }}
-                  />
-                )}
-                sx={{ width: '100%' }}
-              />
-              <Button
-                variant="contained"
-                size="small"
-                fullWidth
-                disabled={!selectedRegistryNetwork || loading}
-                onClick={handleEditFromRegistry}
-                sx={{ 
-                  textTransform: 'none',
-                  py: 0.75
-                }}
-              >
-                {loading ? 'Loading...' : 'Load for Editing'}
-              </Button>
-            </Box>
-          </Collapse>
-        </ListItem>
-
-        <Divider />
-
-        {/* Action 2: Create New Agent Network */}
-        <ListItem disablePadding sx={{ display: 'block' }}>
-          <ListItemButton
-            sx={{
-              minHeight: 48,
-              justifyContent: open ? 'initial' : 'center',
-              px: 2.5,
-            }}
-            onClick={handleCreateNew}
-            disabled={loading}
-          >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                mr: open ? 3 : 'auto',
-                justifyContent: 'center',
-              }}
-            >
-              <CreateNewIcon color="success" />
-            </ListItemIcon>
-            <ListItemText
-              primary="Create New Network"
-              sx={{ opacity: open ? 1 : 0 }}
-            />
-          </ListItemButton>
-        </ListItem>
-
-        <Divider />
-
-        {/* Action 3: Create from Template */}
-        <ListItem disablePadding sx={{ display: 'block' }}>
-          <ListItemButton
-            sx={{
-              minHeight: 48,
-              justifyContent: open ? 'initial' : 'center',
-              px: 2.5,
-            }}
-            onClick={() => {
-              if (!open) setOpen(true);
-              setTemplateMenuOpen(!templateMenuOpen);
-            }}
-          >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                mr: open ? 3 : 'auto',
-                justifyContent: 'center',
-              }}
-            >
-              <TemplateIcon color="warning" />
-            </ListItemIcon>
-            <ListItemText
-              primary="Create from Template"
-              sx={{ opacity: open ? 1 : 0 }}
-            />
-            {open && (templateMenuOpen ? <ExpandLess /> : <ExpandMore />)}
-          </ListItemButton>
-
-          {/* Template Configuration */}
-          <Collapse in={open && templateMenuOpen} timeout="auto" unmountOnExit>
-            <Box sx={{ px: 1.5, pb: 1.5 }}>
-              <Paper elevation={1} sx={{ p: 1.5, backgroundColor: alpha(theme.palette.primary.main, 0.05) }}>
-                <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-                  <InputLabel>Template Type</InputLabel>
-                  <Select
-                    value={templateParams.type}
-                    label="Template Type"
-                    onChange={(e) => setTemplateParams({ ...templateParams, type: e.target.value as any })}
-                  >
-                    <MenuItem value="single_agent">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <SingleAgentIcon fontSize="small" />
-                        Single Agent
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="hierarchical">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <HierarchicalIcon fontSize="small" />
-                        Hierarchical
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="sequential">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <SequentialIcon fontSize="small" />
-                        Sequential
-                      </Box>
-                    </MenuItem>
-                  </Select>
-                </FormControl>
-
-                {/* Template Parameters - Animated */}
-                <Collapse in={true} timeout={300}>
-                  <Box>
-                    {/* Single Agent Parameters */}
-                    {templateParams.type === 'single_agent' && (
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="Agent Name"
-                        value={templateParams.agent_name}
-                        onChange={(e) => setTemplateParams({ ...templateParams, agent_name: e.target.value })}
-                        sx={{ mb: 1.5 }}
-                      />
-                    )}
-
-                    {/* Hierarchical Parameters */}
-                    {templateParams.type === 'hierarchical' && (
-                      <Box>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          type="number"
-                          label="Levels"
-                          value={templateParams.levels}
-                          onChange={(e) => {
-                            const levels = parseInt(e.target.value) || 2;
-                            const agents_per_level = Array(levels).fill(0).map((_, i) => i === 0 ? 1 : 2);
-                            setTemplateParams({ ...templateParams, levels, agents_per_level });
-                          }}
-                          slotProps={{
-                            htmlInput: { min: 2, max: 5 }
-                          }}
-                          sx={{ mb: 1 }}
-                        />
-                        <Box sx={{ maxHeight: 120, overflowY: 'auto', pr: 0.5 }}>
-                          {templateParams.agents_per_level?.map((count, index) => (
-                            <TextField
-                              key={index}
-                              // fullWidth
-                              size="small"
-                              type="number"
-                              label={`Level ${index + 1}`}
-                              value={count}
-                              onChange={(e) => updateAgentsPerLevel(index, parseInt(e.target.value) || (index === 0 ? 1 : 2))}
-                              slotProps={{
-                                htmlInput: { min: index === 0 ? 1 : 1, max: 10 }
-                              }}
-                              disabled={index === 0} // Frontman level always 1
-                              sx={{ mb: 0.5, mt: 0.5 }}
-                            />
-                          ))}
-                        </Box>
-                      </Box>
-                    )}
-
-                    {/* Sequential Parameters */}
-                    {templateParams.type === 'sequential' && (
-                      <TextField
-                        fullWidth
-                        size="small"
-                        type="number"
-                        label="Sequence Length"
-                        value={templateParams.sequence_length}
-                        onChange={(e) => setTemplateParams({ ...templateParams, sequence_length: parseInt(e.target.value) || 3 })}
-                        slotProps={{
-                          htmlInput: { min: 2, max: 10 }
-                        }}
-                        sx={{ mb: 1.5 }}
-                      />
-                    )}
-                  </Box>
-                </Collapse>
-
-                <Button
-                  variant="contained"
+        <DragIndicatorIcon
+          className="palette-drag-handle"
+          sx={{
+            mt: 0.125,
+            fontSize: 16,
+            opacity: 0.25,
+            transition: "opacity 120ms",
+            color: "text.secondary",
+          }}
+        />
+        <ListItemText
+          primary={
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", minWidth: 0 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700 }} noWrap title={item.agentName}>
+                {item.label}
+              </Typography>
+              {item.needsReauth && (
+                <Chip
                   size="small"
-                  fullWidth
-                  disabled={loading}
-                  onClick={handleCreateFromTemplate}
-                  sx={{ 
-                    textTransform: 'none',
-                    py: 0.75,
-                    mt: 1
+                  color="warning"
+                  variant="outlined"
+                  label="reconnect"
+                  sx={{ height: 18 }}
+                />
+              )}
+            </Stack>
+          }
+          secondary={item.description}
+          slotProps={{
+            secondary: {
+              variant: "caption",
+              sx: {
+                display: "-webkit-box",
+                WebkitLineClamp: 1,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                fontSize: "0.68rem",
+                lineHeight: 1.35,
+              },
+            },
+          }}
+        />
+      </ListItemButton>
+    </Box>
+  );
+
+  // The rail is dark in both themes, so these are keyed to the rail rather than to
+  // the app's text palette, which would be unreadable on it under the light theme.
+  const notchButtonSx = {
+    width: NOTCH_BUTTON_SIZE,
+    height: NOTCH_BUTTON_SIZE,
+    color: alpha(theme.palette.common.white, 0.72),
+    "&:hover": {
+      backgroundColor: alpha(theme.palette.common.white, 0.14),
+      color: theme.palette.common.white,
+    },
+  } as const;
+
+  return (
+    <ClickAwayListener onClickAway={closeList}>
+      <Box
+        sx={{
+          position: "absolute",
+          left: 16,
+          top: "50%",
+          transform: "translateY(-50%)",
+          zIndex: 15,
+        }}
+      >
+        <Paper
+          elevation={8}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 0.5,
+            p: 0.75,
+            // A pill rather than a panel: the notch should read as floating over the
+            // canvas, not as a region carved out of it. Tinted away from the paper
+            // colour every other surface uses, so it reads as a tool rail.
+            borderRadius: 6,
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.common.black, 0.72)
+                : alpha(theme.palette.grey[900], 0.9),
+            backdropFilter: "blur(10px)",
+            border: `1px solid ${alpha(theme.palette.common.white, 0.12)}`,
+            boxShadow: `0 8px 24px ${alpha(theme.palette.common.black, 0.45)}`,
+          }}
+        >
+          <Tooltip
+            placement="right"
+            title={
+              disabledReason ??
+              (needsFrontman
+                ? "Add the frontman, the agent a user interfaces with"
+                : "Add an agent. Click to attach it to the selection, or drag it onto an agent")
+            }
+          >
+            {/* The span keeps the tooltip alive while the button is disabled. */}
+            <span style={{ display: "inline-flex" }}>
+              <Box
+                draggable={!disabledReason}
+                onDragStart={(event) => onDragStart(event, addItem)}
+                sx={{ display: "inline-flex" }}
+              >
+                <IconButton
+                  disabled={Boolean(disabledReason)}
+                  onClick={() => handleAdd(addItem)}
+                  aria-label={needsFrontman ? "Add frontman" : "Add agent"}
+                  sx={{
+                    ...notchButtonSx,
+                    cursor: disabledReason ? "not-allowed" : "grab",
+                    color: theme.palette.success.light,
+                    backgroundColor: alpha(theme.palette.success.main, 0.22),
+                    "&:hover": { backgroundColor: alpha(theme.palette.success.main, 0.38) },
                   }}
                 >
-                  {loading ? 'Creating...' : 'Create from Template'}
-                </Button>
+                  <AddIcon />
+                </IconButton>
+              </Box>
+            </span>
+          </Tooltip>
+
+          <Divider flexItem sx={{ my: 0.25, borderColor: alpha(theme.palette.common.white, 0.14) }} />
+
+          {SOURCES.map((source) => (
+            <Tooltip
+              key={source.category}
+              placement="right"
+              title={
+                needsFrontman
+                  ? "Add the frontman first: everything else attaches to it"
+                  : source.category
+              }
+            >
+              {/* The span keeps the tooltip alive while the button is disabled. */}
+              <span style={{ display: "inline-flex" }}>
+                <IconButton
+                  ref={(element) => {
+                    anchors.current[source.category] = element;
+                  }}
+                  // Nothing can be referenced before there is an agent to attach it
+                  // to, and the first agent has to be the frontman.
+                  disabled={needsFrontman}
+                  onClick={() => toggleList(source.category)}
+                  aria-label={source.category}
+                  sx={{
+                    ...notchButtonSx,
+                    color: source.color,
+                    backgroundColor: alpha(source.color, 0.14),
+                    "&:hover": { backgroundColor: alpha(source.color, 0.3), color: source.color },
+                    "&.Mui-disabled": {
+                      color: alpha(source.color, 0.3),
+                      backgroundColor: alpha(theme.palette.common.white, 0.05),
+                    },
+                    ...(openCategory === source.category && {
+                      backgroundColor: alpha(source.color, 0.4),
+                      color: theme.palette.common.white,
+                    }),
+                  }}
+                >
+                  {source.icon}
+                </IconButton>
+              </span>
+            </Tooltip>
+          ))}
+        </Paper>
+
+        <Popper
+          open={Boolean(openCategory)}
+          anchorEl={openCategory ? anchors.current[openCategory] : null}
+          placement="right"
+          transition
+          modifiers={[{ name: "offset", options: { offset: [0, 12] } }]}
+          sx={{ zIndex: 16 }}
+        >
+          {({ TransitionProps }) => (
+            // Grows out of the icon it belongs to rather than fading in place, which
+            // reads as the notch opening rather than a panel appearing over it.
+            <Grow {...TransitionProps} timeout={180} style={{ transformOrigin: "left center" }}>
+              <Paper
+                elevation={10}
+                sx={{
+                  width: LIST_WIDTH,
+                  borderRadius: 3,
+                  overflow: "hidden",
+                  border: `1px solid ${theme.palette.divider}`,
+                  backgroundColor: alpha(theme.palette.background.paper, 0.98),
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <Box sx={{ px: 1.25, pt: 1.25, pb: 0.75 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, display: "block", mb: 0.75 }}>
+                    {openCategory} ({openCategory ? (grouped.get(openCategory) ?? []).length : 0})
+                  </Typography>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    autoFocus
+                    placeholder="Search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon fontSize="small" />
+                          </InputAdornment>
+                        ),
+                        endAdornment: query ? (
+                          <InputAdornment position="end">
+                            <IconButton
+                              size="small"
+                              onClick={() => setQuery("")}
+                              aria-label="Clear search"
+                            >
+                              <ClearIcon fontSize="small" />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : undefined,
+                      },
+                    }}
+                  />
+                </Box>
+
+                <Box sx={{ maxHeight: LIST_MAX_HEIGHT, overflowY: "auto", px: 0.75, pb: 0.75 }}>
+                  {(() => {
+                    const items = openCategory ? grouped.get(openCategory) ?? [] : [];
+                    if (items.length > 0) return <List disablePadding>{items.map(renderRow)}</List>;
+                    return (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ px: 1, py: 1, display: "block" }}
+                      >
+                        {query
+                          ? "Nothing matches that search."
+                          : SOURCES.find((source) => source.category === openCategory)?.empty}
+                      </Typography>
+                    );
+                  })()}
+                </Box>
+
+                {disabledReason && (
+                  <Box sx={{ px: 1.5, py: 1, borderTop: `1px solid ${theme.palette.divider}` }}>
+                    <Typography variant="caption" color="warning.main">
+                      {disabledReason}
+                    </Typography>
+                  </Box>
+                )}
               </Paper>
-            </Box>
-          </Collapse>
-        </ListItem>
-      </List>
-    </Drawer>
+            </Grow>
+          )}
+        </Popper>
+      </Box>
+    </ClickAwayListener>
   );
 };
 

@@ -14,26 +14,53 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { ReactFlow, Background, Controls, useEdgesState, useNodesState, useReactFlow, 
-  Node, Edge, EdgeMarkerType, addEdge, Connection, NodeMouseHandler } from "@xyflow/react";
+  Node, Edge, EdgeMarkerType, Connection, NodeChange, NodeMouseHandler } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Grow, Popper, MenuList, MenuItem } from "@mui/material";
+import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
+import EdgeContextMenu from "./EdgeContextMenu";
 import EditorPalette from "./EditorPalette";
 import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
+import NetworkNameField from "./NetworkNameField";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
-import {
-  AccountTree as LayoutIcon,
-  RocketLaunchTwoTone as LaunchIcon,
-  ArrowDropDown as ArrowDropDownIcon,
-  Home as HomeIcon
-} from "@mui/icons-material";
+import LayoutIcon from "@mui/icons-material/AccountTree";
+import LaunchIcon from "@mui/icons-material/RocketLaunchTwoTone";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import HelpIcon from "@mui/icons-material/HelpOutlined";
+import RenameIcon from "@mui/icons-material/DriveFileRenameOutline";
+import NewDraftIcon from "@mui/icons-material/EditNote";
+import ChatIcon from "@mui/icons-material/ChatBubbleOutlined";
+import HomeIcon from "@mui/icons-material/Home";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
+import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
+import { buildEditorGraph } from "../state/editorGraph";
+import { sendEditorUpdate } from "../state/editorRoundTrip";
+import type { ChatMessage } from "../uiCommon";
+import { useEditorProgressBridge } from "../state/progressBridge";
+import type { ConnectivityInfo } from "../uiCommon";
+import {
+  addAgent as addAgentToDefinition,
+  definitionIssues,
+  deleteAgent as deleteAgentFromDefinition,
+  disconnectAgents as disconnectAgentsInDefinition,
+  reparentAgent as reparentAgentInDefinition,
+  duplicateAgent as duplicateAgentInDefinition,
+  canDelete,
+  canDuplicate,
+  canHaveChildren,
+  connectAgents as connectAgentsInDefinition,
+  newAgentAttributes,
+  uniqueAgentName,
+} from "../state/editorOperations";
+import { FRONTMAN_ITEM, PALETTE_DRAG_TYPE, type PaletteItem } from "../state/paletteSources";
+import { requestChatFocus } from "../utils/focusChat";
 
 export const nodeTypes = Object.freeze({
   agent: EditableAgentNode,
@@ -45,50 +72,77 @@ export const edgeTypes = Object.freeze({
   floating: FloatingEdge,
 });
 
-interface StateConnectivityResponse {
-  nodes: Node[];
-  edges: Edge[];
-  network_name: string;
-  connected_components: number;
-  total_agents: number;
-  defined_agents: number;
-  undefined_agents: number;
-}
+/**
+ * What the editor will and will not let you do, and why.
+ *
+ * Every line here corresponds to a rule enforced in `editorOperations`, so a greyed
+ * out action always has an explanation the user can find.
+ */
+const EDITING_RULES: string[] = [
+  "Adding an agent attaches it to the selected agent, or to the frontman when nothing is selected.",
+  "The frontman is the network's entry point: it cannot be deleted or duplicated. Edit its instructions instead, or start a new draft.",
+  "A toolbox tool or another network cannot have down-chain agents, so nothing can be attached to it.",
+  "Right-click a connection to delete it, or drag its end onto another agent to move the child.",
+  "A change that leaves an agent with no parent is kept on the canvas but not saved until you reconnect it.",
+];
 
-const EditorAgentFlow = ({ 
-  selectedNetwork, 
-  selectedDesignId,
-  onNetworkCreated, 
-  onNetworkSelected 
-}: { 
-  selectedNetwork: string;
-  selectedDesignId: string;
-  onNetworkCreated: () => void;
-  onNetworkSelected: (networkName: string) => void;
-}) => {
-  // console.log('EditorAgentFlow: Received props:', { selectedNetwork, selectedDesignId });
+const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl } = useApiPort();
   // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { fitView, setViewport } = useReactFlow();
+  const { fitView, setViewport, getNodes, getEdges } = useReactFlow();
   const theme = useTheme();
+
+  // Where a manual edit goes when the user has not picked a network: building a
+  // network from scratch has to work before it has a name, so edits land in a draft
+  // and the designer names it on the first round-trip. Without this the editor is
+  // dead on a blank canvas, since every edit path needs a store key.
+  //
+  // The draft is scoped to this editing session, so arriving at the Editor gives a
+  // clean canvas rather than reopening whatever was drawn days ago.
+  const { draftKey, startNewSession } = useEditorDraftSession();
+  const networkId = selectedNetwork || draftKey;
+
+  // The store is the authority for the definition; the canvas renders from it.
+  const entry = useEditorNetworkStore((state) => selectEntry(state, networkId));
+  const applyEdit = useEditorNetworkStore((state) => state.applyEdit);
+  const reconcileFromServer = useEditorNetworkStore((state) => state.reconcileFromServer);
+
+  // Naming is offered for a draft only. Renaming a network that was selected from
+  // the sidebar would save a second copy under the new name and leave the original
+  // behind, which needs designer-side cleanup this cannot do from the browser.
+  const isDraft = isDraftKey(networkId);
+  const networkLabel = selectedNetwork || entry?.networkName || "";
+  // Shown until the draft has a name, and reopened by the pencil after that.
+  const [isNamingNetwork, setIsNamingNetwork] = useState(false);
+  const showNameField = Boolean(entry) && (isDraft ? !entry?.networkName || isNamingNetwork : isNamingNetwork);
+  // Chat-driven changes arrive on the progress/slydata sockets and land in the same
+  // store, so the canvas does not care whether a change came from chat or a manual
+  // edit. Keyed on networkId rather than selectedNetwork so that the handover works
+  // in both directions: a user who builds a network by hand and then asks the chat to
+  // reword its instructions sees the result on the same canvas, instead of the frames
+  // being dropped because no network is formally "selected".
+  useEditorProgressBridge(networkId);
+
 
   // Layout control state (similar to AgentFlow)
   const [baseRadius, setBaseRadius] = useState(30);
   const [levelSpacing, setLevelSpacing] = useState(80);
   const [tempBaseRadius, setTempBaseRadius] = useState(baseRadius);
   const [tempLevelSpacing, setTempLevelSpacing] = useState(levelSpacing);
-  const { pluginManualEditor, pluginCruse } = getFeatureFlags();
-  const canEdit = !!pluginManualEditor;
+  const { pluginCruse } = getFeatureFlags();
   const shouldForceLayoutRef = useRef(false);
+  // The network whose viewport has already been pinned, so switching networks
+  // re-frames the canvas but ordinary edits and selections do not.
+  const pinnedViewportForRef = useRef<string | null>(null);
   const lastSeenNameRef = useRef<string | null>(null);
   const [showLaunchButton, setShowLaunchButton] = useState(false);
   const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
   const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
-  const { getLatestNetworkPayload,
+  const { getLatestNetworkPayload, addSlyDataMessage, targetNetwork,
     progressTick, slyDataTick, waitingForAgent } = useChatContext();
 
   // The launch button becomes visible as soon as the designer reports a network name,
@@ -116,12 +170,21 @@ const EditorAgentFlow = ({
     }
   }, [waitingForAgent]);
 
-  const launchDisabled = waitingForAgent || registryReloadPending;
+  // What the launch buttons will open. A chat-generated network is named by the
+  // designer; a hand-built one carries the name the user gave it, which is also the
+  // name it was saved under.
+  const launchableNetworkName =
+    getLatestNetworkPayload()?.agent_network_name || entry?.networkName || selectedNetwork || "";
 
-  // latest definition for view-mode
-  const getViewDefinition = useCallback(() => {
-    return getLatestNetworkPayload()?.agent_network_definition as Record<string, any> | undefined;
-  }, [getLatestNetworkPayload]);
+  // Visible as soon as the canvas holds a network, rather than waiting for the
+  // designer to announce a name: a network built by hand never produces that
+  // announcement, so the button used to stay hidden however complete the network was.
+  const hasNetworkToLaunch = (entry?.definition?.length ?? 0) > 0;
+
+  // A network with no name has not been persisted, so there is nothing on the server
+  // to launch yet. Showing the button but disabling it says that much more clearly
+  // than hiding it.
+  const launchDisabled = waitingForAgent || registryReloadPending || !launchableNetworkName;
 
   // Latest agent network name for the launch button — same selector as the canvas
   // and outgoing sly_data, so all three always name the same network.
@@ -130,10 +193,14 @@ const EditorAgentFlow = ({
   }, [getLatestNetworkPayload]);
 
   // Layout manager for position caching and intelligent layout
-  const layoutManager = selectedNetwork ? createLayoutManager(selectedNetwork, {
-    baseRadius,
-    levelSpacing
-  }) : null;
+  // Memoised deliberately. renderFromStore depends on this, and the effect that
+  // renders depends on renderFromStore, so an unmemoised layout manager would give
+  // renderFromStore a new identity on every render, re-run the effect, call
+  // setNodes/setEdges, and loop until React throws "maximum update depth exceeded".
+  const layoutManager = useMemo(
+    () => createLayoutManager(networkId, { baseRadius, levelSpacing }),
+    [networkId, baseRadius, levelSpacing]
+  );
   
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -145,96 +212,106 @@ const EditorAgentFlow = ({
 
   // Selected node state
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
+  /** The agent a drop would attach to, or "" over empty canvas. */
+  const [dropTargetId, setDropTargetId] = useState("");
+  /** Held while the naming dialog is up, and added once the network has a name. */
+  const [pendingFirstItem, setPendingFirstItem] = useState<PaletteItem | null>(null);
   
   // Agent editor state
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
   const [autoExpandPanel, setAutoExpandPanel] = useState(false);
   const isPanelOpenRef = useRef(false);
 
-  // Fetch network connectivity data
-  const fetchNetworkData = async (definitionOverride?: Record<string, any>) => {
-    // console.log('fetchNetworkData called with:', { selectedNetwork, selectedDesignId, apiUrl });
-    if (!selectedNetwork || !apiUrl) {
-      console.log('Missing selectedNetwork or apiUrl, skipping fetch');
+  // Render the canvas from the store.
+  //
+  // This replaces the old fetch: edit mode used to GET /andeditor/state/connectivity
+  // and view mode used to POST /connectivity/from_json just to turn a definition
+  // into nodes and edges. Both are now done in the browser by buildEditorGraph,
+  // which is verified to produce the same graph the backend did.
+  const renderFromStore = useCallback(() => {
+    const definition = entry?.definition ?? [];
+    if (definition.length === 0) {
+      setNodes([]);
+      setEdges([]);
       return;
     }
 
-    try {
-      let response: Response;
-      if (canEdit && selectedDesignId) {
-        // EDIT MODE: unchanged
-        response = await fetch(`${apiUrl}/api/v1/andeditor/state/connectivity/${selectedNetwork}`);
-      } else {
-        // VIEW MODE: get the definition from logs (or override)
-        const definition = definitionOverride ?? getViewDefinition();
-        if (!definition) {
-          console.warn("View-mode: no agent_network_definition available yet.");
-          return;
-        }
-        response = await fetch(`${apiUrl}/api/v1/connectivity/from_json`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agent_network_definition: definition }),
-        });
+    const graph = buildEditorGraph(definition, entry?.networkName ?? networkId);
+
+    const rawNodes = graph.nodes.map((node) => ({
+      ...node,
+      // `selected` is React Flow's own flag and decides what the Delete key removes;
+      // `data.selected` is what our node component styles from. Only the latter was
+      // being set, and since this rebuilds every node object it also wiped whatever
+      // selection React Flow had made on click — so Delete had nothing to act on.
+      selected: node.id === selectedNodeId,
+      data: { ...node.data, selected: node.id === selectedNodeId },
+    }));
+
+    const transformedEdges = graph.edges.map((edge) => ({
+      ...edge,
+      markerEnd: "arrowclosed" as EdgeMarkerType,
+      style: { stroke: theme.palette.divider, strokeWidth: 2 },
+      type: "floating",
+    }));
+
+    // Annotated as Node[] so the layout manager's return value is assignable
+    // (rawNodes alone infers a narrower literal type under @xyflow/react 12).
+    let finalNodes: Node[] = rawNodes;
+    if (layoutManager && rawNodes.length > 0) {
+      try {
+        finalNodes = layoutManager.applyLayout(rawNodes, transformedEdges).nodes;
+      } catch (error) {
+        console.warn("Failed to apply layout, using raw positions:", error);
       }
-      if (!response.ok) {
-        console.error(`Failed to fetch network data: ${response.statusText}`);
-        return;
-      }
-
-      const data: StateConnectivityResponse = await response.json();
-      // Transform nodes to include selection state
-      const rawNodes = data.nodes.map((node: Node) => ({
-        ...node,
-        data: { ...node.data, selected: node.id === selectedNodeId },
-      }));
-
-      // Transform edges to include arrows
-      const transformedEdges = data.edges.map((edge: Edge) => ({
-        ...edge,
-        markerEnd: "arrowclosed" as EdgeMarkerType,
-        style: { stroke: theme.palette.divider, strokeWidth: 2 },
-        type: "floating",
-      }));
-
-      // Apply intelligent layout with position caching. Annotated as Node[] so the
-      // layout manager's return value is assignable (rawNodes alone infers a narrower
-      // literal type under @xyflow/react 12's generics).
-      let finalNodes: Node[] = rawNodes;
-
-      if (layoutManager && rawNodes.length > 0) {
-        try {
-          const layoutResult = layoutManager.applyLayout(rawNodes, transformedEdges);
-          finalNodes = layoutResult.nodes;
-          // console.log(`Applied layout for ${selectedNetwork}: ${finalNodes.length} nodes, cached: ${layoutManager.hasCachedPositions()}`);
-        } catch (error) {
-          console.warn('Failed to apply layout, using raw positions:', error);
-          finalNodes = rawNodes;
-        }
-      }
-
-      setNodes(finalNodes);
-      setEdges(transformedEdges);
-      // Only setViewport here, deliberately. @xyflow/react 12 no longer runs
-      // fitView synchronously: it sets fitViewQueued and executes once the fresh
-      // nodes are measured, i.e. AFTER setViewport's animation has started, so a
-      // fitView() on this line would interrupt and override the pinned viewport
-      // (and this runs on every designer progress frame in view mode). Under v11
-      // fitView was a no-op against unmeasured nodes and setViewport always won,
-      // so dropping it preserves the pre-upgrade behaviour exactly.
-      setViewport({ x: -70, y: 100, zoom: 0.5 }, { duration: 800 });
-
-    } catch (error) {
-      console.error("Error fetching network data:", error);
     }
-  };
+
+    setNodes(finalNodes);
+    setEdges(transformedEdges);
+
+    // Pin the viewport only when arriving at a different network. This used to run on
+    // every call, and selectedNodeId is one of this callback's dependencies, so
+    // merely clicking an agent snapped the canvas back to zoom 0.5 and the user lost
+    // whatever they had zoomed in to. Panning and zooming are the user's to keep
+    // until they switch networks or press one of the view controls.
+    if (pinnedViewportForRef.current !== networkId) {
+      pinnedViewportForRef.current = networkId;
+      // Only setViewport here, deliberately. @xyflow/react 12 no longer runs fitView
+      // synchronously: it sets fitViewQueued and executes once the fresh nodes are
+      // measured, i.e. AFTER setViewport's animation has started, so a fitView() on
+      // this line would interrupt and override the pinned viewport.
+      setViewport({ x: -70, y: 100, zoom: 0.5 }, { duration: 800 });
+    }
+  }, [networkId, entry?.definition, entry?.networkName, selectedNodeId, layoutManager, theme, setNodes, setEdges, setViewport]);
+
+  // Mark the drop target on the nodes already on the canvas.
+  //
+  // Deliberately not part of renderFromStore: that rebuilds the graph and runs the
+  // layout, which on every dragover tick would thrash the canvas. This only rewrites
+  // the one flag on the nodes whose value actually changed.
+  useEffect(() => {
+    setNodes((current) => {
+      let changed = false;
+      const next = current.map((node) => {
+        const isTarget = node.id === dropTargetId;
+        if (Boolean(node.data.is_drop_target) === isTarget) return node;
+        changed = true;
+        return { ...node, data: { ...node.data, is_drop_target: isTarget } };
+      });
+      return changed ? next : current;
+    });
+  }, [dropTargetId, setNodes]);
 
   // Handle node click — always populate panel data, but don't auto-expand
   const onNodeClick: NodeMouseHandler = useCallback((_, node) => {
+    // Selecting an agent and editing it are different intents. A single click only
+    // selects — it decides what the palette attaches to and what Delete removes —
+    // while the editor panel is opened deliberately, by double-click or by
+    // right-click "Edit Agent". Loading the agent here as well meant the panel
+    // followed every click around the canvas.
     setSelectedNodeId(node.id);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    setAutoExpandPanel(false);
-    setSelectedAgentName(node.id);
+    closeEdgeMenu();
 
     // Update nodes to show selection
     setNodes((nds) =>
@@ -255,6 +332,30 @@ const EditorAgentFlow = ({
     isPanelOpenRef.current = true;
   }, []);
 
+  const [edgeMenu, setEdgeMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    source: string;
+    target: string;
+  }>({ visible: false, x: 0, y: 0, source: "", target: "" });
+
+  const closeEdgeMenu = useCallback(
+    () => setEdgeMenu({ visible: false, x: 0, y: 0, source: "", target: "" }),
+    []
+  );
+
+  const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.preventDefault();
+    setEdgeMenu({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      source: edge.source,
+      target: edge.target,
+    });
+  }, []);
+
   // Handle node context menu (right-click)
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault();
@@ -267,28 +368,11 @@ const EditorAgentFlow = ({
     });
   }, []);
 
-  // Handle edge connection
-  const onConnect = useCallback(
-    (params: Connection) => {
-      const newEdge: Edge = {
-        ...params,
-        id: `edge-${params.source}-${params.target}`,
-        markerEnd: "arrowclosed" as EdgeMarkerType,
-        style: {
-          stroke: theme.palette.divider,
-          strokeWidth: 2,
-        },
-        type: "floating",
-      };
-      setEdges((eds) => addEdge(newEdge, eds));
-    },
-    [setEdges]
-  );
-
   // Handle canvas click (deselect)
   const onPaneClick = useCallback(() => {
     setSelectedNodeId("");
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+    closeEdgeMenu();
     
     // Update nodes to remove selection
     setNodes((nds) => 
@@ -300,10 +384,10 @@ const EditorAgentFlow = ({
         },
       }))
     );
-  }, [setNodes]);
+  }, [setNodes, closeEdgeMenu]);
 
   // Handle nodes change (including position updates)
-  const handleNodesChange = useCallback((changes: any[]) => {
+  const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
     onNodesChange(changes);
     
     // Save positions when nodes are moved (simplified approach)
@@ -319,23 +403,119 @@ const EditorAgentFlow = ({
     }
   }, [onNodesChange, layoutManager, setNodes]);
 
-  // Force layout recalculation
+  // Force layout recalculation.
+  //
+  // Reads the live nodes and edges through getNodes/getEdges rather than closing over
+  // the `nodes` and `edges` state. This is called from a requestAnimationFrame, by
+  // which point the render that scheduled it has been replaced: with a closure it ran
+  // against the node list from BEFORE the edit and wrote that back, so an agent that
+  // renderFromStore had just added was silently removed again. The symptom was an
+  // added agent appearing only after some other interaction — a pane click or a
+  // reload — re-ran renderFromStore with nothing left to overwrite it.
   const handleForceLayout = useCallback(() => {
-    if (layoutManager && nodes.length > 0) {
-      try {
-        const layoutResult = layoutManager.forceLayout(nodes, edges);
-        setNodes(layoutResult.nodes);
-        // Keep existing edges as they are already transformed
-        
-        // Fit view after layout
-        setTimeout(() => {
-          fitView({ padding: 0.1, duration: 800 });
-        }, 100);
-      } catch (error) {
-        console.warn('Failed to force layout:', error);
-      }
+    if (!layoutManager) return;
+    try {
+      const currentNodes = getNodes();
+      if (currentNodes.length === 0) return;
+      // Edges are already transformed, so only the nodes are replaced.
+      setNodes(layoutManager.forceLayout(currentNodes, getEdges()).nodes);
+      setTimeout(() => {
+        fitView({ padding: 0.1, duration: 800 });
+      }, 100);
+    } catch (error) {
+      console.warn('Failed to force layout:', error);
     }
-  }, [layoutManager, nodes, edges, setNodes, fitView]);
+  }, [layoutManager, getNodes, getEdges, setNodes, fitView]);
+
+  // Apply an edit locally, then let the designer canonicalise it. The optimistic
+  // apply is what makes editing feel immediate; the round-trip is what persists it.
+  //
+  // A newer edit supersedes an older one still in flight. Every edit sends the WHOLE
+  // definition, so the newest send already contains everything the older one did and
+  // the last write wins server-side regardless. What the abort prevents is the older
+  // response arriving afterwards and reconciling a definition that is now stale,
+  // which would undo the newer edit on the canvas. It also stops a queue building up
+  // when a user adds several agents in quick succession.
+  const inFlightEditRef = useRef<AbortController | null>(null);
+
+  // Manual edits go over HTTP, so nothing about them reaches the sly_data websocket
+  // the Sly Data panel listens to, and the panel sat on whatever the last chat turn
+  // left there. Feeding the designer's echoed sly_data into the same stream a chat
+  // turn writes to keeps one source for the panel rather than teaching it a second.
+  const publishSlyData = useCallback(
+    (frame: ChatMessage) => {
+      const slyData = (frame as ChatMessage & { sly_data?: Record<string, unknown> }).sly_data;
+      if (!slyData || !targetNetwork) return;
+      // Only a frame carrying a definition is a complete picture of the network. The
+      // same rule parseEchoedPayload applies, and for the same reason: a partial blob
+      // would become the base for the next chat turn's sly_data, which round-trips
+      // non-definition keys unchanged.
+      if (!slyData.agent_network_definition) return;
+      addSlyDataMessage({
+        sender: targetNetwork,
+        // Same markdown-fenced JSON the chat path posts, so the panel's parsing does
+        // not have to know where the frame came from.
+        text: `\`\`\`json\n${JSON.stringify(slyData, null, 2)}\n\`\`\``,
+        network: targetNetwork,
+      });
+    },
+    [addSlyDataMessage, targetNetwork]
+  );
+
+  const applyAndSync = useCallback(
+    async (next: ConnectivityInfo[], agentName: string, message?: string) => {
+      if (!apiUrl) return;
+      applyEdit(networkId, next);
+
+      // Hold a half-finished rearrangement locally rather than sending it. An
+      // invalid definition is not rejected by the designer, it is REPAIRED by its
+      // LLM, which restructures the network and discards the edit in progress. The
+      // canvas still shows the change; the next valid edit persists everything.
+      if (definitionIssues(next).length > 0) return;
+
+      inFlightEditRef.current?.abort();
+      const controller = new AbortController();
+      inFlightEditRef.current = controller;
+
+      try {
+        await sendEditorUpdate({
+          apiUrl,
+          networkId,
+          agentName,
+          definition: next,
+          message,
+          signal: controller.signal,
+          onFrame: publishSlyData,
+        });
+      } catch (error) {
+        // An abort is this function superseding itself, not a failure.
+        if ((error as Error)?.name !== "AbortError") {
+          console.error(`Failed to persist edit for ${agentName}:`, error);
+        }
+      } finally {
+        if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
+      }
+    },
+    [networkId, apiUrl, applyEdit, publishSlyData]
+  );
+
+  // Handle edge connection.
+  //
+  // Drawing an edge is how a free agent gets wired up, so it has to change the
+  // definition. It used to only call setEdges, which meant the edge vanished the next
+  // time the canvas rendered from the store and never reached the network. There is
+  // no local setEdges here at all now: the store is the authority, and the render
+  // effect draws the edge once the definition holds it.
+  const onConnect = useCallback(
+    (params: Connection) => {
+      const definition = entry?.definition ?? [];
+      const next = connectAgentsInDefinition(definition, params.source ?? "", params.target ?? "");
+      // Unchanged means the edge was refused: a toolbox tool or external reference
+      // cannot have down-chains, and a duplicate or self-edge is nothing to do.
+      if (next !== definition) void applyAndSync(next, params.source ?? "");
+    },
+    [entry?.definition, applyAndSync]
+  );
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
@@ -346,76 +526,285 @@ const EditorAgentFlow = ({
   };
 
   const handleDeleteAgent = async (nodeId: string) => {
-    // console.log("Delete agent:", nodeId, "selectedDesignId:", selectedDesignId);
-    
-    if (!selectedDesignId) {
-      console.error("Cannot delete agent: no design_id available. Current selectedDesignId:", selectedDesignId);
-      setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-      return;
-    }
-    
-    const success = await deleteAgent(nodeId);
-    if (success) {
-      // Refresh the network data to reflect changes
-      await fetchNetworkData();
-    }
-    
+    const next = deleteAgentFromDefinition(entry?.definition ?? [], nodeId);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
     setSelectedNodeId("");
+    // deleteAgent returns the same array when nothing matched, so nothing to send.
+    if (next !== (entry?.definition ?? [])) await applyAndSync(next, nodeId);
   };
 
   const handleDuplicateAgent = async (nodeId: string) => {
-    // console.log("Duplicate agent:", nodeId, "selectedDesignId:", selectedDesignId);
-    
-    if (!selectedDesignId) {
-      console.error("Cannot duplicate agent: no design_id available. Current selectedDesignId:", selectedDesignId);
-      setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-      return;
-    }
-    
-    // Generate a new name for the duplicated agent
-    const newAgentName = `${nodeId}_copy`;
-    
-    const success = await duplicateAgent(nodeId, newAgentName);
-    if (success) {
-      // Refresh the network data to reflect changes
-      await fetchNetworkData();
-    }
-    
+    const definition = entry?.definition ?? [];
+    // Uniquified, or a second copy would collide with the first and addAgent's
+    // duplicate-name guard would silently make the action do nothing.
+    const newAgentName = uniqueAgentName(definition, `${nodeId}_copy`);
+    const next = duplicateAgentInDefinition(definition, nodeId, newAgentName);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+    if (next !== definition) await applyAndSync(next, newAgentName);
   };
 
   const handleAddChildAgent = async (nodeId: string) => {
-    // console.log("Add child agent to:", nodeId, "selectedDesignId:", selectedDesignId);
-    
-    if (!selectedDesignId) {
-      console.error("Cannot add child agent: no design_id available. Current selectedDesignId:", selectedDesignId);
-      setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-      return;
-    }
-    
-    // Generate a name for the child agent
-    const childAgentName = `${nodeId}_child`;
-    
-    // Use current agent as parent (one level down)
-    const success = await createAgent(childAgentName, nodeId);
-    if (success) {
-      // Refresh the network data to reflect changes
-      await fetchNetworkData();
-    }
-    
+    const definition = entry?.definition ?? [];
+    // Uniquified for the same reason as duplicate: a fixed "<parent>_child" meant an
+    // agent could be given exactly one child, and every attempt after the first was
+    // rejected as a duplicate name with nothing to show for it.
+    const childAgentName = uniqueAgentName(definition, `${nodeId}_child`);
+    const next = addAgentToDefinition(
+      definition,
+      childAgentName,
+      nodeId,
+      newAgentAttributes(childAgentName)
+    );
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+    if (next !== definition) await applyAndSync(next, childAgentName);
   };
+
+  // One path for putting a palette item on the canvas, whether it was clicked or
+  // dropped, so both persist exactly like a chat-generated agent does.
+  //
+  // With no explicit target `addAgent` attaches to the frontman, so nothing added
+  // here can ever float free.
+  const addPaletteItem = useCallback(
+    async (item: PaletteItem, parentName?: string) => {
+      if (!item?.agentName) return;
+
+      // Read the entry live rather than from the render closure. This is called
+      // straight after naming the network, and a captured `entry` would still be the
+      // unnamed one, so the naming gate below would fire a second time and the agent
+      // would never be added.
+      const current = useEditorNetworkStore.getState().entries[networkId];
+      const definition = current?.definition ?? [];
+
+      // A network built by hand has no name until someone gives it one, and the
+      // designer refuses to persist anything without `agent_network_name`. So the
+      // first edit of an unnamed network would apply to the canvas and be silently
+      // dropped server-side. Chat mode never hits this because the designer names
+      // what it generates; manual mode has to ask. Asking once, before the first
+      // agent exists, means every edit from then on persists.
+      if (definition.length === 0 && !current?.networkName && networkId === draftKey) {
+        setPendingFirstItem(item);
+        return;
+      }
+      // Only a blank agent gets renamed to dodge a collision; a tool or a network
+      // names something specific, so a second drop of it has to be a no-op.
+      const agentName = item.uniquifyName
+        ? uniqueAgentName(definition, item.agentName)
+        : item.agentName;
+      // An LLM agent needs instructions and a description; a toolbox tool must have
+      // neither, since that absence is what marks it as a tool. addAgent refuses a
+      // parent that cannot take children, so dropping onto a tool does nothing
+      // rather than quietly attaching the agent somewhere else.
+      const next = addAgentToDefinition(
+        definition,
+        agentName,
+        parentName,
+        item.isLlmAgent ? newAgentAttributes(agentName) : undefined
+      );
+      // addAgent returns the same array when the name is taken, which is what makes
+      // adding the same tool twice a no-op rather than an error.
+      if (next !== definition) await applyAndSync(next, agentName);
+    },
+    [entry?.definition, applyAndSync]
+  );
+
+  // Delete one connection, leaving both agents in place. The agent that loses its
+  // parent stays on the canvas so it can be reconnected; applyAndSync holds that
+  // state locally until it is valid again.
+  const handleDeleteConnection = useCallback(
+    async (source: string, target: string) => {
+      closeEdgeMenu();
+      const definition = entry?.definition ?? [];
+      const next = disconnectAgentsInDefinition(definition, source, target);
+      if (next !== definition) await applyAndSync(next, source, `Disconnect "${target}" from "${source}"`);
+    },
+    [entry?.definition, applyAndSync, closeEdgeMenu]
+  );
+
+  // Dragging an edge's endpoint onto another agent moves the child in ONE edit, so
+  // the definition never passes through the rootless state that delete-then-connect
+  // would produce.
+  const onReconnect = useCallback(
+    (oldEdge: Edge, connection: Connection) => {
+      const definition = entry?.definition ?? [];
+      // Only the parent end is meaningful here: the child keeps its identity, and
+      // what changes is which agent chains down to it.
+      const next = reparentAgentInDefinition(
+        definition,
+        oldEdge.target,
+        oldEdge.source,
+        connection.source ?? ""
+      );
+      if (next !== definition) {
+        void applyAndSync(next, connection.source ?? "", `Move "${oldEdge.target}" under "${connection.source}"`);
+      }
+    },
+    [entry?.definition, applyAndSync]
+  );
+
+  // Selecting an agent and pressing Delete removes it, through the same path as the
+  // context menu so the frontman guard and the child promotion apply either way.
+  // React Flow raises this for any node it considers deleted; refusing one simply
+  // leaves the definition unchanged.
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      for (const node of deleted) void handleDeleteAgent(node.id);
+    },
+    // handleDeleteAgent is a plain function redeclared each render, so it is read
+    // through the ref-free closure here; the definition it reads comes from `entry`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entry?.definition, applyAndSync]
+  );
+
+  // Selecting an edge and pressing Delete goes through the same path, so the keyboard
+  // and the context menu cannot drift apart.
+  const onEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      for (const edge of deleted) void handleDeleteConnection(edge.source, edge.target);
+    },
+    [handleDeleteConnection]
+  );
+
+  // Clicking a palette item attaches it to whichever agent is selected, falling back
+  // to the frontman when nothing is.
+  const handlePaletteAdd = useCallback(
+    (item: PaletteItem) => addPaletteItem(item, selectedNodeId || undefined),
+    [addPaletteItem, selectedNodeId]
+  );
+
+  // Why the canvas is not being saved, if it is not. Derived from the definition
+  // rather than remembered from the last edit, so it survives a reload: the store is
+  // persisted, so an unsaved rearrangement outlives the page that made it, and a
+  // warning that disappeared on refresh would read as "saved".
+  const pendingIssues = useMemo(() => {
+    const definition = entry?.definition ?? [];
+    // An empty canvas is not an unsaved change, it is a starting point.
+    return definition.length === 0 ? [] : definitionIssues(definition);
+  }, [entry?.definition]);
+
+  // A click adds under the selected agent, so a selection that cannot take children
+  // disables the palette rather than having the click land somewhere unexpected.
+  const paletteDisabledReason =
+    selectedNodeId && !canHaveChildren(entry?.definition ?? [], selectedNodeId)
+      ? `"${selectedNodeId}" cannot have down-chain agents. Deselect it to add elsewhere.`
+      : undefined;
+
+  // Name a network that is still a draft.
+  //
+  // The name is what decides persistence: verified against a live designer, an edit
+  // sent without `agent_network_name` is canonicalised and echoed but never saved,
+  // while one sent with a name is assembled and saved under it. So naming a draft is
+  // also the moment it starts being persisted.
+  //
+  // Offered for a first name only. Renaming an already-saved network would save it
+  // again under the new name and leave the old registry entry behind, which needs
+  // designer-side cleanup this cannot do from here.
+  const handleNameNetwork = useCallback(
+    async (proposedName: string) => {
+      const name = proposedName.trim();
+      if (!name || !apiUrl) return;
+
+      // Live, for the same reason addPaletteItem reads live: this runs from a dialog
+      // whose callback was created before the current definition existed.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
+      // Record it locally first, so the panel and the next edit's outgoing sly_data
+      // agree on the name even before the echo comes back. reconcileFromServer is
+      // the right door: a name is not an edit, so it must not create an undo step.
+      reconcileFromServer(networkId, { definition, networkName: name });
+
+      // Nothing to persist for a network with no agents yet. The name is recorded
+      // locally and the first agent added carries it, which is what makes that first
+      // edit persist instead of being dropped for a missing agent_network_name.
+      if (definition.length === 0) return;
+
+      // Supersede any in-flight edit, for the same reason applyAndSync does: this
+      // send carries the whole definition, and an older response landing afterwards
+      // would reconcile a definition that predates the name.
+      inFlightEditRef.current?.abort();
+      const controller = new AbortController();
+      inFlightEditRef.current = controller;
+
+      try {
+        await sendEditorUpdate({
+          apiUrl,
+          networkId,
+          agentName: definition[0]?.origin ?? "frontman",
+          definition,
+          networkName: name,
+          message: `Name this agent network "${name}"`,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if ((error as Error)?.name !== "AbortError") {
+          console.error(`Failed to name the network ${name}:`, error);
+        }
+      } finally {
+        if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
+      }
+    },
+    [apiUrl, networkId, reconcileFromServer]
+  );
+
+  /** The agent under the cursor during a drag, if any. */
+  const nodeUnderCursor = (event: React.DragEvent | React.MouseEvent): string =>
+    (event.target as HTMLElement | null)?.closest(".react-flow__node")?.getAttribute("data-id") ?? "";
+
+  const onDragOver = useCallback(
+    (event: React.DragEvent) => {
+      // Without preventDefault the browser refuses the drop entirely.
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+
+      // Highlight what the drop would attach to. A tool cannot take children, so
+      // hovering one highlights nothing rather than promising a connection that
+      // would be refused.
+      const hovered = nodeUnderCursor(event);
+      const attachable = hovered && canHaveChildren(entry?.definition ?? [], hovered) ? hovered : "";
+      setDropTargetId((current) => (current === attachable ? current : attachable));
+    },
+    [entry?.definition]
+  );
+
+  const onDragLeave = useCallback((event: React.DragEvent) => {
+    // Leaving for a child element is not leaving the canvas, so only a move outside
+    // the whole pane clears the highlight.
+    const leavingTo = event.relatedTarget as globalThis.Node | null;
+    if (leavingTo && event.currentTarget.contains(leavingTo)) return;
+    setDropTargetId("");
+  }, []);
+
+  const onDrop = useCallback(
+    async (event: React.DragEvent) => {
+      event.preventDefault();
+      const payload = event.dataTransfer.getData(PALETTE_DRAG_TYPE);
+      if (!payload) return;
+
+      let item: PaletteItem;
+      try {
+        item = JSON.parse(payload) as PaletteItem;
+      } catch {
+        return;
+      }
+
+      // What was dropped ON decides the parent; dropping on empty canvas falls back
+      // to the frontman. The drop POSITION is deliberately ignored, unlike Flowise's
+      // free-form canvas: this graph is laid out as a hierarchy, so the layout
+      // manager would immediately overwrite any position taken from the cursor.
+      const droppedOnNodeId = nodeUnderCursor(event);
+      setDropTargetId("");
+      await addPaletteItem(item, droppedOnNodeId || undefined);
+    },
+    [addPaletteItem]
+  );
 
   // Handle agent update from editor panel
   const handleAgentUpdated = async () => {
-    // console.log("Agent updated, refreshing network data");
-    await fetchNetworkData();
+    // Nothing to refetch: the panel writes through the store, which re-renders the
+    // canvas on its own.
   };
 
   // Handle launch to Cruse (default)
   const handleLaunchCruse = useCallback(() => {
-    const agentNetworkName = getLatestAgentNetworkName();
+    const agentNetworkName = launchableNetworkName;
     if (agentNetworkName) {
       // The designer reports the raw name (e.g. "foo"); neuro-san serves generated
       // networks under the configured subdirectory (e.g. "generated/foo"), which is
@@ -424,18 +813,18 @@ const EditorAgentFlow = ({
       const cruseUrl = `${window.location.origin}/cruse?network=${encodeURIComponent(servedName)}`;
       window.open(cruseUrl, '_blank');
     }
-  }, [getLatestAgentNetworkName]);
+  }, [launchableNetworkName]);
 
   // Handle launch to Home (dropdown option)
   const handleLaunchHome = useCallback(() => {
-    const agentNetworkName = getLatestAgentNetworkName();
+    const agentNetworkName = launchableNetworkName;
     if (agentNetworkName) {
       const servedName = toServedNetworkPath(agentNetworkName);
       const homeUrl = `${window.location.origin}/home?network=${encodeURIComponent(servedName)}`;
       window.open(homeUrl, '_blank');
     }
     setLaunchMenuOpen(false);
-  }, [getLatestAgentNetworkName]);
+  }, [launchableNetworkName]);
 
   // Toggle launch menu
   const handleToggleLaunchMenu = () => {
@@ -452,109 +841,21 @@ const EditorAgentFlow = ({
     setLaunchMenuOpen(false);
   };
 
-  // API functions for agent operations
-  const createAgent = async (agentName: string, parentName?: string) => {
-    if (!selectedDesignId || !apiUrl) {
-      console.error("Missing design_id or apiUrl for createAgent:", { selectedDesignId, apiUrl });
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: agentName,
-          parent_name: parentName,
-          instructions: `Agent ${agentName}`,
-          agent_type: 'standard'
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Failed to create agent:', error);
-        return false;
-      }
-
-      const result = await response.json();
-      console.log('Agent created successfully:', result);
-      return true;
-    } catch (error) {
-      console.error('Error creating agent:', error);
-      return false;
-    }
-  };
-
-  const duplicateAgent = async (agentName: string, newAgentName: string) => {
-    if (!selectedDesignId || !apiUrl) {
-      console.error("Missing design_id or apiUrl");
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${agentName}/duplicate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          new_name: newAgentName
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Failed to duplicate agent:', error);
-        return false;
-      }
-
-      const result = await response.json();
-      console.log('Agent duplicated successfully:', result);
-      return true;
-    } catch (error) {
-      console.error('Error duplicating agent:', error);
-      return false;
-    }
-  };
-
-  const deleteAgent = async (agentName: string) => {
-    if (!selectedDesignId || !apiUrl) {
-      console.error("Missing design_id or apiUrl");
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${agentName}`, {
-        method: 'DELETE'
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Failed to delete agent:', error);
-        return false;
-      }
-
-      const result = await response.json();
-      console.log('Agent deleted successfully:', result);
-      return true;
-    } catch (error) {
-      console.error('Error deleting agent:', error);
-      return false;
-    }
-  };
-
   // Effects
   // Load data when network changes or layout parameters change (similar to AgentFlow)
+  //
+  // Gated on the store entry rather than on selectedNetwork, so a draft built by
+  // dragging renders even though no network has been chosen.
   useEffect(() => {
-    // console.log('useEffect triggered with:', { selectedNetwork, selectedDesignId });
-    if (selectedNetwork) {
-      fetchNetworkData();
+    if (entry) {
+      renderFromStore();
     } else {
       setNodes([]);
       setEdges([]);
       setShowLaunchButton(false);
       lastSeenNameRef.current = null;
     }
-  }, [selectedNetwork, selectedDesignId, baseRadius, levelSpacing]);
+  }, [entry, entry?.definition, baseRadius, levelSpacing, renderFromStore]);
 
   // Update temp values when actual values change
   useEffect(() => {
@@ -565,24 +866,38 @@ const EditorAgentFlow = ({
     setTempLevelSpacing(levelSpacing);
   }, [levelSpacing]);
 
-  // refetch when new progress/slydata ticks arrive (view-mode only)
+  // Relayout after the progress stream changes the definition. The bridge already
+  // wrote it to the store, so there is nothing to refetch; this only latches an
+  // animated relayout so the graph settles into its new shape.
   useEffect(() => {
-    if (!canEdit && selectedNetwork) {
-      const timeout = setTimeout(() => {
-        shouldForceLayoutRef.current = true;
-        const def = getViewDefinition();
-        if (def) fetchNetworkData(def);  // pass override so we POST exactly what just arrived
-        else fetchNetworkData();  // fallback: still try; fetchNetworkData() will call getViewDefinition() internally
-      }, 200); // slight debounce
-
-      return () => clearTimeout(timeout);
+    if (entry) {
+      shouldForceLayoutRef.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progressTick, slyDataTick, selectedNetwork, canEdit]);
+  }, [progressTick, slyDataTick, entry]);
+
+  // The same settle for a manual edit. Chat ticks used to be the only thing that
+  // latched a relayout, so an agent added by hand stayed wherever the first layout
+  // put it and the graph only tidied itself up later, when some unrelated chat frame
+  // arrived. Keyed on the topology, so renaming instructions does not reshuffle the
+  // canvas while the user is reading it.
+  const topologySignature = useMemo(
+    () =>
+      (entry?.definition ?? [])
+        .map((agent) => `${agent.origin}>${[...(agent.tools ?? [])].sort().join(",")}`)
+        .sort()
+        .join("|"),
+    [entry?.definition]
+  );
+  const previousTopologyRef = useRef(topologySignature);
+  useEffect(() => {
+    if (previousTopologyRef.current === topologySignature) return;
+    previousTopologyRef.current = topologySignature;
+    shouldForceLayoutRef.current = true;
+  }, [topologySignature]);
 
   // After nodes/edges update, run animated relayout once
   useEffect(() => {
-    if (!canEdit && selectedNetwork && shouldForceLayoutRef.current) {
+    if (entry && shouldForceLayoutRef.current) {
       // reset the latch before invoking to avoid loops
       shouldForceLayoutRef.current = false;
 
@@ -591,18 +906,18 @@ const EditorAgentFlow = ({
         handleForceLayout();
       });
     }
-  }, [nodes, edges, canEdit, selectedNetwork, handleForceLayout]);
+  }, [nodes, edges, entry, handleForceLayout]);
 
   // Monitor for agent network name changes to show launch button
   useEffect(() => {
-    if (!canEdit && selectedNetwork) {
+    if (selectedNetwork) {
       const currentName = getLatestAgentNetworkName();
       if (currentName && currentName !== lastSeenNameRef.current) {
         lastSeenNameRef.current = currentName;
         setShowLaunchButton(true);
       }
     }
-  }, [progressTick, slyDataTick, selectedNetwork, canEdit, getLatestAgentNetworkName]);
+  }, [progressTick, slyDataTick, selectedNetwork, getLatestAgentNetworkName]);
 
 
   return (
@@ -612,20 +927,23 @@ const EditorAgentFlow = ({
       position: 'relative',
       display: 'flex'
     }}>
-      {/* Editor Palette */}
-      {canEdit &&
-        <EditorPalette 
-          onNetworkCreated={onNetworkCreated}
-          onNetworkSelected={onNetworkSelected}
-        />
-      }
-      
       {/* Main Flow Area */}
       <Box sx={{ 
         flexGrow: 1, 
         position: 'relative',
         backgroundColor: theme.palette.background.default
       }}>
+        {/*
+          Inside the flow area, not beside it: the palette is a notch floating over
+          the canvas now, so it must be positioned against the canvas rather than
+          taking a column of its own out of the row.
+        */}
+        <EditorPalette
+          selectedNetwork={selectedNetwork}
+          needsFrontman={(entry?.definition?.length ?? 0) === 0}
+          disabledReason={paletteDisabledReason}
+          onAddItem={handlePaletteAdd}
+        />
         <ReactFlow
         nodes={nodes}
         // @xyflow/react 12 defaults --xy-controls-button-color-default to
@@ -642,7 +960,19 @@ const EditorAgentFlow = ({
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
+        onNodesDelete={onNodesDelete}
+        onEdgesDelete={onEdgesDelete}
+        // Both, because the key a user calls "delete" differs by keyboard: the Mac
+        // key labelled delete reports "Backspace", while "Delete" is a PC delete or
+        // Mac fn+delete. xyflow binds only Backspace by default.
+        deleteKeyCode={["Delete", "Backspace"]}
+        onReconnect={onReconnect}
+        edgesReconnectable
         onPaneClick={onPaneClick}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{
@@ -677,11 +1007,74 @@ const EditorAgentFlow = ({
         onDuplicate={handleDuplicateAgent}
         onAddChild={handleAddChildAgent}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" })}
-        enableEditing={pluginManualEditor} 
+        canAddChild={canHaveChildren(entry?.definition ?? [], contextMenu.nodeId)}
+        canDuplicate={canDuplicate(entry?.definition ?? [], contextMenu.nodeId)}
+        canDelete={canDelete(entry?.definition ?? [], contextMenu.nodeId)}
+      />
+
+      {/* Name the network before its first agent exists */}
+      <Dialog
+        open={Boolean(pendingFirstItem)}
+        onClose={() => setPendingFirstItem(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>Name this agent network</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            A network needs a name before it can be saved, so this is asked once, up
+            front. Everything you build after this is saved as you go.
+          </Typography>
+          <NetworkNameField
+            onSubmit={async (name) => {
+              const item = pendingFirstItem;
+              setPendingFirstItem(null);
+              if (!item) return;
+              await handleNameNetwork(name);
+              // Name the frontman after the network rather than leaving every network
+              // with an agent called "frontman": the name shows up in the generated
+              // HOCON and in the chat, where "frontman" says nothing about what it
+              // does. Renameable afterwards from the agent panel.
+              await addPaletteItem(
+                item === FRONTMAN_ITEM ? { ...item, agentName: `${name}_agent` } : item
+              );
+            }}
+            onCancel={() => setPendingFirstItem(null)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0, justifyContent: 'flex-start' }}>
+          {/*
+            Building by hand is one way in, not the only one. Offering the other here
+            costs a line and saves a user who opened this dialog without realising
+            they could simply describe what they want.
+          */}
+          <Button
+            size="small"
+            startIcon={<ChatIcon fontSize="small" />}
+            onClick={() => {
+              setPendingFirstItem(null);
+              requestChatFocus();
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            Describe it in chat instead
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Connection Context Menu */}
+      <EdgeContextMenu
+        visible={edgeMenu.visible}
+        x={edgeMenu.x}
+        y={edgeMenu.y}
+        source={edgeMenu.source}
+        target={edgeMenu.target}
+        onDelete={handleDeleteConnection}
+        onClose={closeEdgeMenu}
       />
 
       {/* Network Info Panel */}
-      {selectedNetwork && (
+      {entry && (
         <Paper
           elevation={3}
           sx={{
@@ -695,65 +1088,116 @@ const EditorAgentFlow = ({
             minWidth: 200
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="subtitle1" sx={{ 
-              fontWeight: 600, 
-              color: theme.palette.text.primary
-            }}>
-              Editing: {selectedNetwork}
-            </Typography>
-            <Tooltip title="Reorganize Layout">
-              <span style={{ display: 'inline-flex' }}>
-                <IconButton
-                  size="small"
-                  onClick={handleForceLayout}
-                  disabled={nodes.length === 0}
-                  sx={{
-                    color: theme.palette.primary.main,
-                    '&:hover': {
-                      backgroundColor: theme.palette.primary.main + '20'
-                    }
-                  }}
-                >
-                  <LayoutIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Box>
-          
-          <Box sx={{ color: theme.palette.text.secondary }}>
-            <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
-              Nodes: {nodes.length}
-            </Typography>
-            <Typography variant="body2" sx={{ color: theme.palette.text.primary }}>
-              Edges: {edges.length}
-            </Typography>
-            {selectedNodeId && (
-              <Box sx={{ 
-                mt: 1, 
-                pt: 1, 
-                borderTop: `1px solid ${theme.palette.divider}` 
-              }}>
-                <Typography variant="body2" sx={{ 
-                  color: theme.palette.primary.main,
-                  fontWeight: 500
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            {showNameField ? (
+              <NetworkNameField
+                initialName={entry?.networkName ?? ''}
+                onSubmit={(name) => { setIsNamingNetwork(false); void handleNameNetwork(name); }}
+                onCancel={entry?.networkName ? () => setIsNamingNetwork(false) : undefined}
+              />
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                <Typography variant="subtitle1" noWrap sx={{
+                  fontWeight: 600,
+                  color: theme.palette.text.primary
                 }}>
-                  Selected: {selectedNodeId}
+                  Editing: {networkLabel}
                 </Typography>
+                {/*
+                  Was gated on isDraft, which turns false the moment the network is
+                  named and selected — so the rename affordance disappeared exactly
+                  when the user had a name to change. Renaming saves the network again
+                  under the new name and leaves the old entry in the registry, which
+                  the field's own helper text says.
+                */}
+                <Tooltip title="Rename this network">
+                  <IconButton size="small" onClick={() => setIsNamingNetwork(true)}>
+                    <RenameIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </Box>
             )}
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              {/*
+                The editor refuses a few things on purpose, and a refusal the user
+                cannot explain reads as a bug. The rules live here so they are
+                discoverable before something is greyed out, not only after.
+              */}
+              <Tooltip
+                arrow
+                placement="right"
+                title={
+                  <Box sx={{ p: 0.5 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
+                      How Manual Editing Works
+                    </Typography>
+                    {EDITING_RULES.map((rule) => (
+                      <Typography key={rule} variant="caption" sx={{ display: 'block', mb: 0.25 }}>
+                        • {rule}
+                      </Typography>
+                    ))}
+                  </Box>
+                }
+              >
+                <IconButton size="small" sx={{ color: theme.palette.text.secondary }}>
+                  <HelpIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Reorganize Layout">
+                <span style={{ display: 'inline-flex' }}>
+                  <IconButton
+                    size="small"
+                    onClick={handleForceLayout}
+                    disabled={nodes.length === 0}
+                    sx={{
+                      color: theme.palette.primary.main,
+                      '&:hover': {
+                        backgroundColor: theme.palette.primary.main + '20'
+                      }
+                    }}
+                  >
+                    <LayoutIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
           </Box>
+          
+          {/*
+            Node and edge counts used to live here. The graph is on screen and the
+            sidebar already lists the agents, so they were a second and third place to
+            read the same thing while making this panel three lines tall.
+          */}
+          {pendingIssues.length > 0 && (
+            // Not saved, and why. Silence here would look like a save that worked.
+            <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${theme.palette.divider}`, maxWidth: 300 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.warning.main, fontWeight: 600 }}>
+                Not saved yet
+              </Typography>
+              {pendingIssues.map((issue) => (
+                <Typography key={issue} variant="caption" sx={{ display: 'block', color: theme.palette.text.secondary }}>
+                  {issue}
+                </Typography>
+              ))}
+            </Box>
+          )}
         </Paper>
       )}
 
-      {/* Launch Button with Dropdown */}
-      {showLaunchButton && (
+      {/* Launch Button with Dropdown, and starting over */}
+      {(showLaunchButton || hasNetworkToLaunch) && (
         <Box
           sx={{
             position: 'absolute',
-            top: 16,
-            right: 180, // Position to the left of Layout Controls
+            top: 76,
+            // Below the layout controls rather than beside them. Those became a
+            // single wide row and were sitting on top of these buttons; stacking is
+            // what keeps both readable whatever the canvas width.
+            right: 60,
             zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
           }}
         >
           {pluginCruse ? (
@@ -907,6 +1351,40 @@ const EditorAgentFlow = ({
               </span>
             </Tooltip>
           )}
+
+          {/*
+            Always available, not only while a draft is open: once a chat turn names
+            the network this stopped being a draft and the button vanished, which is
+            exactly when a user is most likely to want to start another one.
+          */}
+          <Tooltip title={`${isDraft ? "Start a new draft, discarding this one." : "Start a new agent network."} You can always describe a network in the chat instead of building it by hand.`}>
+              <span style={{ display: 'inline-flex' }}>
+                <IconButton
+                  onClick={() => {
+                    // Start over the same way the Editor starts: ask for a name, then
+                    // put the frontman down. A draft therefore always has both, and
+                    // nothing can be added before the network's entry point exists.
+                    startNewSession();
+                    setPendingFirstItem(FRONTMAN_ITEM);
+                  }}
+                  sx={{
+                    width: 56,
+                    height: 56,
+                    backgroundColor: alpha(theme.palette.background.paper, 0.95),
+                    backdropFilter: 'blur(8px)',
+                    border: `1px solid ${theme.palette.divider}`,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    color: theme.palette.text.secondary,
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                >
+                <NewDraftIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
         </Box>
       )}
 
@@ -919,29 +1397,25 @@ const EditorAgentFlow = ({
             top: 16,
             right: 60, // Move left to avoid ReactFlow controls
             zIndex: 20,
-            p: 1,
+            px: 1.25,
+            py: 0.5,
+            borderRadius: 2,
             backgroundColor: alpha(theme.palette.background.paper, 0.95),
             backdropFilter: 'blur(8px)',
-            minWidth: 80,
-            maxWidth: 140
+            // Each control is one row of label-then-slider rather than a stacked
+            // block, which is what made this taller than the canvas needed.
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
           }}
         >
-          <Typography variant="caption" sx={{ 
-            fontWeight: 600, 
-            color: theme.palette.text.secondary,
-            display: 'block',
-            mb: 0.1,
-            fontSize: '0.6rem'
-          }}>
-            Layout Controls
-          </Typography>
-          
-          <Box sx={{ mb: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <Typography variant="caption" sx={{ 
-              color: theme.palette.text.primary,
-              fontSize: '0.6rem'
+              color: theme.palette.text.secondary,
+              fontSize: '0.6rem',
+              whiteSpace: 'nowrap'
             }}>
-              Radius: {tempBaseRadius}
+              Radius {tempBaseRadius}
             </Typography>
             <Slider
               size="small"
@@ -963,17 +1437,19 @@ const EditorAgentFlow = ({
                 },
                 '& .MuiSlider-rail': {
                   height: 2
-                }
+                },
+                width: 64,
               }}
             />
           </Box>
           
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <Typography variant="caption" sx={{ 
-              color: theme.palette.text.primary,
-              fontSize: '0.6rem'
+              color: theme.palette.text.secondary,
+              fontSize: '0.6rem',
+              whiteSpace: 'nowrap'
             }}>
-              Spacing: {tempLevelSpacing}
+              Spacing {tempLevelSpacing}
             </Typography>
             <Slider
               size="small"
@@ -995,28 +1471,35 @@ const EditorAgentFlow = ({
                 },
                 '& .MuiSlider-rail': {
                   height: 2
-                }
+                },
+                width: 64,
               }}
             />
           </Box>
         </Paper>
       )}
 
-        {!selectedNetwork && (
+        {nodes.length === 0 && (
           <Box sx={{
             position: 'absolute',
             inset: 0,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            // Must not intercept drags. This overlay covers the whole canvas, and as
+            // a sibling of <ReactFlow> anything dropped on it never reaches the
+            // canvas handler, so dropping onto an empty canvas silently did nothing.
+            pointerEvents: 'none'
           }}>
-            <Typography variant="h6" sx={{ 
+            <Typography variant="h6" sx={{
               color: theme.palette.text.secondary,
-              textAlign: 'center'
+              textAlign: 'center',
+              // Broken deliberately rather than left to wrap: the two halves are the
+              // two ways in, so the line break carries meaning.
+              whiteSpace: 'pre-line',
+              lineHeight: 1.6
             }}>
-              {canEdit
-                ? "Select a network from the sidebar to start editing"
-                : "Awaiting Agent design..."}
+              {'Click or Drag an agent from the palette,\nselect a network from the sidebar, or describe one in the chat'}
             </Typography>
           </Box>
         )}
@@ -1024,12 +1507,17 @@ const EditorAgentFlow = ({
 
       {/* Network Agent Editor Panel */}
       <NetworkAgentEditorPanel
-        selectedDesignId={selectedDesignId}
+        networkId={networkId}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
+        onAgentRenamed={(newName) => {
+          // Follow the agent so the panel and the canvas selection do not stay on a
+          // name that no longer exists.
+          setSelectedAgentName(newName);
+          setSelectedNodeId(newName);
+        }}
         onClose={() => { setSelectedAgentName(null); setAutoExpandPanel(false); isPanelOpenRef.current = false; }}
         autoExpand={autoExpandPanel}
-        enableEditing={pluginManualEditor}
       />
     </Box>
   );

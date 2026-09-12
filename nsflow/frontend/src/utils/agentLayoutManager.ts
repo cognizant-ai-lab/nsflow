@@ -59,31 +59,78 @@ export class AgentLayoutManager {
       return { nodes: [], edges: [] };
     }
 
-    // Try to use cached positions first (unless forced layout)
-    if (!forceLayout && this.positionCache.hasNetworkPositions(this.networkName)) {
-      const cachedNodes = this.positionCache.applyCachedPositions(this.networkName, nodes);
-      
-      // Verify all nodes have valid positions
-      const allPositioned = cachedNodes.every(node => 
-        node.position && 
-        typeof node.position.x === 'number' && 
-        typeof node.position.y === 'number' &&
-        !isNaN(node.position.x) && 
-        !isNaN(node.position.y)
-      );
+    // Try to use cached positions first (unless forced layout).
+    //
+    // Every node must actually BE in the cache, not merely end up with numbers in
+    // its position. applyCachedPositions returns an uncached node untouched, and
+    // callers hand in placeholder coordinates, so checking the resulting position
+    // (as this did) treats a node the cache has never seen as already laid out: a
+    // newly added agent kept its placeholder and rendered stacked on top of another
+    // node, looking as though the edit had not applied at all. It only appeared
+    // after a reload, which happens to trigger a forced re-layout.
+    //
+    // A missing node means the graph has changed shape, so the whole thing is laid
+    // out again. That does discard manual drags when an agent is added or removed,
+    // which is the same thing the "Reorganize Layout" button does, and is much
+    // better than the new agent being invisible.
+    if (!forceLayout) {
+      const cachedPositions = this.positionCache.getNetworkPositions(this.networkName);
+      const everyNodeCached =
+        Boolean(cachedPositions) && nodes.every((node) => Boolean(cachedPositions?.[node.id]));
 
-      if (allPositioned) {
-        return { nodes: cachedNodes, edges };
+      if (everyNodeCached) {
+        return { nodes: this.positionCache.applyCachedPositions(this.networkName, nodes), edges };
       }
     }
 
     // Apply fresh layout
     const layoutResult = this.calculateLayout(nodes, edges);
-    
-    // Cache the new positions
-    this.positionCache.saveNetworkPositions(this.networkName, layoutResult.nodes);
-    
-    return layoutResult;
+    const spread = { nodes: AgentLayoutManager.separateOverlaps(layoutResult.nodes), edges: layoutResult.edges };
+
+    // Cache the positions actually used, so the nudge is applied once and then
+    // stays put rather than being recomputed differently on the next render.
+    this.positionCache.saveNetworkPositions(this.networkName, spread.nodes);
+
+    return spread;
+  }
+
+  /**
+   * Nudge apart any nodes the layout put on the same spot.
+   *
+   * A safety net rather than the mechanism: the hierarchical layout normally spaces
+   * nodes properly, but a degenerate case (one agent under a parent that already has
+   * a child at that angle, or two free agents at the same index) can collide, and two
+   * nodes on the same coordinate look like one node and a missing one.
+   *
+   * The offset walks a fixed spiral rather than being random, so the same graph
+   * always lays out identically and the canvas does not shuffle on re-render.
+   *
+   * Public only so it can be tested directly: the layouts it guards against are hard
+   * to provoke through applyLayout, which is the point of it being a safety net.
+   */
+  public static separateOverlaps(nodes: Node[]): Node[] {
+    // Node cards are wider than they are tall, so a collision is judged on both axes
+    // at roughly card size.
+    const MIN_GAP = 60;
+    const STEP = MIN_GAP;
+
+    const placed: { x: number; y: number }[] = [];
+    const collides = (x: number, y: number): boolean =>
+      placed.some((seen) => Math.abs(seen.x - x) < MIN_GAP && Math.abs(seen.y - y) < MIN_GAP);
+
+    return nodes.map((node) => {
+      let { x, y } = node.position;
+      // Bounded so a pathological graph cannot spin here; after this many tries the
+      // node is left where it is, which is no worse than before.
+      for (let attempt = 1; collides(x, y) && attempt <= 64; attempt += 1) {
+        const ring = Math.ceil(attempt / 8);
+        const angle = ((attempt % 8) * Math.PI) / 4;
+        x = node.position.x + Math.round(Math.cos(angle) * STEP * ring);
+        y = node.position.y + Math.round(Math.sin(angle) * STEP * ring);
+      }
+      placed.push({ x, y });
+      return x === node.position.x && y === node.position.y ? node : { ...node, position: { x, y } };
+    });
   }
 
   /**

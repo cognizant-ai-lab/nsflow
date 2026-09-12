@@ -30,7 +30,6 @@ import { getInitialTheme } from "../../utils/theme";
 
 const EditorContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
-  const [selectedDesignId, setSelectedDesignId] = useState<string>("");
   const { setIsEditorMode } = useChatContext();
 
   useEffect(() => {
@@ -42,18 +41,9 @@ const EditorContent: React.FC = () => {
     return () => setIsEditorMode(false);
   }, [setIsEditorMode]);
 
-  // Callback to refresh sidebar when new networks are created
-  const handleNetworkCreated = () => {
-    // Note: Current sidebar doesn't support refresh trigger
-    // This is a placeholder for future enhancement
-    console.log('Network created - sidebar refresh not implemented');
-  };
-
   // Callback to select a network in sidebar
-  const handleNetworkSelected = (networkName: string, designId?: string) => {
-    console.log('Editor: Network selected:', { networkName, designId });
+  const handleNetworkSelected = (networkName: string) => {
     setSelectedNetwork(networkName);
-    setSelectedDesignId(designId || "");
   };
 
   return (
@@ -72,12 +62,7 @@ const EditorContent: React.FC = () => {
                 
                 <Panel defaultSize={55} minSize={40}>
                   {/* Editable AgentFlow */}
-                  <EditorAgentFlow 
-                    selectedNetwork={selectedNetwork}
-                    selectedDesignId={selectedDesignId}
-                    onNetworkCreated={handleNetworkCreated}
-                    onNetworkSelected={handleNetworkSelected}
-                  />
+                  <EditorAgentFlow selectedNetwork={selectedNetwork} />
                 </Panel>
                 
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />

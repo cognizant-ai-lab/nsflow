@@ -16,33 +16,64 @@ limitations under the License.
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Box,  Paper,  Typography,  IconButton,  useTheme, alpha, Collapse, Button, 
-  CircularProgress, Alert, TextField, InputAdornment } from '@mui/material';
-import { 
-  ExpandLess as ChevronUpIcon, ExpandMore as ChevronDownIcon, Edit as EditIcon,
-  PushPin as PinIcon, PushPinOutlined as UnpinIcon, Save as SaveIcon,
-  Close as CloseIcon, Search as SearchIcon, Add as AddIcon
-} from '@mui/icons-material';
+  CircularProgress, Alert, TextField, InputAdornment, Tooltip, Dialog, DialogTitle,
+  DialogContent, DialogActions } from '@mui/material';
+import ChevronUpIcon from "@mui/icons-material/ExpandLess";
+import ChevronDownIcon from "@mui/icons-material/ExpandMore";
+import EditIcon from "@mui/icons-material/Edit";
+import PinIcon from "@mui/icons-material/PushPin";
+import UnpinIcon from "@mui/icons-material/PushPinOutlined";
+import SaveIcon from "@mui/icons-material/Save";
+import RenameIcon from "@mui/icons-material/DriveFileRenameOutline";
+import CloseIcon from "@mui/icons-material/Close";
+import SearchIcon from "@mui/icons-material/Search";
+import AddIcon from "@mui/icons-material/Add";
 import { useApiPort } from '../context/ApiPortContext';
 import { useJsonEditorTheme } from '../context/ThemeContext';
 import { JsonEditor, ThemeInput } from 'json-edit-react';
-import { useChatContext } from "../context/ChatContext";
+import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { canRename, renameAgent, updateAgent } from "../state/editorOperations";
+import { sendEditorUpdate } from "../state/editorRoundTrip";
+
+/**
+ * Which of an agent's fields this panel edits.
+ *
+ * `origin` and `tools` are structure, and structure belongs to the canvas: the name
+ * identifies the node everywhere else in the definition, and the down-chains are what
+ * the edges are. Editing either as free text here would let the two disagree, and
+ * both already have direct affordances — rename via the node, wire via the edges or
+ * the chat. What is left is the agent's content, which is what a user opens this
+ * panel for.
+ */
+const STRUCTURAL_FIELDS = ["origin", "tools"] as const;
+
+const toEditableFields = (agent: Record<string, unknown>): Record<string, unknown> => {
+  const editable: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(agent)) {
+    if ((STRUCTURAL_FIELDS as readonly string[]).includes(key)) continue;
+    editable[key] = value;
+  }
+  return editable;
+};
+
 
 interface NetworkAgentEditorPanelProps {
-  selectedDesignId: string;
+  networkId: string;
   selectedAgentName: string | null;
   onAgentUpdated: () => void;
+  /** Called with the new name after a rename, so the caller can follow the agent. */
+  onAgentRenamed?: (newName: string) => void;
   onClose?: () => void;
   autoExpand?: boolean; // When true, panel auto-expands on agent selection
-  enableEditing?: boolean; // Flag to control editing capabilities
 }
 
 const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
-  selectedDesignId,
+  networkId,
   selectedAgentName,
   onAgentUpdated,
+  onAgentRenamed,
   onClose,
-  autoExpand = false,
-  enableEditing = false
+  autoExpand = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -54,23 +85,62 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const [hasChanges, setHasChanges] = useState(false);
   const [, setOriginalData] = useState<any>(null);
   const [schema, setSchema] = useState<any>(null);
-  const { getLatestNetworkPayload } = useChatContext();
   
   const panelRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const jsonEditorTheme = useJsonEditorTheme();
   const { apiUrl } = useApiPort();
+  const entry = useEditorNetworkStore((state) => selectEntry(state, networkId));
+  const applyEdit = useEditorNetworkStore((state) => state.applyEdit);
 
   const [searchText, setSearchText] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Only an LLM agent of this network can be renamed: a tool's name is the tool it
+  // resolves to, and an external reference's name is what it points at.
+  const canRenameSelected = Boolean(
+    selectedAgentName && canRename(entry?.definition ?? [], selectedAgentName)
+  );
+
+  const submitRename = useCallback(async () => {
+    const definition = entry?.definition ?? [];
+    const proposed = renameValue.trim();
+    if (!selectedAgentName || !apiUrl) return;
+    const next = renameAgent(definition, selectedAgentName, proposed);
+    setIsRenaming(false);
+    if (next === definition) return;
+
+    applyEdit(networkId, next);
+    // The panel follows the agent to its new name, or it would sit on one that no
+    // longer exists.
+    onAgentRenamed?.(proposed);
+    try {
+      await sendEditorUpdate({
+        apiUrl,
+        networkId,
+        agentName: proposed,
+        definition: next,
+        message: `Rename agent "${selectedAgentName}" to "${proposed}"`,
+      });
+    } catch (err) {
+      console.error('Failed to rename agent:', err);
+      // The canvas already shows the new name, so without this the user has no way to
+      // know the network on the server still has the old one. Not rolled back: the
+      // store is what the canvas draws from, and renaming it back underneath the user
+      // is a worse surprise than being told the save did not land.
+      setError(
+        err instanceof Error
+          ? `Renamed here but not saved: ${err.message}`
+          : 'Renamed here but not saved.'
+      );
+    }
+  }, [entry?.definition, renameValue, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed]);
 
   // Data validation helpers
   const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
-  const canEdit = !!enableEditing;
-  const hasChangesToSave = canEdit && hasChanges;
+  const hasChangesToSave = hasChanges;
 
-  const getViewDefinition = useCallback(() => {
-    return getLatestNetworkPayload()?.agent_network_definition as Record<string, any> | undefined;
-  }, [getLatestNetworkPayload]);
 
   // Handle clicking outside to collapse when not pinned
   useEffect(() => {
@@ -100,7 +170,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
 
   // Load agent data when selectedAgentName or apiUrl changes
   useEffect(() => {
-    if (selectedAgentName && apiUrl && (canEdit ? !!selectedDesignId : true)) {
+    if (selectedAgentName && apiUrl) {
       loadAgentData();
     } else {
       setJsonData({});
@@ -109,7 +179,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setError(null);
       setSuccess(null);
     }
-  }, [selectedAgentName, selectedDesignId, apiUrl, canEdit]);
+  }, [selectedAgentName, apiUrl, entry?.definition]);
 
   // Expand panel when autoExpand becomes true (e.g. double-click on already-selected agent)
   useEffect(() => {
@@ -118,23 +188,19 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     }
   }, [autoExpand, selectedAgentName]);
 
+  // The editable surface of an agent is simply what a connectivity entry carries.
+  // This used to be fetched from /andeditor/schemas/base-agent-properties; holding
+  // it here removes a backend round-trip for a list that only changes when
+  // neuro-san's own entry shape changes.
   const loadSchema = async () => {
-    if (!apiUrl) return;
-
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/schemas/base-agent-properties`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load schema: ${response.statusText}`);
-      }
-
-      const schemaData = await response.json();
-      // console.log('Loaded schema:', schemaData);
-      setSchema(schemaData);
-    } catch (err) {
-      console.error('Error loading schema:', err);
-      // Don't show error to user for schema loading failure
-    }
+    setSchema({
+      type: "object",
+      properties: {
+        instructions: { type: "string" },
+        description: { type: "string" },
+        display_as: { type: "string" },
+      },
+    });
   };
 
   const createDefaultDataFromSchema = (schema: any): any => {
@@ -162,56 +228,30 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   const loadAgentData = async () => {
     if (!selectedAgentName || !apiUrl) return;
 
-    // In edit-mode we still need designId; in view-mode we don’t
-    if (canEdit && !selectedDesignId) return;
-
     setIsLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      let response: Response;
-      if (canEdit && selectedDesignId) {
-        // EDIT MODE (unchanged)
-        response = await fetch(
-          `${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`
-        );
-      } else {
-        // VIEW MODE
-        const definition = getViewDefinition();
-        if (!definition) {
-          setIsLoading(false);
-          // optional: keep quiet until we have the first payload
-          return;
-        }
-        response = await fetch(
-          `${apiUrl}/api/v1/connectivity/from_json/agents/${encodeURIComponent(selectedAgentName)}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ agent_network_definition: definition }),
-          }
-        );
-      }
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load agent: ${response.statusText}`);
+      // The agent is already in the store: the definition the canvas renders is the
+      // same one the panel edits, so there is nothing to fetch.
+      const agentData = entry?.definition.find((agent) => agent.origin === selectedAgentName);
+      if (!agentData) {
+        setIsLoading(false);
+        return;
       }
 
-      const data = await response.json();
-      const agentData = data.agent?? data;
-      // console.log('Loaded agent data:', agentData);
-
-      setJsonData(agentData);
-      setOriginalData(agentData);
+      const editable = toEditableFields(agentData);
+      setJsonData(editable);
+      setOriginalData(editable);
       setHasChanges(false);
-      
-      // Auto-expand the panel only when explicitly requested (double-click, right-click → open)
+
+      // Auto-expand the panel only when explicitly requested (double-click, right-click -> open)
       if (autoExpand && !isExpanded) setIsExpanded(true);
     } catch (err) {
       console.error('Error loading agent data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
-      
+
       // If agent doesn't exist, create default structure from schema
       if (schema && !hasData) {
         const defaultData = createDefaultDataFromSchema(schema);
@@ -224,14 +264,16 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     }
   };
 
-  const cleanAgentData = (data: any): any => {
+const cleanAgentData = (data: any): any => {
     if (!data || typeof data !== 'object') return {};
     
     const cleaned: any = {};
     
     // Only include valid agent properties based on BaseAgentProperties schema
+    // `description` was missing, so the panel offered it for editing and then threw
+    // the edit away, and Save still reported success.
     const validAgentFields = [
-      'instructions', 'function', 'class', 'command', 'tools', 'toolbox', 
+      'instructions', 'description', 'function', 'class', 'command', 'tools', 'toolbox',
       'args', 'allow', 'display_as', 'max_message_history', 'verbose', 'llm_config'
     ];
     
@@ -293,7 +335,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   };
 
   const saveAgentData = async () => {
-    if (!canEdit || !selectedAgentName || !selectedDesignId || !apiUrl || !hasChanges) return;
+    if (!selectedAgentName || !apiUrl || !hasChanges) return;
 
     setIsSaving(true);
     setError(null);
@@ -313,30 +355,27 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       // console.log('Final request body:', JSON.stringify(cleanedData, null, 2));
       
       // Also log the URL for debugging
-      // console.log('API URL:', `${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`);
       
       // Log the headers for debugging
       // console.log('Request headers:', { 'Content-Type': 'application/json' });
       
-      const response = await fetch(`${apiUrl}/api/v1/andeditor/networks/${selectedDesignId}/agents/${selectedAgentName}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cleanedData)
+      if (!entry || !selectedAgentName) throw new Error('No agent selected');
+
+      // Apply locally so the canvas updates at once, then let the designer
+      // canonicalise it. `updateAgent` returns the same array when nothing matched.
+      const next = updateAgent(entry.definition, selectedAgentName, cleanedData);
+      applyEdit(networkId, next);
+      await sendEditorUpdate({
+        apiUrl: apiUrl as string,
+        networkId,
+        agentName: selectedAgentName,
+        definition: next,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        console.error('Request body that failed:', JSON.stringify(cleanedData, null, 2));
-        throw new Error(`Failed to save agent: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      await response.json();
       setSuccess('Agent updated successfully');
       setHasChanges(false);
       setOriginalData(cleanedData);
-      
-      // Notify parent component
+
       onAgentUpdated();
       
       // Clear success message after 3 seconds
@@ -352,20 +391,16 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
 
   // Handle JSON data updates from the editor
   const handleJsonUpdate = useCallback((update: any) => {
-    if (!canEdit) return;
-    
-    // console.log('JsonEditor onUpdate called with:', update);
+    // `update.newData` holds the new full JSON value; `update.data` may be empty.
     // `update.newData` contains the new full JSON value, `update.data` might be empty
     const next = update.newData ?? update.data ?? {}; // fall back to empty object if no data
     // console.log('JsonEditor update - next data:', next, 'keys count:', Object.keys(next).length);
     setJsonData(next);
     setHasChanges(true);
-  }, [canEdit]);
+  }, []);
 
   // Handle adding a new root item
   const handleAddRootItem = useCallback(() => {
-    if (!canEdit) return;
-    
     setJsonData((prev: any) => {
       if (
         prev &&
@@ -380,7 +415,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
       setHasChanges(true);
       return next;
     });
-  }, [canEdit]);
+  }, []);
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
@@ -450,7 +485,64 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
               >
                 Agent: {selectedAgentName}
               </Typography>
+              {canRenameSelected && (
+                // Renaming is an edit like any other, but it is the one that also has
+                // to follow every reference, so it goes through renameAgent rather
+                // than the JSON editor below.
+                <Tooltip title="Rename this agent">
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setRenameValue(selectedAgentName ?? "");
+                      setIsRenaming(true);
+                    }}
+                    sx={{ ml: 0.5, color: theme.palette.text.secondary }}
+                  >
+                    <RenameIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
+            <Dialog
+              open={isRenaming}
+              onClose={() => setIsRenaming(false)}
+              maxWidth="xs"
+              fullWidth
+              onClick={(event) => event.stopPropagation()}
+            >
+              <DialogTitle sx={{ pb: 1 }}>Rename agent</DialogTitle>
+              <DialogContent sx={{ pb: 1 }}>
+                <TextField
+                  autoFocus
+                  fullWidth
+                  size="small"
+                  value={renameValue}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void submitRename();
+                    }
+                  }}
+                  helperText="Every agent that chains to this one follows the new name."
+                />
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 2 }}>
+                <Button size="small" onClick={() => setIsRenaming(false)} sx={{ textTransform: 'none' }}>
+                  Cancel
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => void submitRename()}
+                  disabled={!renameValue.trim() || renameValue.trim() === selectedAgentName}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Rename
+                </Button>
+              </DialogActions>
+            </Dialog>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 280 }}>
               {/* Search input (compact + rounded) */}
               <TextField
@@ -484,30 +576,28 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
                 }}
               />
 
-              {/* Add button - only show when editing is enabled */}
-              {canEdit && (
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleAddRootItem();
-                  }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  disabled={hasData}
-                  sx={{
-                    color: hasData ? theme.palette.text.disabled : theme.palette.primary.main,
-                    '&:disabled': { color: theme.palette.text.disabled },
-                    '&:hover': hasData ? undefined : { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
-                    p: 0.5,
-                  }}
-                  title="Add root item"
-                >
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              )}
+              {/* Add button */}
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddRootItem();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                disabled={hasData}
+                sx={{
+                  color: hasData ? theme.palette.text.disabled : theme.palette.primary.main,
+                  '&:disabled': { color: theme.palette.text.disabled },
+                  '&:hover': hasData ? undefined : { backgroundColor: alpha(theme.palette.primary.main, 0.1) },
+                  p: 0.5,
+                }}
+                title="Add root item"
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
 
-              {/* Save button - only show when editing is enabled */}
-              {canEdit && hasChangesToSave && (
+              {/* Save button */}
+              {hasChangesToSave && (
                 <Button
                   size="small"
                   variant="contained"
@@ -642,19 +732,19 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
                 rootFontSize="14px"
                 indent={2}
                 rootName="agent"
-                restrictDrag={!canEdit}
+                restrictDrag={false}
                 insertAtTop={false}
                 showIconTooltips={true}
-                viewOnly={!canEdit}
+                viewOnly={false}
               />
             ) : selectedAgentName ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                 <EditIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
                 <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>No agent data available</Typography>
                 <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
-                  Agent '{selectedAgentName}' has no {canEdit ? 'editable ' : ''}properties or failed to load.
+                  Agent '{selectedAgentName}' has no editable properties or failed to load.
                 </Typography>
-                {canEdit && schema && (
+                {schema && (
                   <Button
                     variant="outlined"
                     size="small"
@@ -675,13 +765,10 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2, color: theme.palette.text.secondary }}>
                 <EditIcon sx={{ fontSize: 48, color: theme.palette.text.disabled }} />
                 <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>
-                  Select an agent to {canEdit ? 'edit' : 'view'}
+                  Select an agent to edit
                 </Typography>
                 <Typography variant="body2" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary }}>
-                  {canEdit 
-                    ? 'Right-click on an agent and select "Edit Agent" or double-click to start editing.'
-                    : 'Right-click on an agent and select "View Agent" to see its properties.'
-                  }
+                  Right-click on an agent and select "Edit Agent" or double-click to start editing.
                 </Typography>
                 {schema && (
                   <Typography variant="caption" sx={{ textAlign: 'center', maxWidth: 300, color: theme.palette.text.secondary, mt: 1 }}>

@@ -47,6 +47,7 @@ import {
   InsertDriveFile as FileIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
+import { onChatFocusRequested } from "../utils/focusChat";
 import { useChatControls } from "../hooks/useChatControls";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags } from "../utils/config";
@@ -59,6 +60,30 @@ import { Mp3Encoder } from "@breezystack/lamejs";
 import { useSlyDataCache } from "../hooks/useSlyDataCache";
 
 const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
+  // Focused when the editor hands over ("describe it in chat instead"). The input
+  // already autoFocuses on load; this is for the handover, which happens later.
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [chatHandoffHighlight, setChatHandoffHighlight] = useState(false);
+
+  useEffect(() => {
+    let ringTimer: number | undefined;
+    const unsubscribe = onChatFocusRequested(() => {
+      messageInputRef.current?.focus();
+      messageInputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // A brief ring, because focus alone is easy to miss when the user's eyes are
+      // still on the dialog that just closed.
+      setChatHandoffHighlight(true);
+      window.clearTimeout(ringTimer);
+      ringTimer = window.setTimeout(() => setChatHandoffHighlight(false), 1600);
+    });
+    return () => {
+      // Cleared as well as unsubscribed, so a panel that unmounts inside the ring's
+      // 1.6s does not leave a timer running against a component that is gone.
+      window.clearTimeout(ringTimer);
+      unsubscribe();
+    };
+  }, []);
+
   const { apiUrl } = useApiPort();
   const { theme } = useTheme();
   const { viteUseSpeech } = getFeatureFlags();
@@ -966,9 +991,21 @@ const ChatPanel = ({ title = "Chat" }: { title?: string }) => {
             {/* Message input */}
             <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
               {/* Message box wrapper with anchored attach icon */}
-              <Box sx={{ flexGrow: 1, position: "relative" }}>
+              <Box
+                sx={{
+                  flexGrow: 1,
+                  position: "relative",
+                  borderRadius: 1,
+                  transition: "box-shadow 300ms",
+                  // Set briefly when the editor hands over, so the eye follows.
+                  ...(chatHandoffHighlight && {
+                    boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.55)}`,
+                  }),
+                }}
+              >
                 <TextField
                   autoFocus
+                  inputRef={messageInputRef}
                   multiline
                   minRows={3}
                   placeholder="Type a message..."

@@ -17,7 +17,12 @@ limitations under the License.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, IconButton, Paper, Tooltip, Typography, alpha, TextField, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import { DataObject as DataObjectIcon, Download as DownloadIcon, Upload as UploadIcon, Info as InfoIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import DataObjectIcon from "@mui/icons-material/DataObject";
+import DownloadIcon from "@mui/icons-material/Download";
+import UploadIcon from "@mui/icons-material/Upload";
+import InfoIcon from "@mui/icons-material/Info";
+import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { JsonEditor, ThemeInput } from 'json-edit-react';
 import ScrollableMessageContainer from '../ScrollableMessageContainer';

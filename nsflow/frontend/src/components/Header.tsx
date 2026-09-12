@@ -17,17 +17,25 @@ limitations under the License.
 
 import * as React from "react";
 import { useState } from "react";
+import HelpDialog from "./HelpDialog";
 import { ImPower } from "react-icons/im";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
-import { Home as HomeIcon, AccountTree as NetworkIcon, Download as DownloadIcon,
-  Autorenew as AutorenewIcon, AccountCircle as AccountIcon, Edit as EditIcon, DrawTwoTone as WandIcon,
-  KeyboardArrowDown as ArrowDownIcon, QuickreplyTwoTone as ChatIcon, Draw as DrawIcon,
-  Fullscreen as FullscreenIcon
-} from "@mui/icons-material";
+import HomeIcon from "@mui/icons-material/Home";
+import NetworkIcon from "@mui/icons-material/AccountTree";
+import DownloadIcon from "@mui/icons-material/Download";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
+import AccountIcon from "@mui/icons-material/AccountCircle";
+import EditIcon from "@mui/icons-material/Edit";
+import WandIcon from "@mui/icons-material/DrawTwoTone";
+import HelpIcon from "@mui/icons-material/HelpOutlined";
+import ArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import ChatIcon from "@mui/icons-material/QuickreplyTwoTone";
+import DrawIcon from "@mui/icons-material/Draw";
+import FullscreenIcon from "@mui/icons-material/Fullscreen";
 
 import MuiThemeToggle from "./MuiThemeToggle";
 import { useTheme } from "../context/ThemeContext";
@@ -44,6 +52,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   const { apiUrl } = useApiPort();
   const { activeNetwork } = useChatContext();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [accountAnchorEl, setAccountAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
@@ -367,6 +377,7 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
                   </Typography>
                 </MenuItem>
               </Menu>
+
             </>
           )}
         </Box>
@@ -412,16 +423,52 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </Tooltip>
           )}
           <MuiThemeToggle />
-          <IconButton
-            sx={{ 
-              color: muiTheme.palette.text.primary,
-              '&:hover': { 
-                backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
-              }
-            }}
+          <Tooltip title="Account and help">
+            <IconButton
+              onClick={(e) => setAccountAnchorEl(e.currentTarget)}
+              sx={{ 
+                color: muiTheme.palette.text.primary,
+                '&:hover': { 
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) 
+                }
+              }}
+            >
+              <AccountIcon />
+            </IconButton>
+          </Tooltip>
+
+          {/*
+            This menu is on the header itself, not inside the Export dropdown. Export
+            is hidden on the editor and Cruse pages and behind a plugin flag, so
+            anything put there is unreachable from exactly the pages a user is most
+            likely to want help on.
+          */}
+          <Menu
+            anchorEl={accountAnchorEl}
+            open={Boolean(accountAnchorEl)}
+            onClose={() => setAccountAnchorEl(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
-            <AccountIcon />
-          </IconButton>
+            <MenuItem
+              onClick={() => {
+                setAccountAnchorEl(null);
+                setIsHelpOpen(true);
+              }}
+              sx={{
+                py: 1.5,
+                px: 2,
+                '&:hover': { backgroundColor: alpha(muiTheme.palette.primary.main, 0.1) }
+              }}
+            >
+              <HelpIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
+              <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
+                Help
+              </Typography>
+            </MenuItem>
+          </Menu>
+
+          <HelpDialog open={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
         </Box>
       </Toolbar>
     </AppBar>
