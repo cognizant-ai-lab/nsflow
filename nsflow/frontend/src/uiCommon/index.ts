@@ -64,3 +64,35 @@ export {
   ChatMessageType,
   type ConnectivityInfo,
 } from "@ui-common/types";
+
+/**
+ * User settings, for the parts nsflow shares with ui-common.
+ *
+ * Only the API keys and the field names they map to are taken. `LLM_PROVIDER_API_KEY_FIELD`
+ * matters most: it is one half of the BYOK contract, the other half being a
+ * deployment's `llm_config.hocon`, so nsflow reads it rather than writing the field
+ * names out again. `getApiKey` is the accessor to use rather than the store directly,
+ * because it applies the key TTL.
+ *
+ * The store also carries appearance, branding and network-display preferences. nsflow
+ * has its own theming and its own Zen Mode, so those are deliberately left alone.
+ */
+export {
+  API_KEYS_TTL_MS,
+  LLM_PROVIDER_API_KEY_FIELD,
+  getApiKey,
+  useSettingsStore,
+  type LLMProvider,
+} from "@ui-common/state/Settings";
+
+/**
+ * Key validation, so the settings panel can tell the user a key is wrong before an
+ * agent run fails with it. Reused rather than reimplemented: these know each
+ * provider's cheapest authenticated endpoint.
+ */
+export {
+  isAnthropicKeyValid,
+  isKeyValidationFailure,
+  isOpenAIKeyValid,
+  type KeyValidationResult,
+} from "@ui-common/controller/llm/Providers";

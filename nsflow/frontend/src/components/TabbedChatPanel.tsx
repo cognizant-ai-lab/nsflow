@@ -35,19 +35,29 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
   const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "connectors" | "config">("chat");
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
-  const { sessionId, activeNetwork, targetNetwork, isEditorMode: contextIsEditorMode, setIsEditorMode,
+  const { sessionId, activeNetwork, targetNetwork,
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
     setChatWs, setInternalChatWs, setSlyDataWs, setProgressWs,
     setNewSlyData, setNewProgress } = useChatContext();
   const lastActiveNetworkRef = useRef<string | null>(null);
   const lastMessageRef = useRef<string | null>(null);
 
-  // Set editor mode in context when prop changes
-  useEffect(() => {
-    if (contextIsEditorMode !== isEditorMode) {
-      setIsEditorMode(isEditorMode);
-    }
-  }, [isEditorMode, contextIsEditorMode, setIsEditorMode]);
+  /*
+    Editor mode is owned by the PAGE, not by this panel.
+
+    This used to push its own prop into the context whenever the two disagreed, which
+    is wrong as soon as the panel is mounted more than once: the Home page stays
+    mounted behind the Editor (deliberately, so its sockets and node positions
+    survive), so Home's panel saw context true against its own false and set it back
+    to false. That made ChatContext's `targetNetwork` the active network instead of
+    the designer, so the Editor's progress bridge looked for frames under a network
+    they were never tagged with, and neither the canvas nor the sly_data panel updated
+    while the designer worked.
+
+    Editor.tsx sets it true on mount and false on cleanup, and Cruse.tsx sets false,
+    which is all that is needed. The prop is still used below for what this panel
+    renders; it just no longer writes to shared state.
+  */
 
   useEffect(() => {
     if (!targetNetwork) return;

@@ -51,6 +51,14 @@ interface AgentNodeData extends Record<string, unknown> {
   isActive?: boolean;
   dropdown_tools?: string[];
   selectedNetwork: string;
+  /**
+   * Distance from the front man, which the backend already computes.
+   *
+   * Shown because a radial layout makes the shape obvious but not the direction: L0
+   * names the front man, and the numbers tell you which way the chain runs. The Editor
+   * shows the same badge, so the two canvases read alike.
+   */
+  depth?: number;
 }
 
 // In v12 the NodeProps generic is the NODE type, not the data type.
@@ -263,6 +271,28 @@ const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
                 ))}
               </List>
             </Collapse>
+          </Box>
+        )}
+
+        {/*
+          Level, bottom right. Same place the Editor's nodes show it, so the two
+          canvases read the same way. `!== undefined` rather than a truthy check
+          because the front man is L0, and 0 is falsy, so a truthy test would hide the
+          badge on the one node you most want labelled.
+        */}
+        {data.depth !== undefined && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.25 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: theme.palette.text.secondary,
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                lineHeight: 1,
+              }}
+            >
+              L{data.depth}
+            </Typography>
           </Box>
         )}
 

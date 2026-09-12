@@ -27,13 +27,15 @@ import { ReactFlow,
   EdgeMarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { 
-  Box, 
-  Button, 
-  Slider, 
-  Typography, 
-  Paper, 
-  Tooltip, 
+import {
+  Alert,
+  Box,
+  Button,
+  Slider,
+  Snackbar,
+  Typography,
+  Paper,
+  Tooltip,
   useTheme,
   alpha
 } from "@mui/material";
@@ -45,6 +47,11 @@ import {
 } from "@mui/icons-material";
 import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
+import NetworkFileActions from "./NetworkFileActions";
+import { toConnectivityList } from "../state/definitionShape";
+import { useEditorNetworkStore } from "../state/editorNetworkStore";
+import { sendEditorUpdate } from "../state/editorRoundTrip";
+import { waitForServedNetwork } from "../state/servedNetworks";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
@@ -52,13 +59,26 @@ import { createLayoutManager } from "../utils/agentLayoutManager";
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { floating: FloatingEdge };
 
-const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
+interface AgentFlowProps {
+  selectedNetwork: string;
+  /**
+   * Called with the name of a network just imported and saved, so the page can
+   * select it. AgentFlow cannot select for itself: the Home page owns that state.
+   */
+  onNetworkImported?: (networkName: string) => void;
+}
+
+const AgentFlow = ({ selectedNetwork, onNetworkImported }: AgentFlowProps) => {
   const { apiUrl, wsUrl } = useApiPort();
   const { sessionId } = useChatContext();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView, setViewport } = useReactFlow();
   const theme = useTheme();
+  /** Why the last import failed, or undefined. */
+  const [importError, setImportError] = useState<string | undefined>(undefined);
+  /** True while an import is being parsed and saved, which takes a round trip. */
+  const [importing, setImporting] = useState(false);
 
   // ** State for highlighting active agents & edges **
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
@@ -195,6 +215,97 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     }
   }, [onNodesChange, layoutManager, setNodes]);
 
+  /**
+   * Download the selected network's .hocon.
+   *
+   * Straight from the registry, because Home only ever shows a network that is
+   * already served. There is no notebook option: it was stale, depended on the
+   * server's working directory, and is not what anyone reached for here.
+   */
+  const handleExportHocon = useCallback(async () => {
+    if (!selectedNetwork || !apiUrl) return;
+    const response = await fetch(
+      `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(selectedNetwork)}`
+    );
+    if (!response.ok) return;
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${selectedNetwork}.hocon`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [apiUrl, selectedNetwork]);
+
+  /**
+   * Import a .hocon, save it, and open it here for chat.
+   *
+   * Saving is the step that matters. Parsing alone gives a definition the browser can
+   * draw but neuro-san does not serve, so the network would not be chattable and
+   * would not appear anywhere else. The save goes through the designer with
+   * `skip_designer` set, which persists the network exactly as imported, under its
+   * own name, alongside every other generated network.
+   */
+  const handleImport = useCallback(
+    async (file: File) => {
+      if (!apiUrl) return;
+      setImporting(true);
+      // Otherwise the previous failure's snackbar is still up when this one succeeds.
+      setImportError(undefined);
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        const response = await fetch(`${apiUrl}/api/v1/hocon/import`, { method: "POST", body });
+        const payload = await response.json().catch(() => undefined);
+        if (!response.ok) {
+          setImportError(payload?.detail || "Could not read that file.");
+          return;
+        }
+
+        const definition = toConnectivityList(payload.definition);
+        const networkName: string | undefined = payload.network_name;
+        if (!definition || !networkName) {
+          setImportError("That file parsed but produced no agents.");
+          return;
+        }
+
+        // Seed the editor store under the network's own name before saving, because
+        // sendEditorUpdate reads the name from there when the caller omits it, and a
+        // later visit to the Editor should find the same network already loaded.
+        useEditorNetworkStore.getState().reconcileFromServer(networkName, {
+          definition,
+          networkName,
+          hocon: payload.hocon,
+        });
+
+        await sendEditorUpdate({
+          apiUrl,
+          networkId: networkName,
+          agentName: definition[0]?.origin ?? "",
+          definition,
+          networkName,
+          message: `Import agent network "${networkName}"`,
+        });
+
+        // Saved is not the same as servable: neuro-san picks the file up on its next
+        // registry reload. Selecting before then fetches connectivity for a network
+        // that does not exist yet, which fails quietly and leaves a blank canvas.
+        const served = await waitForServedNetwork(apiUrl, networkName);
+        if (!served) {
+          setImportError(
+            `Imported "${networkName}", but the server has not picked it up yet. It should appear in the sidebar shortly.`
+          );
+          return;
+        }
+        onNetworkImported?.(served);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : "Could not import that file.");
+      } finally {
+        setImporting(false);
+      }
+    },
+    [apiUrl, onNetworkImported]
+  );
+
   // Utility function to validate JSON
   const isValidJson = (str: string): boolean => {
     try {
@@ -243,11 +354,37 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       display: 'flex',
       flexDirection: 'column'
     }}>
+      {/*
+        File actions, stacked below the layout row rather than beside it. Both used
+        the same corner and the panel won, hiding these completely.
+      */}
+      <Box sx={{ position: 'absolute', top: 56, right: 60, zIndex: 20 }}>
+        <NetworkFileActions
+          size={40}
+          onExportHocon={handleExportHocon}
+          onImport={importing ? undefined : handleImport}
+          importTooltip="Import a .hocon file, saved and opened here for chat"
+          exportDisabledReason={selectedNetwork ? undefined : "Select an agent network first"}
+        />
+      </Box>
+
+      {/* Why an import failed. */}
+      <Snackbar
+        open={Boolean(importError)}
+        autoHideDuration={8000}
+        onClose={() => setImportError(undefined)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setImportError(undefined)} sx={{ maxWidth: 520 }}>
+          {importError}
+        </Alert>
+      </Snackbar>
+
       {/* Top Controls Bar */}
-      <Box sx={{ 
-        position: 'absolute', 
-        top: 8, 
-        left: 8, 
+      <Box sx={{
+        position: 'absolute',
+        top: 8,
+        left: 8,
         zIndex: 20,
         display: 'flex',
         gap: 1
@@ -307,94 +444,59 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         </Tooltip>
       </Box>
 
-      {/* Compact Layout Controls Panel */}
+      {/*
+        Layout controls, as a single row.
+        This was a tall narrow panel pinned to the same corner as the canvas actions,
+        which it covered completely. Matching the Editor's one-row form frees the
+        corner and keeps both readable at any canvas width.
+      */}
       <Paper
         elevation={1}
         sx={{
           position: 'absolute',
           top: 8,
-          right: 8,
+          right: 60, // Clear of the ReactFlow controls
           zIndex: 20,
-          p: 1,
+          px: 1.25,
+          py: 0.5,
+          borderRadius: 2,
           backgroundColor: alpha(theme.palette.background.paper, 0.95),
           backdropFilter: 'blur(8px)',
-          minWidth: 80,
-          maxWidth: 140
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
         }}
       >
-        <Typography variant="caption" sx={{ 
-          fontWeight: 600, 
-          color: theme.palette.text.secondary,
-          display: 'block',
-          mb: 0.1,
-          fontSize: '0.65rem'
-        }}>
-          Layout
-        </Typography>
-        
-        <Box sx={{ mb: 0.5 }}>
-          <Typography variant="caption" sx={{ 
-            color: theme.palette.text.primary,
-            fontSize: '0.6rem'
-          }}>
-            Radius: {tempBaseRadius}
-          </Typography>
-          <Slider
-            size="small"
-            value={tempBaseRadius}
-            min={10}
-            max={300}
-            onChange={(_, value) => setTempBaseRadius(value as number)}
-            onMouseUp={() => setBaseRadius(tempBaseRadius)}
-            onTouchEnd={() => setBaseRadius(tempBaseRadius)}
-            sx={{
-              color: theme.palette.primary.main,
-              height: 2,
-              '& .MuiSlider-thumb': {
-                width: 8,
-                height: 8
-              },
-              '& .MuiSlider-track': {
-                height: 2
-              },
-              '& .MuiSlider-rail': {
-                height: 2
-              }
-            }}
-          />
-        </Box>
-        
-        <Box>
-          <Typography variant="caption" sx={{ 
-            color: theme.palette.text.primary,
-            fontSize: '0.6rem'
-          }}>
-            Spacing: {tempLevelSpacing}
-          </Typography>
-          <Slider
-            size="small"
-            value={tempLevelSpacing}
-            min={10}
-            max={300}
-            onChange={(_, value) => setTempLevelSpacing(value as number)}
-            onMouseUp={() => setLevelSpacing(tempLevelSpacing)}
-            onTouchEnd={() => setLevelSpacing(tempLevelSpacing)}
-            sx={{
-              color: theme.palette.secondary.main,
-              height: 2,
-              '& .MuiSlider-thumb': {
-                width: 8,
-                height: 8
-              },
-              '& .MuiSlider-track': {
-                height: 2
-              },
-              '& .MuiSlider-rail': {
-                height: 2
-              }
-            }}
-          />
-        </Box>
+        {([
+          { label: 'Radius', value: tempBaseRadius, set: setTempBaseRadius, commit: () => setBaseRadius(tempBaseRadius), min: 10, max: 300 },
+          { label: 'Spacing', value: tempLevelSpacing, set: setTempLevelSpacing, commit: () => setLevelSpacing(tempLevelSpacing), min: 20, max: 400 },
+        ]).map((control) => (
+          <Box key={control.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: theme.palette.text.secondary, fontSize: '0.6rem', whiteSpace: 'nowrap' }}
+            >
+              {control.label} {control.value}
+            </Typography>
+            <Slider
+              size="small"
+              value={control.value}
+              min={control.min}
+              max={control.max}
+              onChange={(_, value) => control.set(value as number)}
+              onMouseUp={control.commit}
+              onTouchEnd={control.commit}
+              sx={{
+                color: theme.palette.primary.main,
+                height: 2,
+                width: 64,
+                '& .MuiSlider-thumb': { width: 8, height: 8 },
+                '& .MuiSlider-track': { height: 2 },
+                '& .MuiSlider-rail': { height: 2 },
+              }}
+            />
+          </Box>
+        ))}
       </Paper>
 
       {/* React Flow Component */}
@@ -420,7 +522,14 @@ const AgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         // style={{ backgroundColor: theme.palette.background.default }}
       >
         <Background/>
-        <Controls>
+        <Controls
+          position="top-right"
+          style={{
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: '8px'
+          }}
+        >
           <div className="react-flow__controls-button">
             <Tooltip title={useCompactMode ? "Switch to full connectivity" : "Switch to compact connectivity"}>
               <span style={{ display: 'inline-block' }}>

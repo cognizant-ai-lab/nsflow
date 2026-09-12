@@ -87,7 +87,7 @@ const HomeContent: React.FC = () => {
               style={{ display: isZenMode ? "none" : "flex", flexDirection: "column", height: "100%" }}
             >
               <div className="h-14">
-                <Header selectedNetwork={selectedNetwork} isEditorPage={false}/>
+                <Header isEditorPage={false}/>
               </div>
               <StarStudioPopup />
 
@@ -101,7 +101,15 @@ const HomeContent: React.FC = () => {
                   <PanelGroup direction="vertical">
                     <Panel defaultSize={66} minSize={50} maxSize={85}>
                       {/* AgentFlow */}
-                      <AgentFlow selectedNetwork={selectedNetwork} />
+                      <AgentFlow
+                        selectedNetwork={selectedNetwork}
+                        onNetworkImported={(networkName) => {
+                          // Select it the same way the sidebar does, so the canvas
+                          // and the chat both point at what was just imported.
+                          setSelectedNetwork(networkName);
+                          setActiveNetwork(networkName);
+                        }}
+                      />
                     </Panel>
                     <PanelResizeHandle className="h-1 bg-gray-700 cursor-ns-resize" />
 

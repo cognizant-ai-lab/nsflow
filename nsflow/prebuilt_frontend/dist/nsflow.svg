@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="nsflow">
+  <!--
+    An agent network: one frontman chaining down to three agents. The same shape the
+    editor draws, so the tab icon matches what the app is for.
+  -->
+  <defs>
+    <linearGradient id="nsflow-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="nsflow-node" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="url(#nsflow-bg)"/>
+
+  <!-- Down-chains, drawn under the nodes so the joins stay clean. -->
+  <g stroke="#38bdf8" stroke-width="2.75" stroke-linecap="round" fill="none" opacity="0.75">
+    <path d="M32 24 L16 42"/>
+    <path d="M32 24 L32 42"/>
+    <path d="M32 24 L48 42"/>
+  </g>
+
+  <!-- The frontman, larger because it is the network's entry point. -->
+  <circle cx="32" cy="20" r="7.5" fill="url(#nsflow-node)"/>
+  <circle cx="16" cy="45" r="5.5" fill="url(#nsflow-node)"/>
+  <circle cx="32" cy="45" r="5.5" fill="url(#nsflow-node)"/>
+  <circle cx="48" cy="45" r="5.5" fill="url(#nsflow-node)"/>
+</svg>

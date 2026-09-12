@@ -32,29 +32,11 @@ import {
   Refresh as ResetIcon,
 } from "@mui/icons-material";
 import { useZenMode } from "../../hooks/useZenMode";
-import { ZenModeFeatures } from "../../config/zenModeConfig";
-
-interface FeatureToggle {
-  key: keyof ZenModeFeatures;
-  label: string;
-  category: string;
-}
-
-// User-toggleable Zen Mode features. Everything else either renders
-// unconditionally (header, chat controls, animations) or is governed by
-// ReactFlow's own Controls panel (node dragging, grid background).
-const FEATURE_TOGGLES: FeatureToggle[] = [
-  { key: "showSidebar", label: "Show Sidebar (Switch Networks)", category: "Layout" },
-
-  { key: "showMinimap", label: "Minimap", category: "Agent Flow" },
-  { key: "showActiveAgents", label: "Active Agents List", category: "Agent Flow" },
-
-  { key: "showInternalChat", label: "Internal Chat", category: "Advanced Panels" },
-  { key: "showConfigPanel", label: "Config Panel", category: "Advanced Panels" },
-  { key: "showSlyDataPanel", label: "Sly Data Panel", category: "Advanced Panels" },
-  { key: "showConnectorsPanel", label: "Connectors Panel", category: "Advanced Panels" },
-  { key: "showLogsPanel", label: "Logs Panel", category: "Advanced Panels" },
-];
+import {
+  ZEN_FEATURE_TOGGLES,
+  type ZenFeatureToggle,
+  type ZenModeFeatures,
+} from "../../config/zenModeConfig";
 
 const ZenModeSettings: React.FC = () => {
   const theme = useTheme();
@@ -85,11 +67,11 @@ const ZenModeSettings: React.FC = () => {
   const id = open ? "zen-mode-settings-popover" : undefined;
 
   // Group toggles by category for the rendered sections.
-  const categories = FEATURE_TOGGLES.reduce((acc, toggle) => {
+  const categories = ZEN_FEATURE_TOGGLES.reduce((acc, toggle) => {
     if (!acc[toggle.category]) acc[toggle.category] = [];
     acc[toggle.category].push(toggle);
     return acc;
-  }, {} as Record<string, FeatureToggle[]>);
+  }, {} as Record<string, ZenFeatureToggle[]>);
 
   return (
     <>

@@ -136,10 +136,26 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+
+  /*
+    Not a flex container, and never scrolled.
+
+    `display: flex` and `place-items: center` here are Vite's starter template. They
+    are actively harmful in this app for two reasons. MUI renders tooltips, menus and
+    poppers into a portal appended to `body`, so each one became a flex SIBLING of
+    #root and got laid out beside the app rather than over it. And every page renders
+    a `w-screen h-screen` div, where `100vw` deliberately ignores scrollbar width: a
+    vertical scrollbar makes `100vw` wider than the content box, which adds a
+    horizontal scrollbar, which costs height, which overflows the `100vh` child, which
+    adds the vertical scrollbar again. The layout is bistable, so it can look fine
+    until something perturbs it and then flicker until something else knocks it back.
+
+    `overflow: hidden` closes that loop at the root: this is a fixed-viewport SPA and
+    every panel that scrolls does its own scrolling, so the page itself never should.
+  */
+  overflow: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {

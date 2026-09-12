@@ -30,6 +30,12 @@ limitations under the License.
  *     as ending the session, so arriving is always a clean canvas.
  *   - A new tab starts a new one, since `sessionStorage` is per tab.
  *
+ *   - A SERVER RESTART ends it. A draft is only meaningful against the server that
+ *     was persisting it: after a restart the network it referred to may be gone, so
+ *     reopening the draft shows agents that no longer exist anywhere. The client
+ *     cannot see a restart on its own, since a reload keeps its own storage, so the
+ *     server reports an instance id that changes on every start.
+ *
  * A hard reload is deliberately NOT distinguished from an ordinary one: browsers
  * report both as navigation type "reload" and expose nothing else to tell them
  * apart, so any rule claiming to separate them would be guessing. `startNewSession`
@@ -38,10 +44,14 @@ limitations under the License.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { getServerInstanceId } from "../utils/config";
 import { useEditorNetworkStore } from "./editorNetworkStore";
 
 /** Where the current session's id is kept. Per tab, cleared when the tab closes. */
 const SESSION_STORAGE_KEY = "nsflow.editorDraftSession";
+
+/** The server instance the current session belongs to. */
+const SESSION_SERVER_KEY = "nsflow.editorDraftSessionServer";
 
 /**
  * Prefix for a draft's store key.
@@ -82,9 +92,24 @@ const dropOtherDrafts = (keepKey: string): void => {
 export const useEditorDraftSession = (): { draftKey: string; startNewSession: () => void } => {
   const [sessionId, setSessionId] = useState<string>(() => {
     const existing = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (existing) return existing;
+    const server = getServerInstanceId();
+    const sessionServer = sessionStorage.getItem(SESSION_SERVER_KEY);
+
+    // Continue only if the same server is still running.
+    //
+    // `main.tsx` awaits loadAppConfig() before rendering, so the id is known by the
+    // time this runs and the empty case is not the normal path. It is still handled
+    // rather than asserted: an empty id means "cannot tell", and continuing is the
+    // safe reading, since wiping a draft on a guess loses work that was fine.
+    const sameServer = !server || !sessionServer || sessionServer === server;
+    if (existing && sameServer) {
+      if (server && !sessionServer) sessionStorage.setItem(SESSION_SERVER_KEY, server);
+      return existing;
+    }
+
     const created = newSessionId();
     sessionStorage.setItem(SESSION_STORAGE_KEY, created);
+    if (server) sessionStorage.setItem(SESSION_SERVER_KEY, server);
     return created;
   });
 
@@ -117,6 +142,8 @@ export const useEditorDraftSession = (): { draftKey: string; startNewSession: ()
   const startNewSession = useCallback(() => {
     const created = newSessionId();
     sessionStorage.setItem(SESSION_STORAGE_KEY, created);
+    const server = getServerInstanceId();
+    if (server) sessionStorage.setItem(SESSION_SERVER_KEY, server);
     setSessionId(created);
   }, []);
 

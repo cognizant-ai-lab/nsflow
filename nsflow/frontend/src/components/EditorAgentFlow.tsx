@@ -18,13 +18,14 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { ReactFlow, Background, Controls, useEdgesState, useNodesState, useReactFlow, 
   Node, Edge, EdgeMarkerType, Connection, NodeChange, NodeMouseHandler } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Box, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem } from "@mui/material";
+import { Alert, Box, Chip, CircularProgress, Fade, Typography, Paper, useTheme, IconButton, Tooltip, Slider, alpha, Button, ButtonGroup, ClickAwayListener, Dialog, DialogActions, DialogContent, DialogTitle, Grow, Popper, MenuList, MenuItem, Snackbar } from "@mui/material";
 import EditableAgentNode from "./EditableAgentNode";
 import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
 import EdgeContextMenu from "./EdgeContextMenu";
 import EditorPalette from "./EditorPalette";
 import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
+import NetworkFileActions from "./NetworkFileActions";
 import NetworkNameField from "./NetworkNameField";
 import { useApiPort } from "../context/ApiPortContext";
 import { createLayoutManager } from "../utils/agentLayoutManager";
@@ -41,7 +42,10 @@ import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from 
 import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
 import { buildEditorGraph } from "../state/editorGraph";
+import { toConnectivityList } from "../state/definitionShape";
+import { describeEdit, recordEditorActivity } from "../state/editorActivity";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
+import { waitForServedNetwork } from "../state/servedNetworks";
 import type { ChatMessage } from "../uiCommon";
 import { useEditorProgressBridge } from "../state/progressBridge";
 import type { ConnectivityInfo } from "../uiCommon";
@@ -85,6 +89,32 @@ const EDITING_RULES: string[] = [
   "Right-click a connection to delete it, or drag its end onto another agent to move the child.",
   "A change that leaves an agent with no parent is kept on the canvas but not saved until you reconnect it.",
 ];
+
+/**
+ * Padding for every fit-to-screen on this canvas.
+ *
+ * React Flow fits the graph to the viewport less this padding, so a larger value means
+ * a smaller graph. The default 0.1 leaves the content filling 1/(1+2*0.1) of the
+ * viewport; 0.25 leaves 1/(1+2*0.25), which is 80% of that zoom.
+ *
+ * 80% on purpose: the canvas corners now carry the info panel, the layout row, the
+ * launch and file actions and React Flow's own controls, and a full-bleed fit put the
+ * outermost agents underneath them. Applied to the mount fit and the force-layout fit
+ * from one constant, so the two cannot drift apart.
+ */
+const FIT_VIEW_PADDING = 0.25;
+
+/** Starting over is a third kind of action, so a third hue. */
+const NEW_DRAFT_TINT = "#c3b1f5";
+
+/** A .hocon the backend has parsed, held while we decide whether to ask about it. */
+type ParsedImport = {
+  readonly definition: ConnectivityInfo[];
+  readonly networkName: string;
+  readonly hocon?: string;
+  /** The file's own name, which is what the user recognises in a prompt. */
+  readonly fileName: string;
+};
 
 const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl } = useApiPort();
@@ -139,6 +169,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const lastSeenNameRef = useRef<string | null>(null);
   const [showLaunchButton, setShowLaunchButton] = useState(false);
   const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
+  /** Why the last import failed, or undefined. */
+  const [importError, setImportError] = useState<string | undefined>(undefined);
+  /** A parsed import waiting on confirmation, because it would overwrite a network. */
+  const [pendingImport, setPendingImport] = useState<ParsedImport | undefined>(undefined);
   const launchAnchorRef = useRef<HTMLDivElement>(null);
 
   // We'll read the latest agent_network_definition from logs in view-mode
@@ -184,6 +218,17 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // A network with no name has not been persisted, so there is nothing on the server
   // to launch yet. Showing the button but disabling it says that much more clearly
   // than hiding it.
+  /**
+   * True while the agent network designer is mid-turn.
+   *
+   * Manual editing is withheld throughout: the designer is rewriting the same
+   * definition, so an edit sent into that is either overwritten or canonicalised on
+   * top of a half-built network. The Launch button already used this condition; the
+   * rest of the manual surface now uses the same one rather than each gate inventing
+   * its own idea of "busy".
+   */
+  const designerBusy = waitingForAgent;
+
   const launchDisabled = waitingForAgent || registryReloadPending || !launchableNetworkName;
 
   // Latest agent network name for the launch button — same selector as the canvas
@@ -219,8 +264,16 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   
   // Agent editor state
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
-  const [autoExpandPanel, setAutoExpandPanel] = useState(false);
-  const isPanelOpenRef = useRef(false);
+  /**
+   * Counts explicit requests to open the agent panel.
+   *
+   * A counter, not a boolean. As a boolean this said "the panel may auto-expand",
+   * which stayed true after the user closed the panel, so the next time the panel
+   * reloaded its data (which happens on every progress frame while the designer
+   * works) it opened itself again. A counter says "open now", once, and closing is
+   * therefore final until the user asks again.
+   */
+  const [panelOpenRequests, setPanelOpenRequests] = useState(0);
 
   // Render the canvas from the store.
   //
@@ -327,9 +380,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   // Handle node double-click — expand panel
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
-    setAutoExpandPanel(true);
     setSelectedAgentName(node.id);
-    isPanelOpenRef.current = true;
+    setPanelOpenRequests((count) => count + 1);
   }, []);
 
   const [edgeMenu, setEdgeMenu] = useState<{
@@ -420,7 +472,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // Edges are already transformed, so only the nodes are replaced.
       setNodes(layoutManager.forceLayout(currentNodes, getEdges()).nodes);
       setTimeout(() => {
-        fitView({ padding: 0.1, duration: 800 });
+        fitView({ padding: FIT_VIEW_PADDING, duration: 800 });
       }, 100);
     } catch (error) {
       console.warn('Failed to force layout:', error);
@@ -436,7 +488,21 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // response arriving afterwards and reconciling a definition that is now stale,
   // which would undo the newer edit on the canvas. It also stops a queue building up
   // when a user adds several agents in quick succession.
+  /** Set when the naming dialog is closing in order to hand over to the chat. */
+  const focusChatOnCloseRef = useRef(false);
   const inFlightEditRef = useRef<AbortController | null>(null);
+  /**
+   * How many edits are being saved right now.
+   *
+   * A count rather than a boolean because edits supersede each other, so the
+   * indicator has to survive one finishing while another is still going.
+   *
+   * This exists instead of slowing edits down. Rapid clicks are safe now that each
+   * edit path reads the live definition, so the only thing missing was telling the
+   * user their change registered. A delay would make every single edit feel worse
+   * to fix a case that no longer misbehaves.
+   */
+  const [savingCount, setSavingCount] = useState(0);
 
   // Manual edits go over HTTP, so nothing about them reaches the sly_data websocket
   // the Sly Data panel listens to, and the panel sat on whatever the last chat turn
@@ -467,6 +533,13 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       if (!apiUrl) return;
       applyEdit(networkId, next);
 
+      // Logged on the local apply, not on the server round trip: this records what the
+      // user did, and it did happen even when the definition is held back below for
+      // being mid-rearrangement.
+      recordEditorActivity(
+        describeEdit(message ?? `Updated agent "${agentName}"`, launchableNetworkName || undefined)
+      );
+
       // Hold a half-finished rearrangement locally rather than sending it. An
       // invalid definition is not rejected by the designer, it is REPAIRED by its
       // LLM, which restructures the network and discards the edit in progress. The
@@ -477,6 +550,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       const controller = new AbortController();
       inFlightEditRef.current = controller;
 
+      setSavingCount((count) => count + 1);
       try {
         await sendEditorUpdate({
           apiUrl,
@@ -493,10 +567,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           console.error(`Failed to persist edit for ${agentName}:`, error);
         }
       } finally {
+        setSavingCount((count) => Math.max(0, count - 1));
         if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
       }
     },
-    [networkId, apiUrl, applyEdit, publishSlyData]
+    [networkId, apiUrl, applyEdit, publishSlyData, launchableNetworkName]
   );
 
   // Handle edge connection.
@@ -508,20 +583,27 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // effect draws the edge once the definition holds it.
   const onConnect = useCallback(
     (params: Connection) => {
-      const definition = entry?.definition ?? [];
+      // Read from the store, not from this render's `entry`. Two clicks inside one
+      // render cycle would otherwise both build on the same stale definition and the
+      // first edit would be silently lost, which is exactly what a double click does.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       const next = connectAgentsInDefinition(definition, params.source ?? "", params.target ?? "");
       // Unchanged means the edge was refused: a toolbox tool or external reference
       // cannot have down-chains, and a duplicate or self-edge is nothing to do.
-      if (next !== definition) void applyAndSync(next, params.source ?? "");
+      if (next !== definition)
+        void applyAndSync(
+          next,
+          params.source ?? "",
+          `Connected "${params.target}" under "${params.source}"`
+        );
     },
     [entry?.definition, applyAndSync]
   );
 
   // Context menu actions
   const handleEditAgent = (nodeId: string) => {
-    setAutoExpandPanel(true);
     setSelectedAgentName(nodeId);
-    isPanelOpenRef.current = true;
+    setPanelOpenRequests((count) => count + 1);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
   };
 
@@ -530,21 +612,29 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
     setSelectedNodeId("");
     // deleteAgent returns the same array when nothing matched, so nothing to send.
-    if (next !== (entry?.definition ?? [])) await applyAndSync(next, nodeId);
+    if (next !== (entry?.definition ?? []))
+      await applyAndSync(next, nodeId, `Deleted agent "${nodeId}"`);
   };
 
   const handleDuplicateAgent = async (nodeId: string) => {
-    const definition = entry?.definition ?? [];
+    // Read from the store, not from this render's `entry`. Two clicks inside one
+    // render cycle would otherwise both build on the same stale definition and the
+    // first edit would be silently lost, which is exactly what a double click does.
+    const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
     // Uniquified, or a second copy would collide with the first and addAgent's
     // duplicate-name guard would silently make the action do nothing.
     const newAgentName = uniqueAgentName(definition, `${nodeId}_copy`);
     const next = duplicateAgentInDefinition(definition, nodeId, newAgentName);
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    if (next !== definition) await applyAndSync(next, newAgentName);
+    if (next !== definition)
+      await applyAndSync(next, newAgentName, `Added agent "${newAgentName}"`);
   };
 
   const handleAddChildAgent = async (nodeId: string) => {
-    const definition = entry?.definition ?? [];
+    // Read from the store, not from this render's `entry`. Two clicks inside one
+    // render cycle would otherwise both build on the same stale definition and the
+    // first edit would be silently lost, which is exactly what a double click does.
+    const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
     // Uniquified for the same reason as duplicate: a fixed "<parent>_child" meant an
     // agent could be given exactly one child, and every attempt after the first was
     // rejected as a duplicate name with nothing to show for it.
@@ -556,7 +646,12 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       newAgentAttributes(childAgentName)
     );
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
-    if (next !== definition) await applyAndSync(next, childAgentName);
+    if (next !== definition)
+      await applyAndSync(
+        next,
+        childAgentName,
+        `Added agent "${childAgentName}" under "${nodeId}"`
+      );
   };
 
   // One path for putting a palette item on the canvas, whether it was clicked or
@@ -602,7 +697,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       );
       // addAgent returns the same array when the name is taken, which is what makes
       // adding the same tool twice a no-op rather than an error.
-      if (next !== definition) await applyAndSync(next, agentName);
+      if (next !== definition) await applyAndSync(next, agentName, `Duplicated agent "${agentName}"`);
     },
     [entry?.definition, applyAndSync]
   );
@@ -613,7 +708,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const handleDeleteConnection = useCallback(
     async (source: string, target: string) => {
       closeEdgeMenu();
-      const definition = entry?.definition ?? [];
+      // Read from the store, not from this render's `entry`. Two clicks inside one
+      // render cycle would otherwise both build on the same stale definition and the
+      // first edit would be silently lost, which is exactly what a double click does.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       const next = disconnectAgentsInDefinition(definition, source, target);
       if (next !== definition) await applyAndSync(next, source, `Disconnect "${target}" from "${source}"`);
     },
@@ -625,7 +723,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // would produce.
   const onReconnect = useCallback(
     (oldEdge: Edge, connection: Connection) => {
-      const definition = entry?.definition ?? [];
+      // Read from the store, not from this render's `entry`. Two clicks inside one
+      // render cycle would otherwise both build on the same stale definition and the
+      // first edit would be silently lost, which is exactly what a double click does.
+      const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       // Only the parent end is meaningful here: the child keeps its identity, and
       // what changes is which agent chains down to it.
       const next = reparentAgentInDefinition(
@@ -683,8 +784,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   // A click adds under the selected agent, so a selection that cannot take children
   // disables the palette rather than having the click land somewhere unexpected.
-  const paletteDisabledReason =
-    selectedNodeId && !canHaveChildren(entry?.definition ?? [], selectedNodeId)
+  // The designer takes precedence: while it is rewriting the network, nothing about
+  // the current selection matters, and this is the reason the user needs to see.
+  const paletteDisabledReason = designerBusy
+    ? "The agent network designer is working. Manual editing resumes when it finishes."
+    : selectedNodeId && !canHaveChildren(entry?.definition ?? [], selectedNodeId)
       ? `"${selectedNodeId}" cannot have down-chain agents. Deselect it to add elsewhere.`
       : undefined;
 
@@ -801,6 +905,146 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     // Nothing to refetch: the panel writes through the store, which re-renders the
     // canvas on its own.
   };
+
+  /**
+   * Download the network as a .hocon file.
+   *
+   * The text is whatever the designer last assembled and sent back as
+   * `agent_network_hocon_text`, kept in the store. nsflow deliberately does not
+   * assemble its own: the designer already owns that job, and a second writer here
+   * would be a second answer to the same question, free to drift from the first.
+   */
+  const handleExportHocon = useCallback(async () => {
+    const name = launchableNetworkName || selectedNetwork || "agent_network";
+
+    // The store's copy first, then the served registry file. Two sources because the
+    // store's copy is keyed on `selectedNetwork || draftKey` and there is no
+    // migration between those keys, so selecting a network the store knew as a draft
+    // moves the lookup to an entry that has no HOCON yet. Falling back means export
+    // stays available on exactly the same condition as Launch, rather than blinking
+    // out whenever the key changes underneath it.
+    let text = entry?.hocon;
+    if (!text && launchableNetworkName && apiUrl) {
+      try {
+        const response = await fetch(
+          `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(launchableNetworkName)}`
+        );
+        if (response.ok) text = await response.text();
+      } catch {
+        // Offline or the network is not served yet. Nothing to download, and the
+        // button reporting failure is more noise than a no-op.
+      }
+    }
+    if (!text) return;
+
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${name}.hocon`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [apiUrl, entry?.hocon, launchableNetworkName, selectedNetwork]);
+
+  /**
+   * Open a .hocon file as the network under design.
+   *
+   * The backend parses it, because neuro-san's own restorer is what resolves
+   * `include` and `${substitution}` the way a real load would. Parsing it in the
+   * browser would mean a second HOCON dialect that agrees with neuro-san only until
+   * someone uses a feature it does not implement.
+   */
+  /**
+   * Save a parsed import and open it on the canvas.
+   *
+   * Saving is the step that makes it a real agent network rather than a picture of
+   * one: until the designer has written it under its name, neuro-san does not serve
+   * it, so Launch has nothing to open and Home and Cruse cannot see it. Doing this on
+   * import rather than waiting for the user's first edit is the whole difference
+   * between "imported" and "imported and usable".
+   */
+  const applyImport = useCallback(
+    async (parsed: ParsedImport) => {
+      if (!apiUrl) return;
+      // Into the store first, exactly as a designer frame would arrive, so the canvas
+      // draws immediately rather than after the round trip.
+      useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+        definition: parsed.definition,
+        networkName: parsed.networkName,
+        hocon: parsed.hocon,
+      });
+      setImportError(undefined);
+
+      // Hold Launch while the server picks the file up, using the same gate that
+      // covers a chat-generated network. Saved is not servable until neuro-san's next
+      // registry reload, and Launch before then opens nothing. `skip_designer` is set
+      // inside sendEditorUpdate, so this saves the network exactly as imported.
+      setRegistryReloadPending(true);
+      try {
+        await sendEditorUpdate({
+          apiUrl,
+          networkId,
+          agentName: parsed.definition[0]?.origin ?? "",
+          definition: parsed.definition,
+          networkName: parsed.networkName,
+          message: `Import agent network "${parsed.networkName}"`,
+          onFrame: publishSlyData,
+        });
+        await waitForServedNetwork(apiUrl, parsed.networkName);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : "Could not save that network.");
+      } finally {
+        setRegistryReloadPending(false);
+      }
+    },
+    [apiUrl, networkId, publishSlyData]
+  );
+
+  /**
+   * Parse a chosen file, and ask first only when the import would overwrite.
+   *
+   * Parsing has to happen before the question can be asked, because the answer turns
+   * on the imported network's name and that is inside the file.
+   *
+   * A differently named import is not destructive: the network currently on the
+   * canvas has already been saved under its own name, so it survives untouched and
+   * remains in the sidebar. Only an import of the SAME name replaces something, and
+   * that is the only case worth interrupting for.
+   */
+  const handleImportRequested = useCallback(
+    async (file: File) => {
+      if (!apiUrl) return;
+      setImportError(undefined);
+      const body = new FormData();
+      body.append("file", file);
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/hocon/import`, { method: "POST", body });
+        const payload = await response.json();
+        if (!response.ok) {
+          setImportError(payload?.detail || "Could not read that file.");
+          return;
+        }
+        const definition = toConnectivityList(payload.definition);
+        const networkName: string | undefined = payload.network_name;
+        if (!definition || !networkName) {
+          setImportError("That file parsed but produced no agents.");
+          return;
+        }
+
+        const parsed: ParsedImport = { definition, networkName, hocon: payload.hocon, fileName: file.name };
+        // The server decides, because it is the one that knows the registry. Comparing
+        // against the network on this canvas was too narrow: importing a name that is
+        // already served overwrites it whether or not it happens to be open here.
+        if (payload.name_is_taken) {
+          setPendingImport(parsed);
+          return;
+        }
+        await applyImport(parsed);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : "Could not read that file.");
+      }
+    },
+    [apiUrl, applyImport]
+  );
 
   // Handle launch to Cruse (default)
   const handleLaunchCruse = useCallback(() => {
@@ -966,7 +1210,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         // Both, because the key a user calls "delete" differs by keyboard: the Mac
         // key labelled delete reports "Backspace", while "Delete" is a PC delete or
         // Mac fn+delete. xyflow binds only Backspace by default.
-        deleteKeyCode={["Delete", "Backspace"]}
+        /*
+          No delete key while the designer works. The context menu already withholds
+          Delete, and leaving the keyboard route open would be a way round it.
+        */
+        deleteKeyCode={designerBusy ? null : ["Delete", "Backspace"]}
         onReconnect={onReconnect}
         edgesReconnectable
         onPaneClick={onPaneClick}
@@ -980,6 +1228,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           markerEnd: "arrowclosed" as EdgeMarkerType,
         }}
         fitView
+        fitViewOptions={{ padding: FIT_VIEW_PADDING }}
         onlyRenderVisibleElements
         attributionPosition="bottom-left"
         minZoom={0.01}
@@ -1010,6 +1259,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         canAddChild={canHaveChildren(entry?.definition ?? [], contextMenu.nodeId)}
         canDuplicate={canDuplicate(entry?.definition ?? [], contextMenu.nodeId)}
         canDelete={canDelete(entry?.definition ?? [], contextMenu.nodeId)}
+        readOnly={designerBusy}
       />
 
       {/* Name the network before its first agent exists */}
@@ -1018,6 +1268,23 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         onClose={() => setPendingFirstItem(null)}
         maxWidth="xs"
         fullWidth
+        /*
+          Focus the chat only once this dialog has finished leaving.
+          MUI restores focus to whatever opened a dialog when it unmounts, which is the
+          right thing for Cancel and the wrong thing here: asking for chat focus while
+          the dialog was still closing meant MUI took it straight back, so the input
+          lit up but had no caret. Keyed off the transition rather than a timeout, so
+          it does not depend on guessing how long the animation takes.
+        */
+        slotProps={{
+          transition: {
+            onExited: () => {
+              if (!focusChatOnCloseRef.current) return;
+              focusChatOnCloseRef.current = false;
+              requestChatFocus();
+            },
+          },
+        }}
       >
         <DialogTitle sx={{ pb: 1 }}>Name this agent network</DialogTitle>
         <DialogContent sx={{ pb: 1 }}>
@@ -1052,8 +1319,9 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
             size="small"
             startIcon={<ChatIcon fontSize="small" />}
             onClick={() => {
+              // Requested on exit, not here: see the dialog's onExited above.
+              focusChatOnCloseRef.current = true;
               setPendingFirstItem(null);
-              requestChatFocus();
             }}
             sx={{ textTransform: 'none' }}
           >
@@ -1061,6 +1329,57 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/*
+        Confirm only when an import would overwrite the network it names.
+        A differently named import replaces nothing: the current network stays saved
+        under its own name. Asking then would be a question with no stakes.
+      */}
+      <Dialog open={Boolean(pendingImport)} onClose={() => setPendingImport(undefined)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Overwrite {pendingImport?.networkName}?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            <strong>{pendingImport?.fileName}</strong> is also called
+            {" "}
+            <strong>{pendingImport?.networkName}</strong>, so importing it replaces the
+            {" "}
+            {entry?.definition?.length ?? 0} agents currently saved under that name.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
+          <Button onClick={() => setPendingImport(undefined)} sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => {
+              const parsed = pendingImport;
+              setPendingImport(undefined);
+              if (parsed) void applyImport(parsed);
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            Overwrite
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/*
+        Why an import failed. A snackbar rather than a dialog: the file is simply not
+        one we can open, there is nothing to decide, and the reason comes from the
+        backend so it names the actual problem.
+      */}
+      <Snackbar
+        open={Boolean(importError)}
+        autoHideDuration={8000}
+        onClose={() => setImportError(undefined)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setImportError(undefined)} sx={{ maxWidth: 520 }}>
+          {importError}
+        </Alert>
+      </Snackbar>
 
       {/* Connection Context Menu */}
       <EdgeContextMenu
@@ -1184,23 +1503,28 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         </Paper>
       )}
 
-      {/* Launch Button with Dropdown, and starting over */}
-      {(showLaunchButton || hasNetworkToLaunch) && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 76,
-            // Below the layout controls rather than beside them. Those became a
-            // single wide row and were sitting on top of these buttons; stacking is
-            // what keeps both readable whatever the canvas width.
-            right: 60,
-            zIndex: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
-          {pluginCruse ? (
+      {/*
+        Launch, centred on the second row.
+        It is the one action about the network rather than about the canvas, so it reads
+        better as a primary call to action than as one more icon in a corner row.
+
+        Second row rather than the first: the network info panel sits top left and grows
+        rightward with the name, so a long name ran into a top-centre button. This row
+        already holds the file actions on the right and is empty in the middle. Not the
+        true centre of the canvas either, which a radial layout fills with the front man.
+      */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 76,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+          {(showLaunchButton || hasNetworkToLaunch) && (pluginCruse ? (
             // Cruse enabled: Show Launch to Cruse with dropdown for Home
             <>
               <ButtonGroup
@@ -1208,10 +1532,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                 variant="contained"
                 color="primary"
                 sx={{
-                  borderRadius: '28px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  borderRadius: '20px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
                   '& .MuiButton-root': {
-                    height: 56,
+                    height: 40,
                     '&:hover': {
                       backgroundColor: theme.palette.primary.dark,
                       transform: 'scale(1.02)',
@@ -1332,11 +1656,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                   onClick={handleLaunchHome}
                   disabled={launchDisabled}
                   sx={{
-                    height: 56,
-                    minWidth: 100,
-                    px: 2.5,
+                    height: 40,
+                    minWidth: 88,
+                    px: 2,
                     textTransform: 'none',
-                    borderRadius: '28px',
+                    borderRadius: '20px',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                     backgroundColor: theme.palette.primary.main,
                     '&:hover': {
@@ -1350,7 +1674,68 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                 </Button>
               </span>
             </Tooltip>
-          )}
+          ))}
+      </Box>
+
+      {/*
+        File actions and starting over. The container is always rendered
+        because importing a .hocon has to be reachable on an empty canvas, which is
+        exactly when a user has a file and nothing drawn yet. Each button keeps its
+        own condition.
+      */}
+      {(
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 76,
+            // Below the layout controls rather than beside them. Those became a
+            // single wide row and were sitting on top of these buttons; stacking is
+            // what keeps both readable whatever the canvas width.
+            right: 60,
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+
+          {/*
+            Export appears on the same condition as Launch: both need a network that
+            actually exists. Import has no such condition, since an empty canvas is
+            the most natural place to open a file.
+          */}
+          {/*
+            Says an edit registered, without taking the canvas away to say it.
+            Non-modal and non-blocking on purpose: the alternative considered was
+            slowing edits down so a double click could not outrun them, which would
+            have made every edit feel worse to fix a case that reading the live
+            definition already fixed. This only closes the feedback gap that made
+            clicking again feel necessary.
+          */}
+          {/* Quick in, quicker out: it should be gone the moment the change lands, not
+              linger and imply work that has finished. */}
+          <Fade in={savingCount > 0} timeout={{ enter: 100, exit: 160 }}>
+            <Chip
+              size="small"
+              icon={<CircularProgress size={12} thickness={6} sx={{ color: 'inherit' }} />}
+              label="Saving"
+              sx={{
+                height: 26,
+                backgroundColor: alpha(theme.palette.background.paper, 0.95),
+                backdropFilter: 'blur(8px)',
+                border: `1px solid ${theme.palette.divider}`,
+                color: theme.palette.text.secondary,
+                '& .MuiChip-icon': { ml: 1, color: theme.palette.primary.main },
+              }}
+            />
+          </Fade>
+
+          <NetworkFileActions
+            onExportHocon={hasNetworkToLaunch ? handleExportHocon : undefined}
+            onImport={handleImportRequested}
+            importTooltip="Import a .hocon file, saved and opened here for editing"
+            size={40}
+          />
 
           {/*
             Always available, not only while a draft is open: once a chat turn names
@@ -1368,28 +1753,39 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
                     setPendingFirstItem(FRONTMAN_ITEM);
                   }}
                   sx={{
-                    width: 56,
-                    height: 56,
-                    backgroundColor: alpha(theme.palette.background.paper, 0.95),
+                    width: 40,
+                    height: 40,
+                    // Tinted to match the file actions beside it, in a third hue: the
+                    // three sit in a row and colour is what separates them at a
+                    // glance. Fixed pastels for the same reason as the palette notch,
+                    // since this is on the canvas in both themes.
+                    color: NEW_DRAFT_TINT,
+                    backgroundColor: alpha(NEW_DRAFT_TINT, theme.palette.mode === 'dark' ? 0.16 : 0.14),
                     backdropFilter: 'blur(8px)',
-                    border: `1px solid ${theme.palette.divider}`,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                    color: theme.palette.text.secondary,
+                    border: `1px solid ${alpha(NEW_DRAFT_TINT, 0.35)}`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    transition: 'background-color 160ms, transform 160ms',
                     '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                      color: theme.palette.primary.main,
+                      backgroundColor: alpha(NEW_DRAFT_TINT, 0.3),
+                      color: NEW_DRAFT_TINT,
+                      transform: 'translateY(-1px)',
                     },
                   }}
                 >
-                <NewDraftIcon />
+                <NewDraftIcon sx={{ fontSize: 20 }} />
               </IconButton>
             </span>
           </Tooltip>
         </Box>
       )}
 
-      {/* Layout Controls Panel */}
-      {selectedNetwork && (
+      {/*
+        Layout Controls Panel.
+        Always shown. Gating this on `selectedNetwork` meant it vanished for exactly
+        the networks most in need of arranging: a fresh draft and a freshly imported
+        one, both of which live under a draft key and so have no selected network.
+      */}
+      {(
         <Paper
           elevation={1}
           sx={{
@@ -1516,8 +1912,9 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           setSelectedAgentName(newName);
           setSelectedNodeId(newName);
         }}
-        onClose={() => { setSelectedAgentName(null); setAutoExpandPanel(false); isPanelOpenRef.current = false; }}
-        autoExpand={autoExpandPanel}
+        onClose={() => setSelectedAgentName(null)}
+        openRequest={panelOpenRequests}
+        readOnly={designerBusy}
       />
     </Box>
   );

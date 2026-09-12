@@ -52,6 +52,8 @@ export const uiCommonAliases: Record<string, string> = {
   "@ui-common/state/Environment": path.join(uiCommonDist, "state/Environment.js"),
   "@ui-common/state/ChatHistory": path.join(uiCommonDist, "state/ChatHistory.js"),
   "@ui-common/state/IndexedDBStorage": path.join(uiCommonDist, "state/IndexedDBStorage.js"),
+  "@ui-common/state/Settings": path.join(uiCommonDist, "state/Settings.js"),
+  "@ui-common/controller/llm/Providers": path.join(uiCommonDist, "controller/llm/Providers.js"),
   "@ui-common/mac/const": path.join(uiCommonDist, `${mac}/const.js`),
   "@ui-common/mac/AgentNetworkDesigner": path.join(uiCommonDist, `${mac}/AgentNetworkDesigner.js`),
   "@ui-common/graph/GraphStructure": path.join(uiCommonDist, `${mac}/AgentFlow/GraphStructure.js`),

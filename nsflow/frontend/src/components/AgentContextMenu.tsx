@@ -37,11 +37,19 @@ import {
 import DuplicateIcon from "@mui/icons-material/ContentCopy";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import ViewIcon from "@mui/icons-material/VisibilityOutlined";
 import AddChildIcon from "@mui/icons-material/Add";
 
 /** Roughly the menu's own size, used to keep it inside the viewport. */
 const MENU_WIDTH = 200;
-const MENU_HEIGHT = 210;
+// Only used to keep the menu on screen near a window edge, so it tracks the
+// rendered height rather than being exact.
+const MENU_HEIGHT = 180;
+
+/** Row metrics, shared so every row in the menu lines up. */
+const ITEM_SX = { minHeight: 30, px: 1.5 } as const;
+const ICON_SX = { minWidth: 28 } as const;
+const LABEL_SX = { sx: { fontSize: "0.8125rem" } } as const;
 
 interface AgentContextMenuProps {
   visible: boolean;
@@ -70,6 +78,16 @@ interface AgentContextMenuProps {
    * entry point and has no parent to promote its children to.
    */
   canDelete?: boolean;
+  /**
+   * True while the agent network designer is mid-turn.
+   *
+   * Everything that changes the network is withheld, because the designer is
+   * rewriting the same definition and a manual edit sent into that would either be
+   * overwritten or, worse, be canonicalised on top of a half-built network. Viewing
+   * stays available: reading an agent while the designer works is useful and safe,
+   * so the edit action becomes "View" rather than disappearing.
+   */
+  readOnly?: boolean;
 }
 
 const AgentContextMenu = ({
@@ -85,6 +103,7 @@ const AgentContextMenu = ({
   canAddChild = true,
   canDuplicate = true,
   canDelete = true,
+  readOnly = false,
 }: AgentContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -136,8 +155,14 @@ const AgentContextMenu = ({
   const adjustedY = Math.min(y, window.innerHeight - MENU_HEIGHT);
 
   const actions = [
-    { icon: <EditIcon fontSize="small" />, label: "Edit Agent", onClick: () => onEdit(nodeId) },
-    ...(canDuplicate
+    {
+      icon: readOnly ? <ViewIcon fontSize="small" /> : <EditIcon fontSize="small" />,
+      // "View" rather than a disabled "Edit": the panel it opens is read-only while
+      // the designer is working, and the label should say what will happen.
+      label: readOnly ? "View Agent" : "Edit Agent",
+      onClick: () => onEdit(nodeId),
+    },
+    ...(canDuplicate && !readOnly
       ? [
           {
             icon: <DuplicateIcon fontSize="small" />,
@@ -146,7 +171,7 @@ const AgentContextMenu = ({
           },
         ]
       : []),
-    ...(canAddChild
+    ...(canAddChild && !readOnly
       ? [
           {
             icon: <AddChildIcon fontSize="small" />,
@@ -172,46 +197,55 @@ const AgentContextMenu = ({
         overflow: "hidden",
       }}
     >
+      {/*
+        One row, showing the agent's name.
+        This used to be two stacked lines, an "Agent Actions" label above the name. The
+        label said nothing a right-click menu on an agent does not already say, so the
+        name alone is both shorter and more useful.
+      */}
       <Box
         sx={{
           px: 1.5,
-          py: 1,
+          py: 0.5,
           borderBottom: `1px solid ${theme.palette.divider}`,
           backgroundColor: alpha(theme.palette.primary.main, 0.08),
         }}
       >
-        <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
-          Agent Actions
+        <Typography variant="caption" noWrap sx={{ fontWeight: 600, display: "block" }}>
+          {nodeId || "Agent"}
         </Typography>
-        {nodeId && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-            {nodeId}
-          </Typography>
-        )}
       </Box>
 
+      {/*
+        Tighter rows than MUI's dense default. The icons carry most of the meaning here,
+        so the wide gap the default leaves between icon and label just made the menu
+        cover more of the canvas than it needed to.
+      */}
       <MenuList dense disablePadding sx={{ py: 0.5 }}>
         {actions.map((action) => (
-          <MenuItem key={action.label} onClick={action.onClick}>
-            <ListItemIcon sx={{ color: theme.palette.text.secondary }}>{action.icon}</ListItemIcon>
-            <ListItemText primary={action.label} />
+          <MenuItem key={action.label} onClick={action.onClick} sx={ITEM_SX}>
+            <ListItemIcon sx={{ ...ICON_SX, color: theme.palette.text.secondary }}>
+              {action.icon}
+            </ListItemIcon>
+            <ListItemText primary={action.label} slotProps={{ primary: LABEL_SX }} />
           </MenuItem>
         ))}
 
-        {canDelete && (
+        {canDelete && !readOnly && (
           <>
             <Divider sx={{ my: 0.5 }} />
             <MenuItem
               onClick={() => onDelete(nodeId)}
               sx={{
+                ...ITEM_SX,
                 color: theme.palette.error.main,
                 "&:hover": { backgroundColor: alpha(theme.palette.error.main, 0.12) },
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.error.main }}>
+              <ListItemIcon sx={{ ...ICON_SX, color: theme.palette.error.main }}>
                 <DeleteIcon fontSize="small" />
               </ListItemIcon>
-              <ListItemText primary="Delete Agent" />
+              <ListItemText primary="Delete Agent" slotProps={{ primary: LABEL_SX }} />
             </MenuItem>
           </>
         )}

@@ -18,7 +18,7 @@ limitations under the License.
 import * as React from "react";
 import { alpha } from "@mui/material/styles";
 import { Box, Paper, Tooltip, Typography } from "@mui/material";
-import { Folder, FolderOpen, AccountTreeTwoTone, EditOutlined } from "@mui/icons-material";
+import { Folder, FolderOpen, AccountTreeTwoTone, DeleteOutlined, EditOutlined, FileUploadOutlined } from "@mui/icons-material";
 import { TreeItem, treeItemClasses } from "@mui/x-tree-view";
 
 export type TreeNode = Record<
@@ -87,7 +87,11 @@ export const renderTree = (
   activeNetwork: string,
   theme: any,
   onSelect: (n: string) => void,
-  onEditNetwork?: (n: string) => void
+  onEditNetwork?: (n: string) => void,
+  onExportNetwork?: (n: string) => void,
+  onDeleteNetwork?: (n: string) => void,
+  /** Whether this network may be deleted. Deciding that is the caller's business. */
+  isDeletable?: (n: string) => boolean
 ): React.ReactNode[] => {
   return sortNodeEntries(node).map(([key, value]) => {
     const fullPath = [...path, key].join("/");
@@ -121,7 +125,7 @@ export const renderTree = (
                 "&:hover": {
                   backgroundColor: alpha(theme.palette.primary.main, 0.05),
                   cursor: "pointer",
-                  "& .edit-icon": {
+                  "& .row-action": {
                     opacity: 1,
                   },
                 },
@@ -165,15 +169,61 @@ export const renderTree = (
                       whiteSpace: "nowrap",
                       display: "block",
                       flexGrow: 1,
+                      // Without this a flex item will not shrink below its content
+                      // width, so a long name pushed the row actions past the
+                      // container's `overflow: hidden` and clipped them. Survivable
+                      // with one icon, not with two.
+                      minWidth: 0,
                     }}
                   >
                     {key}
                   </Typography>
                 </Tooltip>
-                {onEditNetwork && (
-                  <Tooltip title="Open in Editor" placement="right">
+                {onExportNetwork && (
+                  <Tooltip title="Export as .hocon" placement="bottom">
                     <Box
-                      className="edit-icon"
+                      className="row-action"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        onExportNetwork(fullPath);
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        opacity: 0,
+                        transition: "all 200ms ease",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        // A different hue from Edit so the two are told apart at a
+                        // glance rather than by position.
+                        backgroundColor: alpha(theme.palette.info.main, 0.12),
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.info.main, 0.25),
+                          transform: "scale(1.1)",
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.info.main, 0.3)}`,
+                        },
+                        "&:active": {
+                          transform: "scale(0.95)",
+                        },
+                      }}
+                    >
+                      <FileUploadOutlined
+                        sx={{
+                          fontSize: 13,
+                          color: theme.palette.info.main,
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                )}
+                {onEditNetwork && (
+                  <Tooltip title="Open in Editor" placement="bottom">
+                    <Box
+                      className="row-action"
                       onClick={(e: React.MouseEvent) => {
                         e.stopPropagation();
                         onEditNetwork(fullPath);
@@ -204,6 +254,47 @@ export const renderTree = (
                         sx={{
                           fontSize: 13,
                           color: theme.palette.success.main,
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                )}
+                {onDeleteNetwork && isDeletable?.(fullPath) && (
+                  <Tooltip title="Delete this generated agent network" placement="bottom">
+                    <Box
+                      className="row-action"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        onDeleteNetwork(fullPath);
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        opacity: 0,
+                        transition: "all 200ms ease",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        // Warning rather than error: it needs to read as destructive
+                        // without shouting on every hover of every generated network.
+                        backgroundColor: alpha(theme.palette.warning.main, 0.14),
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: alpha(theme.palette.error.main, 0.28),
+                          transform: "scale(1.1)",
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.3)}`,
+                        },
+                        "&:active": {
+                          transform: "scale(0.95)",
+                        },
+                      }}
+                    >
+                      <DeleteOutlined
+                        sx={{
+                          fontSize: 13,
+                          color: theme.palette.warning.main,
                         }}
                       />
                     </Box>
@@ -275,7 +366,22 @@ export const renderTree = (
           },
         }}
       >
-        {renderTree(children, [...path, key], activeNetwork, theme, onSelect, onEditNetwork)}
+        {/*
+          Every handler has to be forwarded here. Dropping one silently disables that
+          action for every nested network, which is most of them, while leaving it
+          working on the top level: the action appears to exist but only sometimes.
+        */}
+        {renderTree(
+          children,
+          [...path, key],
+          activeNetwork,
+          theme,
+          onSelect,
+          onEditNetwork,
+          onExportNetwork,
+          onDeleteNetwork,
+          isDeletable
+        )}
       </TreeItem>
     );
   });

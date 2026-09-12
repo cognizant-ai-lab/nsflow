@@ -77,6 +77,9 @@ vi.mock("../utils/config", () => ({
   getFeatureFlags: () => ({ pluginCruse: false }),
   toServedNetworkPath: (name: string) => name,
   getManifestUpdatePeriodMs: () => 1000,
+  // Stable across a test run, so the draft session is never treated as belonging to a
+  // server that has since restarted.
+  getServerInstanceId: () => "test-instance",
 }));
 
 import EditorAgentFlow from "./EditorAgentFlow";

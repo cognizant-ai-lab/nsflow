@@ -30,11 +30,12 @@ type AppRuntimeConfig = {
   AGENT_NETWORK_DESIGNER_SUBDIRECTORY?: string;
   // Seconds the neuro-san server takes to reload its registries (string from backend).
   AGENT_MANIFEST_UPDATE_PERIOD_SECONDS?: string;
+  /** Identifies the running server process; changes on every restart. */
+  NSFLOW_INSTANCE_ID: string;
   // NEW flags (booleans from backend)
   NSFLOW_PLUGIN_CRUSE: boolean;
   NSFLOW_PLUGIN_WAND: boolean;
   NSFLOW_PLUGIN_MULTIMEDIACARD: boolean;
-  NSFLOW_PLUGIN_EXPORT: boolean;
   NSFLOW_PLUGIN_ZENMODE: boolean;
 };
 
@@ -72,7 +73,6 @@ export function getFeatureFlags() {
     pluginCruse: !!c.NSFLOW_PLUGIN_CRUSE,
     pluginWand: !!c.NSFLOW_PLUGIN_WAND,
     pluginMultiMediaCard: !!c.NSFLOW_PLUGIN_MULTIMEDIACARD,
-    pluginExport: !!c.NSFLOW_PLUGIN_EXPORT,
     pluginZenMode: !!c.NSFLOW_PLUGIN_ZENMODE,
     viteUseSpeech: !!c.VITE_USE_SPEECH
   };
@@ -137,4 +137,21 @@ export function getCruseAgentNames() {
     widgetAgentName: c.NSFLOW_CRUSE_WIDGET_AGENT_NAME,
     themeAgentName: c.NSFLOW_CRUSE_THEME_AGENT_NAME,
   };
+}
+
+/**
+ * The running server's instance id, or "" before the config has loaded.
+ *
+ * Changes on every server start. The Editor uses it to end a draft session that
+ * belonged to a server which no longer exists: an unnamed draft only means something
+ * against the server that was persisting it.
+ */
+export function getServerInstanceId(): string {
+  try {
+    return String(getAppConfig().NSFLOW_INSTANCE_ID ?? "");
+  } catch {
+    // Config not loaded yet. "" means "do not know", which callers treat as "do not
+    // reset": guessing a restart and wiping a draft is worse than missing one.
+    return "";
+  }
 }

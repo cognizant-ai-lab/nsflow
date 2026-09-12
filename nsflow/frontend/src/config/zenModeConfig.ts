@@ -172,3 +172,33 @@ export const resetZenModeConfig = (): void => {
 };
 
 export const getDefaultZenModeConfig = (): ZenModeConfig => DEFAULT_CONFIG;
+
+/** One user-toggleable Zen Mode feature, as presented in a settings list. */
+export interface ZenFeatureToggle {
+  readonly key: keyof ZenModeFeatures;
+  readonly label: string;
+  readonly category: string;
+}
+
+/**
+ * The Zen Mode features a user may turn on and off.
+ *
+ * Everything else either renders unconditionally (header, chat controls, animations)
+ * or is governed by ReactFlow's own Controls panel (node dragging, grid background).
+ *
+ * Lives here rather than in a component because two places present it now: the gear
+ * inside the Zen overlay, and the app Settings dialog. One list means the two cannot
+ * drift into offering different features.
+ */
+export const ZEN_FEATURE_TOGGLES: ZenFeatureToggle[] = [
+  { key: "showSidebar", label: "Show Sidebar (Switch Networks)", category: "Layout" },
+
+  { key: "showMinimap", label: "Minimap", category: "Agent Flow" },
+  { key: "showActiveAgents", label: "Active Agents List", category: "Agent Flow" },
+
+  { key: "showInternalChat", label: "Internal Chat", category: "Advanced Panels" },
+  { key: "showConfigPanel", label: "Config Panel", category: "Advanced Panels" },
+  { key: "showSlyDataPanel", label: "Sly Data Panel", category: "Advanced Panels" },
+  { key: "showConnectorsPanel", label: "Connectors Panel", category: "Advanced Panels" },
+  { key: "showLogsPanel", label: "Logs Panel", category: "Advanced Panels" },
+];

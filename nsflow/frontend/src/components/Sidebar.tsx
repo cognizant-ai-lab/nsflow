@@ -17,7 +17,8 @@ limitations under the License.
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Box, Typography, TextField, Button, Paper, FormControl, RadioGroup, FormControlLabel,
-  Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip } from "@mui/material";
+  Radio, Alert, useTheme, alpha, Chip, Stack, IconButton, Tooltip, Dialog, DialogTitle,
+  DialogContent, DialogActions, Snackbar, CircularProgress } from "@mui/material";
 import { HubTwoTone as NetworkIcon, Search as SearchIcon, CloseRounded } from "@mui/icons-material";
 import { SimpleTreeView, treeItemClasses } from "@mui/x-tree-view";
 import { useApiPort } from "../context/ApiPortContext";
@@ -25,6 +26,17 @@ import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { buildTree, renderTree, getAncestorDirs } from "../utils/sidebarHelpers";
+import { getGeneratedSubdir } from "../utils/config";
+
+/**
+ * How long the delete toast stays before the page reloads.
+ *
+ * neuro-san only stops serving a deleted network on its next registry reload, so
+ * reloading the page too early just lists it again and the delete looks like it did
+ * nothing. This waits comfortably past that reload rather than racing it. Also long
+ * enough for the toast to be read rather than flash.
+ */
+const RELOAD_AFTER_DELETE_MS = 4500;
 
 const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => void }) => {
   const [loading, setLoading] = useState(true);
@@ -48,6 +60,11 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
   const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const clearAllTags = () => setSelectedTags(new Set());
+  /** A generated network awaiting confirmation before it is deleted. */
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** Progress text while a delete settles, cleared by the reload that follows. */
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
 
   // Sync tempHost/tempPort when host/port from context change (after get_ns_config)
   useEffect(() => {
@@ -171,6 +188,52 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
       setLoading(false);
     }
   };
+
+
+  /**
+   * Delete a generated network, once confirmed.
+   *
+   * Refreshes the list afterwards rather than removing the row locally: the server is
+   * the authority on what it serves, and a local removal would diverge from it if the
+   * delete half-succeeded.
+   */
+  const confirmDelete = useCallback(async () => {
+    const networkName = pendingDelete;
+    setPendingDelete(null);
+    if (!networkName || !apiUrl) return;
+    // Any error still on screen is from the previous attempt, and leaving it up next
+    // to a successful delete reads as if this one failed too.
+    setDeleteError(null);
+    try {
+      // The route's "generated" segment is fixed, but the subdirectory a network is
+      // served under is not: AGENT_NETWORK_DESIGNER_SUBDIRECTORY can rename it. Sending
+      // the bare name keeps the two independent, so a renamed subdirectory does not
+      // turn every delete into a 404.
+      const prefix = `${getGeneratedSubdir()}/`;
+      const bareName = networkName.startsWith(prefix) ? networkName.slice(prefix.length) : networkName;
+      const response = await fetch(
+        `${apiUrl}/api/v1/hocon/generated/${encodeURI(bareName)}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => undefined);
+        setDeleteError(payload?.detail || `Could not delete "${networkName}".`);
+        return;
+      }
+      // Reload rather than refetch.
+      //
+      // Deleting changes the manifest, and neuro-san only stops serving the network on
+      // its next registry reload, so refetching the list immediately can still return
+      // the network that was just deleted. A reload also clears the several places the
+      // deleted name may still be held: the selected network, the chat's active
+      // network, the sockets open on it. The toast stays up until the page goes, so
+      // the wait is visible rather than looking like nothing happened.
+      setDeleteStatus(`Deleting "${networkName}". Reloading shortly...`);
+      window.setTimeout(() => window.location.reload(), RELOAD_AFTER_DELETE_MS);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : `Could not delete "${networkName}".`);
+    }
+  }, [pendingDelete, apiUrl]);
 
   const handleNetworkSelection = (network: string) => {
     if (network === activeNetwork) return;
@@ -655,14 +718,87 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
                   handleNetworkSelection,
                   (networkName: string) => {
                     window.open(`/editor?loadNetwork=${encodeURIComponent(networkName)}`, '_blank', 'noopener,noreferrer');
-                  }
+                  },
+                  // Any served network can be exported, not just generated ones, so
+                  // this hangs off the sidebar row rather than off the canvas.
+                  async (networkName: string) => {
+                    if (!apiUrl) return;
+                    const response = await fetch(
+                      `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(networkName)}`
+                    );
+                    if (!response.ok) return;
+                    const url = URL.createObjectURL(await response.blob());
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    // Nested names arrive as "basic/music_nerd"; a slash in a download
+                    // name is silently dropped by the browser, so flatten it.
+                    anchor.download = `${networkName.replace(/\//g, "_")}.hocon`;
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  },
+                  // Deleting is confirmed first, so this only opens the dialog.
+                  (networkName: string) => setPendingDelete(networkName),
+                  // Only what the designer generated. Everything else in the registry
+                  // is part of the deployment and is not nsflow's to remove, which the
+                  // endpoint enforces too; this keeps the icon from appearing where it
+                  // would only ever fail.
+                  (networkName: string) => networkName.startsWith(`${getGeneratedSubdir()}/`)
                 )}
               </SimpleTreeView>
             )}
           </Box>
 
           <div ref={networksEndRef} />
-        </Box>
+        
+      {/*
+        Confirm before deleting, and name what is being deleted.
+        This removes a file from the server's registry, so it is not undoable from here
+        and the network stops being servable to anyone.
+      */}
+      <Dialog open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Delete {pendingDelete}?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            This removes the agent network from the server's registry. It will stop being
+            available in Home, Cruse and the Editor, and this cannot be undone from here.
+            Export it first if you might want it back.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
+          <Button onClick={() => setPendingDelete(null)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => void confirmDelete()}
+            sx={{ textTransform: "none" }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(deleteStatus)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="info" icon={<CircularProgress size={16} />} sx={{ maxWidth: 520 }}>
+          {deleteStatus}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={Boolean(deleteError)}
+        autoHideDuration={8000}
+        onClose={() => setDeleteError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ maxWidth: 520 }}>
+          {deleteError}
+        </Alert>
+      </Snackbar>
+    </Box>
       </Paper>
     </Paper>
   );

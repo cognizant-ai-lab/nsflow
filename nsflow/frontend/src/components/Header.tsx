@@ -19,45 +19,40 @@ import * as React from "react";
 import { useState } from "react";
 import HelpDialog from "./HelpDialog";
 import { ImPower } from "react-icons/im";
-import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useLocation } from "react-router-dom";
 import { AppBar, Toolbar, Typography, IconButton, Button, Menu,
   MenuItem, Box, Tooltip, useTheme as useMuiTheme, alpha } from "@mui/material";
 import HomeIcon from "@mui/icons-material/Home";
-import NetworkIcon from "@mui/icons-material/AccountTree";
-import DownloadIcon from "@mui/icons-material/Download";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 import AccountIcon from "@mui/icons-material/AccountCircle";
-import EditIcon from "@mui/icons-material/Edit";
+import SettingsIcon from "@mui/icons-material/SettingsOutlined";
 import WandIcon from "@mui/icons-material/DrawTwoTone";
 import HelpIcon from "@mui/icons-material/HelpOutlined";
-import ArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import ChatIcon from "@mui/icons-material/QuickreplyTwoTone";
 import DrawIcon from "@mui/icons-material/Draw";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 
 import MuiThemeToggle from "./MuiThemeToggle";
+import SettingsDialog from "./SettingsDialog";
 import { useTheme } from "../context/ThemeContext";
 import { useZenMode } from "../hooks/useZenMode";
 import { getFeatureFlags } from "../utils/config";
 
 interface HeaderProps {
-  selectedNetwork: string;
   isEditorPage?: boolean;
   isCrusePage?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, isCrusePage = false }) => {
-  const { apiUrl } = useApiPort();
+const Header: React.FC<HeaderProps> = ({ isEditorPage = false, isCrusePage = false }) => {
   const { activeNetwork } = useChatContext();
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [accountAnchorEl, setAccountAnchorEl] = useState<null | HTMLElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const muiTheme = useMuiTheme();
-  const { pluginCruse, pluginExport, pluginZenMode } = getFeatureFlags();
+  const { pluginCruse, pluginZenMode } = getFeatureFlags();
   const { enterZenMode } = useZenMode();
 
   // Determine if we're on editor page based on location or prop
@@ -66,35 +61,6 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
   // Determine if we're on CRUSE page based on location or prop
   const isOnCrusePage = isCrusePage || location.pathname.includes('/cruse');
 
-  const handleExportNotebook = async () => {
-    if (!selectedNetwork) return alert("Please select an agent network first.");
-    const response = await fetch(`${apiUrl}/api/v1/export/notebook/${selectedNetwork}`);
-    if (!response.ok) return alert("Failed to generate notebook.");
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${selectedNetwork}.ipynb`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setAnchorEl(null);
-  };
-
-  const handleExportAgentNetwork = async () => {
-    if (!selectedNetwork) return alert("Please select an agent network first.");
-    const response = await fetch(`${apiUrl}/api/v1/export/agent_network/${selectedNetwork}`);
-    if (!response.ok) return alert("Failed to download agent network.");
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${selectedNetwork}.hocon`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setAnchorEl(null);
-  };
 
   const handleNavigateToEditor = () => {
     // Only pass activeNetwork to editor from the Cruse page
@@ -295,91 +261,14 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </Tooltip>
           )}
 
-          {/* Export Dropdown */}
-          {pluginExport && !isOnEditorPage && !isCrusePage && (
-            <>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                endIcon={
-                  <ArrowDownIcon
-                    sx={{
-                      fontSize: '18px',
-                      transform: anchorEl ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.3s ease'
-                    }}
-                  />
-                }
-                onClick={(e) => setAnchorEl(e.currentTarget)}
-                sx={{
-                  color: muiTheme.palette.text.primary,
-                  borderColor: muiTheme.palette.primary.main,
-                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1),
-                  '&:hover': {
-                    backgroundColor: alpha(muiTheme.palette.primary.main, 0.15),
-                    borderColor: muiTheme.palette.primary.main,
-                  },
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Export
-              </Button>
-
-              <Menu
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={() => setAnchorEl(null)}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'left',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'left',
-                }}
-                sx={{
-                  '& .MuiPaper-root': {
-                    minWidth: 220,
-                    mt: 1,
-                    borderRadius: 1,
-                    border: `1px solid ${muiTheme.palette.divider}`,
-                  }
-                }}
-              >
-                <MenuItem
-                  onClick={handleExportNotebook}
-                  sx={{
-                    py: 1.5,
-                    px: 2,
-                    '&:hover': {
-                      backgroundColor: alpha(muiTheme.palette.primary.main, 0.1)
-                    }
-                  }}
-                >
-                  <EditIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
-                    Export as Notebook
-                  </Typography>
-                </MenuItem>
-                <MenuItem
-                  onClick={handleExportAgentNetwork}
-                  sx={{
-                    py: 1.5,
-                    px: 2,
-                    '&:hover': {
-                      backgroundColor: alpha(muiTheme.palette.primary.main, 0.1)
-                    }
-                  }}
-                >
-                  <NetworkIcon sx={{ mr: 1.5, fontSize: '20px', color: muiTheme.palette.primary.main }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: muiTheme.palette.text.primary }}>
-                    Export as HOCON
-                  </Typography>
-                </MenuItem>
-              </Menu>
-
-            </>
-          )}
+          {/*
+            Export and import now live on the canvases themselves, top right of the
+            Home agent flow and beside the Editor's canvas actions, via
+            NetworkFileActions. The thing being exported is the thing on screen, so
+            the control belongs next to it rather than in the app chrome. The old
+            dropdown also sat behind NSFLOW_PLUGIN_EXPORT, which defaulted to false
+            and so hid it from every default install.
+          */}
         </Box>
 
         {/* Right - Zen Mode + Theme Toggle + Profile */}
@@ -423,6 +312,20 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </Tooltip>
           )}
           <MuiThemeToggle />
+          <Tooltip title="Settings">
+            <IconButton
+              onClick={() => setIsSettingsOpen(true)}
+              aria-label="Open settings"
+              sx={{
+                color: muiTheme.palette.text.primary,
+                '&:hover': {
+                  backgroundColor: alpha(muiTheme.palette.primary.main, 0.1)
+                }
+              }}
+            >
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Account and help">
             <IconButton
               onClick={(e) => setAccountAnchorEl(e.currentTarget)}
@@ -468,7 +371,8 @@ const Header: React.FC<HeaderProps> = ({ selectedNetwork, isEditorPage = false, 
             </MenuItem>
           </Menu>
 
-          <HelpDialog open={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+          <SettingsDialog open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <HelpDialog open={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
         </Box>
       </Toolbar>
     </AppBar>
