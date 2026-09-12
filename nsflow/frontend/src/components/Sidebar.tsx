@@ -165,7 +165,7 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
         await setConfig(finalHost, finalPort, finalType);
       }
       await fetchNetworks(finalType, finalHost, finalPort);
-    } catch (error) {
+    } catch (_error) {
       setError("Failed to connect to NeuroSan server.");
     } finally {
       setLoading(false);

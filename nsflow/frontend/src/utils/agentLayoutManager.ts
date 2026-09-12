@@ -93,7 +93,7 @@ export class AgentLayoutManager {
     // Separate connected and free agents
     const { connectedNodes, freeNodes } = this.separateConnectedAndFreeNodes(nodes, edges);
 
-    let layoutNodes: Node[] = [];
+    const layoutNodes: Node[] = [];
 
     // Apply hierarchical layout to connected components
     if (connectedNodes.length > 0) {

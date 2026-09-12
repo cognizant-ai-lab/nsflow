@@ -57,7 +57,7 @@ export const ApiPortProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setIsReady(true);
           return;
         }
-      } catch (e) {
+      } catch (_e) {
         // ignore; we'll fall back
       }
 

@@ -31,9 +31,7 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # The Python gate above runs in a Python-only container, so the frontend suite
-  # needs its own job. Deliberately no `yarn lint` step: eslint 9 currently
-  # crashes on this repo's `ajv: ^8.18.0` resolution (@eslint/eslintrc needs
-  # ajv 6), which predates this workflow and is tracked separately.
+  # needs its own job.
   frontend:
     if: github.repository == 'cognizant-ai-lab/nsflow'
     runs-on: ubuntu-latest
@@ -48,6 +46,7 @@ jobs:
           cache: yarn
           cache-dependency-path: nsflow/frontend/yarn.lock
       - run: yarn install --frozen-lockfile
+      - run: yarn lint
       - run: yarn test
       # tsc -b runs here, so this is what catches type regressions in CI.
       - run: yarn build

@@ -16,11 +16,13 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -105,6 +107,27 @@ else:
     logging.info("DEV MODE: Skipping frontend serving.")
 
 
+def _dist_file(path_name: str) -> Optional[str]:
+    """
+    Resolve a request path to a file at the root of the frontend build.
+
+    :param path_name: The requested path, relative to the site root.
+    :return: An absolute path to the file, or None when the request is not for one.
+             index.html is excluded so the SPA fallback keeps serving it.
+    """
+    if not path_name or path_name == "index.html":
+        return None
+
+    # Resolve both sides before comparing: a path like "../../etc/passwd" must not
+    # escape the build directory just because it exists.
+    dist_root = os.path.realpath(frontend_dist_path)
+    candidate = os.path.realpath(os.path.join(dist_root, path_name))
+    if not candidate.startswith(dist_root + os.sep):
+        return None
+
+    return candidate if os.path.isfile(candidate) else None
+
+
 @app.get("/{path_name:path}", response_class=HTMLResponse)
 async def spa_fallback(path_name: str):
     """
@@ -118,6 +141,14 @@ async def spa_fallback(path_name: str):
     """
     if path_name.startswith("api/"):
         raise HTTPException(status_code=404, detail="API route not found")
+
+    # A real file sitting at the top of the build is served as itself. Only /assets is
+    # mounted, so anything Vite copies from public/ to the dist root — the favicon,
+    # robots.txt — used to fall through to here and be answered with index.html. A
+    # browser asked for an SVG and got HTML, which is why no tab icon ever appeared.
+    static_file = _dist_file(path_name)
+    if static_file is not None:
+        return FileResponse(static_file)
 
     index_file_path = os.path.join(frontend_dist_path, "index.html")
     if os.path.exists(index_file_path):

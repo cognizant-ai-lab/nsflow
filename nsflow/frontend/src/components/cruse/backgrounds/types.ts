@@ -22,6 +22,10 @@ import type React from 'react';
 
 // TypeScript declarations for css-doodle Web Component
 declare global {
+  // Declaring a custom element to JSX requires augmenting JSX.IntrinsicElements, and
+  // that interface only exists inside this namespace. There is no module-syntax
+  // equivalent, so the rule's advice does not apply here.
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
       'css-doodle': React.DetailedHTMLProps<

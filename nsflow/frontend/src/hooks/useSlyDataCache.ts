@@ -52,7 +52,7 @@ export const useSlyDataCache = () => {
           return null;
         }
         return { data: cacheData.data || {}, nextId: cacheData.nextId || 1 };
-      } catch (e) {
+      } catch (_e) {
         const cacheKey = getCacheKey(networkName);
         localStorage.removeItem(cacheKey);
         return null;

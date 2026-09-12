@@ -40,6 +40,24 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+      // A leading underscore means "deliberately unused": a signature that has to
+      // match a callee's shape, or the destructure-to-omit idiom
+      // (`const { [key]: _dropped, ...rest } = obj`), which needs a binding it
+      // never reads. Without this, the only way to keep those is a disable comment
+      // on every line.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+      // Deliberately a warning, not an error, and this is a debt rather than a
+      // preference. There are ~108 of these, almost all on genuinely dynamic JSON
+      // reaching the UI: streamed sly_data, progress payloads, the JSON editor's
+      // callbacks. `unknown` is the right type for nearly all of them, but it only
+      // pays off with narrowing added at each use site, and those sites live in
+      // features with no test coverage. Keeping the rule on as a warning means lint
+      // can run in CI and catch everything else, including any NEW error, instead of
+      // being switched off wholesale because of this one rule.
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
 )

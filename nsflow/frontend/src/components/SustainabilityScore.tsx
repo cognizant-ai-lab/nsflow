@@ -88,10 +88,8 @@ const SustainabilityScore: React.FC = () => {
     let ws: WebSocket | null = null;
     let isCleanedUp = false;
     let connectionTimeout: NodeJS.Timeout;
-    let fallbackTimeout: NodeJS.Timeout;
-
     // Fail-safe: Use fallback data after 5 seconds if WebSocket fails
-    fallbackTimeout = setTimeout(() => {
+    const fallbackTimeout: NodeJS.Timeout = setTimeout(() => {
       if (!isCleanedUp && connectionStatus !== 'connected') {
         setValues(fallbackData);
         setLoading(false);
@@ -125,7 +123,7 @@ const SustainabilityScore: React.FC = () => {
             setValues(data);
             setLoading(false);
             setConnectionStatus('connected');
-          } catch (err) {
+          } catch (_err) {
             // Use fallback data on parse error
             setValues(fallbackData);
             setLoading(false);
@@ -155,7 +153,7 @@ const SustainabilityScore: React.FC = () => {
           setConnectionStatus('disconnected');
           setLoading(false);
         };
-      } catch (err) {
+      } catch (_err) {
         if (!isCleanedUp) {
           setValues(fallbackData);
           setLoading(false);
@@ -177,7 +175,7 @@ const SustainabilityScore: React.FC = () => {
           if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
             ws.close(1000, 'Component unmounted');
           }
-        } catch (error) {
+        } catch (_error) {
           // Ignore errors during cleanup
         }
       }
