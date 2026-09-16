@@ -27,8 +27,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from nsflow.backend.api.v1 import agent_flows
 from nsflow.backend.main import app
+from nsflow.backend.utils.agentutils import served_networks
 
 NETWORK = """
 {
@@ -44,7 +44,12 @@ NETWORK = """
 @pytest.fixture(name="registry")
 def registry_fixture(tmp_path: Path, monkeypatch) -> Path:
     """
-    A registry laid out like a real one, with the server started somewhere else.
+    A registry laid out like a real one: a manifest listing what is served, a network at
+    the top level and one in generated/, and the server started somewhere else entirely.
+
+    The manifest is what makes this realistic. Networks are reachable because they are
+    listed, which is how neuro-san decides what it serves, so a file sitting in the
+    registry without an entry is not reachable and should not be.
 
     Everything lives under tmp_path so each test gets its own, and the working directory
     is a sibling of the registry rather than its parent. That is the shape of a pip
@@ -55,7 +60,16 @@ def registry_fixture(tmp_path: Path, monkeypatch) -> Path:
     (registry / "generated").mkdir(parents=True)
     (registry / "top_level.hocon").write_text(NETWORK, encoding="utf-8")
     (registry / "generated" / "coffee_shop.hocon").write_text(NETWORK, encoding="utf-8")
-    monkeypatch.setattr(agent_flows, "REGISTRY_DIR", registry)
+    # Present on disk but absent from the manifest, so it must not be readable.
+    (registry / "not_served.hocon").write_text(NETWORK, encoding="utf-8")
+    manifest = registry / "manifest.hocon"
+    manifest.write_text(
+        '{\n "top_level.hocon": true\n "generated/coffee_shop.hocon": true\n}\n',
+        encoding="utf-8",
+    )
+    # Patched on served_networks, which binds both names at import time.
+    monkeypatch.setattr(served_networks, "AGENT_MANIFEST_FILE", str(manifest))
+    monkeypatch.setattr(served_networks, "REGISTRY_DIR", str(registry))
 
     elsewhere = tmp_path / "somewhere_else"
     elsewhere.mkdir()
@@ -118,11 +132,22 @@ def test_tells_an_agent_apart_from_a_tool(client: TestClient):
         "%2e%2e%2fsecret",
         "generated%2f%2e%2e%2f%2e%2e%2fsecret",
         "does_not_exist",
+        "not_served",
     ],
-    ids=["climbs out, encoded", "climbs out via a subdirectory, encoded", "absent"],
+    ids=[
+        "climbs out, encoded",
+        "climbs out via a subdirectory, encoded",
+        "absent",
+        "present on disk but switched off in the manifest",
+    ],
 )
 def test_refuses_anything_outside_the_registry(client: TestClient, registry: Path, name: str):
-    """The name arrives from the URL, so it has to be proven to stay inside the registry."""
+    """
+    The name arrives from the URL, so it only ever selects a manifest entry.
+
+    A name that climbs out, one that is simply wrong, and one whose file is really there
+    but switched off all fail the same way, because none of them is a served name.
+    """
     (registry.parent / "secret.hocon").write_text(NETWORK, encoding="utf-8")
 
     response = client.get(f"/api/v1/network_definition/{name}")
