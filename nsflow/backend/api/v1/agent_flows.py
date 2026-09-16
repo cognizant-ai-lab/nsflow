@@ -15,7 +15,6 @@
 # END COPYRIGHT
 import logging
 import os
-from pathlib import Path
 from typing import Any
 from typing import Dict
 
@@ -25,18 +24,13 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
 
-from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR as CONFIGURED_REGISTRY_DIR
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
+from nsflow.backend.utils.agentutils.served_networks import resolve_served_network
 
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
-
-# Derived from AGENT_MANIFEST_FILE, not from the working directory. Same reasoning as
-# export_endpoints: a pip installed neuro-san-studio is started from a project that has
-# no registries/ of its own, so a relative path there resolves to nothing.
-REGISTRY_DIR = Path(CONFIGURED_REGISTRY_DIR)
 
 
 @router.get("/networks/")
@@ -209,22 +203,21 @@ def get_latest_sly_data(network_name: str):
 )
 async def get_network_definition(network_name: str):
     """Converts a HOCON agent network into an agent_network_definition dict for the editor."""
-    # Joined onto the configured registry rather than onto "registries/", which was
-    # relative and so only resolved when the server was started from a project root that
-    # had a registries/ beside it. Everywhere else this 404d, and because the Editor
-    # fills its canvas from here, every existing network opened as a blank canvas.
+    # Looked up in the manifest rather than joined onto a directory. The old path was
+    # the literal "registries/<name>.hocon", which is relative and so only resolved when
+    # the server happened to be started from a project root with a registries/ beside
+    # it. Everywhere else this 404d, and since the Editor fills its canvas from here,
+    # every existing network opened blank.
     #
-    # The name keeps its subdirectory, since a generated network is known as
-    # "generated/<name>" and basename-ing it would look in the wrong place. Resolving
-    # both sides and comparing them is what keeps a name from the URL inside the
-    # registry, the same guard the export route uses.
-    registry_root = REGISTRY_DIR.resolve()
-    hocon_path = (registry_root / f"{network_name}.hocon").resolve()
-    if not hocon_path.is_relative_to(registry_root) or not hocon_path.is_file():
+    # Going through the manifest fixes where it looks and what it will open in one go:
+    # the name selects a manifest entry and the path comes from that entry, so a name
+    # from the URL is never part of the path and cannot walk out of the registry.
+    hocon_path = resolve_served_network(network_name)
+    if hocon_path is None:
         raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found")
 
     try:
-        hocon = EasyHoconPersistence(full_ref=str(hocon_path), must_exist=True)
+        hocon = EasyHoconPersistence(full_ref=hocon_path, must_exist=True)
         config = hocon.restore()
     except (FileNotFoundError, TypeError) as e:
         raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e
