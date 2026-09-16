@@ -20,19 +20,10 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
-from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR as CONFIGURED_REGISTRY_DIR
+from nsflow.backend.utils.agentutils.served_networks import resolve_served_network
 from nsflow.backend.utils.tools.notebook_generator import NotebookGenerator
 
 router = APIRouter(prefix="/api/v1/export")
-
-# Derived from AGENT_MANIFEST_FILE, not from the working directory.
-#
-# This was `Path.cwd() / "registries"`, which only resolves when the server happens to
-# be started from a project root that has a registries/ beside it. neuro-san-studio
-# bundles nsflow and points AGENT_MANIFEST_FILE at its own registry, so under a
-# pip-installed studio the old path looked in a directory that need not exist and
-# export returned 404 for networks that were plainly listed in the sidebar.
-REGISTRY_DIR = Path(CONFIGURED_REGISTRY_DIR)
 
 
 @router.get("/notebook/{agent_network}")
@@ -52,13 +43,16 @@ async def export_agent_network(agent_network: str):
     # A greedy path, because networks are listed by their path within the registry
     # ("basic/music_nerd", "generated/foo") and a literal segment would only ever match
     # the ones sitting at the top level.
-    registry_root = REGISTRY_DIR.resolve()
-    file_path = (registry_root / f"{agent_network}.hocon").resolve()
-
-    # The name reaches us from the URL, so it can climb out of the registry with "..".
-    # Compared after resolving, which is what catches a symlink as well as a literal.
-    if not file_path.is_relative_to(registry_root) or not file_path.is_file():
+    #
+    # The name reaches us from the URL, so it selects a manifest entry rather than
+    # forming a path. Joining it onto the registry and checking the result stayed inside
+    # also worked, but it left the name in the path expression; this way a name carrying
+    # ".." matches no entry and there is nothing to check afterwards. It also means
+    # export offers exactly what the server serves, which is what the sidebar lists.
+    resolved = resolve_served_network(agent_network)
+    if resolved is None:
         raise HTTPException(status_code=404, detail=f"Agent network '{agent_network}' not found.")
+    file_path = Path(resolved)
 
     # A nested name would otherwise suggest a directory to the browser, which silently
     # drops it; the leaf is what the user expects to land in their downloads.

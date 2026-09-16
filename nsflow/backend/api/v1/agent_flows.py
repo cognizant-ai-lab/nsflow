@@ -27,6 +27,7 @@ from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersist
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
 from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
+from nsflow.backend.utils.agentutils.served_networks import resolve_served_network
 
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
@@ -202,9 +203,21 @@ def get_latest_sly_data(network_name: str):
 )
 async def get_network_definition(network_name: str):
     """Converts a HOCON agent network into an agent_network_definition dict for the editor."""
+    # Looked up in the manifest rather than joined onto a directory. The old path was
+    # the literal "registries/<name>.hocon", which is relative and so only resolved when
+    # the server happened to be started from a project root with a registries/ beside
+    # it. Everywhere else this 404d, and since the Editor fills its canvas from here,
+    # every existing network opened blank.
+    #
+    # Going through the manifest fixes where it looks and what it will open in one go:
+    # the name selects a manifest entry and the path comes from that entry, so a name
+    # from the URL is never part of the path and cannot walk out of the registry.
+    hocon_path = resolve_served_network(network_name)
+    if hocon_path is None:
+        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found")
+
     try:
-        hocon_file = f"registries/{network_name}.hocon"
-        hocon = EasyHoconPersistence(full_ref=hocon_file, must_exist=True)
+        hocon = EasyHoconPersistence(full_ref=hocon_path, must_exist=True)
         config = hocon.restore()
     except (FileNotFoundError, TypeError) as e:
         raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e

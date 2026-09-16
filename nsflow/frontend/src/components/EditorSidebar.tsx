@@ -250,10 +250,16 @@ const EditorSidebar = ({
 
     setLoadingDefinition(true);
     try {
+      setError("");
       const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`);
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        console.error("Failed to load network definition:", errData.detail || response.statusText);
+        const detail = errData.detail || response.statusText;
+        console.error("Failed to load network definition:", detail);
+        // Said out loud, not just to the console. This failing quietly is why the
+        // server looking in the wrong directory showed up as an empty canvas with
+        // nothing to suggest anything had gone wrong.
+        setError(`Could not open "${networkName}": ${detail}`);
         return;
       }
       const payload = await response.json();
@@ -279,6 +285,7 @@ const EditorSidebar = ({
       }
     } catch (e) {
       console.error("Error loading network definition:", e);
+      setError(e instanceof Error ? `Could not open "${networkName}": ${e.message}` : `Could not open "${networkName}".`);
     } finally {
       setLoadingDefinition(false);
     }
