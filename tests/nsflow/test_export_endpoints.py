@@ -20,17 +20,28 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from nsflow.backend.api.v1 import export_endpoints
 from nsflow.backend.main import app
+from nsflow.backend.utils.agentutils import served_networks
 
 
 @pytest.fixture(name="registry")
 def registry_fixture(tmp_path: Path, monkeypatch) -> Path:
-    """A registry laid out like a real one, including a nested network."""
+    """
+    A registry laid out like a real one: a manifest, a top level network and a nested one.
+
+    Export now offers what the manifest serves rather than whatever .hocon happens to be
+    in the directory, so the manifest is what makes a network reachable here.
+    """
     (tmp_path / "top_level.hocon").write_text('{"tools": []}', encoding="utf-8")
     (tmp_path / "generated").mkdir()
     (tmp_path / "generated" / "made_by_designer.hocon").write_text('{"tools": []}', encoding="utf-8")
-    monkeypatch.setattr(export_endpoints, "REGISTRY_DIR", tmp_path)
+    manifest = tmp_path / "manifest.hocon"
+    manifest.write_text(
+        '{\n "top_level.hocon": true\n "generated/made_by_designer.hocon": true\n}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(served_networks, "AGENT_MANIFEST_FILE", str(manifest))
+    monkeypatch.setattr(served_networks, "REGISTRY_DIR", str(tmp_path))
     return tmp_path
 
 
@@ -73,8 +84,8 @@ def test_refuses_anything_outside_the_registry(client: TestClient, registry: Pat
     """
     The name arrives from the URL, so it has to be proven to stay inside the registry.
 
-    Verified non-vacuous: removing the `is_relative_to` check makes the two encoded
-    cases return 200 with the contents of a file outside the registry.
+    Verified non-vacuous: resolving the name against the registry directly, the way this
+    used to, makes the two encoded cases return 200 with a file from outside it.
     """
     (registry.parent / "secret.hocon").write_text("secret", encoding="utf-8")
     response = client.get(f"/api/v1/export/agent_network/{name}")
