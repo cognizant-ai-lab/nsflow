@@ -42,7 +42,6 @@ class AgentLogProcessor(MessageProcessor):
     Tells the UI there's an agent message to process.
     """
 
-
     def __init__(self, agent_name: str, session_id: str = None):
         """
         Constructor
@@ -180,4 +179,3 @@ class AgentLogProcessor(MessageProcessor):
             return tool_output
 
         return None
-
