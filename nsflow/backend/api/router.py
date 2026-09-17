@@ -22,7 +22,6 @@ from .v1 import app_configs
 from .v1 import audio_endpoints
 from .v1 import cruse_endpoints
 from .v1 import designer_endpoints
-from .v1 import editor_endpoints
 from .v1 import export_endpoints
 from .v1 import fast_websocket
 from .v1 import fastapi_concierge_endpoints
@@ -44,7 +43,6 @@ router.include_router(agent_flows.router, tags=["Agent Flows"])
 router.include_router(export_endpoints.router, tags=["Notebook Export"])
 router.include_router(fastapi_concierge_endpoints.router, tags=["Concierge Endpoints"])
 router.include_router(audio_endpoints.router, tags=["Audio Processing"])
-router.include_router(editor_endpoints.router, tags=["Agent Network Designer"])
 router.include_router(cruse_endpoints.router, prefix="/api/v1", tags=["CRUSE Threads"])
 router.include_router(oneshot_endpoints.router, tags=["One-Shot Chat"])
 router.include_router(pdf_endpoints.router, tags=["PDF Processing"])
