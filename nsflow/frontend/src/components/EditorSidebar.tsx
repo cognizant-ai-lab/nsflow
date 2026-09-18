@@ -282,6 +282,15 @@ const EditorSidebar = ({
           networkName,
         });
         setSelectedNetworkId(networkName);
+        // Tell the page as well, not just this component. EditorAgentFlow keys its
+        // store lookup on the network the page holds, so without this it keeps reading
+        // the empty draft entry and the canvas stays blank however well the fetch went.
+        //
+        // This used to happen by accident. The old code posted the definition into the
+        // chat as a sly_data message, the designer stream echoed it back, and the
+        // handler for that echo called onSelectNetwork. Replacing the round trip with a
+        // direct store write dropped that side effect with it.
+        onSelectNetwork(networkName);
       }
     } catch (e) {
       console.error("Error loading network definition:", e);
@@ -289,7 +298,7 @@ const EditorSidebar = ({
     } finally {
       setLoadingDefinition(false);
     }
-  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage]);
+  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, onSelectNetwork]);
 
   /* -------------------- Effects -------------------- */
   // Reset selection to "none" whenever mode flips or app becomes ready

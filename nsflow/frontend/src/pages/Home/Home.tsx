@@ -91,13 +91,19 @@ const HomeContent: React.FC = () => {
               </div>
               <StarStudioPopup />
 
-              <PanelGroup direction="horizontal">
-                <Panel defaultSize={12} minSize={10} maxSize={25}>
+              {/*
+                autoSaveId persists this group's layout to localStorage, so a sidebar
+                dragged to a comfortable width stays there across a reload. It is the
+                library's own mechanism rather than a hand-rolled one, and the panels
+                are given ids because it keys the saved sizes by them.
+              */}
+              <PanelGroup direction="horizontal" autoSaveId="nsflow-home-layout">
+                <Panel id="home-sidebar" order={1} defaultSize={12} minSize={10} maxSize={25}>
                   {/* Sidebar */}
                   <Sidebar onSelectNetwork={setSelectedNetwork} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                <Panel defaultSize={55} minSize={40}>
+                <Panel id="home-main" order={2} defaultSize={55} minSize={40}>
                   <PanelGroup direction="vertical">
                     <Panel defaultSize={66} minSize={50} maxSize={85}>
                       {/* AgentFlow */}
@@ -129,7 +135,7 @@ const HomeContent: React.FC = () => {
                   </PanelGroup>
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
-                <Panel defaultSize={33} minSize={15} maxSize={40}>
+                <Panel id="home-chat" order={3} defaultSize={33} minSize={15} maxSize={40}>
                   {/* TabbedChatPanel */}
                   <TabbedChatPanel />
                 </Panel>
