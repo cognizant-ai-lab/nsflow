@@ -24,7 +24,6 @@ from neuro_san.message.processors.message_processor import MessageProcessor
 from neuro_san.message.types.chat_message_type import ChatMessageType
 
 from nsflow.backend.trust.rai_service import RaiService
-from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 EDITOR_TOOLS = {
