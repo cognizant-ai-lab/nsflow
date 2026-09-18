@@ -26,7 +26,6 @@ from fastapi import HTTPException
 from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
 from neuro_san.internals.graph.registry.agent_network import AgentNetwork
 from neuro_san.session.missing_agent_check import MissingAgentCheck
-from pyhocon import ConfigFactory
 
 AGENT_MANIFEST_FILE = os.getenv("AGENT_MANIFEST_FILE")
 if not AGENT_MANIFEST_FILE:
@@ -96,21 +95,6 @@ class AgentNetworkUtils:
             raise HTTPException(status_code=403, detail="Access denied: Path is outside allowed directory")
 
         return resolved_path
-
-    def list_available_networks(self):
-        """Lists available networks from the manifest file."""
-        manifest_path = AGENT_MANIFEST_FILE
-        if not os.path.exists(manifest_path):
-            return {"networks": []}
-
-        config = ConfigFactory.parse_file(str(manifest_path))
-        networks = [
-            os.path.splitext(os.path.basename(file))[0].replace('"', "").strip()
-            for file, enabled in config.items()
-            if enabled is True
-        ]
-
-        return {"networks": networks}
 
     def get_agent_network(self, agent_network_name: str) -> AgentNetwork:
         """
