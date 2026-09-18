@@ -53,21 +53,27 @@ const EditorContent: React.FC = () => {
           <div className="h-screen w-screen bg-gray-900 flex flex-col">
             <Header isEditorPage={true} />
 
-              <PanelGroup direction="horizontal">
-                <Panel defaultSize={12} minSize={10} maxSize={25}>
+              {/*
+                autoSaveId persists this group's layout to localStorage, so a sidebar
+                dragged to a comfortable width stays there across a reload. It is the
+                library's own mechanism rather than a hand-rolled one, and the panels
+                are given ids because it keys the saved sizes by them.
+              */}
+              <PanelGroup direction="horizontal" autoSaveId="nsflow-editor-layout">
+                <Panel id="editor-sidebar" order={1} defaultSize={12} minSize={10} maxSize={25}>
                   {/* Editor Sidebar */}
                   <EditorSidebar onSelectNetwork={handleNetworkSelected} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
-                <Panel defaultSize={55} minSize={40}>
+                <Panel id="editor-canvas" order={2} defaultSize={55} minSize={40}>
                   {/* Editable AgentFlow */}
                   <EditorAgentFlow selectedNetwork={selectedNetwork} />
                 </Panel>
                 
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
-                <Panel defaultSize={33} minSize={15} maxSize={40}>
+                <Panel id="editor-chat" order={3} defaultSize={33} minSize={15} maxSize={40}>
                   {/* TabbedChatPanel with Chat and SlyData */}
                   <TabbedChatPanel isEditorMode={true} />
                 </Panel>
