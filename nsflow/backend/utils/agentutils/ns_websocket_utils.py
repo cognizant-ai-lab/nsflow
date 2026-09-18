@@ -46,7 +46,6 @@ user_sessions = {}
 
 # Global storage for latest sly_data by network name and session
 # Key format: "agent_name:session_id"
-latest_sly_data_storage: Dict[str, Any] = {}
 
 # http_headers entries whose values are credentials and must never leave the
 # backend (logs, the sly_data websocket stream, or the persisted /slydata store).
@@ -177,12 +176,6 @@ class NsWebsocketUtils:
                     await websocket.send_text(response_str)
                     await self.logs_manager.log_event(f"Streaming response sent: {response_str}", "nsflow")
                     await self.logs_manager.sly_data_event(sly_data_str)
-
-                # Store the latest sly_data for this network and session (redacted;
-                # this is served verbatim by GET /slydata).
-                if state.get("sly_data") is not None:
-                    storage_key = f"{self.agent_name}:{self.session_id}"
-                    latest_sly_data_storage[storage_key] = surfaced_sly_data
 
                 await self.logs_manager.log_event(f"Streaming chat finished for client: {self.session_id}", "nsflow")
 
@@ -891,21 +884,3 @@ class NsWebsocketUtils:
             )
             return declared
         return required
-
-    @classmethod
-    def get_latest_sly_data(cls, network_name: str, session_id: str = None) -> dict:
-        """
-        Retrieve the latest sly_data for a given network and session.
-
-        Args:
-            network_name: The name of the network to get sly_data for
-            session_id: The session identifier. If None, tries to get any data for the network
-
-        Returns:
-            dict: The latest sly_data for the network:session, or empty dict if none available
-        """
-        if session_id:
-            storage_key = f"{network_name}:{session_id}"
-            return latest_sly_data_storage.get(storage_key, {})
-        # Fallback: try to find any session data for this network (backward compatibility)
-        return latest_sly_data_storage.get(network_name, {})
