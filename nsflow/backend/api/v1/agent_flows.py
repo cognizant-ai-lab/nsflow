@@ -20,7 +20,6 @@ from typing import Dict
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Request
 from fastapi.responses import JSONResponse
 from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
 
@@ -31,12 +30,6 @@ from nsflow.backend.utils.agentutils.served_networks import resolve_served_netwo
 
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
-
-
-@router.get("/networks/")
-def get_networks():
-    """Returns a list of available agent networks."""
-    return agent_utils.list_available_networks()
 
 
 @router.get(
@@ -56,141 +49,6 @@ async def get_agent_network(network_name: str):
     network_utils = NsNetworkUtils()
     res = network_utils.build_nodes_and_edges(result)
     return JSONResponse(content=res)
-
-
-@router.post(
-    "/connectivity/from_json",
-    summary="Build connectivity graph from raw JSON.",
-    responses={
-        200: {"description": "Connectivity graph built from provided JSON."},
-        422: {"description": "Invalid payload. Provide exactly one of the accepted formats."},
-        500: {"description": "Failed to build nodes/edges."},
-    },
-)
-async def build_connectivity_from_json(request: Request):
-    """
-    Accepts ONE of:
-      A) connectivity_info: [{ "origin": str, "tools": [str, ...] }, ...]
-         -> NsNetworkUtils.build_nodes_and_edges(...)
-      B) agent_network_definition: dict or connectivity-style list
-           - dict form:  { "<agent>": { "down_chains": [...], "instructions": str }, ... }
-           - list form:  [{ "origin": str, "tools": [...], "instructions": str, ... }, ...]
-             (entries whose "origin" starts with "/" are treated as external agents and excluded
-             from top-level keys; only "tools", "instructions", and "description" are copied)
-         + optional agent_network_name (str)
-         -> NsNetworkUtils.partial_build_nodes_and_edges(...)
-    """
-    try:
-        data: Dict[str, Any] = await request.json()
-    except Exception as e:
-        raise HTTPException(status_code=422, detail="Body must be valid JSON") from e
-
-    has_conn = isinstance(data.get("connectivity_info"), list)
-    has_state = isinstance(data.get("agent_network_definition"), (dict, list))
-
-    # require exactly one of the two inputs
-    if has_conn == has_state:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Provide exactly one of 'connectivity_info' (list) or "
-                "'agent_network_definition' (dict or connectivity-style list)."
-            ),
-        )
-
-    try:
-        utils = NsNetworkUtils()
-
-        if has_conn:
-            # Minimal pass-through shape used by build_nodes_and_edges(...)
-            connectivity_response = {"connectivity_info": data["connectivity_info"]}
-            result = utils.build_nodes_and_edges(connectivity_response)
-            return JSONResponse(content=result)
-
-        # Otherwise: partial build from state dict
-        state_dict = {
-            "agent_network_name": data.get("agent_network_name", "new_agent_network"),
-            "agent_network_definition": data["agent_network_definition"],
-        }
-        result = utils.partial_build_nodes_and_edges(state_dict)
-        return JSONResponse(content=result)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception("Failed to build connectivity from JSON: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to build nodes/edges") from e
-
-
-@router.post(
-    "/connectivity/from_json/agents/{agent_name}",
-    summary="Get details for a specific agent from raw JSON.",
-    responses={
-        200: {"description": "Agent details built from provided JSON."},
-        404: {"description": "Agent not found in provided JSON."},
-        422: {"description": "Invalid payload. Must include 'agent_network_definition'."},
-        500: {"description": "Failed to build agent details."},
-    },
-)
-async def get_agent_details_from_json(agent_name: str, request: Request):
-    """Get agent details from json object such as agent_network_definition in a sly data"""
-    try:
-        data = await request.json()
-    except Exception as e:
-        raise HTTPException(status_code=422, detail="Body must be valid JSON") from e
-
-    agent_def = data.get("agent_network_definition")
-    if not isinstance(agent_def, (dict, list)):
-        raise HTTPException(
-            status_code=422,
-            detail="Missing or invalid 'agent_network_definition' (dict or connectivity-style list required).",
-        )
-
-    try:
-        utils = NsNetworkUtils()
-
-        # Normalize keys so everyone sees 'down_chains'
-        norm_def = utils.normalize_agent_def(agent_def)
-        network_name = data.get("agent_network_name", "new_agent_network")
-
-        details = utils.get_agent_details(
-            agent_definition=norm_def,
-            agent_name=agent_name,
-            network_name=network_name,
-            design_id=network_name,
-        )
-
-        if details is None:
-            # selected agent neither defined nor referenced
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found.")
-
-        return JSONResponse(content=details)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception("Failed to build agent details: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to build agent details") from e
-
-
-@router.get(
-    "/slydata/{network_name:path}",
-    responses={200: {"description": "Latest SlyData found"}, 404: {"description": "No SlyData available"}},
-)
-def get_latest_sly_data(network_name: str):
-    """Retrieves the latest sly_data for a given network."""
-    logging.info("Fetching latest sly_data for network: %s", network_name)
-    try:
-        latest_data = NsWebsocketUtils.get_latest_sly_data(network_name)
-
-        if not latest_data:
-            raise HTTPException(status_code=404, detail=f"No sly_data available for network '{network_name}'")
-
-        return JSONResponse(content={"network_name": network_name, "sly_data": latest_data})
-
-    except Exception as e:
-        logging.exception("Failed to retrieve sly_data for network %s: %s", network_name, e)
-        raise HTTPException(status_code=500, detail="Failed to retrieve sly_data") from e
 
 
 @router.get(
