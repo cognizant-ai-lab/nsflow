@@ -352,24 +352,6 @@ class NsNetworkUtils:
         return result
 
     @staticmethod
-    def normalize_agent_def(agent_def) -> Dict[str, dict]:
-        """
-        Canonicalize children under 'down_chains'.
-        Accepts dict-format or list-format (connectivity-style with 'origin' keys).
-        """
-        if isinstance(agent_def, list):
-            agent_def = NsNetworkUtils.list_def_to_dict(agent_def)
-        normalized: Dict[str, dict] = {}
-        for name, data in (agent_def or {}).items():
-            d = dict(data or {})
-            children = d.get("down_chains")
-            if children is None:
-                children = d.get("tools") or []
-            d["down_chains"] = list(children)
-            normalized[name] = d
-        return normalized
-
-    @staticmethod
     def build_parent_map(agent_definition: Dict[str, Any]) -> Dict[str, str]:
         """
         Build parent map from normalized definition (expects 'down_chains' to exist).
