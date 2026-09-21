@@ -16,7 +16,6 @@
 
 import json
 import logging
-import os
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -25,8 +24,6 @@ from neuro_san.message.processors.message_processor import MessageProcessor
 from neuro_san.message.types.chat_message_type import ChatMessageType
 
 from nsflow.backend.trust.rai_service import RaiService
-from nsflow.backend.utils.agentutils.constants import AGENT_NETWORK_DESIGNER_NAME
-from nsflow.backend.utils.editor.simple_state_registry import get_registry
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
 EDITOR_TOOLS = {
@@ -43,8 +40,6 @@ class AgentLogProcessor(MessageProcessor):
     """
     Tells the UI there's an agent message to process.
     """
-
-    NSFLOW_PLUGIN_MANUAL_EDITOR = os.getenv("NSFLOW_PLUGIN_MANUAL_EDITOR", None)
 
     def __init__(self, agent_name: str, session_id: str = None):
         """
@@ -113,11 +108,6 @@ class AgentLogProcessor(MessageProcessor):
             progress = chat_message_dict.get("structure", progress)
             if progress:
                 await self.logs_manager.progress_event({"text": progress})
-
-                # Process with state manager only if the manual editor plugin is enabled
-                if self.NSFLOW_PLUGIN_MANUAL_EDITOR:
-                    # Process state information if this is from agent network designer
-                    self.process_for_manual_editor(progress)
 
         # Get the list of agents that participated in the message
         otrace = chat_message_dict.get("origin", [])
@@ -188,45 +178,3 @@ class AgentLogProcessor(MessageProcessor):
             return tool_output
 
         return None
-
-    def process_for_manual_editor(self, progress: Dict[str, Any]) -> str:
-        """process progress message for manual editor's consumption"""
-        if self.agent_name == AGENT_NETWORK_DESIGNER_NAME:
-            # Use simple state registry for copilot state updates
-            try:
-                network_name = progress.get("agent_network_name", "new_network")
-
-                # Get the registry instance
-                registry = get_registry()
-
-                # Check if this is an existing session or a new one
-                managers = registry.get_managers_for_network(network_name)
-
-                if managers:
-                    # Existing session - just update the state (adds to history)
-                    manager = registry.get_primary_manager_for_network(network_name)
-                    design_id = None
-                    for did, mgr in managers.items():
-                        if mgr == manager:
-                            design_id = did
-                            break
-
-                    state_dict = manager.extract_state_from_progress(progress)
-                    if state_dict:
-                        success = manager.update_network_state(network_name, state_dict, source="copilot_logs")
-                        if success:
-                            self.logger.info(
-                                "Updated existing session for network '%s' (design_id: %s)", network_name, design_id
-                            )
-                        else:
-                            self.logger.warning("Failed to update existing session for network '%s'", network_name)
-                else:
-                    # New session - create from copilot state
-                    design_id, _ = registry.load_from_copilot_state(copilot_state=progress, session_id=self.session_id)
-                    self.logger.info("Created new session for network '%s' (design_id: %s)", network_name, design_id)
-
-            except Exception as e:
-                self.logger.error("Error processing copilot state with SimpleStateRegistry: %s", e)
-                self.logger.error(
-                    "Unable to process agent network designer state update for session %s", self.session_id
-                )

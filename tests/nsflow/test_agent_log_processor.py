@@ -56,12 +56,8 @@ class TestProgressWireShape(unittest.IsolatedAsyncioTestCase):
             "nsflow.backend.utils.agentutils.agent_log_processor.LogsRegistry.register",
             return_value=self.logs_manager,
         )
-        # Keep the manual-editor mirroring out of these tests regardless of env.
-        plugin_patch = patch.object(AgentLogProcessor, "NSFLOW_PLUGIN_MANUAL_EDITOR", None)
         registry_patch.start()
-        plugin_patch.start()
         self.addCleanup(registry_patch.stop)
-        self.addCleanup(plugin_patch.stop)
         self.processor = AgentLogProcessor("agent_network_designer", "session-1")
 
     async def test_agent_progress_emits_canonical_dict_shape(self):

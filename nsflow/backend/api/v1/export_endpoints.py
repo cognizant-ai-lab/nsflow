@@ -21,20 +21,8 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from nsflow.backend.utils.agentutils.served_networks import resolve_served_network
-from nsflow.backend.utils.tools.notebook_generator import NotebookGenerator
 
 router = APIRouter(prefix="/api/v1/export")
-
-
-@router.get("/notebook/{agent_network}")
-async def export_notebook(agent_network: str):
-    """Endpoint to generate and return a downloadable Jupyter Notebook for an agent network."""
-    notebook_generator = NotebookGenerator()
-    try:
-        notebook_path = notebook_generator.generate_notebook(agent_network)
-        return FileResponse(notebook_path, media_type="application/octet-stream", filename=notebook_path.name)
-    except HTTPException as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/agent_network/{agent_network:path}", responses={404: {"description": "Agent network not found"}})
