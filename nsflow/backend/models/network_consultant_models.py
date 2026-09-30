@@ -29,6 +29,27 @@ class GenerateTestsRequest(BaseModel):
 
     network_name: str = Field(..., description="Network name relative to registries/, e.g. 'basic/coffee_finder'.")
     test_level: Literal["minimum", "normal", "max"] = "normal"
+    test_guidance: str = Field(
+        default="",
+        description="Free text steering what the generator writes tests ABOUT, e.g. 'the vendor onboarding "
+        "path'. Distinct from ImproveNetworkRequest.direction, which states the network's intended behavior "
+        "for the consultant and is never read by the generator.",
+    )
+    session_id: str = Field(
+        default="global", description="Chat session ID -- job logs are mirrored to this session's LogsPanel channel."
+    )
+
+
+class RunTestsRequest(BaseModel):
+    """Request to run a network's existing test fixtures once, with no generation and no fix loop."""
+
+    network_name: str = Field(..., description="Network name relative to registries/, e.g. 'basic/coffee_finder'.")
+    fixture_name: Optional[str] = Field(
+        default=None,
+        description="Run only this fixture (a basename such as 'order_lookup.hocon'). Omit to run the whole "
+        "suite. A single-fixture run reports through the per-fixture results only -- it is not a full-suite "
+        "measurement, so it neither draws a chart bar nor seeds a later Self-Improve run's baseline.",
+    )
     session_id: str = Field(
         default="global", description="Chat session ID -- job logs are mirrored to this session's LogsPanel channel."
     )
@@ -64,6 +85,22 @@ class JobStartResponse(BaseModel):
     message: str
 
 
+class FixtureResult(BaseModel):
+    """One fixture's verdict from the most recent round that ran it."""
+
+    fixture: str
+    passed: bool
+    message: Optional[str] = Field(
+        default=None, description="Why it failed -- the assertion text, verbatim. None when it passed."
+    )
+    infrastructure_error: bool = Field(
+        default=False,
+        description="True when the run could not reach a verdict -- a timeout or an API-key fault, not a "
+        "defect in the network. Worth showing differently: treating these as defects is what sends the "
+        "consultant rewriting agents that were never at fault.",
+    )
+
+
 class JobStatusResponse(BaseModel):
     """Polled by the frontend to show live progress."""
 
@@ -81,6 +118,13 @@ class JobStatusResponse(BaseModel):
         description="TOOL_ISSUE lines consultant reported before stopping the run -- a broken coded "
         "tool needs a human code fix; not something an answer can resolve.",
     )
+    ungrounded: List[str] = Field(
+        default_factory=list,
+        description="UNGROUNDED lines: criteria asking for a fact no tool in the network can supply, "
+        "because something it depends on returns no data. Not an agent defect and not a broken tool -- "
+        "no instruction rewrite can satisfy one, so they need a data source wired up or the criteria "
+        "removed.",
+    )
     progress_chart: Optional[str] = Field(
         default=None,
         description="A data:image/png;base64 URI for the tests-passing chart, or None before the first test "
@@ -90,6 +134,11 @@ class JobStatusResponse(BaseModel):
         default=None,
         description="The consultant-versions/<network>/<run-id> branch --git-versions is committing this run's "
         "hocon snapshots to, if the request asked for it and versioning started successfully; None otherwise.",
+    )
+    results: List[FixtureResult] = Field(
+        default_factory=list,
+        description="Per-fixture pass/fail for this job. A fixture the latest round did not re-run keeps the "
+        "verdict from the last round that did, so this always describes the whole suite.",
     )
 
 

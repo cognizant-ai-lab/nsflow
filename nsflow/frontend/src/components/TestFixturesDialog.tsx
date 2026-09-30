@@ -45,6 +45,10 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   ContentCopy as CopyIcon,
+  PlayArrow as RunIcon,
+  CheckCircleOutline as PassIcon,
+  ErrorOutline as FailIcon,
+  ReportProblemOutlined as InfraIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
 import FileViewerDialog, { ViewableFile } from "./FileViewerDialog";
@@ -96,10 +100,26 @@ interface Fixture {
   parse_error: string | null;
 }
 
+// One fixture's verdict from the last round that ran it, mirroring the backend's FixtureResult.
+// Defined here rather than in the panel because the panel imports this file, not the reverse.
+export type FixtureResult = {
+  fixture: string;
+  passed: boolean;
+  message?: string | null;
+  infrastructure_error?: boolean;
+};
+
 interface TestFixturesDialogProps {
   open: boolean;
   onClose: () => void;
   networkName: string;
+  // Run one fixture. Supplied by the panel, which owns the single job slot and its poll loop --
+  // there is one job at a time, so the dialog must not start one behind the panel's back.
+  onRunFixture?: (fixtureName: string) => void;
+  // True while any consultant job is running: a second run cannot start until it finishes.
+  jobRunning?: boolean;
+  // Per-fixture verdicts from the most recent run, keyed by fixture name.
+  results?: Record<string, FixtureResult>;
 }
 
 // A single check's value can be a list (gist, keywords) or a scalar (value, greater, less) --
@@ -478,7 +498,7 @@ const rawInteractionsToPayload = (interactions: FixtureInteraction[]) =>
     sly_data: interaction.sly_data ?? {},
   }));
 
-const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogProps) => {
+const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunning, results }: TestFixturesDialogProps) => {
   const { apiUrl } = useApiPort();
   const theme = useTheme();
 
@@ -873,6 +893,18 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                 >
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", width: "100%" }}>
+                      {!(isEditing && draft) && results?.[fixture.name] && (
+                        // An infrastructure error gets its own glyph on purpose: a timeout or an
+                        // API-key fault is not a defect in the network, and reading one as a
+                        // defect sends the consultant rewriting agents that were never at fault.
+                        results[fixture.name].infrastructure_error ? (
+                          <InfraIcon fontSize="small" color="warning" titleAccess="Could not reach a verdict" />
+                        ) : results[fixture.name].passed ? (
+                          <PassIcon fontSize="small" color="success" titleAccess="Passing" />
+                        ) : (
+                          <FailIcon fontSize="small" color="error" titleAccess="Failing" />
+                        )
+                      )}
                       {!(isEditing && draft) && (
                         <Typography sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
                           {fixture.name.replace(/\.hocon$/, "")}
@@ -903,6 +935,20 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                         fixture.success_ratio && <Chip size="small" color="primary" label={fixture.success_ratio} />
                       )}
                       <Box sx={{ flexGrow: 1 }} />
+                      {onRunFixture && !fixture.parse_error && (
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          title={jobRunning ? "A run is already in progress" : "Run just this test"}
+                          disabled={jobRunning}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRunFixture(fixture.name);
+                          }}
+                        >
+                          <RunIcon fontSize="small" />
+                        </IconButton>
+                      )}
                       {!fixture.parse_error && (
                         <IconButton
                           size="small"
@@ -930,6 +976,20 @@ const TestFixturesDialog = ({ open, onClose, networkName }: TestFixturesDialogPr
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails>
+                    {results?.[fixture.name] && !results[fixture.name].passed && results[fixture.name].message && (
+                      <Alert
+                        severity={results[fixture.name].infrastructure_error ? "warning" : "error"}
+                        sx={{ mb: 2, "& .MuiAlert-message": { overflow: "hidden" } }}
+                      >
+                        <Box
+                          component="pre"
+                          sx={{ m: 0, fontSize: "0.72rem", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                maxHeight: 220, overflowY: "auto" }}
+                        >
+                          {results[fixture.name].message}
+                        </Box>
+                      </Alert>
+                    )}
                     {fixture.parse_error ? (
                       <Alert severity="warning" sx={{ mb: 1 }}>
                         Could not parse this fixture: {fixture.parse_error}

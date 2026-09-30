@@ -44,12 +44,14 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 from matplotlib import pyplot as plt  # noqa: E402  (must follow matplotlib.use)
 from matplotlib.ticker import MaxNLocator  # noqa: E402  (must follow matplotlib.use)
+from pydantic import ValidationError
 from pyhocon import ConfigFactory
 
 from nsflow.backend.models.network_consultant_models import AnswerJobRequest
 from nsflow.backend.models.network_consultant_models import Fixture
 from nsflow.backend.models.network_consultant_models import FixtureDeleteResponse
 from nsflow.backend.models.network_consultant_models import FixtureInteraction
+from nsflow.backend.models.network_consultant_models import FixtureResult
 from nsflow.backend.models.network_consultant_models import FixtureSaveRequest
 from nsflow.backend.models.network_consultant_models import FixtureSaveResponse
 from nsflow.backend.models.network_consultant_models import FixturesResponse
@@ -59,6 +61,7 @@ from nsflow.backend.models.network_consultant_models import JobAnswerResponse
 from nsflow.backend.models.network_consultant_models import JobStartResponse
 from nsflow.backend.models.network_consultant_models import JobStatusResponse
 from nsflow.backend.models.network_consultant_models import JobStopResponse
+from nsflow.backend.models.network_consultant_models import RunTestsRequest
 from nsflow.backend.models.network_consultant_models import SlyDataKeysResponse
 from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 
@@ -66,6 +69,10 @@ from nsflow.backend.utils.logutils.websocket_logs_registry import LogsRegistry
 # --direction with --hocon-file so defects are never guessed from current behavior, so an
 # empty UI field still needs to send *something* that doesn't imply a behavior change.
 DEFAULT_DIRECTION = "Fix any currently failing tests without changing the network's intended behavior."
+
+# Fields of a per-fixture verdict the runner writes. Filtered on read so a runner that
+# starts recording something extra cannot make the whole status poll fail validation.
+_RESULT_FIELDS = {"passed", "message", "infrastructure_error"}
 
 # How long to wait for a graceful SIGTERM exit before escalating to SIGKILL.
 STOP_GRACE_PERIOD_SECONDS = 5
@@ -615,8 +622,13 @@ async def _start_job(args: list, agent_name: str, session_id: str) -> JobStartRe
 @router.post("/generate-tests", response_model=JobStartResponse)
 async def generate_tests(request: GenerateTestsRequest):
     """Generate ANTeGen test fixtures for a network, with no fix loop -- max_iterations=0 makes
-    the runner do its normal generate-tests-if-missing step, then stop: the fix loop itself
-    never executes."""
+    the runner generate, run the resulting suite once so the caller sees pass/fail, then stop:
+    the fix loop itself never executes.
+
+    --force-generate because this is an explicit request. The runner otherwise skips generation
+    whenever the network already has fixtures, which is right for the fix loop (reuse the suite
+    rather than pay to rebuild it) but made pressing Generate silently do nothing.
+    """
     hocon_file = _network_hocon_file(request.network_name)
     return await _start_job(
         [
@@ -626,6 +638,32 @@ async def generate_tests(request: GenerateTestsRequest):
             "Generate tests only -- no fix loop requested.",
             "--test-level",
             request.test_level,
+            *(["--test-guidance", request.test_guidance.strip()] if request.test_guidance.strip() else []),
+            "--force-generate",
+            "--max-iterations",
+            "0",
+        ],
+        agent_name=request.network_name,
+        session_id=request.session_id,
+    )
+
+
+@router.post("/run-tests", response_model=JobStartResponse)
+async def run_tests(request: RunTestsRequest):
+    """Run a network's existing fixtures once -- no generation, no fix loop.
+
+    Same max_iterations=0 path as generate-tests, minus --force-generate: with fixtures already
+    on disk the runner's generate step is a no-op, so what is left is exactly a test run.
+    """
+    hocon_file = _network_hocon_file(request.network_name)
+    fixture_name = (request.fixture_name or "").strip()
+    return await _start_job(
+        [
+            "--hocon-file",
+            hocon_file,
+            "--direction",
+            DEFAULT_DIRECTION,
+            *(["--only-fixtures", _safe_fixture_file_name(fixture_name)] if fixture_name else []),
             "--max-iterations",
             "0",
         ],
@@ -693,12 +731,36 @@ async def get_job_status(job_id: str, theme: str = "light"):
     except FileNotFoundError:
         pass
 
+    ungrounded: list = []
+    ungrounded_path = os.path.join(job_dir, f"{job_id}.ungrounded.txt")
+    try:
+        with open(ungrounded_path, "r", encoding="utf-8") as ungrounded_file:
+            ungrounded = [line for line in ungrounded_file.read().splitlines() if line]
+    except FileNotFoundError:
+        pass
+
     git_branch: Optional[str] = None
     branch_path = os.path.join(job_dir, f"{job_id}.git_branch.txt")
     try:
         with open(branch_path, "r", encoding="utf-8") as branch_file:
             git_branch = branch_file.read().strip() or None
     except FileNotFoundError:
+        pass
+
+    results: list = []
+    results_path = os.path.join(job_dir, f"{job_id}.results.json")
+    try:
+        with open(results_path, "r", encoding="utf-8") as results_file:
+            recorded = json.load(results_file)
+        if isinstance(recorded, dict):
+            results = [
+                FixtureResult(fixture=name, **{k: v for k, v in verdict.items() if k in _RESULT_FIELDS})
+                for name, verdict in sorted(recorded.items())
+                if isinstance(verdict, dict)
+            ]
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError):
+        # Absent until the first round finishes, and the runner may be mid-write during a
+        # poll -- the next poll gets the complete file.
         pass
 
     progress: list = []
@@ -730,8 +792,10 @@ async def get_job_status(job_id: str, theme: str = "light"):
         log_tail=[line.rstrip("\n") for line in log_tail],
         pending_question=pending_question,
         tool_issues=tool_issues,
+        ungrounded=ungrounded,
         progress_chart=progress_chart,
         git_branch=git_branch,
+        results=results,
     )
 
 
