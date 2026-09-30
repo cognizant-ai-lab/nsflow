@@ -106,7 +106,7 @@ class ConsultantJobManager:
                 sys.executable,
                 "-u",
                 "-m",
-                "apps.network_consultant.runner",
+                "apps.network_consultant.run",
                 *args,
                 cwd=self.project_root,
                 stdout=log_file,
