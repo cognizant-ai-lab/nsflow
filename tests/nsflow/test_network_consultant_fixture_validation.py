@@ -15,7 +15,7 @@
 # END COPYRIGHT
 import unittest
 
-from nsflow.backend.api.v1.network_consultant_endpoints import _validate_fixture_for_save
+from nsflow.backend.utils.network_consultant_fixtures import validate_fixture
 
 
 def _valid_fixture():
@@ -40,36 +40,36 @@ class TestValidateFixtureForSave(unittest.TestCase):
     check-type check in case a stale client ever sends one outside the known set)."""
 
     def test_valid_fixture_has_no_errors(self):
-        self.assertEqual(_validate_fixture_for_save(_valid_fixture()), [])
+        self.assertEqual(validate_fixture(_valid_fixture()), [])
 
     def test_missing_agent(self):
         fixture = _valid_fixture()
         fixture["agent"] = "   "
-        errors = _validate_fixture_for_save(fixture)
+        errors = validate_fixture(fixture)
         self.assertTrue(any("agent" in e for e in errors))
 
     def test_bad_success_ratio(self):
         fixture = _valid_fixture()
         fixture["success_ratio"] = "one out of one"
-        errors = _validate_fixture_for_save(fixture)
+        errors = validate_fixture(fixture)
         self.assertTrue(any("success_ratio" in e for e in errors))
 
     def test_interaction_missing_text(self):
         fixture = _valid_fixture()
         fixture["interactions"][0]["text"] = ""
-        errors = _validate_fixture_for_save(fixture)
+        errors = validate_fixture(fixture)
         self.assertTrue(any("'text' is required" in e for e in errors))
 
     def test_unknown_check_type_rejected(self):
         fixture = _valid_fixture()
         fixture["interactions"][0]["response"]["text"] = {"regex": ["nope"]}
-        errors = _validate_fixture_for_save(fixture)
+        errors = validate_fixture(fixture)
         self.assertTrue(any("not a valid check type" in e for e in errors))
 
     def test_empty_interactions_short_circuits(self):
         fixture = _valid_fixture()
         fixture["interactions"] = []
-        errors = _validate_fixture_for_save(fixture)
+        errors = validate_fixture(fixture)
         self.assertEqual(errors, ["'interactions' must be a non-empty list."])
 
 

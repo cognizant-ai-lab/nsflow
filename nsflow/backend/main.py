@@ -43,10 +43,6 @@ NUMERIC_LOG_LEVEL = getattr(logging, LOG_LEVEL, logging.INFO)
 logging.basicConfig(
     level=NUMERIC_LOG_LEVEL, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
-# Re-announces every manifest restore (on every job status poll) at WARNING level -- real but
-# useless noise here, same fix apps/network_consultant/runner.py already applies for the sibling
-# "ServedManifestConfigFilter" logger.
-logging.getLogger("RegistryManifestRestorer").setLevel(logging.ERROR)
 
 if NSFLOW_DEV_MODE:
     logging.info("DEV_MODE: %s", NSFLOW_DEV_MODE)
@@ -171,7 +167,6 @@ if __name__ == "__main__":
         port=NSFLOW_PORT,
         workers=os.cpu_count(),
         log_level=LOG_LEVEL.lower(),
-        access_log=False,  # kills the "GET /jobs/<id> 200 OK" spam from frontend status polling
         reload=True,
         loop="asyncio",
     )

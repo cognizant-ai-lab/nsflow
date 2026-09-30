@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -25,7 +25,6 @@ import {
   Button,
   IconButton,
   TextField,
-  MenuItem,
   Typography,
   Chip,
   Alert,
@@ -51,70 +50,27 @@ import {
   ReportProblemOutlined as InfraIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
+import {
+  buildInteractionsPayload,
+  emptyDraftFixture,
+  fixtureToDraft,
+  formatCheckTypeLabel,
+  rawInteractionsToPayload,
+  SUCCESS_RATIO_PATTERN,
+  uniqueCopyName,
+} from "../state/networkConsultantFixtures";
+import type { DraftFixture } from "../state/networkConsultantFixtures";
+import type { ConsultantFixture as Fixture, FixtureResult } from "../types/networkConsultant";
+import {
+  deleteConsultantFixture,
+  describeError,
+  describeErrors,
+  listConsultantFixtures,
+  listSlyDataKeys,
+  saveConsultantFixture,
+} from "../utils/networkConsultantApi";
 import FileViewerDialog, { ViewableFile } from "./FileViewerDialog";
-
-// The complete set of stock tests neuro-san's AgentEvaluatorFactory recognizes under
-// response.text -- mirrors coded_tools/agent_network_test_generator/validate_test_fixture.py's
-// _VALID_STOCK_TESTS and the backend's own copy in network_consultant_endpoints.py.
-const STOCK_TEST_KEYS = [
-  "gist", "not_gist",
-  "keywords", "not_keywords",
-  "value", "not_value",
-  "less", "not_less",
-  "greater", "not_greater",
-] as const;
-
-// Display-only -- the wire value stays snake_case (e.g. "not_gist"); this is just how it reads
-// in the Type dropdown and the read-only check summary.
-const formatCheckTypeLabel = (key: string): string =>
-  key
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-
-// These take a single number (assertLess/assertGreater/assertEqual, or their negations);
-// everything else (gist, keywords) takes a list of strings.
-const NUMERIC_CHECK_TYPES = new Set(["value", "not_value", "less", "not_less", "greater", "not_greater"]);
-
-const SUCCESS_RATIO_PATTERN = /^\d+\/\d+$/;
-
-let nextDraftId = 0;
-const newDraftId = () => String(nextDraftId++);
-
-type ResponseChecks = Record<string, unknown>;
-
-interface FixtureInteraction {
-  text: string;
-  timeout_in_seconds: number | null;
-  response_checks: ResponseChecks;
-  sly_data: Record<string, unknown>;
-}
-
-interface FixtureInteractionPayload {
-  text: string;
-  timeout_in_seconds: number;
-  response: { text: ResponseChecks };
-  sly_data: Record<string, unknown>;
-}
-
-interface Fixture {
-  name: string;
-  agent: string | null;
-  success_ratio: string | null;
-  connections: string[];
-  interactions: FixtureInteraction[];
-  raw_hocon: string;
-  parse_error: string | null;
-}
-
-// One fixture's verdict from the last round that ran it, mirroring the backend's FixtureResult.
-// Defined here rather than in the panel because the panel imports this file, not the reverse.
-export type FixtureResult = {
-  fixture: string;
-  passed: boolean;
-  message?: string | null;
-  infrastructure_error?: boolean;
-};
+import InteractionsEditor from "./networkConsultant/InteractionsEditor";
 
 interface TestFixturesDialogProps {
   open: boolean;
@@ -151,364 +107,6 @@ const CheckValue = ({ value }: { value: unknown }) => {
   );
 };
 
-// Editable form state for one check (one interactions[].response.text entry). `value` is always
-// kept as a plain string in the editor -- one-number text or newline-separated list text -- and
-// only converted to its real JSON shape (number or string[]) right before saving.
-interface DraftCheck {
-  id: string;
-  checkType: string;
-  value: string;
-}
-
-// One interactions[].sly_data entry -- a variable name and its override text (e.g. "time" ->
-// "2024-01-01T08:00:00" for TimeTool), edited as a row instead of hand-written JSON.
-interface DraftSlyDataEntry {
-  id: string;
-  key: string;
-  value: string;
-}
-
-interface DraftInteraction {
-  id: string;
-  text: string;
-  timeoutInSeconds: string;
-  slyData: DraftSlyDataEntry[];
-  checks: DraftCheck[];
-}
-
-// "agent" is deliberately not part of the draft -- it identifies which network this fixture
-// tests and is always taken from the fixture as-loaded (or from `networkName` for a new one),
-// never hand-edited.
-interface DraftFixture {
-  fileName: string;
-  successRatio: string;
-  interactions: DraftInteraction[];
-}
-
-const checkValueToText = (value: unknown): string =>
-  Array.isArray(value) ? value.map((item) => String(item)).join("\n") : String(value ?? "");
-
-const fixtureToDraft = (fixture: Fixture): DraftFixture => ({
-  fileName: fixture.name.replace(/\.hocon$/, ""),
-  successRatio: fixture.success_ratio ?? "",
-  interactions: fixture.interactions.map((interaction) => ({
-    id: newDraftId(),
-    text: interaction.text,
-    timeoutInSeconds: interaction.timeout_in_seconds != null ? String(interaction.timeout_in_seconds) : "400",
-    slyData: Object.entries(interaction.sly_data ?? {}).map(([key, value]) => ({
-      id: newDraftId(),
-      key,
-      value: String(value),
-    })),
-    checks: Object.entries(interaction.response_checks).map(([checkType, value]) => ({
-      id: newDraftId(),
-      checkType,
-      value: checkValueToText(value),
-    })),
-  })),
-});
-
-const emptyInteraction = (): DraftInteraction => ({
-  id: newDraftId(),
-  text: "",
-  timeoutInSeconds: "400",
-  slyData: [],
-  checks: [{ id: newDraftId(), checkType: "gist", value: "" }],
-});
-
-const emptyDraftFixture = (): DraftFixture => ({
-  fileName: "",
-  successRatio: "1/1",
-  interactions: [emptyInteraction()],
-});
-
-const describeError = (error: unknown): string =>
-  error instanceof Error ? error.message : "An unexpected error occurred.";
-
-// Shared editor for a fixture's interactions/turns -- used both for an existing fixture's edit
-// form and for the "New Test" creation form, so add/remove-turn and add/remove-check logic
-// lives in exactly one place.
-const InteractionsEditor = ({
-  interactions,
-  onChange,
-  slyDataKeys,
-}: {
-  interactions: DraftInteraction[];
-  onChange: (next: DraftInteraction[]) => void;
-  slyDataKeys: string[];
-}) => {
-  const theme = useTheme();
-  const updateOne = (id: string, updater: (interaction: DraftInteraction) => DraftInteraction) =>
-    onChange(interactions.map((interaction) => (interaction.id === id ? updater(interaction) : interaction)));
-
-  return (
-    <>
-      {interactions.map((interaction, index) => (
-        <Box key={interaction.id} sx={{ p: 2, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: theme.palette.text.primary, flexGrow: 1 }}>
-              Turn {index + 1}
-            </Typography>
-            <IconButton
-              size="small"
-              title="Remove this turn"
-              disabled={interactions.length <= 1}
-              onClick={() => onChange(interactions.filter((i) => i.id !== interaction.id))}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Box>
-
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 2 }}>
-              User Input
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, pl: 2 }}>
-              <TextField
-                label="Prompt"
-                size="small"
-                fullWidth
-                multiline
-                value={interaction.text}
-                onChange={(e) => updateOne(interaction.id, (i) => ({ ...i, text: e.target.value }))}
-              />
-              <TextField
-                label="Timeout (s)"
-                size="small"
-                type="number"
-                value={interaction.timeoutInSeconds}
-                onChange={(e) => updateOne(interaction.id, (i) => ({ ...i, timeoutInSeconds: e.target.value }))}
-                sx={{ width: 160 }}
-              />
-            </Box>
-          </Box>
-
-          <Divider sx={{ mb: 2 }} />
-
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 2 }}>
-              Expected Response
-            </Typography>
-            <Box sx={{ pl: 2 }}>
-              {interaction.checks.map((check) => {
-                const usedElsewhere = new Set(
-                  interaction.checks.filter((c) => c.id !== check.id).map((c) => c.checkType)
-                );
-                return (
-                  <Box key={check.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 0.5 }}>
-                    <TextField
-                      select
-                      size="small"
-                      label="Type"
-                      value={check.checkType}
-                      sx={{ width: 160 }}
-                      onChange={(e) =>
-                        updateOne(interaction.id, (i) => ({
-                          ...i,
-                          checks: i.checks.map((c) => (c.id === check.id ? { ...c, checkType: e.target.value } : c)),
-                        }))
-                      }
-                    >
-                      {STOCK_TEST_KEYS.map((key) => (
-                        <MenuItem key={key} value={key} disabled={usedElsewhere.has(key)}>
-                          {formatCheckTypeLabel(key)}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      multiline={!NUMERIC_CHECK_TYPES.has(check.checkType)}
-                      type={NUMERIC_CHECK_TYPES.has(check.checkType) ? "number" : "text"}
-                      label="Expected"
-                      value={check.value}
-                      onChange={(e) =>
-                        updateOne(interaction.id, (i) => ({
-                          ...i,
-                          checks: i.checks.map((c) => (c.id === check.id ? { ...c, value: e.target.value } : c)),
-                        }))
-                      }
-                    />
-                    <IconButton
-                      size="small"
-                      title="Remove this check"
-                      disabled={interaction.checks.length <= 1}
-                      onClick={() =>
-                        updateOne(interaction.id, (i) => ({
-                          ...i,
-                          checks: i.checks.filter((c) => c.id !== check.id),
-                        }))
-                      }
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                );
-              })}
-              <Button
-                size="small"
-                startIcon={<AddIcon />}
-                sx={{ mt: 0.5 }}
-                disabled={interaction.checks.length >= STOCK_TEST_KEYS.length}
-                onClick={() => {
-                  const used = new Set(interaction.checks.map((c) => c.checkType));
-                  const nextType = STOCK_TEST_KEYS.find((key) => !used.has(key)) ?? STOCK_TEST_KEYS[0];
-                  updateOne(interaction.id, (i) => ({
-                    ...i,
-                    checks: [...i.checks, { id: newDraftId(), checkType: nextType, value: "" }],
-                  }));
-                }}
-              >
-                Add Check
-              </Button>
-            </Box>
-          </Box>
-
-          <Divider sx={{ mb: 2 }} />
-
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: theme.palette.text.secondary, mb: 2 }}>
-              Sly Data Input
-            </Typography>
-            <Box sx={{ pl: 2 }}>
-              {interaction.slyData.map((entry) => {
-                // The dropdown is restricted to variable names actually found in this network's
-                // coded tools -- but a saved fixture's existing key always stays selectable even if
-                // it's since fallen out of that list (a tool changed, or it was hand-typed before).
-                const options =
-                  entry.key && !slyDataKeys.includes(entry.key) ? [...slyDataKeys, entry.key] : slyDataKeys;
-                return (
-                  <Box key={entry.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 0.5 }}>
-                    <TextField
-                      select
-                      size="small"
-                      label="Key"
-                      value={entry.key}
-                      sx={{ width: 160 }}
-                      onChange={(e) =>
-                        updateOne(interaction.id, (i) => ({
-                          ...i,
-                          slyData: i.slyData.map((s) => (s.id === entry.id ? { ...s, key: e.target.value } : s)),
-                        }))
-                      }
-                    >
-                      {options.map((key) => (
-                        <MenuItem key={key} value={key}>
-                          {key}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Override Value"
-                      value={entry.value}
-                      onChange={(e) =>
-                        updateOne(interaction.id, (i) => ({
-                          ...i,
-                          slyData: i.slyData.map((s) => (s.id === entry.id ? { ...s, value: e.target.value } : s)),
-                        }))
-                      }
-                    />
-                    <IconButton
-                      size="small"
-                      title="Remove this sly_data entry"
-                      onClick={() =>
-                        updateOne(interaction.id, (i) => ({
-                          ...i,
-                          slyData: i.slyData.filter((s) => s.id !== entry.id),
-                        }))
-                      }
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                );
-              })}
-              <Button
-                size="small"
-                startIcon={<AddIcon />}
-                sx={{ mt: 0.5 }}
-                onClick={() =>
-                  updateOne(interaction.id, (i) => ({
-                    ...i,
-                    slyData: [...i.slyData, { id: newDraftId(), key: "", value: "" }],
-                  }))
-                }
-              >
-                Add Sly Data
-              </Button>
-            </Box>
-          </Box>
-        </Box>
-      ))}
-
-      <Button
-        size="small"
-        startIcon={<AddIcon />}
-        sx={{ alignSelf: "flex-start" }}
-        onClick={() => onChange([...interactions, emptyInteraction()])}
-      >
-        Add Turn
-      </Button>
-    </>
-  );
-};
-
-// Converts one draft's interactions into the JSON shape the backend expects, or collects client-
-// side errors instead (a sly_data row with a value but no variable name, a numeric check that
-// isn't a number, an empty keyword/gist list) -- shared by both "Save" (existing fixture) and
-// "Create" (new fixture).
-const buildInteractionsPayload = (
-  draftInteractions: DraftInteraction[],
-): { interactions: FixtureInteractionPayload[]; errors: string[] } => {
-  const errors: string[] = [];
-  const interactions = draftInteractions.map((interaction, index) => {
-    const label = `Turn ${index + 1}`;
-    const slyData: Record<string, unknown> = {};
-    interaction.slyData.forEach((entry) => {
-      const key = entry.key.trim();
-      if (!key) {
-        if (entry.value.trim()) errors.push(`${label}: a sly_data entry needs a variable name.`);
-        return;
-      }
-      slyData[key] = entry.value;
-    });
-    const checks: ResponseChecks = {};
-    interaction.checks.forEach((check) => {
-      if (NUMERIC_CHECK_TYPES.has(check.checkType)) {
-        const num = Number(check.value);
-        if (check.value.trim() === "" || Number.isNaN(num)) {
-          errors.push(`${label}: "${check.checkType}" must be a number.`);
-        } else {
-          checks[check.checkType] = num;
-        }
-      } else {
-        const items = check.value.split("\n").map((line) => line.trim()).filter(Boolean);
-        if (!items.length) {
-          errors.push(`${label}: "${check.checkType}" needs at least one line.`);
-        } else {
-          checks[check.checkType] = items;
-        }
-      }
-    });
-    return {
-      text: interaction.text,
-      timeout_in_seconds: Number(interaction.timeoutInSeconds) || 400,
-      response: { text: checks },
-      sly_data: slyData,
-    };
-  });
-  return { interactions, errors };
-};
-
-const rawInteractionsToPayload = (interactions: FixtureInteraction[]) =>
-  interactions.map((interaction) => ({
-    text: interaction.text,
-    timeout_in_seconds: interaction.timeout_in_seconds ?? 400,
-    response: { text: interaction.response_checks },
-    sly_data: interaction.sly_data ?? {},
-  }));
 
 const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunning, results }: TestFixturesDialogProps) => {
   const { apiUrl } = useApiPort();
@@ -534,45 +132,53 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
   // Variable names this network's own coded tools actually read from sly_data -- an empty list
   // (a pure-LLM network, or one whose tools don't override anything) falls back to free text.
   const [slyDataKeys, setSlyDataKeys] = useState<string[]>([]);
+  const requestGenerationRef = useRef(0);
 
   // Returns the freshly-loaded list so callers that need to act on the result (e.g. Duplicate,
   // which wants to open the newly-created copy) don't have to re-fetch it themselves.
-  const fetchFixtures = (): Promise<Fixture[]> => {
-    if (!networkName) return Promise.resolve([]);
+  const fetchFixtures = useCallback(async (): Promise<Fixture[]> => {
+    if (!networkName) return [];
+    const generation = ++requestGenerationRef.current;
     setLoading(true);
     setError(null);
-    return fetch(`${apiUrl}/api/v1/network_consultant/fixtures?network_name=${encodeURIComponent(networkName)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to load tests (${res.status})`);
-        return res.json();
-      })
-      .then((data) => {
-        const loaded: Fixture[] = data.fixtures ?? [];
+    try {
+      const loaded = await listConsultantFixtures(apiUrl, networkName, "Failed to load tests ({status})");
+      if (generation === requestGenerationRef.current) {
         setFixtures(loaded);
-        return loaded;
-      })
-      .catch((error: unknown) => {
-        setError(describeError(error));
-        return [];
-      })
-      .finally(() => setLoading(false));
-  };
+      }
+      return loaded;
+    } catch (loadError: unknown) {
+      if (generation === requestGenerationRef.current) {
+        setError(describeError(loadError));
+      }
+      return [];
+    } finally {
+      if (generation === requestGenerationRef.current) setLoading(false);
+    }
+  }, [apiUrl, networkName]);
 
   // Every open is a fresh read of whatever's on disk right now -- drop any fixture that was
   // mid-edit from a previous open rather than carrying stale drafts forward.
   useEffect(() => {
     if (!open) return;
+    let active = true;
     setEditingNames(new Set());
     setDrafts({});
     setSaveErrors({});
     setNewFixture(null);
-    fetchFixtures();
-    fetch(`${apiUrl}/api/v1/network_consultant/sly_data_keys?network_name=${encodeURIComponent(networkName)}`)
-      .then((res) => (res.ok ? res.json() : { keys: [] }))
-      .then((data) => setSlyDataKeys(data.keys ?? []))
-      .catch(() => setSlyDataKeys([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, networkName]);
+    void fetchFixtures();
+    void listSlyDataKeys(apiUrl, networkName)
+      .then((keys) => {
+        if (active) setSlyDataKeys(keys);
+      })
+      .catch(() => {
+        if (active) setSlyDataKeys([]);
+      });
+    return () => {
+      active = false;
+      requestGenerationRef.current += 1;
+    };
+  }, [apiUrl, fetchFixtures, networkName, open]);
 
   const cancelEditing = (fixtureName: string) => {
     setEditingNames((prev) => {
@@ -598,49 +204,17 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
   const updateDraft = (fixtureName: string, updater: (draft: DraftFixture) => DraftFixture) =>
     setDrafts((prev) => ({ ...prev, [fixtureName]: updater(prev[fixtureName]) }));
 
-  // Picks a not-yet-used "<base>_copy", "<base>_copy2", ... file name for Duplicate.
-  const uniqueCopyName = (base: string) => {
-    const existing = new Set(fixtures.map((f) => f.name.replace(/\.hocon$/, "")));
-    let candidate = `${base}_copy`;
-    let suffix = 2;
-    while (existing.has(candidate)) {
-      candidate = `${base}_copy${suffix}`;
-      suffix += 1;
-    }
-    return candidate;
-  };
-
-  const putFixture = (fixtureName: string, fixture: Record<string, unknown>, originalFixtureName?: string) => {
-    const params = new URLSearchParams({ network_name: networkName, fixture_name: fixtureName });
-    if (originalFixtureName) params.set("original_fixture_name", originalFixtureName);
-    return fetch(`${apiUrl}/api/v1/network_consultant/fixtures?${params.toString()}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fixture }),
-    });
-  };
-
-  const errorsFromResponse = async (res: Response, fallbackStatus: number): Promise<string[]> => {
-    const body = await res.json().catch(() => null);
-    const detail = body?.detail;
-    return Array.isArray(detail?.errors) ? detail.errors : [typeof detail === "string" ? detail : `Failed (${fallbackStatus}).`];
-  };
-
   const handleDuplicate = async (fixture: Fixture) => {
     setDuplicatingName(fixture.name);
     setError(null);
     try {
-      const copyName = uniqueCopyName(fixture.name.replace(/\.hocon$/, ""));
-      const res = await putFixture(copyName, {
+      const copyName = uniqueCopyName(fixtures, fixture.name.replace(/\.hocon$/, ""));
+      await saveConsultantFixture(apiUrl, networkName, copyName, {
         agent: fixture.agent,
         success_ratio: fixture.success_ratio,
         connections: fixture.connections.length ? fixture.connections : ["direct"],
         interactions: rawInteractionsToPayload(fixture.interactions),
       });
-      if (!res.ok) {
-        setError((await errorsFromResponse(res, res.status)).join(" "));
-        return;
-      }
       const loaded = await fetchFixtures();
       const created = loaded.find((f) => f.name === `${copyName}.hocon`);
       if (created) {
@@ -660,18 +234,9 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
     setDeletingName(fixture.name);
     setError(null);
     try {
-      const res = await fetch(
-        `${apiUrl}/api/v1/network_consultant/fixtures?network_name=${encodeURIComponent(
-          networkName
-        )}&fixture_name=${encodeURIComponent(fixture.name)}`,
-        { method: "DELETE" }
-      );
-      if (!res.ok) {
-        setError((await errorsFromResponse(res, res.status)).join(" "));
-        return;
-      }
+      await deleteConsultantFixture(apiUrl, networkName, fixture.name);
       cancelEditing(fixture.name);
-      fetchFixtures();
+      void fetchFixtures();
     } catch (error: unknown) {
       setError(describeError(error));
     } finally {
@@ -693,7 +258,9 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
     setSavingName(fixture.name);
     setSaveErrors((prev) => ({ ...prev, [fixture.name]: [] }));
     try {
-      const res = await putFixture(
+      await saveConsultantFixture(
+        apiUrl,
+        networkName,
         fileName,
         {
           agent: fixture.agent,
@@ -701,17 +268,12 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
           connections: fixture.connections.length ? fixture.connections : ["direct"],
           interactions,
         },
-        fixture.name
+        fixture.name,
       );
-      if (!res.ok) {
-        const errs = await errorsFromResponse(res, res.status);
-        setSaveErrors((prev) => ({ ...prev, [fixture.name]: errs }));
-        return;
-      }
       cancelEditing(fixture.name);
-      fetchFixtures();
+      void fetchFixtures();
     } catch (error: unknown) {
-      setSaveErrors((prev) => ({ ...prev, [fixture.name]: [describeError(error)] }));
+      setSaveErrors((prev) => ({ ...prev, [fixture.name]: describeErrors(error) }));
     } finally {
       setSavingName(null);
     }
@@ -733,20 +295,16 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
     setCreating(true);
     setNewFixtureErrors([]);
     try {
-      const res = await putFixture(fileName, {
+      await saveConsultantFixture(apiUrl, networkName, fileName, {
         agent: networkName,
         success_ratio: newFixture.successRatio,
         connections: ["direct"],
         interactions,
       });
-      if (!res.ok) {
-        setNewFixtureErrors(await errorsFromResponse(res, res.status));
-        return;
-      }
       setNewFixture(null);
-      fetchFixtures();
+      void fetchFixtures();
     } catch (error: unknown) {
-      setNewFixtureErrors([describeError(error)]);
+      setNewFixtureErrors(describeErrors(error));
     } finally {
       setCreating(false);
     }
@@ -788,7 +346,12 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
               {editingNames.size > 0 ? "Done" : "Edit"}
             </Button>
           )}
-          <IconButton onClick={fetchFixtures} size="small" disabled={loading} title="Refresh (discards unsaved edits)">
+          <IconButton
+            onClick={() => void fetchFixtures()}
+            size="small"
+            disabled={loading}
+            title="Refresh (discards unsaved edits)"
+          >
             <RefreshIcon />
           </IconButton>
           <IconButton onClick={onClose} size="small">

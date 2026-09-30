@@ -34,7 +34,9 @@ interface TabbedChatPanelProps {
 }
 
 const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
-  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "connectors" | "config" | "consultant">("chat");
+  const [activeTab, setActiveTab] = useState<
+    "chat" | "internal" | "slydata" | "connectors" | "config" | "consultant"
+  >("chat");
   const { wsUrl } = useApiPort();
   const { theme } = useTheme();
   const { sessionId, activeNetwork, targetNetwork,
@@ -268,9 +270,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
         <Tabs
           value={activeTabIndex}
           onChange={(_, newValue) => setActiveTab(tabConfig[newValue].id as any)}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
+          variant="fullWidth"
           sx={{
             minHeight: 48,
             '& .MuiTab-root': {
@@ -278,7 +278,6 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
               fontSize: '0.875rem',
               fontWeight: 500,
               textTransform: 'none',
-              whiteSpace: 'nowrap',
               color: theme.palette.text.secondary,
               '&.Mui-selected': {
                 color: theme.palette.primary.main,
