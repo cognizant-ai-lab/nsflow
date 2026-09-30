@@ -69,6 +69,9 @@ const DEFAULT_MAX_ITERATIONS = 10;
 // hammer the backend since a run can take many minutes.
 const POLL_INTERVAL_MS = 2000;
 
+const describeError = (error: unknown): string =>
+  error instanceof Error ? error.message : "An unexpected error occurred.";
+
 const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl } = useApiPort();
   const { sessionId } = useChatContext();
@@ -160,8 +163,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
           // job ends. Cheap call, and only on the edge from running to finished.
           loadFixtures();
         }
-      } catch (err: any) {
-        setError(err.message);
+      } catch (error: unknown) {
+        setError(describeError(error));
         stopPolling();
       }
     }, POLL_INTERVAL_MS);
@@ -197,8 +200,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       setJobId(data.job_id);
       setRunning(true);
       pollJob(data.job_id);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: unknown) {
+      setError(describeError(error));
     }
   };
 
@@ -215,8 +218,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       if (!res.ok) throw new Error(`Could not list tests (${res.status})`);
       const data = await res.json();
       setFixtureNames((data.fixtures ?? []).map((f: { name: string }) => f.name));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: unknown) {
+      setError(describeError(error));
     }
   };
 
@@ -257,8 +260,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       }
       setAnswerText("");
       // The next poll tick picks up pending_question clearing once the job consumes the answer.
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: unknown) {
+      setError(describeError(error));
     } finally {
       setSubmittingAnswer(false);
     }
@@ -276,8 +279,8 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
         throw new Error(detail.detail ?? `Request failed (${res.status})`);
       }
       // The next poll tick (POLL_INTERVAL_MS) picks up running:false; no need to stop polling here.
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: unknown) {
+      setError(describeError(error));
     } finally {
       setStopping(false);
     }

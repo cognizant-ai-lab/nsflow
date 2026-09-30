@@ -46,8 +46,8 @@ import {
   Edit as EditIcon,
   ContentCopy as CopyIcon,
   PlayArrow as RunIcon,
-  CheckCircleOutline as PassIcon,
-  ErrorOutline as FailIcon,
+  CheckCircleOutlined as PassIcon,
+  ErrorOutlined as FailIcon,
   ReportProblemOutlined as InfraIcon,
 } from "@mui/icons-material";
 import { useApiPort } from "../context/ApiPortContext";
@@ -87,6 +87,13 @@ interface FixtureInteraction {
   text: string;
   timeout_in_seconds: number | null;
   response_checks: ResponseChecks;
+  sly_data: Record<string, unknown>;
+}
+
+interface FixtureInteractionPayload {
+  text: string;
+  timeout_in_seconds: number;
+  response: { text: ResponseChecks };
   sly_data: Record<string, unknown>;
 }
 
@@ -214,6 +221,9 @@ const emptyDraftFixture = (): DraftFixture => ({
   successRatio: "1/1",
   interactions: [emptyInteraction()],
 });
+
+const describeError = (error: unknown): string =>
+  error instanceof Error ? error.message : "An unexpected error occurred.";
 
 // Shared editor for a fixture's interactions/turns -- used both for an existing fixture's edit
 // form and for the "New Test" creation form, so add/remove-turn and add/remove-check logic
@@ -449,7 +459,9 @@ const InteractionsEditor = ({
 // side errors instead (a sly_data row with a value but no variable name, a numeric check that
 // isn't a number, an empty keyword/gist list) -- shared by both "Save" (existing fixture) and
 // "Create" (new fixture).
-const buildInteractionsPayload = (draftInteractions: DraftInteraction[]): { interactions: any[]; errors: string[] } => {
+const buildInteractionsPayload = (
+  draftInteractions: DraftInteraction[],
+): { interactions: FixtureInteractionPayload[]; errors: string[] } => {
   const errors: string[] = [];
   const interactions = draftInteractions.map((interaction, index) => {
     const label = `Turn ${index + 1}`;
@@ -539,8 +551,8 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
         setFixtures(loaded);
         return loaded;
       })
-      .catch((err: any) => {
-        setError(err.message);
+      .catch((error: unknown) => {
+        setError(describeError(error));
         return [];
       })
       .finally(() => setLoading(false));
@@ -636,8 +648,8 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
         setDrafts((prev) => ({ ...prev, [created.name]: fixtureToDraft(created) }));
         setEditingNames((prev) => new Set(prev).add(created.name));
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: unknown) {
+      setError(describeError(error));
     } finally {
       setDuplicatingName(null);
     }
@@ -660,8 +672,8 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
       }
       cancelEditing(fixture.name);
       fetchFixtures();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: unknown) {
+      setError(describeError(error));
     } finally {
       setDeletingName(null);
     }
@@ -698,8 +710,8 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
       }
       cancelEditing(fixture.name);
       fetchFixtures();
-    } catch (err: any) {
-      setSaveErrors((prev) => ({ ...prev, [fixture.name]: [err.message] }));
+    } catch (error: unknown) {
+      setSaveErrors((prev) => ({ ...prev, [fixture.name]: [describeError(error)] }));
     } finally {
       setSavingName(null);
     }
@@ -733,8 +745,8 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
       }
       setNewFixture(null);
       fetchFixtures();
-    } catch (err: any) {
-      setNewFixtureErrors([err.message]);
+    } catch (error: unknown) {
+      setNewFixtureErrors([describeError(error)]);
     } finally {
       setCreating(false);
     }
@@ -747,7 +759,7 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
         onClose={onClose}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { maxHeight: "85vh", backgroundColor: theme.palette.background.paper } }}
+        slotProps={{ paper: { sx: { maxHeight: "85vh", backgroundColor: theme.palette.background.paper } } }}
       >
         <DialogTitle
           sx={{ display: "flex", alignItems: "center", gap: 1, pb: 1, borderBottom: `1px solid ${theme.palette.divider}` }}
