@@ -91,6 +91,8 @@ vi.mock("../utils/config", async () => {
 import EditorAgentFlow from "./EditorAgentFlow";
 import { useEditorNetworkStore } from "../state/editorNetworkStore";
 import type { AgentNetworkDefinitionEntry } from "../uiCommon";
+import { isDraftKey } from "../state/editorSession";
+import * as config from "../utils/config";
 
 const NETWORK = "coffee_shop";
 
@@ -100,6 +102,268 @@ const mount = () =>
       <EditorAgentFlow selectedNetwork={NETWORK} />
     </ReactFlowProvider>
   );
+
+describe("naming a network after one that already exists", () => {
+  // The designer saves a named network to <subdirectory>/<name>.hocon over whatever is
+  // there, so a name another network already has replaces that network. These tests
+  // drive the real component against a stubbed server and look at what was sent.
+
+  /** The names the server was asked about, in order. */
+  const nameChecks: string[] = [];
+  /** The sly_data of every save sent to the designer, in order. */
+  const savedSlyData: Record<string, unknown>[] = [];
+  /** What the stubbed server answers about any name it is asked about. */
+  let nameIsTaken = true;
+  /** The status the stubbed name check answers with. */
+  let nameCheckStatus = 200;
+  /** Whether the stubbed name check fails before any response, as an unreachable server does. */
+  let nameCheckThrows = false;
+
+  /** Every draft entry in the store. A network built by hand lives under a draft key. */
+  const draftEntries = () =>
+    Object.entries(useEditorNetworkStore.getState().entries)
+      .filter(([key]) => isDraftKey(key))
+      .map(([, entry]) => entry);
+
+  /** The network name each recorded save carried. */
+  const savedNames = () => savedSlyData.map((slyData) => slyData.agent_network_name);
+
+  /** Start a fresh draft, ask for its frontman, and submit `name` in the naming dialog. */
+  const nameFirstAgent = async (name: string) => {
+    render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="" />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Add frontman"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: name } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+  };
+
+  /** Open a saved network, rename it, and submit. Leaving `typed` out resubmits the name as it stands. */
+  const renameOpenNetwork = async (selectedNetwork: string, typed?: string) => {
+    render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork={selectedNetwork} />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    if (typed !== undefined) {
+      await act(async () => {
+        fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: typed } });
+      });
+    }
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+  };
+
+  /**
+   * A network opened from outside the designer's folder: keyed and selected by its served
+   * path, with its bare name in the entry. Nothing maps either onto the other, so only
+   * the entry's own name says which name is this network's.
+   */
+  const openMusicNerd = () => {
+    const definition: AgentNetworkDefinitionEntry[] = [
+      { origin: "music_nerd_agent", tools: [], instructions: "Talk music.", description: "Front" },
+    ];
+    useEditorNetworkStore.getState().reconcileFromServer("basic/music_nerd", { definition, networkName: "music_nerd" });
+  };
+
+  beforeEach(() => {
+    renderedNodeIds.length = 0;
+    nameChecks.length = 0;
+    savedSlyData.length = 0;
+    nameIsTaken = true;
+    nameCheckStatus = 200;
+    nameCheckThrows = false;
+    localStorage.clear();
+    useEditorNetworkStore.setState({ entries: {} });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/v1/hocon/name_taken")) {
+          const name = new URL(url).searchParams.get("name") ?? "";
+          nameChecks.push(name);
+          if (nameCheckThrows) throw new TypeError("Failed to fetch");
+          return {
+            ok: nameCheckStatus === 200,
+            status: nameCheckStatus,
+            statusText: nameCheckStatus === 200 ? "OK" : "Internal Server Error",
+            json: async () => ({ network_name: name, name_is_taken: nameIsTaken }),
+          } as Response;
+        }
+        if (url.includes("/streaming_chat")) {
+          savedSlyData.push(JSON.parse(String(init?.body)).sly_data);
+        }
+        // No body, so a save throws and logs once it is recorded, as in the block
+        // below: what is under test is what was sent, not how the designer answers.
+        return { ok: true, body: null, status: 200, statusText: "OK", json: async () => ({}) } as unknown as Response;
+      })
+    );
+  });
+
+  it("asks before a draft takes a name another network has, and adds nothing until Overwrite", async () => {
+    await nameFirstAgent("travel");
+
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+    expect(nameChecks).toEqual(["travel"]);
+    // While the question is open the other network is still intact: no name recorded,
+    // no frontman on the canvas, and nothing sent that could save over it.
+    expect(savedSlyData).toEqual([]);
+    expect(screen.queryByTestId("node-travel_agent")).toBeNull();
+    expect(draftEntries().some((entry) => entry.networkName)).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("node-travel_agent")).toBeTruthy());
+    // The frontman's save carries the name, which is what makes it land on travel.
+    await waitFor(() => expect(savedNames()).toEqual(["travel"]));
+  });
+
+  it("leaves the draft unnamed and empty when the user cancels", async () => {
+    await nameFirstAgent("travel");
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    // The flow ends there. Going on to add the frontman would find the draft still
+    // unnamed and put the naming dialog straight back up, which is not what Cancel said.
+    await waitFor(() => expect(screen.queryByText("Overwrite travel?")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Name this agent network")).toBeNull());
+    expect(savedSlyData).toEqual([]);
+    expect(screen.queryByTestId("node-travel_agent")).toBeNull();
+    expect(draftEntries().some((entry) => entry.networkName || entry.definition.length > 0)).toBe(false);
+  });
+
+  it("names a draft without asking when no other network has the name", async () => {
+    nameIsTaken = false;
+    await nameFirstAgent("car_wash");
+
+    await waitFor(() => expect(screen.getByTestId("node-car_wash_agent")).toBeTruthy());
+    expect(nameChecks).toEqual(["car_wash"]);
+    expect(screen.queryByText("Overwrite car_wash?")).toBeNull();
+    await waitFor(() => expect(savedNames()).toEqual(["car_wash"]));
+  });
+
+  it("names as before, with a warning, when the check itself fails", async () => {
+    // A failing check means nsflow's own server is failing, and the save goes through
+    // the same server, so refusing the name would only add a second failure.
+    nameCheckStatus = 500;
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await nameFirstAgent("car_wash");
+
+    await waitFor(() => expect(screen.getByTestId("node-car_wash_agent")).toBeTruthy());
+    expect(screen.queryByText("Overwrite car_wash?")).toBeNull();
+    expect(consoleWarn.mock.calls.some(([message]) => String(message).includes('"car_wash"'))).toBe(true);
+    consoleWarn.mockRestore();
+  });
+
+  it("names as before, with a warning, when the check cannot reach the server", async () => {
+    // A request that never gets a response, as opposed to one the server answered
+    // with an error: the same reasoning applies, so the same outcome is expected.
+    nameCheckThrows = true;
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await nameFirstAgent("car_wash");
+
+    await waitFor(() => expect(screen.getByTestId("node-car_wash_agent")).toBeTruthy());
+    expect(nameChecks).toEqual(["car_wash"]);
+    expect(screen.queryByText("Overwrite car_wash?")).toBeNull();
+    expect(consoleWarn.mock.calls.some(([message]) => String(message).includes('"car_wash"'))).toBe(true);
+    consoleWarn.mockRestore();
+  });
+
+  it("does not ask about the name the network's entry already carries", async () => {
+    openMusicNerd();
+    await renameOpenNetwork("basic/music_nerd");
+
+    // The rename's save goes out under the name, with no question first, even though
+    // the server would have called it taken: every edit of this entry already saves
+    // under that name, so asking would guard nothing.
+    await waitFor(() => expect(savedNames()).toEqual(["music_nerd"]));
+    expect(nameChecks).toEqual([]);
+  });
+
+  it("does not ask about the name whose served path is the open network", async () => {
+    // Mapped into the designer's folder for this test, as the real mapping does, so the
+    // name typed differs from the selection and only its served path can match it.
+    const toServed = vi
+      .spyOn(config, "toServedNetworkPath")
+      .mockImplementation((name: string) => `generated/${name}`);
+    try {
+      const served = "generated/coffee_shop";
+      // Seeded without a name of its own, so the entry cannot answer and only the
+      // selection can say this name is the open network's.
+      const seed: AgentNetworkDefinitionEntry[] = [
+        { origin: "frontman", tools: [], instructions: "Greet.", description: "Front" },
+      ];
+      useEditorNetworkStore.getState().applyEdit(served, seed);
+
+      await renameOpenNetwork(served, "coffee_shop");
+
+      await waitFor(() => expect(savedNames()).toEqual(["coffee_shop"]));
+      expect(nameChecks).toEqual([]);
+    } finally {
+      toServed.mockRestore();
+    }
+  });
+
+  it("keeps the old name when a rename onto another network is cancelled", async () => {
+    openMusicNerd();
+    await renameOpenNetwork("basic/music_nerd", "travel");
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    await waitFor(() => expect(screen.queryByText("Overwrite travel?")).toBeNull());
+    expect(useEditorNetworkStore.getState().entries["basic/music_nerd"]?.networkName).toBe("music_nerd");
+    expect(savedSlyData).toEqual([]);
+  });
+
+  it("saves the network as it is when Overwrite is clicked, not as it was when asked", async () => {
+    openMusicNerd();
+    await renameOpenNetwork("basic/music_nerd", "travel");
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+
+    // A progress frame lands while the question is open and adds an agent, the way
+    // streamed frames reach the store.
+    const progressed: AgentNetworkDefinitionEntry[] = [
+      { origin: "music_nerd_agent", tools: ["critic"], instructions: "Talk music.", description: "Front" },
+      { origin: "critic", tools: [], instructions: "Review it.", description: "Critic" },
+    ];
+    act(() => {
+      useEditorNetworkStore
+        .getState()
+        .reconcileFromServer("basic/music_nerd", { definition: progressed, networkName: "music_nerd" });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    });
+
+    // Saved with the agent the frame added: a definition read before the question
+    // would have written the network back without it.
+    await waitFor(() => expect(savedNames()).toEqual(["travel"]));
+    expect(Object.keys(savedSlyData[0].agent_network_definition as Record<string, unknown>)).toContain("critic");
+  });
+});
 
 describe("adding an agent from the palette", () => {
   beforeEach(() => {

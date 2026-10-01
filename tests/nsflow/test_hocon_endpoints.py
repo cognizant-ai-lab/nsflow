@@ -15,8 +15,15 @@
 # END COPYRIGHT
 """Covers HOCON import: the shape it returns, and what it refuses."""
 
+import os
+import tempfile
+import unittest
+from typing import Dict
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from nsflow.backend.api.v1 import hocon_endpoints
 from nsflow.backend.main import app
@@ -170,3 +177,164 @@ class TestDeleteGeneratedNetwork:
     def test_reports_a_missing_network_rather_than_pretending(self, client: TestClient):
         """A 404 rather than a cheerful 200 that deleted nothing."""
         assert client.delete("/api/v1/hocon/generated/never_existed").status_code == 404
+
+
+class TestNetworkNameCheck(unittest.TestCase):
+    """
+    Covers GET /hocon/name_taken, which the Editor asks before it records a name.
+
+    The designer saves a named network over whatever file already has that name, so
+    this answer is the only thing standing between naming a network and silently
+    replacing a different one. It has to agree with import's rule about which file a
+    name means, and it must not answer for files outside the designer's subdirectory.
+    """
+
+    def setUp(self) -> None:
+        """
+        Point the registry at a fresh directory holding one generated network.
+
+        Patched with unittest.mock rather than pytest's monkeypatch so the class runs
+        under plain unittest too; every patch is undone by addCleanup, in reverse.
+        """
+        # Not a with block: the directory has to outlive setUp, so addCleanup removes it.
+        staging = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.addCleanup(staging.cleanup)
+        self.registry: str = staging.name
+
+        registry_patch = patch.object(hocon_endpoints, "REGISTRY_DIR", self.registry)
+        registry_patch.start()
+        self.addCleanup(registry_patch.stop)
+        self.use_designer_subdirectory("generated")
+
+        os.mkdir(os.path.join(self.registry, "generated"))
+        self.write_network("generated", "travel")
+        # Outside the generated directory: what an escaping name would reach for.
+        self.write_network("deployment")
+
+        self.client: TestClient = TestClient(app)
+
+    def use_designer_subdirectory(self, subdirectory: str) -> None:
+        """
+        Set AGENT_NETWORK_DESIGNER_SUBDIRECTORY for the rest of the test.
+
+        :param subdirectory: the directory, relative to the registry, the designer saves into.
+        """
+        env_patch = patch.dict(os.environ, {"AGENT_NETWORK_DESIGNER_SUBDIRECTORY": subdirectory})
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+
+    def write_network(self, *parts: str) -> None:
+        """
+        Write a network HOCON into the registry.
+
+        :param parts: the path below the registry, the last part being the name without .hocon.
+        """
+        with open(os.path.join(self.registry, *parts) + ".hocon", "w", encoding="utf-8") as handle:
+            handle.write(NETWORK)
+
+    def ask(self, params: Dict[str, str]) -> Response:
+        """
+        Ask the real app whether a name is taken, so route registration is covered too.
+
+        :param params: the query parameters to send.
+        :return: the HTTP response.
+        """
+        return self.client.get("/api/v1/hocon/name_taken", params=params)
+
+    def test_reports_a_generated_network_of_that_name_as_taken(self) -> None:
+        """Saving under this name would replace generated/travel.hocon, so it is taken."""
+        response = self.ask({"name": "travel"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"network_name": "travel", "name_is_taken": True})
+
+    def test_reports_a_name_with_no_generated_network_as_free(self) -> None:
+        """A name nothing in the designer's subdirectory uses replaces nothing."""
+        response = self.ask({"name": "music_nerd"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"network_name": "music_nerd", "name_is_taken": False})
+
+    def test_ignores_a_same_named_network_outside_the_designer_subdirectory(self) -> None:
+        """registries/deployment.hocon is served under a different path, so it is not at risk."""
+        response = self.ask({"name": "deployment"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(response.json()["name_is_taken"], False)
+
+    def test_looks_in_the_configured_designer_subdirectory(self) -> None:
+        """
+        The directory is whatever AGENT_NETWORK_DESIGNER_SUBDIRECTORY says, read per request.
+
+        A deployment that renames it saves there, so a file in "generated" is no longer
+        at risk and one in the renamed directory is.
+        """
+        self.use_designer_subdirectory("drafts")
+        os.mkdir(os.path.join(self.registry, "drafts"))
+        self.write_network("drafts", "car_wash")
+
+        self.assertIs(self.ask({"name": "car_wash"}).json()["name_is_taken"], True)
+        self.assertIs(self.ask({"name": "travel"}).json()["name_is_taken"], False)
+
+    def test_refuses_a_name_that_is_not_a_generated_network_name(self) -> None:
+        """
+        Each is a 400 with a reason, not an answer about some other file, and not a 500.
+
+        The escaping names point at registries/deployment.hocon, which exists, so a
+        missing guard would show up as a 200 that says "taken".
+        """
+        refused: Dict[str, str] = {
+            "parent segment": "../deployment",
+            "absolute path": os.path.join(self.registry, "deployment"),
+            "NUL byte": "travel\x00",
+            "empty": "",
+            "blank": "   ",
+        }
+        for label, name in refused.items():
+            with self.subTest(label):
+                response = self.ask({"name": name})
+                self.assertEqual(response.status_code, 400)
+                self.assertTrue(response.json()["detail"])
+
+    def test_reports_a_symlinked_generated_network_as_taken(self) -> None:
+        """
+        A link in the designer's subdirectory is a network saving under its name would replace.
+
+        The import's rule already calls it taken, because isfile follows the link, so the
+        check has to agree rather than refuse the name: the Editor reads a refusal as free
+        and would go on to save under the name without asking. The link points outside the
+        subdirectory on purpose, since that is the case a resolved containment check refuses.
+        """
+        os.symlink(
+            os.path.join(self.registry, "deployment.hocon"),
+            os.path.join(self.registry, "generated", "linked.hocon"),
+        )
+
+        response = self.ask({"name": "linked"})
+        imported = self.client.post("/api/v1/hocon/import", files={"file": ("linked.hocon", NETWORK, "text/plain")})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"network_name": "linked", "name_is_taken": True})
+        # The same answer import gives for a file of that name: one rule, two callers.
+        self.assertIs(imported.json()["name_is_taken"], True)
+
+    def test_refuses_a_name_through_a_directory_link_pointing_out(self) -> None:
+        """
+        A directory link on the way is still resolved, so it cannot be used to climb out.
+
+        generated/escape points at the registry itself, where deployment.hocon exists, so
+        a check that compared paths without resolving the directories would answer
+        "taken" about a file outside the designer's subdirectory.
+        """
+        os.symlink(self.registry, os.path.join(self.registry, "generated", "escape"))
+
+        response = self.ask({"name": "escape/deployment"})
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_requires_the_name_query_parameter(self) -> None:
+        """FastAPI exposes the name as a required query parameter, so leaving it out is a 422."""
+        response = self.ask({})
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"][0]["loc"], ["query", "name"])
