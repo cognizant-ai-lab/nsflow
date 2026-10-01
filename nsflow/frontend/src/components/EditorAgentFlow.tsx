@@ -814,15 +814,20 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     pending?.decide(overwrite);
   };
 
-  // A naming belongs to the network it was started on. The page can move to another
-  // network while one is still waiting, from the sidebar or from a designer frame that
-  // reselects the network, and finishing it then would rename and save a network that
-  // is no longer on screen, and abort the new network's own save on the way, since
-  // they share one in-flight handle. So a change of network overtakes any naming in
-  // progress, the same as a newer naming does, and closes its question as declined.
+  // A naming belongs to the network, and the Editor, it was started on. The page can
+  // move to another network while one is still waiting, from the sidebar or from a
+  // designer frame that reselects the network, or leave the Editor altogether.
+  // Finishing it then would rename and save a network that is no longer on screen,
+  // and on a network change abort the new network's own save on the way, since they
+  // share one in-flight handle. So leaving the network, either way, overtakes any
+  // naming in progress, the same as a newer naming does, and closes its question as
+  // declined. A cleanup, because it runs on both: before the next network's effect,
+  // and on unmount.
   useEffect(() => {
-    namingAttemptRef.current += 1;
-    settleNameOverwrite(false);
+    return () => {
+      namingAttemptRef.current += 1;
+      settleNameOverwrite(false);
+    };
   }, [networkId]);
 
   // Whether saving under `name` would replace a generated network that already has it.

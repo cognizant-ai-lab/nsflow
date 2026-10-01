@@ -411,6 +411,40 @@ describe("naming a network after one that already exists", () => {
     expect(savedSlyData).toEqual([]);
   });
 
+  it("drops a naming whose check answers after the Editor was left", async () => {
+    openMusicNerd();
+    nameIsTaken = false;
+    let releaseCheck: () => void = () => {};
+    nameCheckGates.push(new Promise<void>((resolve) => { releaseCheck = resolve; }));
+
+    const view = render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="basic/music_nerd" />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: "alpha" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+    await waitFor(() => expect(nameChecks).toEqual(["alpha"]));
+
+    // The user goes to another page while the check is still out.
+    view.unmount();
+    await act(async () => {
+      releaseCheck();
+    });
+
+    // Nothing the user can no longer see is renamed or saved.
+    await waitFor(() => expect(nameChecks).toEqual(["alpha"]));
+    expect(useEditorNetworkStore.getState().entries["basic/music_nerd"]?.networkName).toBe("music_nerd");
+    expect(savedSlyData).toEqual([]);
+  });
+
   it("closes the overwrite question as declined when the page moves to another network", async () => {
     openMusicNerd();
     const view = render(
