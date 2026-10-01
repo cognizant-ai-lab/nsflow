@@ -118,6 +118,8 @@ describe("naming a network after one that already exists", () => {
   let nameCheckStatus = 200;
   /** Whether the stubbed name check fails before any response, as an unreachable server does. */
   let nameCheckThrows = false;
+  /** Gates the next name checks wait on, in order, so a test can hold one back. */
+  const nameCheckGates: Promise<void>[] = [];
 
   /** Every draft entry in the store. A network built by hand lives under a draft key. */
   const draftEntries = () =>
@@ -185,6 +187,7 @@ describe("naming a network after one that already exists", () => {
     nameIsTaken = true;
     nameCheckStatus = 200;
     nameCheckThrows = false;
+    nameCheckGates.length = 0;
     localStorage.clear();
     useEditorNetworkStore.setState({ entries: {} });
     vi.stubGlobal(
@@ -194,6 +197,8 @@ describe("naming a network after one that already exists", () => {
         if (url.includes("/api/v1/hocon/name_taken")) {
           const name = new URL(url).searchParams.get("name") ?? "";
           nameChecks.push(name);
+          const gate = nameCheckGates.shift();
+          if (gate) await gate;
           if (nameCheckThrows) throw new TypeError("Failed to fetch");
           return {
             ok: nameCheckStatus === 200,
@@ -335,6 +340,37 @@ describe("naming a network after one that already exists", () => {
     await waitFor(() => expect(screen.queryByText("Overwrite travel?")).toBeNull());
     expect(useEditorNetworkStore.getState().entries["basic/music_nerd"]?.networkName).toBe("music_nerd");
     expect(savedSlyData).toEqual([]);
+  });
+
+  it("keeps the newer name when an older name's check answers last", async () => {
+    openMusicNerd();
+    nameIsTaken = false;
+    // Hold the first check back, so the second name is submitted and answered first.
+    let releaseFirstCheck: () => void = () => {};
+    nameCheckGates.push(new Promise<void>((resolve) => { releaseFirstCheck = resolve; }));
+
+    await renameOpenNetwork("basic/music_nerd", "alpha");
+    await waitFor(() => expect(nameChecks).toEqual(["alpha"]));
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: "beta" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+    await waitFor(() => expect(savedNames()).toEqual(["beta"]));
+
+    // Only now does the first answer arrive. The user has since chosen "beta", so
+    // "alpha" must not be recorded or saved on top of it.
+    await act(async () => {
+      releaseFirstCheck();
+    });
+
+    await waitFor(() => expect(nameChecks).toEqual(["alpha", "beta"]));
+    expect(useEditorNetworkStore.getState().entries["basic/music_nerd"]?.networkName).toBe("beta");
+    expect(savedNames()).toEqual(["beta"]);
   });
 
   it("saves the network as it is when Overwrite is clicked, not as it was when asked", async () => {

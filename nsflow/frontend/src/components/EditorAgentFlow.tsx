@@ -801,6 +801,9 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   /** A taken name waiting on the user, with the naming that asked waiting on the answer. */
   const [pendingNameOverwrite, setPendingNameOverwrite] = useState<PendingNameOverwrite | undefined>(undefined);
+  // Numbers each naming, so one a newer naming has overtaken can tell and stop. See
+  // handleNameNetwork.
+  const namingAttemptRef = useRef(0);
   const settleNameOverwrite = (overwrite: boolean) => {
     const pending = pendingNameOverwrite;
     setPendingNameOverwrite(undefined);
@@ -873,9 +876,22 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // The entry is read live, like the definition below.
       const ownName = useEditorNetworkStore.getState().entries[networkId]?.networkName;
       const isOwnName = name === ownName || toServedNetworkPath(name) === selectedNetwork;
-      if (!isOwnName && (await isNameTaken(name))) {
-        const overwrite = await new Promise<boolean>((decide) => setPendingNameOverwrite({ name, decide }));
-        if (!overwrite) return false;
+
+      // The check is a request, and the rename field closes as soon as a name is
+      // submitted, so it can be reopened and a second name submitted before the first
+      // answer comes back. Answers can arrive out of order, and the older name would
+      // then land on top of the newer one. So a naming that has been overtaken stops at
+      // its next await. That also keeps two namings from both reaching the question:
+      // an overtaken one stops before asking, and while the question is open it covers
+      // the page, so no newer naming can start.
+      const attempt = ++namingAttemptRef.current;
+      if (!isOwnName) {
+        const taken = await isNameTaken(name);
+        if (attempt !== namingAttemptRef.current) return false;
+        if (taken) {
+          const overwrite = await new Promise<boolean>((decide) => setPendingNameOverwrite({ name, decide }));
+          if (!overwrite || attempt !== namingAttemptRef.current) return false;
+        }
       }
 
       // Live, for the same reason addPaletteItem reads live: this runs from a dialog
