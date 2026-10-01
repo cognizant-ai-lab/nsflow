@@ -38,7 +38,7 @@ import NewDraftIcon from "@mui/icons-material/EditNote";
 import ChatIcon from "@mui/icons-material/ChatBubbleOutlined";
 import HomeIcon from "@mui/icons-material/Home";
 import { useChatContext } from "../context/ChatContext";
-import { getFeatureFlags, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
+import { getFeatureFlags, toDesignerNetworkName, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
 import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
 import { buildEditorGraph } from "../state/editorGraph";
@@ -915,7 +915,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
    * would be a second answer to the same question, free to drift from the first.
    */
   const handleExportHocon = useCallback(async () => {
-    const name = launchableNetworkName || selectedNetwork || "agent_network";
+    let name = launchableNetworkName || selectedNetwork || "agent_network";
 
     // The store's copy first, then the served registry file. Two sources because the
     // store's copy is keyed on `selectedNetwork || draftKey` and there is no
@@ -924,12 +924,24 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     // stays available on exactly the same condition as Launch, rather than blinking
     // out whenever the key changes underneath it.
     let text = entry?.hocon;
-    if (!text && launchableNetworkName && apiUrl) {
+    // The export route is keyed by served path ("generated/foo"), like /api/v1/list. The
+    // page's selection already is one. A loaded entry now carries the designer's name
+    // instead (see EditorSidebar), and a network the designer has just named is not
+    // selected yet, so those map the way Launch does.
+    const servedName = selectedNetwork || (launchableNetworkName ? toServedNetworkPath(launchableNetworkName) : "");
+    if (!text && servedName && apiUrl) {
       try {
         const response = await fetch(
-          `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(launchableNetworkName)}`
+          `${apiUrl}/api/v1/export/agent_network/${encodeURIComponent(servedName)}`
         );
-        if (response.ok) text = await response.text();
+        if (response.ok) {
+          text = await response.text();
+          // Name the download after the file that was actually fetched. The entry's
+          // name can run ahead of the selection: a rename writes the new name into the
+          // entry before its save resolves, and if that save fails this fetch still
+          // returns the old file, which must not go out under the new name.
+          name = toDesignerNetworkName(servedName);
+        }
       } catch {
         // Offline or the network is not served yet. Nothing to download, and the
         // button reporting failure is more noise than a no-op.

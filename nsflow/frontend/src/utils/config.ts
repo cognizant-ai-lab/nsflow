@@ -131,6 +131,26 @@ export function toServedNetworkPath(rawName: string): string {
   return `${subdir}/${name}`;
 }
 
+// Map a network's served path to the name the Agent Network Designer persists it under:
+// the file's stem, with every folder removed ("generated/foo" -> "foo", "basic/bar" -> "bar").
+//
+// The designer writes every network as "<subdir>/<name>.hocon" and nowhere else, so
+// handing it a served path made it add the folder again: the first save after Load
+// Existing wrote a fresh "generated/generated/foo.hocon" and left the opened file
+// untouched (#304). Removing every folder, not just the designer's own, keeps one rule
+// for networks from any folder, and sends a stray "generated/generated/foo" copy back
+// to its original on save, launch and reselection alike.
+//
+// Two consequences were accepted when choosing this: a nested designer name
+// ("generated/team/foo") saves to "generated/foo.hocon", and two networks with the
+// same stem in different folders ("basic/foo", "advanced/foo") land on the same file.
+export function toDesignerNetworkName(servedName: string): string {
+  const name = (servedName ?? "").trim();
+  const stem = name.slice(name.lastIndexOf("/") + 1);
+  // A path ending in "/" has no stem; better the odd name than an empty one.
+  return stem || name;
+}
+
 export function getCruseAgentNames() {
   const c = getAppConfig();
   return {

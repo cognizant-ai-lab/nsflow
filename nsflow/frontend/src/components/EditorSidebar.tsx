@@ -26,7 +26,7 @@ import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
-import { toServedNetworkPath } from "../utils/config";
+import { toDesignerNetworkName, toServedNetworkPath } from "../utils/config";
 import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
@@ -279,7 +279,14 @@ const EditorSidebar = ({
                 tools: ((v ?? {}) as { tools?: string[]; down_chains?: string[] }).tools ??
                   ((v ?? {}) as { down_chains?: string[] }).down_chains ?? [],
               })) as ConnectivityInfo[],
-          networkName,
+          // The store KEY stays the served path ("generated/foo"): it is what
+          // /api/v1/list returns and what the canvas looks up. The name INSIDE the
+          // entry is what every save sends as agent_network_name, and the designer
+          // writes that name verbatim under its own folder, so handing it the served
+          // path made it add the folder again (#304). It gets the file's stem instead,
+          // which lands the save on the opened file; the consequences of that choice
+          // are recorded on toDesignerNetworkName.
+          networkName: toDesignerNetworkName(networkName),
         });
         setSelectedNetworkId(networkName);
         // Tell the page as well, not just this component. EditorAgentFlow keys its
