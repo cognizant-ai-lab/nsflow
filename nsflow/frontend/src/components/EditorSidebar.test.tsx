@@ -152,6 +152,40 @@ describe("opening an existing agent network", () => {
     expect(onSelectNetwork).toHaveBeenCalledWith(NETWORK_NAME);
   });
 
+  it("stores the designer's own name for the entry, which a save then sends as agent_network_name", async () => {
+    const onSelectNetwork = vi.fn();
+    render(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+
+    await waitFor(() => expect(autocompleteOnChange).toBeTypeOf("function"));
+    await act(async () => {
+      autocompleteOnChange!(null, NETWORK_NAME);
+    });
+
+    // Two names, two jobs. The store key and the page's selection stay the served
+    // path, which is what /api/v1/list returns and what the canvas looks up. The name
+    // inside the entry is what every save sends as agent_network_name, and the
+    // designer adds the subdirectory itself when it writes: handed the served path it
+    // wrote a second file, generated/generated/coffee_shop.hocon, and left the opened
+    // one untouched (#304).
+    await waitFor(() =>
+      expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]?.networkName).toBe("coffee_shop")
+    );
+    expect(onSelectNetwork).toHaveBeenCalledWith(NETWORK_NAME);
+
+    // The name really is what goes out: a save with no explicit name falls back to
+    // the entry's, and the designer must see the raw one.
+    await sendEditorUpdate({
+      apiUrl: "http://localhost:8005",
+      networkId: NETWORK_NAME,
+      agentName: "helper",
+      definition: useEditorNetworkStore.getState().entries[NETWORK_NAME]!.definition,
+    });
+    const saveCall = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/streaming_chat"));
+    expect(saveCall).toBeTruthy();
+    const body = JSON.parse(String((saveCall![1] as RequestInit).body));
+    expect(body.sly_data.agent_network_name).toBe("coffee_shop");
+  });
+
   it("opens the network named in the loadNetwork URL parameter", async () => {
     // What the pen icon on the home page opens: /editor?loadNetwork=<name>
     window.history.replaceState({}, "", `/editor?loadNetwork=${encodeURIComponent(NETWORK_NAME)}`);

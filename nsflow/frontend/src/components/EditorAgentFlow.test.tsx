@@ -26,7 +26,7 @@ limitations under the License.
 
 import { ReactFlowProvider } from "@xyflow/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 /** Captures the nodes React Flow is asked to render on each pass. */
 const renderedNodeIds: string[][] = [];
@@ -73,14 +73,20 @@ vi.mock("../context/ChatContext", () => ({
 // is under test here.
 vi.mock("./NetworkAgentEditorPanel", () => ({ default: () => null }));
 
-vi.mock("../utils/config", () => ({
-  getFeatureFlags: () => ({ pluginCruse: false }),
-  toServedNetworkPath: (name: string) => name,
-  getManifestUpdatePeriodMs: () => 1000,
-  // Stable across a test run, so the draft session is never treated as belonging to a
-  // server that has since restarted.
-  getServerInstanceId: () => "test-instance",
-}));
+// The real name mapping stays in: with the runtime config never loaded it falls back to
+// the default "generated/" subdirectory, which is exactly the mapping the launch and
+// export paths are meant to apply. Stubbing it as the identity hid a wrong mapping.
+vi.mock("../utils/config", async () => {
+  const actual = await vi.importActual<typeof import("../utils/config")>("../utils/config");
+  return {
+    ...actual,
+    getFeatureFlags: () => ({ pluginCruse: false }),
+    getManifestUpdatePeriodMs: () => 1000,
+    // Stable across a test run, so the draft session is never treated as belonging to a
+    // server that has since restarted.
+    getServerInstanceId: () => "test-instance",
+  };
+});
 
 import EditorAgentFlow from "./EditorAgentFlow";
 import { useEditorNetworkStore } from "../state/editorNetworkStore";
@@ -196,5 +202,150 @@ describe("adding an agent from the palette", () => {
     for (const source of ["Agent Networks", "Toolbox", "MCP Servers"]) {
       expect(screen.getByLabelText(source)).toHaveProperty("disabled", true);
     }
+  });
+});
+
+describe("downloading the network as .hocon", () => {
+  // What a Load Existing entry looks like after #304: keyed by the served path, the
+  // page selecting that same path, and the file's stem inside the entry. A network
+  // from a folder other than the designer's, so the served path is nothing the stem
+  // could be mapped back to: the request has to come from the page's selection.
+  const SERVED = "basic/music_nerd";
+  const downloads: string[] = [];
+  let clickSpy: MockInstance;
+
+  /** The export URLs the component asked for so far. */
+  const exportRequests = () =>
+    vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((url) => url.includes("/api/v1/export/"));
+
+  beforeEach(() => {
+    renderedNodeIds.length = 0;
+    downloads.length = 0;
+    localStorage.clear();
+    useEditorNetworkStore.getState().reset(SERVED);
+    useEditorNetworkStore.getState().reconcileFromServer(SERVED, {
+      definition: [{ origin: "frontman", tools: [] }],
+      networkName: "music_nerd",
+      // No hocon in the store: a network that was opened, not yet saved, so the
+      // button has to go and fetch the served file.
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/api/v1/export/agent_network/")) {
+          return { ok: true, status: 200, text: async () => "# the served file" } as Response;
+        }
+        return { ok: true, body: null, status: 200, statusText: "OK", json: async () => ({}) } as unknown as Response;
+      })
+    );
+    // jsdom has neither blob URLs nor navigation; record the download instead. A
+    // subclass rather than patching URL in place, so unstubbing really restores it.
+    vi.stubGlobal(
+      "URL",
+      class StubURL extends URL {
+        static createObjectURL = vi.fn(() => "blob:x");
+        static revokeObjectURL = vi.fn();
+      }
+    );
+    clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+  });
+
+  afterEach(() => {
+    clickSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches the served file by its served path, not by the designer's raw name", async () => {
+    render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork={SERVED} />
+      </ReactFlowProvider>
+    );
+    await waitFor(() => expect(screen.getByLabelText("Export agent network")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Export agent network"));
+    });
+
+    // The export route, like /api/v1/list, knows networks by served path. Before this
+    // the request went out under the entry's name; with the entry now holding the
+    // raw name that would be a 404 and a download button that silently does nothing.
+    await waitFor(() =>
+      expect(exportRequests()).toEqual([`http://api/api/v1/export/agent_network/${encodeURIComponent(SERVED)}`])
+    );
+    // The file is named after the network itself, without the folder.
+    await waitFor(() => expect(downloads).toEqual(["music_nerd.hocon"]));
+  });
+
+  it("names the download after the file it fetched, not after a rename whose save failed", async () => {
+    render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork={SERVED} />
+      </ReactFlowProvider>
+    );
+    await waitFor(() => expect(screen.getByLabelText("Export agent network")).toBeTruthy());
+
+    // A rename writes the new name into the entry before its save resolves. The fetch
+    // stub answers the save with no body, so the save fails and the entry is left
+    // holding "bar" and no HOCON while the page still selects the old file.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: "bar" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+    await waitFor(() =>
+      expect(consoleError.mock.calls.some(([message]) => String(message).includes("Failed to name the network"))).toBe(true)
+    );
+    consoleError.mockRestore();
+    expect(useEditorNetworkStore.getState().entries[SERVED]?.networkName).toBe("bar");
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Export agent network"));
+    });
+
+    // What went out is the old served file, so that is what the download is called.
+    await waitFor(() =>
+      expect(exportRequests()).toEqual([`http://api/api/v1/export/agent_network/${encodeURIComponent(SERVED)}`])
+    );
+    await waitFor(() => expect(downloads).toEqual(["music_nerd.hocon"]));
+  });
+
+  it("maps a draft's own name to its served path when the page has nothing selected", async () => {
+    // A network built by hand: the page selects nothing, the canvas works in the
+    // draft entry, and the only name anywhere is the one the user typed, which is the
+    // designer's name for it once saved. The served file lives one folder down.
+    render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="" />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Add frontman"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: "car_wash" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+    await waitFor(() => expect(screen.getByTestId("node-car_wash_agent")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Export agent network"));
+    });
+
+    await waitFor(() =>
+      expect(exportRequests()).toEqual([
+        `http://api/api/v1/export/agent_network/${encodeURIComponent("generated/car_wash")}`,
+      ])
+    );
+    await waitFor(() => expect(downloads).toEqual(["car_wash.hocon"]));
   });
 });
