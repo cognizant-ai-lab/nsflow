@@ -22,7 +22,14 @@ simply empty, so where it looks for the registry decides whether editing an exis
 network works at all.
 """
 
+import os
+import shutil
+import tempfile
+import unittest
 from pathlib import Path
+from typing import Any
+from typing import Dict
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,6 +42,52 @@ NETWORK = """
     "tools": [
         {"name": "frontman", "instructions": "You are the front man.", "tools": ["helper", "search"]},
         {"name": "helper", "instructions": "You help."},
+        {"name": "search", "toolbox": "website_search"}
+    ]
+}
+"""
+
+# A network that carries descriptions in each of the places one can be found.
+#
+# `booker` is written the way the agent network designer writes every agent it
+# generates: `function` is the shared `aaosa_call` block with a description merged
+# over it. The real file gets `aaosa_call` from an include of registries/aaosa.hocon;
+# it is defined inline here so the merge goes through the real parser without this
+# test depending on a file outside the temporary registry.
+#
+# `string_call` is malformed on purpose: its `function` is a string, not a dict, and
+# the string happens to contain the word "description".
+DESCRIBED_NETWORK = """
+{
+    "aaosa_call": {
+        "description": "Depending on the mode, returns a natural language string in response.",
+        "parameters": {
+            "type": "object",
+            "properties": {"inquiry": {"type": "string", "description": "The inquiry"}}
+        }
+    },
+    "tools": [
+        {
+            "name": "frontman",
+            "description": "Front desk for travel.",
+            "instructions": "You are the front man.",
+            "tools": ["booker", "weather", "chooser", "blank", "blank_call", "string_call", "search"]
+        },
+        {
+            "name": "booker",
+            "function": ${aaosa_call}{"description": "Books flights and hotels."},
+            "instructions": "You book."
+        },
+        {"name": "weather", "instructions": "You report the weather."},
+        {
+            "name": "chooser",
+            "description": "The top-level one.",
+            "function": {"description": "The function one."},
+            "instructions": "You choose."
+        },
+        {"name": "blank", "description": "", "instructions": "You are blank."},
+        {"name": "blank_call", "function": {"description": ""}, "instructions": "You are blank too."},
+        {"name": "string_call", "function": "has a description in it", "instructions": "You are misfiled."},
         {"name": "search", "toolbox": "website_search"}
     ]
 }
@@ -172,3 +225,157 @@ def test_works_both_as_a_studio_library_and_from_a_studio_checkout(client: TestC
 
     assert installed_as_a_library == from_a_checkout
     assert installed_as_a_library["agent_network_definition"]
+
+
+class TestNetworkDefinitionEndpoint(unittest.TestCase):
+    """
+    Covers the descriptions GET /api/v1/network_definition hands the Editor.
+
+    The Editor sends the definition it was given straight back on every save, so an
+    agent whose description is missing here has it written back blank by the next
+    edit, whichever agent that edit was to. These tests pin down where a description
+    is read from, and that nothing else about an entry changed to make room for it.
+
+    The registry is laid out as the module's registry fixture lays it out: a manifest
+    that serves the network, the network in generated/, and the server started from a
+    sibling of the registry so that a path built against the working directory cannot
+    resolve by accident.
+    """
+
+    def setUp(self) -> None:
+        """
+        Build a temporary registry that serves one described network, and a client.
+        """
+        self.root: str = tempfile.mkdtemp()
+        registry: Path = Path(self.root) / "registries"
+        (registry / "generated").mkdir(parents=True)
+        (registry / "generated" / "travel.hocon").write_text(DESCRIBED_NETWORK, encoding="utf-8")
+        manifest: Path = registry / "manifest.hocon"
+        manifest.write_text('{\n "generated/travel.hocon": true\n}\n', encoding="utf-8")
+
+        # Patched on served_networks, which binds both names at import time, so patching
+        # agent_network_utils where they are defined would not reach the endpoint.
+        self.registry_patch: Any = mock.patch.multiple(
+            served_networks, AGENT_MANIFEST_FILE=str(manifest), REGISTRY_DIR=str(registry)
+        )
+        self.registry_patch.start()
+
+        self.original_cwd: str = os.getcwd()
+        elsewhere: Path = Path(self.root) / "somewhere_else"
+        elsewhere.mkdir()
+        os.chdir(elsewhere)
+
+        self.client: TestClient = TestClient(app)
+
+    def tearDown(self) -> None:
+        """
+        Put the working directory and the registry paths back, then delete the registry.
+        """
+        # Back out of the temporary tree before deleting it, since the working
+        # directory is inside it.
+        os.chdir(self.original_cwd)
+        self.registry_patch.stop()
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def definition(self) -> Dict[str, Any]:
+        """
+        Fetch the generated network's definition through the real app.
+
+        :return: The ``agent_network_definition`` the Editor would receive, keyed by
+                 agent name.
+        """
+        # Any, because the class it returns depends on whether starlette's TestClient
+        # found httpx2 or httpx installed.
+        response: Any = self.client.get("/api/v1/network_definition/generated/travel")
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["agent_network_definition"]
+
+    def test_returns_a_top_level_description(self) -> None:
+        """
+        A description written at the top level of an agent comes back as it is.
+        """
+        self.assertEqual(
+            self.definition()["frontman"],
+            {
+                "instructions": "You are the front man.",
+                "description": "Front desk for travel.",
+                "tools": ["booker", "weather", "chooser", "blank", "blank_call", "string_call", "search"],
+            },
+        )
+
+    def test_returns_the_function_description_of_a_designer_generated_agent(self) -> None:
+        """
+        A description under ``function`` comes back, which is how the designer writes
+        every agent. Only the description is taken: the call's parameters belong to
+        the HOCON, not to the definition the Editor holds.
+        """
+        self.assertEqual(
+            self.definition()["booker"],
+            {"instructions": "You book.", "description": "Books flights and hotels."},
+        )
+
+    def test_leaves_the_key_out_when_the_agent_has_no_description(self) -> None:
+        """
+        No description in the HOCON means no ``description`` key, rather than an
+        empty one standing in for it.
+        """
+        weather: Dict[str, Any] = self.definition()["weather"]
+
+        self.assertNotIn("description", weather)
+        self.assertEqual(weather, {"instructions": "You report the weather."})
+
+    def test_prefers_the_top_level_description_over_the_function_one(self) -> None:
+        """
+        The import reads the top level first, and this has to agree with it, or the
+        same file would open with different descriptions depending on how it was opened.
+        """
+        self.assertEqual(self.definition()["chooser"]["description"], "The top-level one.")
+
+    def test_keeps_an_empty_description(self) -> None:
+        """
+        An empty description is present, not absent, so it comes back empty.
+        """
+        self.assertEqual(self.definition()["blank"], {"instructions": "You are blank.", "description": ""})
+
+    def test_keeps_an_empty_function_description(self) -> None:
+        """
+        The same holds under ``function``: an empty description there is present as
+        well, so it also comes back empty.
+        """
+        self.assertEqual(self.definition()["blank_call"], {"instructions": "You are blank too.", "description": ""})
+
+    def test_ignores_a_function_that_is_not_a_dict(self) -> None:
+        """
+        A ``function`` that is not a dict has no description to give, even a string
+        with the word in it. Indexing that string as if it were a dict would fail the
+        whole request, and take every other agent in the network down with it.
+        """
+        string_call: Dict[str, Any] = self.definition()["string_call"]
+
+        self.assertNotIn("description", string_call)
+        self.assertEqual(string_call, {"instructions": "You are misfiled."})
+
+    def test_still_returns_a_toolbox_tool_as_an_empty_entry(self) -> None:
+        """
+        A toolbox tool gains nothing, because an entry with no keys at all is how the
+        Editor knows it is a tool rather than an agent.
+        """
+        self.assertEqual(self.definition()["search"], {})
+
+    def test_still_returns_every_agent_instructions(self) -> None:
+        """
+        Adding descriptions must not cost an agent its instructions.
+        """
+        expected: Dict[str, str] = {
+            "frontman": "You are the front man.",
+            "booker": "You book.",
+            "weather": "You report the weather.",
+            "chooser": "You choose.",
+            "blank": "You are blank.",
+            "blank_call": "You are blank too.",
+            "string_call": "You are misfiled.",
+        }
+        definition: Dict[str, Any] = self.definition()
+
+        for name, instructions in expected.items():
+            self.assertEqual(definition[name]["instructions"], instructions, name)

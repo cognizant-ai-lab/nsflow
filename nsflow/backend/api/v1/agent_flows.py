@@ -104,6 +104,22 @@ async def get_network_definition(network_name: str):
             agent_def: Dict[str, Any] = {
                 "instructions": tool.get("instructions", ""),
             }
+            # The description is what the agents above this one read when deciding
+            # whether to call it, and the Editor sends this whole definition back on
+            # every save, so anything left out here is written back blank by the very
+            # next edit, even one to a different agent.
+            #
+            # Read from the same two places the HOCON import reads: a top-level
+            # `description` first, then `function.description`, which is where a network
+            # HOCON, and every network the designer generates, keeps it. On presence,
+            # not truthiness, so an empty description comes back empty instead of
+            # disappearing.
+            if "description" in tool:
+                agent_def["description"] = tool["description"]
+            else:
+                function = tool.get("function")
+                if isinstance(function, dict) and "description" in function:
+                    agent_def["description"] = function["description"]
             child_tools = tool.get("tools", [])
             if child_tools:
                 agent_def["tools"] = child_tools
