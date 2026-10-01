@@ -30,15 +30,17 @@ import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import EditorSidebar from "./EditorSidebar";
+import { updateAgent } from "../state/editorOperations";
 import { useEditorNetworkStore } from "../state/editorNetworkStore";
+import { sendEditorUpdate } from "../state/editorRoundTrip";
 
 const NETWORK_NAME = "generated/coffee_shop";
 
 /** What /api/v1/network_definition returns for that network. */
 const DEFINITION = {
   agent_network_definition: {
-    frontman: { instructions: "You are the front man.", tools: ["helper"] },
-    helper: { instructions: "You help." },
+    frontman: { instructions: "You are the front man.", description: "Front desk.", tools: ["helper"] },
+    helper: { instructions: "You help.", description: "Helps." },
   },
   agent_network_name: NETWORK_NAME,
 };
@@ -100,6 +102,10 @@ describe("opening an existing agent network", () => {
         if (url.includes("/api/v1/network_definition/")) {
           return { ok: true, status: 200, json: async () => DEFINITION } as Response;
         }
+        if (url.includes("/streaming_chat")) {
+          // One frame is all sendEditorUpdate needs to count the save as delivered.
+          return new Response('{"response":{"type":"AGENT","text":"saved"}}\n', { status: 200 });
+        }
         if (url.includes("/api/v1/list")) {
           return {
             ok: true,
@@ -155,5 +161,42 @@ describe("opening an existing agent network", () => {
 
     await waitFor(() => expect(onSelectNetwork).toHaveBeenCalledWith(NETWORK_NAME));
     expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]).toBeTruthy();
+  });
+
+  it("keeps every agent's description through the next save", async () => {
+    render(<EditorSidebar onSelectNetwork={vi.fn()} />);
+
+    await waitFor(() => expect(autocompleteOnChange).toBeTypeOf("function"));
+    await act(async () => {
+      autocompleteOnChange!(null, NETWORK_NAME);
+    });
+    await waitFor(() => expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]).toBeTruthy());
+
+    const loaded = useEditorNetworkStore.getState().entries[NETWORK_NAME].definition;
+    expect(loaded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ origin: "frontman", description: "Front desk." }),
+        expect.objectContaining({ origin: "helper", description: "Helps." }),
+      ])
+    );
+
+    // Then save an edit the way the agent panel's Save button does: patch one agent in
+    // the stored definition and send the whole definition. The designer writes the
+    // network from what is sent and nothing else, so the agent nobody touched has to
+    // keep its description too, or that save writes it back blank.
+    await sendEditorUpdate({
+      apiUrl: "http://localhost:4173",
+      networkId: NETWORK_NAME,
+      agentName: "helper",
+      definition: updateAgent(loaded, "helper", { instructions: "You help more." }),
+    });
+
+    const save = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/streaming_chat"));
+    expect(save).toBeDefined();
+    const body = JSON.parse(String((save![1] as RequestInit).body));
+    expect(body.sly_data.agent_network_definition).toEqual({
+      frontman: { instructions: "You are the front man.", description: "Front desk.", tools: ["helper"] },
+      helper: { instructions: "You help more.", description: "Helps." },
+    });
   });
 });
