@@ -205,14 +205,14 @@ const Sidebar = ({ onSelectNetwork }: { onSelectNetwork: (network: string) => vo
     // to a successful delete reads as if this one failed too.
     setDeleteError(null);
     try {
-      // The route's "generated" segment is fixed, but the subdirectory a network is
-      // served under is not: AGENT_NETWORK_DESIGNER_SUBDIRECTORY can rename it. Sending
-      // the bare name keeps the two independent, so a renamed subdirectory does not
-      // turn every delete into a 404.
-      const prefix = `${getGeneratedSubdir()}/`;
-      const bareName = networkName.startsWith(prefix) ? networkName.slice(prefix.length) : networkName;
+      // The route's "generated" segment is fixed and is not the subdirectory. What
+      // follows it is the network's served path ("generated/foo"), and the route
+      // removes the designer's subdirectory from that itself, once, using the name it
+      // is configured with, so a renamed AGENT_NETWORK_DESIGNER_SUBDIRECTORY still
+      // works. Removing it here as well took off two levels: deleting a nested copy,
+      // "generated/generated/foo", deleted the original "generated/foo" instead (#307).
       const response = await fetch(
-        `${apiUrl}/api/v1/hocon/generated/${encodeURI(bareName)}`,
+        `${apiUrl}/api/v1/hocon/generated/${encodeURI(networkName)}`,
         { method: "DELETE" }
       );
       if (!response.ok) {
