@@ -19,6 +19,27 @@ client into a well-featured agent orchestration platform with visual design capa
 
 ---
 
+## Network Consultant
+
+When nsflow runs from a compatible Neuro SAN Studio checkout, the **Self Improvement** tab provides the Network
+Consultant workflow for the selected agent network. It can generate and edit ANTeGen fixtures, run one fixture or the
+complete suite, and iteratively improve agent instructions while preserving the network's tools and topology.
+
+The panel displays per-fixture verdicts and progress charts while a job runs. It also surfaces clarification questions,
+tool failures, and criteria that require data the network cannot obtain. These conditions are kept separate from agent
+instruction failures so the consultant does not modify a network for an infrastructure or data-source problem.
+
+The backend launches the Studio workflow as a background process:
+
+```bash
+python -m apps.network_consultant.network_consultant --help
+```
+
+The Studio checkout containing `apps/network_consultant` must therefore be the project root used to start nsflow.
+Generated fixtures remain under that Studio project's `tests/fixtures` directory.
+
+---
+
 ## **Enabling/Disabling text-to-speech and speech-to-text**
 
 For local development (when running the backend and frontend separately), you can toggle text-to-speech and
