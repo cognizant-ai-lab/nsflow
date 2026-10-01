@@ -373,6 +373,74 @@ describe("naming a network after one that already exists", () => {
     expect(savedNames()).toEqual(["beta"]);
   });
 
+  it("drops a naming whose check answers after the page moved to another network", async () => {
+    openMusicNerd();
+    nameIsTaken = false;
+    let releaseCheck: () => void = () => {};
+    nameCheckGates.push(new Promise<void>((resolve) => { releaseCheck = resolve; }));
+
+    const view = render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="basic/music_nerd" />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: "alpha" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+    await waitFor(() => expect(nameChecks).toEqual(["alpha"]));
+
+    // Another network is opened while the check is still out.
+    view.rerender(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="generated/coffee_shop" />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      releaseCheck();
+    });
+
+    // The rename was for a network that is no longer open, so nothing is recorded or saved.
+    await waitFor(() => expect(nameChecks).toEqual(["alpha"]));
+    expect(useEditorNetworkStore.getState().entries["basic/music_nerd"]?.networkName).toBe("music_nerd");
+    expect(savedSlyData).toEqual([]);
+  });
+
+  it("closes the overwrite question as declined when the page moves to another network", async () => {
+    openMusicNerd();
+    const view = render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="basic/music_nerd" />
+      </ReactFlowProvider>
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: "travel" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Save network name"));
+    });
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+
+    // A designer frame, or the sidebar, moves the page while the question is open.
+    view.rerender(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork="generated/coffee_shop" />
+      </ReactFlowProvider>
+    );
+
+    await waitFor(() => expect(screen.queryByText("Overwrite travel?")).toBeNull());
+    expect(useEditorNetworkStore.getState().entries["basic/music_nerd"]?.networkName).toBe("music_nerd");
+    expect(savedSlyData).toEqual([]);
+  });
+
   it("saves the network as it is when Overwrite is clicked, not as it was when asked", async () => {
     openMusicNerd();
     await renameOpenNetwork("basic/music_nerd", "travel");

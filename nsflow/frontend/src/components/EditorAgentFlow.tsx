@@ -801,14 +801,29 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
 
   /** A taken name waiting on the user, with the naming that asked waiting on the answer. */
   const [pendingNameOverwrite, setPendingNameOverwrite] = useState<PendingNameOverwrite | undefined>(undefined);
-  // Numbers each naming, so one a newer naming has overtaken can tell and stop. See
+  // The same question, for code that runs outside a render: the effect below has to
+  // close it when the network changes.
+  const pendingNameOverwriteRef = useRef<PendingNameOverwrite | undefined>(undefined);
+  // Numbers each naming, so one that has been overtaken can tell and stop. See
   // handleNameNetwork.
   const namingAttemptRef = useRef(0);
   const settleNameOverwrite = (overwrite: boolean) => {
-    const pending = pendingNameOverwrite;
+    const pending = pendingNameOverwriteRef.current;
+    pendingNameOverwriteRef.current = undefined;
     setPendingNameOverwrite(undefined);
     pending?.decide(overwrite);
   };
+
+  // A naming belongs to the network it was started on. The page can move to another
+  // network while one is still waiting, from the sidebar or from a designer frame that
+  // reselects the network, and finishing it then would rename and save a network that
+  // is no longer on screen, and abort the new network's own save on the way, since
+  // they share one in-flight handle. So a change of network overtakes any naming in
+  // progress, the same as a newer naming does, and closes its question as declined.
+  useEffect(() => {
+    namingAttemptRef.current += 1;
+    settleNameOverwrite(false);
+  }, [networkId]);
 
   // Whether saving under `name` would replace a generated network that already has it.
   //
@@ -881,15 +896,20 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // submitted, so it can be reopened and a second name submitted before the first
       // answer comes back. Answers can arrive out of order, and the older name would
       // then land on top of the newer one. So a naming that has been overtaken stops at
-      // its next await. That also keeps two namings from both reaching the question:
-      // an overtaken one stops before asking, and while the question is open it covers
-      // the page, so no newer naming can start.
+      // its next await. Switching to another network overtakes it too (see the effect
+      // by settleNameOverwrite). That also keeps two namings from both reaching the
+      // question: an overtaken one stops before asking, and an open question is closed
+      // when its network goes.
       const attempt = ++namingAttemptRef.current;
       if (!isOwnName) {
         const taken = await isNameTaken(name);
         if (attempt !== namingAttemptRef.current) return false;
         if (taken) {
-          const overwrite = await new Promise<boolean>((decide) => setPendingNameOverwrite({ name, decide }));
+          const overwrite = await new Promise<boolean>((decide) => {
+            const pending: PendingNameOverwrite = { name, decide };
+            pendingNameOverwriteRef.current = pending;
+            setPendingNameOverwrite(pending);
+          });
           if (!overwrite || attempt !== namingAttemptRef.current) return false;
         }
       }
