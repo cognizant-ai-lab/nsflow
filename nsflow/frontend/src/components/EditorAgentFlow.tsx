@@ -116,6 +116,13 @@ type ParsedImport = {
   readonly fileName: string;
 };
 
+/** A name another network already has, held while the user decides whether to replace it. */
+type PendingNameOverwrite = {
+  readonly name: string;
+  /** Settles the naming that asked: true to save over the other network, false to keep the old name. */
+  readonly decide: (overwrite: boolean) => void;
+};
+
 const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   const { apiUrl } = useApiPort();
   // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
@@ -792,6 +799,67 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       ? `"${selectedNodeId}" cannot have down-chain agents. Deselect it to add elsewhere.`
       : undefined;
 
+  /** A taken name waiting on the user, with the naming that asked waiting on the answer. */
+  const [pendingNameOverwrite, setPendingNameOverwrite] = useState<PendingNameOverwrite | undefined>(undefined);
+  // The same question, for code that runs outside a render: the effect below has to
+  // close it when the network changes.
+  const pendingNameOverwriteRef = useRef<PendingNameOverwrite | undefined>(undefined);
+  // Numbers each naming, so one that has been overtaken can tell and stop. See
+  // handleNameNetwork.
+  const namingAttemptRef = useRef(0);
+  const settleNameOverwrite = (overwrite: boolean) => {
+    const pending = pendingNameOverwriteRef.current;
+    pendingNameOverwriteRef.current = undefined;
+    setPendingNameOverwrite(undefined);
+    pending?.decide(overwrite);
+  };
+
+  // A naming belongs to the network, and the Editor, it was started on. The page can
+  // move to another network while one is still waiting, from the sidebar or from a
+  // designer frame that reselects the network, or leave the Editor altogether.
+  // Finishing it then would rename and save a network that is no longer on screen,
+  // and on a network change abort the new network's own save on the way, since they
+  // share one in-flight handle. So leaving the network, either way, overtakes any
+  // naming in progress, the same as a newer naming does, and closes its question as
+  // declined. A cleanup, because it runs on both: before the next network's effect,
+  // and on unmount.
+  useEffect(() => {
+    return () => {
+      namingAttemptRef.current += 1;
+      settleNameOverwrite(false);
+    };
+  }, [networkId]);
+
+  // Whether saving under `name` would replace a generated network that already has it.
+  //
+  // The designer saves to <subdirectory>/<name>.hocon and replaces whatever is there: it
+  // cannot tell a second save of this network from a different network that happens to
+  // share the name. So the question goes to the server, which looks at that file. The
+  // sidebar's list is no substitute, because a network saved a moment ago is on disk
+  // before the registry reload lists it.
+  //
+  // A check that fails answers "free", so naming carries on as it would without it.
+  // nsflow's frontend and backend ship together, so a failing check means nsflow's own
+  // server is failing, and the save that follows goes through it and fails too, with an
+  // error of its own. Refusing the name as well would only stack a second failure on it.
+  const isNameTaken = useCallback(
+    async (name: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/hocon/name_taken?name=${encodeURIComponent(name)}`);
+        if (!response.ok) {
+          console.warn(`Could not check whether the name "${name}" is taken: ${response.status} ${response.statusText}`);
+          return false;
+        }
+        const payload = await response.json();
+        return Boolean(payload?.name_is_taken);
+      } catch (error) {
+        console.warn(`Could not check whether the name "${name}" is taken:`, error);
+        return false;
+      }
+    },
+    [apiUrl]
+  );
+
   // Name a network that is still a draft.
   //
   // The name is what decides persistence: verified against a live designer, an edit
@@ -802,13 +870,59 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
   // Offered for a first name only. Renaming an already-saved network would save it
   // again under the new name and leave the old registry entry behind, which needs
   // designer-side cleanup this cannot do from here.
+  //
+  // Resolves to whether the name was applied. The user can decline to replace a network
+  // that already has the name, and a caller about to build on the name (the first-agent
+  // dialog adds its agent next) has to stop there rather than save into a name it does
+  // not have.
   const handleNameNetwork = useCallback(
-    async (proposedName: string) => {
+    async (proposedName: string): Promise<boolean> => {
       const name = proposedName.trim();
-      if (!name || !apiUrl) return;
+      if (!name || !apiUrl) return false;
+
+      // Two names count as the network's own, and neither is asked about.
+      //
+      // One is the name its entry already carries. sendEditorUpdate sends that name with
+      // every edit, so the network already saves under it, and asking now would guard
+      // nothing the next edit does not replace anyway. The file it names can still hold
+      // a different network, when two networks map onto one name, but a question here
+      // could not keep the edits off it.
+      //
+      // The other, for a network opened from the sidebar, is the name whose served path
+      // is the selection: that file is the open network itself. The selection is always
+      // a served path ("generated/foo") while the entry may hold that or the bare name,
+      // so the entry's name alone can miss it.
+      //
+      // The entry is read live, like the definition below.
+      const ownName = useEditorNetworkStore.getState().entries[networkId]?.networkName;
+      const isOwnName = name === ownName || toServedNetworkPath(name) === selectedNetwork;
+
+      // The check is a request, and the rename field closes as soon as a name is
+      // submitted, so it can be reopened and a second name submitted before the first
+      // answer comes back. Answers can arrive out of order, and the older name would
+      // then land on top of the newer one. So a naming that has been overtaken stops at
+      // its next await. Switching to another network overtakes it too (see the effect
+      // by settleNameOverwrite). That also keeps two namings from both reaching the
+      // question: an overtaken one stops before asking, and an open question is closed
+      // when its network goes.
+      const attempt = ++namingAttemptRef.current;
+      if (!isOwnName) {
+        const taken = await isNameTaken(name);
+        if (attempt !== namingAttemptRef.current) return false;
+        if (taken) {
+          const overwrite = await new Promise<boolean>((decide) => {
+            const pending: PendingNameOverwrite = { name, decide };
+            pendingNameOverwriteRef.current = pending;
+            setPendingNameOverwrite(pending);
+          });
+          if (!overwrite || attempt !== namingAttemptRef.current) return false;
+        }
+      }
 
       // Live, for the same reason addPaletteItem reads live: this runs from a dialog
-      // whose callback was created before the current definition existed.
+      // whose callback was created before the current definition existed. Read after
+      // the question above, too, which can stay open while progress frames change the
+      // network: a definition read before it would be written back over those changes.
       const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
       // Record it locally first, so the panel and the next edit's outgoing sly_data
       // agree on the name even before the echo comes back. reconcileFromServer is
@@ -818,7 +932,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // Nothing to persist for a network with no agents yet. The name is recorded
       // locally and the first agent added carries it, which is what makes that first
       // edit persist instead of being dropped for a missing agent_network_name.
-      if (definition.length === 0) return;
+      if (definition.length === 0) return true;
 
       // Supersede any in-flight edit, for the same reason applyAndSync does: this
       // send carries the whole definition, and an older response landing afterwards
@@ -844,8 +958,11 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       } finally {
         if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
       }
+      // Applied even when the save failed: the name is recorded, and the next edit
+      // sends it again.
+      return true;
     },
-    [apiUrl, networkId, reconcileFromServer]
+    [apiUrl, networkId, reconcileFromServer, selectedNetwork, isNameTaken]
   );
 
   /** The agent under the cursor during a drag, if any. */
@@ -1309,7 +1426,10 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               const item = pendingFirstItem;
               setPendingFirstItem(null);
               if (!item) return;
-              await handleNameNetwork(name);
+              // The user declined to replace the network that already has this name, so
+              // this one is still unnamed and the agent would have nothing to be saved
+              // under. Nothing is added, and adding it again asks for a name again.
+              if (!(await handleNameNetwork(name))) return;
               // Name the frontman after the network rather than leaving every network
               // with an agent called "frontman": the name shows up in the generated
               // HOCON and in the chat, where "frontman" says nothing about what it
@@ -1370,6 +1490,35 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
               setPendingImport(undefined);
               if (parsed) void applyImport(parsed);
             }}
+            sx={{ textTransform: 'none' }}
+          >
+            Overwrite
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/*
+        Confirm before a name lands on a network that already has it. Naming saves under
+        the name, and the designer replaces whatever file has it, so without this a
+        network the user meant to keep is replaced with nothing said. Closing the dialog
+        any way other than Overwrite keeps the name the network had.
+      */}
+      <Dialog open={Boolean(pendingNameOverwrite)} onClose={() => settleNameOverwrite(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Overwrite {pendingNameOverwrite?.name}?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            A network called <strong>{pendingNameOverwrite?.name}</strong> already exists,
+            and saving this one under that name replaces it.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
+          <Button onClick={() => settleNameOverwrite(false)} sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => settleNameOverwrite(true)}
             sx={{ textTransform: 'none' }}
           >
             Overwrite

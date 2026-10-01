@@ -16,9 +16,11 @@
 """
 Turns an uploaded agent network HOCON into a definition the editor can open.
 
-Only import lives here. Export needs no endpoint: the agent network designer already
-emits the finished file as ``agent_network_hocon_text`` in sly_data, the editor store
-keeps it, and the browser downloads that text directly. Assembling a second HOCON
+Import lives here, with the two other questions about generated networks the Editor
+and Home ask: whether a name is already taken, and deleting one. Export needs no
+endpoint of its own for the editor: the agent network designer already emits the
+finished file as ``agent_network_hocon_text`` in sly_data, the editor store keeps it,
+and the browser downloads that text directly. Assembling a second HOCON
 writer in nsflow would be a second answer to a question the designer already answers,
 and the two would drift.
 
@@ -277,3 +279,77 @@ async def delete_generated_network(network_name: str) -> JSONResponse:
 
     logger.info("Deleted generated agent network %s (manifest updated: %s)", bare_name, manifest_updated)
     return JSONResponse(content={"deleted": bare_name, "manifest_updated": manifest_updated})
+
+
+class NetworkNameCheck:
+    """
+    Answers whether a network name is already taken by a generated network.
+
+    The Editor asks this before it records a name, because naming is what decides where
+    the designer saves: it writes ``<subdirectory>/<name>.hocon`` and replaces whatever
+    is there, with no way to tell a second save of the same network from a new network
+    that happens to share its name. Import already asks before overwriting; this gives
+    naming and renaming the same question, answered by the same rule.
+
+    The answer comes from the file rather than from ``/api/v1/list``, because a network
+    saved a moment ago is on disk before neuro-san's next registry reload lists it, and
+    a check against the listing would call that name free.
+    """
+
+    @staticmethod
+    def resolves_inside_designer_subdirectory(name: str) -> bool:
+        """
+        Whether a proposed network name names a file inside the designer's subdirectory.
+
+        The directories on the way are resolved before comparing, so a ``..`` segment, an
+        absolute path and a directory symlink pointing out are all caught. A name that
+        escapes would make this endpoint a way to probe for ``.hocon`` files anywhere on
+        the server, and it names nothing the designer could save to anyway.
+
+        The file itself is left unresolved, unlike in ``_generated_network_path``. Delete
+        acts on the file a link points at, but this answers for the path a save would
+        replace, and a link there is a network the import's ``_name_is_taken`` already
+        calls taken, because ``isfile`` follows it. Resolving it would refuse a name the
+        import calls taken, and the Editor reads a refusal as free.
+
+        :param name: the proposed network name, without the ``.hocon`` suffix.
+        :return: True when ``<subdirectory>/<name>.hocon`` lies inside the subdirectory.
+        """
+        root: str = os.path.realpath(os.path.join(REGISTRY_DIR, _designer_subdirectory()))
+        joined: str = os.path.join(root, f"{name}.hocon")
+        # The appended suffix means the last component is never "..", so leaving it out of
+        # the resolution cannot let a name climb out.
+        candidate: str = os.path.join(os.path.realpath(os.path.dirname(joined)), os.path.basename(joined))
+        return candidate.startswith(root + os.sep)
+
+    @staticmethod
+    async def name_taken(name: str) -> Dict[str, Any]:
+        """
+        Report whether saving under this name would replace an existing generated network.
+
+        :param name: the proposed network name, as a query parameter, without ``.hocon``.
+        :return: the name as checked and whether a generated network already uses it.
+        :raises HTTPException: 400 when the name is empty, carries a NUL byte, or would
+            resolve outside the designer's subdirectory.
+        """
+        if not name.strip():
+            raise HTTPException(status_code=400, detail="Expected a network name.")
+        # Before any path call: realpath raises ValueError on an embedded NUL, which would
+        # surface as a 500, while isfile quietly answers False and would call it free.
+        if "\x00" in name:
+            raise HTTPException(status_code=400, detail="A network name cannot contain a NUL byte.")
+        if not NetworkNameCheck.resolves_inside_designer_subdirectory(name):
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{name}' is not a name a generated network can be saved under.",
+            )
+
+        # The import's rule, called rather than restated, so the two cannot disagree about
+        # which file a name means.
+        return {"network_name": name, "name_is_taken": _name_is_taken(name)}
+
+
+# Registered at module import, alongside the decorated routes above, so it reaches the app
+# through the same router include. The literal segment keeps it clear of
+# DELETE /hocon/generated/{network_name:path} and of the neuro-san facade's greedy routes.
+router.add_api_route("/hocon/name_taken", NetworkNameCheck.name_taken, methods=["GET"])
