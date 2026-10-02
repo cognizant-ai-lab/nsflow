@@ -64,7 +64,7 @@ class ConsultantJobManager:
                 sys.executable,
                 "-u",
                 "-m",
-                "apps.network_consultant.network_consultant",
+                "neuro_san_studio.network_consultant.network_consultant",
                 *args,
                 cwd=self._project_root,
                 stdout=log_file,

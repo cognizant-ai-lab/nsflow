@@ -23,6 +23,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from nsflow.backend.utils import consultant_job_manager as consultant_job_manager_module
 from nsflow.backend.utils.consultant_job import ConsultantJob
 from nsflow.backend.utils.consultant_job_manager import ConsultantJobManager
 from nsflow.backend.utils.job_not_found_error import JobNotFoundError
@@ -98,3 +99,22 @@ class TestNetworkConsultantJobs:
 
         with pytest.raises(JobNotFoundError):
             asyncio.run(manager.status("missing"))
+
+    @staticmethod
+    def test_start_uses_the_installed_studio_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Launch the consultant from the installable neuro_san_studio package."""
+        process = Mock(pid=123)
+        create_process = AsyncMock(return_value=process)
+        monkeypatch.setattr(consultant_job_manager_module.asyncio, "create_subprocess_exec", create_process)
+        monkeypatch.setattr(consultant_job_manager_module, "ConsultantJob", Mock())
+
+        manager = ConsultantJobManager(str(tmp_path))
+        asyncio.run(manager.start(["--hocon-file", "basic/coffee.hocon"], "basic/coffee", "session"))
+
+        command = create_process.await_args.args
+        assert command[:4] == (
+            consultant_job_manager_module.sys.executable,
+            "-u",
+            "-m",
+            "neuro_san_studio.network_consultant.network_consultant",
+        )
