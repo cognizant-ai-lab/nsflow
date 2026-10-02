@@ -1,4 +1,4 @@
-# Copyright © 2025 Cognizant Technology Solutions Corp, www.cognizant.com.
+# Copyright © 2025-2026 Cognizant Technology Solutions Corp, www.cognizant.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,65 +13,75 @@
 # limitations under the License.
 #
 # END COPYRIGHT
+
+"""Tests for Network Consultant fixture validation."""
+
 import unittest
+from typing import Any
 
-from nsflow.backend.utils.network_consultant_fixtures import validate_fixture
-
-
-def _valid_fixture():
-    return {
-        "agent": "basic/coffee_finder",
-        "success_ratio": "1/1",
-        "connections": ["direct"],
-        "interactions": [
-            {
-                "text": "Where can I get coffee?",
-                "timeout_in_seconds": 400,
-                "response": {"text": {"gist": ["Names at least one coffee shop"]}},
-                "sly_data": {},
-            }
-        ],
-    }
+from nsflow.backend.utils.fixture_repository import FixtureRepository
 
 
-class TestValidateFixtureForSave(unittest.TestCase):
-    """Covers the hand-edit save-path validator's branches -- every check the UI's own dropdown
-    doesn't already prevent (free-text agent/success_ratio/interaction text, and a defensive
-    check-type check in case a stale client ever sends one outside the known set)."""
+class TestNetworkConsultantFixtureValidation(unittest.TestCase):
+    """Cover each validation branch in the fixture save path."""
 
-    def test_valid_fixture_has_no_errors(self):
-        self.assertEqual(validate_fixture(_valid_fixture()), [])
+    @staticmethod
+    def valid_fixture() -> dict[str, Any]:
+        """Return a valid editable fixture."""
+        return {
+            "agent": "basic/coffee_finder",
+            "success_ratio": "1/1",
+            "connections": ["direct"],
+            "interactions": [
+                {
+                    "text": "Where can I get coffee?",
+                    "timeout_in_seconds": 400,
+                    "response": {"text": {"gist": ["Names at least one coffee shop"]}},
+                    "sly_data": {},
+                }
+            ],
+        }
 
-    def test_missing_agent(self):
-        fixture = _valid_fixture()
-        fixture["agent"] = "   "
-        errors = validate_fixture(fixture)
-        self.assertTrue(any("agent" in e for e in errors))
+    def test_valid_fixture_has_no_errors(self) -> None:
+        """Accept a complete valid fixture."""
+        self.assertEqual(FixtureRepository.validate_fixture(self.valid_fixture()), [])
 
-    def test_bad_success_ratio(self):
-        fixture = _valid_fixture()
-        fixture["success_ratio"] = "one out of one"
-        errors = validate_fixture(fixture)
-        self.assertTrue(any("success_ratio" in e for e in errors))
+    def test_missing_agent(self) -> None:
+        """Reject a blank agent name."""
+        fixture = self.valid_fixture()
+        fixture.update({"agent": "   "})
+        errors = FixtureRepository.validate_fixture(fixture)
+        self.assertTrue(any("agent" in error for error in errors))
 
-    def test_interaction_missing_text(self):
-        fixture = _valid_fixture()
-        fixture["interactions"][0]["text"] = ""
-        errors = validate_fixture(fixture)
-        self.assertTrue(any("'text' is required" in e for e in errors))
+    def test_bad_success_ratio(self) -> None:
+        """Reject a success ratio outside N/M format."""
+        fixture = self.valid_fixture()
+        fixture.update({"success_ratio": "one out of one"})
+        errors = FixtureRepository.validate_fixture(fixture)
+        self.assertTrue(any("success_ratio" in error for error in errors))
 
-    def test_unknown_check_type_rejected(self):
-        fixture = _valid_fixture()
-        fixture["interactions"][0]["response"]["text"] = {"regex": ["nope"]}
-        errors = validate_fixture(fixture)
-        self.assertTrue(any("not a valid check type" in e for e in errors))
+    def test_interaction_missing_text(self) -> None:
+        """Reject an interaction with blank input text."""
+        fixture = self.valid_fixture()
+        interactions = fixture.get("interactions", [])
+        interaction = interactions[0]
+        interaction.update({"text": ""})
+        errors = FixtureRepository.validate_fixture(fixture)
+        self.assertTrue(any("'text' is required" in error for error in errors))
 
-    def test_empty_interactions_short_circuits(self):
-        fixture = _valid_fixture()
-        fixture["interactions"] = []
-        errors = validate_fixture(fixture)
+    def test_unknown_check_type_rejected(self) -> None:
+        """Reject response assertion types unknown to the fixture runner."""
+        fixture = self.valid_fixture()
+        interactions = fixture.get("interactions", [])
+        interaction = interactions[0]
+        response = interaction.get("response", {})
+        response.update({"text": {"regex": ["nope"]}})
+        errors = FixtureRepository.validate_fixture(fixture)
+        self.assertTrue(any("not a valid check type" in error for error in errors))
+
+    def test_empty_interactions_short_circuits(self) -> None:
+        """Report an empty interaction list without inspecting its elements."""
+        fixture = self.valid_fixture()
+        fixture.update({"interactions": []})
+        errors = FixtureRepository.validate_fixture(fixture)
         self.assertEqual(errors, ["'interactions' must be a non-empty list."])
-
-
-if __name__ == "__main__":
-    unittest.main()

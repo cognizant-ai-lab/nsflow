@@ -25,94 +25,47 @@ import re
 import tempfile
 from pathlib import Path
 from typing import Any
-from typing import Optional
+from typing import ClassVar
 
 from pyhocon import ConfigFactory
+from pyhocon.exceptions import ConfigException
+from pyparsing import ParseBaseException
 
-from nsflow.backend.models.network_consultant_models import Fixture
-from nsflow.backend.models.network_consultant_models import FixtureInteraction
-
-STOCK_TEST_KEYS = frozenset(
-    {
-        "gist",
-        "not_gist",
-        "keywords",
-        "not_keywords",
-        "value",
-        "not_value",
-        "less",
-        "not_less",
-        "greater",
-        "not_greater",
-    }
-)
-
-FIXTURE_REFERENCE_COMMENT = (
-    "# This file defines everything necessary for a data-driven test.\n"
-    "# The schema specifications for this file are documented here:\n"
-    "# https://github.com/cognizant-ai-lab/neuro-san/blob/main/docs/test_case_hocon_reference.md\n"
-)
-
-SUCCESS_RATIO_PATTERN = re.compile(r"^\d+/\d+$")
-CLASS_REFERENCE_PATTERN = re.compile(r'(?:(?:"class"\s*:)|(?:class\s*=))\s*"([^"]+)"')
-SLY_DATA_GET_PATTERN = re.compile(r"sly_data\.get\(\s*[\"']([^\"']+)[\"']")
-SLY_DATA_ITEM_PATTERN = re.compile(r"sly_data\[\s*[\"']([^\"']+)[\"']\s*\]")
-
-
-class InvalidNetworkNameError(ValueError):
-    """Raised when a network name would escape its configured root."""
-
-
-class FixtureNotFoundError(FileNotFoundError):
-    """Raised when a requested fixture does not exist."""
-
-
-def network_hocon_file(network_name: str) -> str:
-    """Return a network registry name with its HOCON suffix."""
-    return network_name if network_name.endswith(".hocon") else f"{network_name}.hocon"
-
-
-def safe_fixture_file_name(fixture_name: str) -> str:
-    """Return a fixture basename that cannot contain a path separator."""
-    suffixed_name = fixture_name if fixture_name.endswith(".hocon") else f"{fixture_name}.hocon"
-    return re.sub(r"[^\w.\-]", "_", suffixed_name)
-
-
-def validate_fixture(fixture: dict[str, Any]) -> list[str]:
-    """Validate the editable portion of a fixture before it reaches disk."""
-    errors: list[str] = []
-    if not isinstance(fixture.get("agent"), str) or not fixture["agent"].strip():
-        errors.append("'agent' must be a non-empty string.")
-
-    success_ratio = fixture.get("success_ratio")
-    if not isinstance(success_ratio, str) or not SUCCESS_RATIO_PATTERN.fullmatch(success_ratio):
-        errors.append("'success_ratio' must be a string in 'N/M' format, e.g. '1/1'.")
-
-    interactions = fixture.get("interactions")
-    if not isinstance(interactions, list) or not interactions:
-        errors.append("'interactions' must be a non-empty list.")
-        return errors
-
-    for index, interaction in enumerate(interactions):
-        prefix = f"interactions[{index}]"
-        if not isinstance(interaction, dict) or not str(interaction.get("text", "")).strip():
-            errors.append(f"{prefix}: 'text' is required.")
-            continue
-        response = interaction.get("response") or {}
-        checks = response.get("text") if isinstance(response, dict) else None
-        if not isinstance(checks, dict) or not checks:
-            errors.append(f"{prefix}: at least one response check is required.")
-            continue
-        for key in checks:
-            if key not in STOCK_TEST_KEYS:
-                errors.append(f"{prefix}: '{key}' is not a valid check type.")
-    return errors
+from nsflow.backend.models.network_consultant.fixture import Fixture
+from nsflow.backend.models.network_consultant.fixture_interaction import FixtureInteraction
+from nsflow.backend.utils.fixture_not_found_error import FixtureNotFoundError
+from nsflow.backend.utils.invalid_network_name_error import InvalidNetworkNameError
 
 
 class FixtureRepository:
     """Read and write consultant fixtures beneath one target project."""
 
-    def __init__(self, project_root: str):
+    STOCK_TEST_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "gist",
+            "not_gist",
+            "keywords",
+            "not_keywords",
+            "value",
+            "not_value",
+            "less",
+            "not_less",
+            "greater",
+            "not_greater",
+        }
+    )
+    FIXTURE_REFERENCE_COMMENT: ClassVar[str] = (
+        "# This file defines everything necessary for a data-driven test.\n"
+        "# The schema specifications for this file are documented here:\n"
+        "# https://github.com/cognizant-ai-lab/neuro-san/blob/main/docs/test_case_hocon_reference.md\n"
+    )
+    SUCCESS_RATIO_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^\d+/\d+$")
+    CLASS_REFERENCE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r'(?:(?:"class"\s*:)|(?:class\s*=))\s*"([^"]+)"')
+    SLY_DATA_GET_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\.get\(\s*[\"']([^\"']+)[\"']")
+    SLY_DATA_ITEM_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\[\s*[\"']([^\"']+)[\"']\s*\]")
+
+    def __init__(self, project_root: str) -> None:
+        """Create a repository rooted at a target project."""
         self.project_root = Path(project_root).resolve()
 
     def list(self, network_name: str) -> list[Fixture]:
@@ -127,18 +80,18 @@ class FixtureRepository:
         network_name: str,
         fixture_name: str,
         fixture: dict[str, Any],
-        original_fixture_name: Optional[str] = None,
+        original_fixture_name: str | None = None,
     ) -> str:
         """Atomically create or replace a fixture and return its safe filename."""
-        errors = validate_fixture(fixture)
+        errors = self.validate_fixture(fixture)
         if errors:
             raise ValueError(errors)
 
         fixture_directory = self._fixtures_directory(network_name)
         fixture_directory.mkdir(parents=True, exist_ok=True)
-        safe_name = safe_fixture_file_name(fixture_name)
+        safe_name = self.safe_fixture_file_name(fixture_name)
         output_path = fixture_directory / safe_name
-        content = f"{FIXTURE_REFERENCE_COMMENT}\n{json.dumps(fixture, indent=4, ensure_ascii=False)}\n"
+        content = f"{self.FIXTURE_REFERENCE_COMMENT}\n{json.dumps(fixture, indent=4, ensure_ascii=False)}\n"
 
         descriptor, temporary_path = tempfile.mkstemp(dir=fixture_directory)
         try:
@@ -155,7 +108,7 @@ class FixtureRepository:
 
     def delete(self, network_name: str, fixture_name: str) -> str:
         """Delete a fixture and return its safe filename."""
-        safe_name = safe_fixture_file_name(fixture_name)
+        safe_name = self.safe_fixture_file_name(fixture_name)
         path = self._fixtures_directory(network_name) / safe_name
         if not path.is_file():
             raise FixtureNotFoundError(safe_name)
@@ -170,22 +123,68 @@ class FixtureRepository:
 
         hocon_text = hocon_path.read_text(encoding="utf-8")
         keys: set[str] = set()
-        for class_reference in CLASS_REFERENCE_PATTERN.findall(hocon_text):
+        for class_reference in self.CLASS_REFERENCE_PATTERN.findall(hocon_text):
             class_file = self._resolve_class_file(class_reference, network_name)
             if class_file:
                 keys.update(self._sly_data_keys_from_file(class_file))
         return sorted(keys)
 
+    @staticmethod
+    def network_hocon_file(network_name: str) -> str:
+        """Return a network registry name with its HOCON suffix."""
+        return network_name if network_name.endswith(".hocon") else f"{network_name}.hocon"
+
+    @staticmethod
+    def safe_fixture_file_name(fixture_name: str) -> str:
+        """Return a fixture basename that cannot contain a path separator."""
+        suffixed_name = fixture_name if fixture_name.endswith(".hocon") else f"{fixture_name}.hocon"
+        return re.sub(r"[^\w.\-]", "_", suffixed_name)
+
+    @classmethod
+    def validate_fixture(cls, fixture: dict[str, Any]) -> list[str]:
+        """Validate the editable portion of a fixture before it reaches disk."""
+        errors: list[str] = []
+        agent = fixture.get("agent")
+        if not isinstance(agent, str) or not agent.strip():
+            errors.append("'agent' must be a non-empty string.")
+
+        success_ratio = fixture.get("success_ratio")
+        if not isinstance(success_ratio, str) or not cls.SUCCESS_RATIO_PATTERN.fullmatch(success_ratio):
+            errors.append("'success_ratio' must be a string in 'N/M' format, e.g. '1/1'.")
+
+        interactions = fixture.get("interactions")
+        if not isinstance(interactions, list) or not interactions:
+            errors.append("'interactions' must be a non-empty list.")
+            return errors
+
+        for index, interaction in enumerate(interactions):
+            prefix = f"interactions[{index}]"
+            if not isinstance(interaction, dict) or not str(interaction.get("text", "")).strip():
+                errors.append(f"{prefix}: 'text' is required.")
+                continue
+            response = interaction.get("response") or {}
+            checks = response.get("text") if isinstance(response, dict) else None
+            if not isinstance(checks, dict) or not checks:
+                errors.append(f"{prefix}: at least one response check is required.")
+                continue
+            for key in checks:
+                if key not in cls.STOCK_TEST_KEYS:
+                    errors.append(f"{prefix}: '{key}' is not a valid check type.")
+        return errors
+
     def _fixtures_directory(self, network_name: str) -> Path:
+        """Return the contained fixture directory for a network."""
         root = self.project_root / "tests" / "fixtures"
         return self._contained_path(root, network_name)
 
     def _registry_path(self, network_name: str) -> Path:
+        """Return the contained registry path for a network."""
         root = self.project_root / "registries"
-        return self._contained_path(root, network_hocon_file(network_name))
+        return self._contained_path(root, self.network_hocon_file(network_name))
 
     @staticmethod
     def _contained_path(root: Path, relative_path: str) -> Path:
+        """Resolve a path and reject attempts to escape its root."""
         resolved_root = root.resolve()
         resolved_path = (resolved_root / relative_path).resolve()
         if resolved_path != resolved_root and resolved_root not in resolved_path.parents:
@@ -194,6 +193,7 @@ class FixtureRepository:
 
     @staticmethod
     def _load_fixture(path: Path) -> Fixture:
+        """Load a fixture while retaining malformed input for the editor."""
         raw_hocon = path.read_text(encoding="utf-8")
         try:
             parsed = ConfigFactory.parse_file(str(path)).as_plain_ordered_dict()
@@ -214,10 +214,11 @@ class FixtureRepository:
                 interactions=interactions,
                 raw_hocon=raw_hocon,
             )
-        except Exception as error:  # pylint: disable=broad-exception-caught
+        except (AttributeError, ConfigException, OSError, ParseBaseException, TypeError, ValueError) as error:
             return Fixture(name=path.name, raw_hocon=raw_hocon, parse_error=str(error))
 
-    def _resolve_class_file(self, class_reference: str, network_name: str) -> Optional[Path]:
+    def _resolve_class_file(self, class_reference: str, network_name: str) -> Path | None:
+        """Resolve a short or fully qualified coded-tool class reference."""
         parts = class_reference.replace("\\", "/").split(".")
         if len(parts) < 2 or any(part in {"", ".", ".."} for part in parts):
             return None
@@ -238,23 +239,26 @@ class FixtureRepository:
                 return resolved
         return None
 
-    @staticmethod
-    def _sly_data_keys_from_file(path: Path) -> set[str]:
+    @classmethod
+    def _sly_data_keys_from_file(cls, path: Path) -> set[str]:
+        """Extract literal sly-data keys from one coded-tool source file."""
         try:
             source = path.read_text(encoding="utf-8")
         except OSError:
             return set()
-        return set(SLY_DATA_GET_PATTERN.findall(source)) | set(SLY_DATA_ITEM_PATTERN.findall(source))
+        return set(cls.SLY_DATA_GET_PATTERN.findall(source)) | set(cls.SLY_DATA_ITEM_PATTERN.findall(source))
 
-    @staticmethod
+    @classmethod
     def _remove_renamed_fixture(
+        cls,
         fixture_directory: Path,
-        original_fixture_name: Optional[str],
+        original_fixture_name: str | None,
         current_safe_name: str,
     ) -> None:
+        """Remove the old fixture file after a successful rename."""
         if not original_fixture_name:
             return
-        original_safe_name = safe_fixture_file_name(original_fixture_name)
+        original_safe_name = cls.safe_fixture_file_name(original_fixture_name)
         original_path = fixture_directory / original_safe_name
         if original_safe_name != current_safe_name and original_path.is_file():
             original_path.unlink()

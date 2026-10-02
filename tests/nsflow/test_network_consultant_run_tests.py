@@ -14,101 +14,107 @@
 #
 # END COPYRIGHT
 
-"""The CLI a run-tests / generate-tests request turns into."""
+"""Tests for the CLI arguments built by Network Consultant endpoints."""
 
 import asyncio
 import os
 import unittest
+from collections.abc import Callable
+from collections.abc import Coroutine
+from typing import Any
 from unittest.mock import patch
 
-from nsflow.backend.api.v1 import network_consultant_endpoints as endpoints
-from nsflow.backend.models.network_consultant_models import GenerateTestsRequest
-from nsflow.backend.models.network_consultant_models import JobStartResponse
-from nsflow.backend.models.network_consultant_models import RunTestsRequest
+from nsflow.backend.api.v1.network_consultant_endpoints import NetworkConsultantEndpoints
+from nsflow.backend.models.network_consultant.generate_tests_request import GenerateTestsRequest
+from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
+from nsflow.backend.models.network_consultant.run_tests_request import RunTestsRequest
 
 
-def _args_for(coroutine_factory):
-    """Run an endpoint with _start_job stubbed, and return the argv it would have launched."""
-    captured = {}
+class TestNetworkConsultantRunTests(unittest.TestCase):
+    """Verify run-tests and generate-tests subprocess arguments."""
 
-    async def fake_start_job(args, agent_name, session_id):
-        captured["args"] = args
-        captured["agent_name"] = agent_name
-        captured["session_id"] = session_id
-        return JobStartResponse(job_id="jid", message="Job started.")
+    @staticmethod
+    def args_for(coroutine_factory: Callable[[], Coroutine[Any, Any, JobStartResponse]]) -> dict[str, Any]:
+        """Run an endpoint with job startup stubbed and return its launch data."""
+        captured: dict[str, Any] = {}
 
-    with patch.object(endpoints, "_start_job", fake_start_job):
-        asyncio.run(coroutine_factory())
-    return captured
+        # The patch callback must be an async closure so it can capture one endpoint invocation.
+        async def fake_start_job(args: list[str], agent_name: str, session_id: str) -> JobStartResponse:
+            """Capture the endpoint's job-start arguments."""
+            captured.update({"args": args, "agent_name": agent_name, "session_id": session_id})
+            return JobStartResponse(job_id="jid", message="Job started.")
 
+        with patch.object(NetworkConsultantEndpoints, "_start_job", fake_start_job):
+            asyncio.run(coroutine_factory())
+        return captured
 
-class TestRunTestsArgs(unittest.TestCase):
-    """POST /run-tests"""
-
-    def test_whole_suite_runs_without_only_fixtures(self):
-        captured = _args_for(lambda: endpoints.run_tests(RunTestsRequest(network_name="industry/cpg_agents")))
-        args = captured["args"]
+    def test_whole_suite_runs_without_only_fixtures(self) -> None:
+        """Run a complete existing fixture suite without regenerating it."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.run_tests(RunTestsRequest(network_name="industry/cpg_agents"))
+        )
+        args = captured.get("args", [])
         self.assertIn("--hocon-file", args)
         self.assertEqual(args[args.index("--hocon-file") + 1], "industry/cpg_agents.hocon")
         self.assertEqual(args[args.index("--max-iterations") + 1], "0")
         self.assertNotIn("--only-fixtures", args)
-        # Running a suite must never regenerate it.
         self.assertNotIn("--force-generate", args)
-        self.assertEqual(captured["agent_name"], "industry/cpg_agents")
+        self.assertEqual(captured.get("agent_name"), "industry/cpg_agents")
 
-    def test_single_fixture_is_passed_as_only_fixtures(self):
-        captured = _args_for(
-            lambda: endpoints.run_tests(
+    def test_single_fixture_is_passed_as_only_fixtures(self) -> None:
+        """Pass a selected fixture to the CLI's exact-basename filter."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.run_tests(
                 RunTestsRequest(network_name="industry/cpg_agents", fixture_name="gtm_strategy.hocon")
             )
         )
-        args = captured["args"]
+        args = captured.get("args", [])
         self.assertEqual(args[args.index("--only-fixtures") + 1], "gtm_strategy.hocon")
 
-    def test_fixture_name_is_sanitized_not_trusted(self):
-        """It reaches a subprocess argv, so no path separator may survive. Traversal is
-        additionally impossible downstream -- run_all_tests uses only_fixtures as an exact
-        membership filter over basenames it globbed itself -- but the separator is stripped
-        here so nothing depends on that alone."""
-        captured = _args_for(
-            lambda: endpoints.run_tests(
+    def test_fixture_name_is_sanitized_not_trusted(self) -> None:
+        """Remove every path separator before placing a fixture name in subprocess arguments."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.run_tests(
                 RunTestsRequest(network_name="industry/cpg_agents", fixture_name="../../etc/passwd")
             )
         )
-        only = captured["args"][captured["args"].index("--only-fixtures") + 1]
+        args = captured.get("args", [])
+        only = args[args.index("--only-fixtures") + 1]
         self.assertNotIn("/", only)
         self.assertNotIn(os.sep, only)
         self.assertEqual(only, ".._.._etc_passwd.hocon")
 
-    def test_blank_fixture_name_means_whole_suite(self):
-        captured = _args_for(
-            lambda: endpoints.run_tests(RunTestsRequest(network_name="industry/cpg_agents", fixture_name="   "))
+    def test_blank_fixture_name_means_whole_suite(self) -> None:
+        """Treat whitespace-only fixture selection as a full-suite run."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.run_tests(
+                RunTestsRequest(network_name="industry/cpg_agents", fixture_name="   ")
+            )
         )
-        self.assertNotIn("--only-fixtures", captured["args"])
+        self.assertNotIn("--only-fixtures", captured.get("args", []))
 
+    def test_generation_is_forced_so_an_explicit_request_is_never_a_no_op(self) -> None:
+        """Force fixture generation for an explicit generate-tests request."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.generate_tests(GenerateTestsRequest(network_name="basic/coffee"))
+        )
+        self.assertIn("--force-generate", captured.get("args", []))
 
-class TestGenerateTestsArgs(unittest.TestCase):
-    """POST /generate-tests"""
-
-    def test_generation_is_forced_so_an_explicit_request_is_never_a_no_op(self):
-        captured = _args_for(lambda: endpoints.generate_tests(GenerateTestsRequest(network_name="basic/coffee")))
-        self.assertIn("--force-generate", captured["args"])
-
-    def test_guidance_is_forwarded_when_given(self):
-        captured = _args_for(
-            lambda: endpoints.generate_tests(
+    def test_guidance_is_forwarded_when_given(self) -> None:
+        """Trim and forward nonblank generation guidance."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.generate_tests(
                 GenerateTestsRequest(network_name="basic/coffee", test_guidance="  the vendor onboarding path  ")
             )
         )
-        args = captured["args"]
+        args = captured.get("args", [])
         self.assertEqual(args[args.index("--test-guidance") + 1], "the vendor onboarding path")
 
-    def test_blank_guidance_is_omitted_entirely(self):
-        captured = _args_for(
-            lambda: endpoints.generate_tests(GenerateTestsRequest(network_name="basic/coffee", test_guidance="   "))
+    def test_blank_guidance_is_omitted_entirely(self) -> None:
+        """Omit the guidance flag for whitespace-only input."""
+        captured = self.args_for(
+            lambda: NetworkConsultantEndpoints.generate_tests(
+                GenerateTestsRequest(network_name="basic/coffee", test_guidance="   ")
+            )
         )
-        self.assertNotIn("--test-guidance", captured["args"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertNotIn("--test-guidance", captured.get("args", []))
