@@ -44,13 +44,14 @@ describe("listToDict", () => {
     });
   });
 
-  it("keeps instructions the user deliberately cleared", () => {
-    // The designer's own converter would drop these for being falsy, turning the
+  it("keeps empty instructions, which still mark an LLM agent", () => {
+    // The designer's own AddAgent writes a new agent's text fields like this, and
+    // the designer's list converter would drop them for being falsy, turning the
     // agent into a toolbox tool behind the user's back.
-    const cleared: AgentNetworkDefinitionEntry[] = [
+    const empty: AgentNetworkDefinitionEntry[] = [
       { origin: "frontman", tools: [], instructions: "", description: "" },
     ];
-    const dict = listToDict(cleared);
+    const dict = listToDict(empty);
 
     expect(dict).toEqual({ frontman: { instructions: "", description: "" } });
   });

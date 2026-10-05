@@ -30,8 +30,10 @@ import { useApiPort } from '../context/ApiPortContext';
 import { useJsonEditorTheme } from '../context/ThemeContext';
 import { JsonEditor, ThemeInput } from 'json-edit-react';
 import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { isExternalName, isToolboxTool } from "../state/definitionShape";
 import { canRename, renameAgent, updateAgent } from "../state/editorOperations";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
+import type { ConnectivityInfo } from "../uiCommon";
 
 /**
  * Which of an agent's fields this panel edits.
@@ -52,6 +54,40 @@ const toEditableFields = (agent: Record<string, unknown>): Record<string, unknow
     editable[key] = value;
   }
   return editable;
+};
+
+/**
+ * The text fields an LLM agent cannot be saved without. The designer's validator
+ * rejects an empty or whitespace-only value and has its model rewrite the field, so
+ * the panel refuses it up front instead.
+ */
+const REQUIRED_TEXT_FIELDS = ["instructions", "description"] as const;
+
+/**
+ * The required text fields that `data` sets to a string with nothing in it but
+ * whitespace.
+ *
+ * Only a string counts. A key that is missing, or set to something else, is left to
+ * cleanAgentData as before.
+ */
+const blankRequiredFields = (data: Record<string, unknown>): string[] => {
+  const blank: string[] = [];
+  for (const field of REQUIRED_TEXT_FIELDS) {
+    const value = data[field];
+    if (typeof value === "string" && value.trim() === "") blank.push(field);
+  }
+  return blank;
+};
+
+/**
+ * Whether `name` is an LLM agent of this network. A toolbox tool, a reference to
+ * another network and a name with no entry have neither text field, and adding them
+ * would turn a tool into an agent.
+ */
+const isLlmAgent = (definition: ConnectivityInfo[], name: string): boolean => {
+  if (isExternalName(name)) return false;
+  const stored = definition.find((agent) => agent.origin === name);
+  return Boolean(stored) && !isToolboxTool(stored);
 };
 
 
@@ -368,6 +404,18 @@ const cleanAgentData = (data: any): any => {
 
   const saveAgentData = async () => {
     if (!selectedAgentName || !apiUrl || !hasChanges) return;
+
+    // Checked before anything is applied, so a refused save changes nothing. Only an
+    // LLM agent has these fields; anything else keeps the handling below.
+    const blank = isLlmAgent(entry?.definition ?? [], selectedAgentName)
+      ? blankRequiredFields(jsonData && typeof jsonData === 'object' ? jsonData : {})
+      : [];
+    if (blank.length > 0) {
+      const named = blank.map((field) => `"${field}"`).join(' and ');
+      setSuccess(null);
+      setError(`Not saved: an agent needs a non-empty value for ${named}.`);
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
