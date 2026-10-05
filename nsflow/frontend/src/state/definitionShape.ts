@@ -34,8 +34,13 @@ limitations under the License.
  * reclassified as a toolbox tool, which then fails validation ("toolbox agent 'x'
  * references tool 'y'") and summons the designer LLM to repair the network: verified
  * against a live designer at 39 seconds and thousands of tokens per edit, renaming
- * and restructuring what the user drew. Sending the dict preserves the distinction
- * and the same edit applies deterministically in under a second.
+ * and restructuring what the user drew. Sending the dict keeps such an agent an LLM
+ * agent.
+ *
+ * That fixes the classification only. An empty value still fails the separate
+ * non-empty check, which summons the instructions writer instead (see
+ * `newAgentAttributes`). An edit applies deterministically in under a second only
+ * when both fields have text.
  */
 
 import type { ConnectivityInfo } from "../uiCommon";
