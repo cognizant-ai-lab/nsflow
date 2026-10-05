@@ -29,6 +29,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -43,6 +44,10 @@ client = TestClient(app)
 # What a neuro-san `connectivity` call returns: a list of nodes, each naming its
 # origin and the tools reachable from it. This is the shape the facade must pass
 # through untouched.
+# What the neuro-san server serves. Anything else gets its real answer for an unknown
+# agent, which is a 404 with no body.
+SERVED_AGENTS = {"my_net", "generated/coffee_shop"}
+
 FAKE_CONNECTIVITY: Dict[str, Any] = {
     "connectivity_info": [
         {"origin": "frontman", "tools": ["barista", "loyalty"]},
@@ -95,6 +100,20 @@ def _fake_neuro_san(monkeypatch):
     """
     NsConfigsRegistry.set_current("http", "localhost", 8080)
     monkeypatch.setattr(nw.NsWebsocketUtils, "create_agent_session", lambda self: _FakeSession())
+
+    # connectivity and function ask neuro-san over HTTP now, rather than going through
+    # its Python client, so the fake server lives at the transport. Intercepting here
+    # rather than stubbing the handler means the status mapping is really exercised.
+    async def _fake_get(_self, url, **_kwargs):
+        agent = str(url).split("/api/v1/", 1)[1].rsplit("/", 1)[0]
+        method = str(url).rsplit("/", 1)[1]
+        if agent not in SERVED_AGENTS:
+            # What neuro-san sends for an unknown agent: 404 with an empty body.
+            return httpx.Response(404, content=b"")
+        body = FAKE_CONNECTIVITY if method == "connectivity" else FAKE_FUNCTION
+        return httpx.Response(200, json=body)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
     yield
     # The registry holds its config on the class, so without this the config set here
     # outlives the module and whichever test file runs next inherits it. Reset puts it
@@ -284,3 +303,60 @@ def test_streaming_chat_injects_mcp_auth_headers(monkeypatch):
     assert injected, "inject_mcp_auth_headers was never called for the HTTP chat route"
     forwarded = captured.streaming_chat_requests[0]["sly_data"]
     assert forwarded["http_headers"]["https://mcp.example.com"]["Authorization"] == "Bearer real-token"
+
+
+class TestUnknownAgentName:
+    """
+    An agent the server does not have should read as absent, not as a broken server.
+
+    neuro-san answers 404 with an empty body for an unknown agent. Its Python client
+    parses the body before checking the status, so the parse fails and every case comes
+    back as one generic ValueError, which nsflow could only report as 502. These pin the
+    status the facade now passes through instead.
+    """
+
+    @pytest.mark.parametrize("method", ["connectivity", "function"])
+    def test_says_not_found_rather_than_bad_gateway(self, method: str):
+        """502 claims the upstream failed. It answered, and the answer was 404."""
+        response = client.get(f"/api/v1/no_such_agent/{method}")
+
+        assert response.status_code == 404, response.text
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_a_nested_unknown_name_is_also_not_found(self):
+        """
+        The route is greedy, so a whole prefix can land in agent_name. This is the shape
+        a retired route's URL takes once its own route is gone.
+        """
+        response = client.get("/api/v1/some/removed/path/connectivity")
+
+        assert response.status_code == 404, response.text
+
+    @pytest.mark.parametrize("method", ["connectivity", "function"])
+    def test_a_real_agent_is_unaffected(self, method: str):
+        """The status check must not get in the way of the networks that do exist."""
+        assert client.get(f"/api/v1/my_net/{method}").status_code == 200
+        assert client.get(f"/api/v1/generated/coffee_shop/{method}").status_code == 200
+
+    def test_an_unreachable_server_is_still_a_gateway_error(self, monkeypatch):
+        """
+        The point of the change is telling these two apart, so the other side needs
+        pinning too: if neuro-san cannot be reached that is still 502, not 404.
+        """
+
+        async def _refuse(_self, _url, **_kwargs):
+            raise httpx.ConnectError("connection refused")
+
+        monkeypatch.setattr(httpx.AsyncClient, "get", _refuse)
+
+        assert client.get("/api/v1/my_net/connectivity").status_code == 502
+
+    def test_an_upstream_failure_is_a_gateway_error(self, monkeypatch):
+        """A 500 from neuro-san is a real upstream failure, so it stays 502."""
+
+        async def _boom(_self, _url, **_kwargs):
+            return httpx.Response(500, content=b"kaboom")
+
+        monkeypatch.setattr(httpx.AsyncClient, "get", _boom)
+
+        assert client.get("/api/v1/my_net/connectivity").status_code == 502
