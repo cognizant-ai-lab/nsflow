@@ -27,6 +27,7 @@ from .v1 import fast_websocket
 from .v1 import fastapi_concierge_endpoints
 from .v1 import hocon_endpoints
 from .v1 import mcp_oauth_endpoints
+from .v1 import network_consultant_endpoints
 from .v1 import oneshot_endpoints
 from .v1 import pdf_endpoints
 from .v1 import toolbox_endpoints
@@ -50,6 +51,7 @@ router.include_router(toolbox_endpoints.router, tags=["Toolbox"])
 router.include_router(designer_endpoints.router, tags=["Designer"])
 router.include_router(hocon_endpoints.router, tags=["HOCON Import"])
 router.include_router(mcp_oauth_endpoints.router, tags=["MCP OAuth"])
+router.include_router(network_consultant_endpoints.router, tags=["Network Consultant"])
 if NSFLOW_PLUGIN_VQA_ENDPOINT:
     router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
 

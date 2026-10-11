@@ -27,6 +27,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from nsflow.backend.api.router import router
+from nsflow.backend.api.v1.network_consultant_endpoints import job_manager as consultant_job_manager
 from nsflow.backend.db.database import init_nss_db
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
@@ -76,6 +77,7 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        await consultant_job_manager.shutdown()
         logging.info("FastAPI is shutting down...")
 
 
