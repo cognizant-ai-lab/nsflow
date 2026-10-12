@@ -575,17 +575,18 @@ describe("the New network button", () => {
     definitionGate = undefined;
     await act(async () => {
       releaseDefinition();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    // The old sidebar finished opening network_b, but the page stays on the new draft.
-    await waitFor(() => expect(useEditorNetworkStore.getState().entries[B_KEY]).toBeTruthy());
+    // The old sidebar's load is dropped: the page stays on the new draft, and nothing
+    // is written for network_b, so a network saved later under that name keeps its own.
+    expect(useEditorNetworkStore.getState().entries[B_KEY]).toBeUndefined();
     expect(screen.queryByText(`Editing: ${B_KEY}`)).toBeNull();
     expect(screen.getByText("Name this agent network")).toBeTruthy();
 
     await submitName("network_c");
 
     await waitFor(() => expect(saves).toEqual([{ name: "network_c", agents: { network_c_agent: [] } }]));
-    expect(useEditorNetworkStore.getState().entries[B_KEY]?.networkName).toBe("network_b");
-    expect(entryAgents(B_KEY)).toEqual(["network_b_agent->[]"]);
+    expect(useEditorNetworkStore.getState().entries[B_KEY]).toBeUndefined();
   });
 
   it("ignores the old sidebar's delayed refresh after New network", async () => {
