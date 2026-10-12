@@ -29,6 +29,13 @@ describe("parseCodeFenceJSON", () => {
     expect(parseCodeFenceJSON(fenced(value))).toEqual(value);
   });
 
+  it("parses unfenced JSON whose strings contain a code fence", () => {
+    // The chat panel records what it sends as plain JSON. Both fence patterns match
+    // inside the string, so the whole text has to be tried as well.
+    const value = { frontman: { instructions: "Reply in a ```python``` block.", tools: [] } };
+    expect(parseCodeFenceJSON(JSON.stringify(value, null, 2))).toEqual(value);
+  });
+
   it("takes the first block when the text holds two fenced blocks", () => {
     expect(parseCodeFenceJSON(`${fenced({ first: 1 })}\nThen:\n${fenced({ second: 2 })}`)).toEqual({ first: 1 });
   });

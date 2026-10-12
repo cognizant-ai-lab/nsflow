@@ -27,13 +27,14 @@ export type ProgressPayload = {
  * { "foo": "bar" }
  * ```
  * Strings in the JSON, such as agent instructions, may contain ``` too, so the
- * longest fenced body is parsed first and the shortest second. A string with no
- * fence is parsed as is. Returns undefined when nothing parses.
+ * longest fenced body is parsed first, then the shortest, then the whole string,
+ * which covers unfenced JSON with ``` in its strings. Returns undefined when
+ * nothing parses.
  */
 export function parseCodeFenceJSON(s: string): any | undefined {
   const longest = s.match(/```(?:json)?\s*([\s\S]*)```/i);
   const shortest = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidates = longest && shortest ? [longest[1], shortest[1]] : [s];
+  const candidates = longest && shortest ? [longest[1], shortest[1], s] : [s];
   for (const raw of candidates) {
     try {
       return JSON.parse(raw.trim());
