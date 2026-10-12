@@ -26,21 +26,22 @@ export type ProgressPayload = {
  * ```json
  * { "foo": "bar" }
  * ```
- * Strings in the JSON, such as agent instructions, may contain ``` too, so each
- * closing fence after the first opener is tried in turn, then the whole string,
- * which covers unfenced JSON with ``` in its strings. Returns undefined when
- * nothing parses.
+ * Text that is JSON as a whole is the payload, even when its strings hold ```, so
+ * it is tried first. Otherwise each closing fence after the first opener is tried
+ * in turn, because strings in the fenced JSON may contain ``` too. Returns
+ * undefined when nothing parses.
  */
 export function parseCodeFenceJSON(s: string): any | undefined {
+  const whole = parseJSON(s);
+  if (whole !== undefined) return whole;
   const opener = s.match(/```(?:json)?\s*/i);
-  if (opener?.index !== undefined) {
-    const start = opener.index + opener[0].length;
-    for (let end = s.indexOf("```", start); end !== -1; end = s.indexOf("```", end + 3)) {
-      const parsed = parseJSON(s.slice(start, end));
-      if (parsed !== undefined) return parsed;
-    }
+  if (opener?.index === undefined) return undefined;
+  const start = opener.index + opener[0].length;
+  for (let end = s.indexOf("```", start); end !== -1; end = s.indexOf("```", end + 3)) {
+    const parsed = parseJSON(s.slice(start, end));
+    if (parsed !== undefined) return parsed;
   }
-  return parseJSON(s);
+  return undefined;
 }
 
 /** JSON.parse of the trimmed text, or undefined when it is not JSON. */

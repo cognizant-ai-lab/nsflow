@@ -41,6 +41,12 @@ describe("parseCodeFenceJSON", () => {
     expect(parseCodeFenceJSON(`${fenced(value)}\nThen:\n${fenced({ second: 2 })}`)).toEqual(value);
   });
 
+  it("parses unfenced JSON as a whole when a string in it holds fenced JSON", () => {
+    // The fenced [1,2] inside the instructions is not the payload.
+    const value = { frontman: { instructions: "Return a ```[1,2]``` block.", tools: [] } };
+    expect(parseCodeFenceJSON(JSON.stringify(value))).toEqual(value);
+  });
+
   it("takes the first block when the text holds two fenced blocks", () => {
     expect(parseCodeFenceJSON(`${fenced({ first: 1 })}\nThen:\n${fenced({ second: 2 })}`)).toEqual({ first: 1 });
   });
