@@ -26,16 +26,22 @@ export type ProgressPayload = {
  * ```json
  * { "foo": "bar" }
  * ```
- * Performs a strict JSON.parse on the extracted content; on parse failure, returns undefined.
+ * Strings in the JSON, such as agent instructions, may contain ``` too, so the
+ * longest fenced body is parsed first and the shortest second. A string with no
+ * fence is parsed as is. Returns undefined when nothing parses.
  */
 export function parseCodeFenceJSON(s: string): any | undefined {
-  const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = (m ? m[1] : s).trim();
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
+  const longest = s.match(/```(?:json)?\s*([\s\S]*)```/i);
+  const shortest = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidates = longest && shortest ? [longest[1], shortest[1]] : [s];
+  for (const raw of candidates) {
+    try {
+      return JSON.parse(raw.trim());
+    } catch {
+      // Not JSON; try the next candidate.
+    }
   }
+  return undefined;
 }
 
 /** Normalize text (string | object) → object */

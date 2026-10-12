@@ -153,6 +153,30 @@ describe("applyFramesToStore", () => {
     expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({ sample_queries: ["Generated query."] });
   });
 
+  it("holds the block from a fenced sly_data frame whose instructions contain a code fence", () => {
+    // The sly_data socket records the whole blob inside a ```json fence. A ``` in the
+    // instructions must not end that fence, or the frame is unreadable and the old block stays.
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "frontman", tools: [] }],
+      metadata: { sample_queries: ["Old query."] },
+    });
+    const definition = { frontman: { instructions: "Reply in a ```python``` block.", tools: [] } };
+    const slyData = {
+      agent_network_definition: definition,
+      agent_network_name: "coffee_shop",
+      agent_network_metadata: { sample_queries: ["Generated query."] },
+    };
+
+    applyFramesToStore(
+      NET,
+      frame({ agent_network_definition: definition, agent_network_name: "coffee_shop" }),
+      { text: `\`\`\`json\n${JSON.stringify(slyData, null, 2)}\n\`\`\`` },
+      false
+    );
+
+    expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({ sample_queries: ["Generated query."] });
+  });
+
   it("keeps the held block when the frame carries none", () => {
     // Progress frames never carry the block.
     useEditorNetworkStore.getState().reconcileFromServer(NET, {
