@@ -33,6 +33,7 @@ import { useEffect } from "react";
 
 import { useChatContext } from "../context/ChatContext";
 import { type ConnectivityInfo } from "../uiCommon";
+import { toDesignerNetworkName } from "../utils/config";
 import { latestNetworkPayload, progressIsNewer } from "../utils/progressHelper";
 import { toConnectivityList } from "./definitionShape";
 import { asMetadataBlock, useEditorNetworkStore } from "./editorNetworkStore";
@@ -70,9 +71,14 @@ export const applyFramesToStore = (
   if (!definition) return;
 
   const payload = latestNetworkPayload(progressFrame, slyDataFrame, preferProgress);
+  const name = payload?.agent_network_name;
+  // Frames are kept for the whole Editor visit, so the last one may be another
+  // network's. A named frame lands only on its own network; a draft key matches no name.
+  if (name && toDesignerNetworkName(name) !== toDesignerNetworkName(networkId)) return;
+
   useEditorNetworkStore.getState().reconcileFromServer(networkId, {
     definition,
-    networkName: payload?.agent_network_name,
+    networkName: name,
     // The block a chat turn saved, from the same frame as the definition. The last
     // sly_data frame alone may be another network's, or older than the held block.
     metadata: asMetadataBlock(payload?.agent_network_metadata),

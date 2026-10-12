@@ -18,6 +18,7 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useEditorNetworkStore } from "./editorNetworkStore";
+import { draftKeyFor } from "./editorSession";
 import { applyFramesToStore, definitionFromFrames, useEditorProgressBridge } from "./progressBridge";
 
 /** What the mocked ChatContext returns; each test sets this before rendering. */
@@ -362,6 +363,259 @@ describe("useEditorProgressBridge", () => {
       expect(entry.networkName).toBe("network_b");
       expect(entry.definition).toEqual([{ origin: "frontman", tools: [], instructions: "Greet warmly" }]);
       expect(entry.metadata).toBeUndefined();
+      // The winning frame names B, so A never took it while A was on the canvas.
+      expect(useEditorNetworkStore.getState().entries[A]).toBeUndefined();
+    });
+  });
+
+  describe("frames named for another network", () => {
+    const ALPHA = "generated/alpha";
+    const BETA = "generated/beta";
+    const COFFEE = "generated/coffee";
+    const ALPHA_DEFINITION = { alpha_front: { instructions: "Alpha", tools: [] } };
+    const BETA_DEFINITION = { beta_front: { instructions: "Beta", tools: [] } };
+    const COFFEE_DEFINITION = { coffee_front: { instructions: "Coffee", tools: [] } };
+
+    /** Open a network the way Load Existing does: straight into the store, block and all. */
+    const open = (networkId: string, networkName: string, metadata: Record<string, unknown>) =>
+      useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+        definition: [{ origin: `${networkName}_front`, tools: ["as_opened"] }],
+        networkName,
+        metadata,
+      });
+
+    /** The parts of an entry a frame can change. */
+    const held = (networkId: string) => {
+      const entry = useEditorNetworkStore.getState().entries[networkId];
+      return entry && { networkName: entry.networkName, definition: entry.definition, metadata: entry.metadata };
+    };
+
+    const renderBridge = (networkId: string) =>
+      renderHook(({ networkId: id }) => useEditorProgressBridge(id), { initialProps: { networkId } });
+
+    beforeEach(() => {
+      for (const networkId of [ALPHA, BETA, COFFEE]) useEditorNetworkStore.getState().reset(networkId);
+    });
+
+    it("does not give an opened network the frames of the network open before it", () => {
+      // A save still in flight when the network is opened publishes its echo after the
+      // open, so the newest frame can be the earlier network's, with its block.
+      open(BETA, "beta", { description: "Beta file block" });
+      const opened = held(BETA);
+      recordFrames(
+        frame({ agent_network_definition: ALPHA_DEFINITION, agent_network_name: "alpha" }),
+        frame({
+          agent_network_definition: ALPHA_DEFINITION,
+          agent_network_name: "alpha",
+          agent_network_metadata: { description: "Alpha block" },
+        }),
+        1,
+        2
+      );
+
+      renderBridge(BETA);
+
+      expect(held(BETA)).toEqual(opened);
+    });
+
+    it("keeps a chat turn's frame for a new network off the network still on the canvas", () => {
+      // The sidebar moves the canvas to the network a frame names, but in that same
+      // commit the bridge sees the frame under the network still on the canvas.
+      open(ALPHA, "alpha", { sample_queries: ["Alpha query."] });
+      const opened = held(ALPHA);
+      recordFrames(frame({ agent_network_definition: BETA_DEFINITION, agent_network_name: "beta" }), undefined, 1, 0);
+
+      renderBridge(ALPHA);
+
+      expect(held(ALPHA)).toEqual(opened);
+    });
+
+    it("keeps the frames off the earlier network when the canvas moves back to it", () => {
+      // The sidebar's delayed refresh can select the earlier network again while the
+      // newest frame, here the turn's sly_data with its block, names the new one.
+      open(ALPHA, "alpha", { sample_queries: ["Alpha query."] });
+      const opened = held(ALPHA);
+      const progress = frame({ agent_network_definition: BETA_DEFINITION, agent_network_name: "beta" });
+      recordFrames(progress, undefined, 1, 0);
+      const { rerender } = renderBridge(BETA);
+      recordFrames(
+        progress,
+        frame({
+          agent_network_definition: BETA_DEFINITION,
+          agent_network_name: "beta",
+          agent_network_metadata: { sample_queries: ["Beta query."] },
+        }),
+        1,
+        2
+      );
+      rerender({ networkId: BETA });
+
+      rerender({ networkId: ALPHA });
+
+      expect(held(ALPHA)).toEqual(opened);
+      expect(held(BETA)?.metadata).toEqual({ sample_queries: ["Beta query."] });
+    });
+
+    it("hands a chat turn's frames to the network they name once the canvas moves there", () => {
+      open(ALPHA, "alpha", { sample_queries: ["Alpha query."] });
+      const progress = frame({ agent_network_definition: BETA_DEFINITION, agent_network_name: "beta" });
+      recordFrames(progress, undefined, 1, 0);
+      const { rerender } = renderBridge(ALPHA);
+
+      rerender({ networkId: BETA });
+
+      expect(held(BETA)).toEqual({
+        networkName: "beta",
+        definition: [{ origin: "beta_front", tools: [], instructions: "Beta" }],
+        metadata: undefined,
+      });
+
+      // The turn ends with its sly_data frame, which carries the block it saved.
+      recordFrames(
+        progress,
+        frame({
+          agent_network_definition: BETA_DEFINITION,
+          agent_network_name: "beta",
+          agent_network_metadata: { sample_queries: ["Beta query."] },
+        }),
+        1,
+        2
+      );
+      rerender({ networkId: BETA });
+
+      expect(held(BETA)?.metadata).toEqual({ sample_queries: ["Beta query."] });
+    });
+
+    it("keeps a frame naming a network off a new draft, which has no name to match", () => {
+      // A draft key is never a network's name, so a named frame always belongs to
+      // another entry, such as the network a chat turn has just named.
+      const draft = draftKeyFor("bridge_test");
+      useEditorNetworkStore.getState().reset(draft);
+      useEditorNetworkStore.getState().applyEdit(draft, [{ origin: "frontman", tools: [] }]);
+      const drawn = held(draft);
+      recordFrames(
+        undefined,
+        frame({
+          agent_network_definition: ALPHA_DEFINITION,
+          agent_network_name: "alpha",
+          agent_network_metadata: { sample_queries: ["Alpha query."] },
+        }),
+        0,
+        1
+      );
+
+      renderBridge(draft);
+
+      expect(held(draft)).toEqual(drawn);
+      expect(held(draft)?.networkName).toBeUndefined();
+    });
+
+    it("fills the network a draft's first chat turn names", () => {
+      // The draft's own entry stays as drawn: the turn lives under its new name.
+      const draft = draftKeyFor("bridge_test");
+      useEditorNetworkStore.getState().reset(draft);
+      recordFrames(
+        frame({ agent_network_definition: COFFEE_DEFINITION, agent_network_name: "coffee" }),
+        frame({
+          agent_network_definition: COFFEE_DEFINITION,
+          agent_network_name: "coffee",
+          agent_network_metadata: { sample_queries: ["Coffee query."] },
+        }),
+        1,
+        2
+      );
+      const { rerender } = renderBridge(draft);
+
+      rerender({ networkId: COFFEE });
+
+      expect(held(COFFEE)).toEqual({
+        networkName: "coffee",
+        definition: [{ origin: "coffee_front", tools: [], instructions: "Coffee" }],
+        metadata: { sample_queries: ["Coffee query."] },
+      });
+      expect(held(draft)).toBeUndefined();
+    });
+
+    it("lands a frame on a network opened from another folder", () => {
+      // The designer names a network by its file's stem, whatever folder it was opened from.
+      const HELLO = "basic/hello_world";
+      useEditorNetworkStore.getState().reset(HELLO);
+      open(HELLO, "hello_world", { description: "Hello block" });
+      recordFrames(
+        frame({
+          agent_network_definition: { hello_world_front: { instructions: "Say hello", tools: [] } },
+          agent_network_name: "hello_world",
+        }),
+        undefined,
+        1,
+        0
+      );
+
+      renderBridge(HELLO);
+
+      expect(held(HELLO)?.definition).toEqual([{ origin: "hello_world_front", tools: [], instructions: "Say hello" }]);
+    });
+
+    it("lands a frame whose name has a folder on the network the sidebar opens for it", () => {
+      // The designer can choose a nested name, and the sidebar then selects
+      // "generated/<that name>". Both sides compare by stem.
+      const NESTED = "generated/team/coffee";
+      useEditorNetworkStore.getState().reset(NESTED);
+      recordFrames(frame({ agent_network_definition: COFFEE_DEFINITION, agent_network_name: "team/coffee" }), undefined, 1, 0);
+
+      renderBridge(NESTED);
+
+      expect(held(NESTED)).toEqual({
+        networkName: "team/coffee",
+        definition: [{ origin: "coffee_front", tools: [], instructions: "Coffee" }],
+        metadata: undefined,
+      });
+    });
+
+    it("applies a run of progress frames, with or without a name", () => {
+      // The designer reports a single agent change without the network's name.
+      const front = { coffee_front: { instructions: "Coffee", tools: ["barista"] } };
+      const barista = { barista: { instructions: "Brew", tools: [] } };
+      const till = { till: { instructions: "Charge", tools: [] } };
+      recordFrames(frame({ agent_network_definition: COFFEE_DEFINITION, agent_network_name: "coffee" }), undefined, 1, 0);
+      const { rerender } = renderBridge(COFFEE);
+
+      recordFrames(frame({ agent_network_definition: { ...front, ...barista } }), undefined, 2, 0);
+      rerender({ networkId: COFFEE });
+      recordFrames(frame({ agent_network_definition: { ...front, ...barista, ...till } }), undefined, 3, 0);
+      rerender({ networkId: COFFEE });
+
+      const entry = held(COFFEE);
+      expect(entry?.networkName).toBe("coffee");
+      expect(entry?.definition.map((agent) => agent.origin)).toEqual(["coffee_front", "barista", "till"]);
+    });
+
+    it("takes a chat turn's frames after a local rename, and the block they carry", () => {
+      // The chat sends the name of its own last frame, not the renamed one, so the
+      // designer saves the turn under that name and the entry follows it.
+      open(COFFEE, "coffee", { sample_queries: ["Q1"] });
+      useEditorNetworkStore.getState().reconcileFromServer(COFFEE, {
+        definition: held(COFFEE)!.definition,
+        networkName: "latte",
+      });
+      recordFrames(
+        frame({ agent_network_definition: COFFEE_DEFINITION, agent_network_name: "coffee" }),
+        frame({
+          agent_network_definition: COFFEE_DEFINITION,
+          agent_network_name: "coffee",
+          agent_network_metadata: { sample_queries: ["Q2"] },
+        }),
+        1,
+        2
+      );
+
+      renderBridge(COFFEE);
+
+      expect(held(COFFEE)).toEqual({
+        networkName: "coffee",
+        definition: [{ origin: "coffee_front", tools: [], instructions: "Coffee" }],
+        metadata: { sample_queries: ["Q2"] },
+      });
     });
   });
 });
