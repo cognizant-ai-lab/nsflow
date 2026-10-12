@@ -49,7 +49,7 @@ import AgentNode from "./AgentNode";
 import FloatingEdge from "./FloatingEdge";
 import NetworkFileActions from "./NetworkFileActions";
 import { toConnectivityList } from "../state/definitionShape";
-import { useEditorNetworkStore } from "../state/editorNetworkStore";
+import { asMetadataBlock, type NetworkMetadataBlock, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
 import { waitForServedNetwork } from "../state/servedNetworks";
 import { useApiPort } from "../context/ApiPortContext";
@@ -271,10 +271,15 @@ const AgentFlow = ({ selectedNetwork, onNetworkImported }: AgentFlowProps) => {
         // Seed the editor store under the network's own name before saving, because
         // sendEditorUpdate reads the name from there when the caller omits it, and a
         // later visit to the Editor should find the same network already loaded.
+        //
+        // The file's block, or {} when it has none, so the replaced network's block
+        // does not survive. Held as well as sent, so a later save still sends it.
+        const metadata: NetworkMetadataBlock = asMetadataBlock(payload.metadata) ?? {};
         useEditorNetworkStore.getState().reconcileFromServer(networkName, {
           definition,
           networkName,
           hocon: payload.hocon,
+          metadata,
         });
 
         await sendEditorUpdate({
@@ -284,6 +289,7 @@ const AgentFlow = ({ selectedNetwork, onNetworkImported }: AgentFlowProps) => {
           definition,
           networkName,
           message: `Import agent network "${networkName}"`,
+          metadata,
         });
 
         // Saved is not the same as servable: neuro-san picks the file up on its next

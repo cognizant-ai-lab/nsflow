@@ -242,3 +242,106 @@ describe("network name handling", () => {
     expect(body.user_message.text).toBe('Name this agent network "x"');
   });
 });
+
+describe("the metadata block", () => {
+  // The designer's contract for agent_network_metadata: no key means "keep the block of
+  // the file this save goes over", and any value, {} included, is written as sent.
+  const HELD = { sample_queries: ["Book me a trip to Paris."], date_created: "2026-01-01T00:00:00+00:00" };
+  const ECHOED = { ...HELD, sample_queries: ["Generated query."], date_modified: "2026-02-02T00:00:00+00:00" };
+
+  /** The sly_data of the nth save the mocked fetch received. */
+  const sentSlyData = (fetchMock: ReturnType<typeof streamingFetch>, n = 0) =>
+    JSON.parse(String(fetchMock.mock.calls[n][1].body)).sly_data;
+
+  beforeEach(() => {
+    useEditorNetworkStore.getState().reset(NET);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reads the block a frame echoes", () => {
+    const payload = parseEchoedPayload({
+      response: {
+        type: "AGENT_FRAMEWORK",
+        sly_data: { agent_network_definition: [{ origin: "a", tools: [] }], agent_network_metadata: ECHOED },
+      },
+    });
+    expect(payload?.metadata).toEqual(ECHOED);
+  });
+
+  it("reads nothing about the block from a frame without one, or with one that is not a block", () => {
+    // undefined is "nothing said", so the store keeps the block it holds.
+    for (const echoed of [undefined, null, "not a block", ["q"]]) {
+      const payload = parseEchoedPayload({
+        response: {
+          type: "AGENT_FRAMEWORK",
+          sly_data: { agent_network_definition: [{ origin: "a", tools: [] }], agent_network_metadata: echoed },
+        },
+      });
+      expect(payload?.metadata).toBeUndefined();
+    }
+  });
+
+  it("sends the block the store holds for the network", async () => {
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "a", tools: [] }],
+      networkName: "coffee_shop",
+      metadata: HELD,
+    });
+    const fetchMock = streamingFetch(FRAMES);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendEditorUpdate({ apiUrl: API, networkId: NET, agentName: "a", definition: [] });
+
+    expect(sentSlyData(fetchMock).agent_network_metadata).toEqual(HELD);
+  });
+
+  it("sends no key, never {}, for a network the store holds no block for", async () => {
+    // A draft built by hand, before its first save. {} would tell the designer to
+    // wipe the block of the file the save goes over.
+    useEditorNetworkStore.getState().applyEdit(NET, [{ origin: "a", tools: [] }]);
+    const fetchMock = streamingFetch(FRAMES);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendEditorUpdate({ apiUrl: API, networkId: NET, agentName: "a", definition: [] });
+
+    expect(sentSlyData(fetchMock)).not.toHaveProperty("agent_network_metadata");
+  });
+
+  it("sends an explicit block over the held one, {} included", async () => {
+    useEditorNetworkStore.getState().reconcileFromServer(NET, { definition: [], metadata: HELD });
+    const fetchMock = streamingFetch(FRAMES);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendEditorUpdate({ apiUrl: API, networkId: NET, agentName: "a", definition: [], metadata: {} });
+
+    expect(sentSlyData(fetchMock).agent_network_metadata).toEqual({});
+  });
+
+  it("sends the block a save echoed on the next save", async () => {
+    // The echo carries this save's dates and any queries the designer generated, and
+    // the next save has to send those, not the block held before.
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "a", tools: [] }],
+      networkName: "coffee_shop",
+      metadata: HELD,
+    });
+    const echo = {
+      response: {
+        type: "AGENT_FRAMEWORK",
+        sly_data: { agent_network_definition: [{ origin: "a", tools: [] }], agent_network_metadata: ECHOED },
+      },
+    };
+    const fetchMock = streamingFetch([FRAMES[0], echo]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendEditorUpdate({ apiUrl: API, networkId: NET, agentName: "a", definition: [] });
+    await sendEditorUpdate({ apiUrl: API, networkId: NET, agentName: "a", definition: [] });
+
+    expect(sentSlyData(fetchMock, 0).agent_network_metadata).toEqual(HELD);
+    expect(sentSlyData(fetchMock, 1).agent_network_metadata).toEqual(ECHOED);
+    expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual(ECHOED);
+  });
+});

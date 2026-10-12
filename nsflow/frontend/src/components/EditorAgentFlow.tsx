@@ -39,7 +39,12 @@ import ChatIcon from "@mui/icons-material/ChatBubbleOutlined";
 import HomeIcon from "@mui/icons-material/Home";
 import { useChatContext } from "../context/ChatContext";
 import { getFeatureFlags, toDesignerNetworkName, toServedNetworkPath, getManifestUpdatePeriodMs } from "../utils/config";
-import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import {
+  asMetadataBlock,
+  type NetworkMetadataBlock,
+  selectEntry,
+  useEditorNetworkStore,
+} from "../state/editorNetworkStore";
 import { isDraftKey, useEditorDraftSession } from "../state/editorSession";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
@@ -112,6 +117,8 @@ type ParsedImport = {
   readonly definition: ConnectivityInfo[];
   readonly networkName: string;
   readonly hocon?: string;
+  /** The file's metadata block, or undefined when it has none. */
+  readonly metadata?: NetworkMetadataBlock;
   /** The file's own name, which is what the user recognises in a prompt. */
   readonly fileName: string;
 };
@@ -910,6 +917,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       // question: an overtaken one stops before asking, and an open question is closed
       // when its network goes.
       const attempt = ++namingAttemptRef.current;
+      let replacesNetwork = false;
       if (!isOwnName) {
         const taken = await isNameTaken(name);
         if (attempt !== namingAttemptRef.current) return false;
@@ -920,6 +928,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
             setPendingNameOverwrite(pending);
           });
           if (!overwrite || attempt !== namingAttemptRef.current) return false;
+          replacesNetwork = true;
         }
       }
 
@@ -928,10 +937,17 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       // the question above, too, which can stay open while progress frames change the
       // network: a definition read before it would be written back over those changes.
       const definition = useEditorNetworkStore.getState().entries[networkId]?.definition ?? [];
+      const heldMetadata = useEditorNetworkStore.getState().entries[networkId]?.metadata;
       // Record it locally first, so the panel and the next edit's outgoing sly_data
       // agree on the name even before the echo comes back. reconcileFromServer is
       // the right door: a name is not an edit, so it must not create an undo step.
-      reconcileFromServer(networkId, { definition, networkName: name });
+      reconcileFromServer(networkId, {
+        definition,
+        networkName: name,
+        // Taking another network's name replaces it, so its block must not survive.
+        // Hold this network's own block, or {} for a draft, so every save sends it.
+        metadata: replacesNetwork ? (heldMetadata ?? {}) : undefined,
+      });
 
       // Nothing to persist for a network with no agents yet. The name is recorded
       // locally and the first agent added carries it, which is what makes that first
@@ -1098,12 +1114,16 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
   const applyImport = useCallback(
     async (parsed: ParsedImport) => {
       if (!apiUrl) return;
+      // The file's block, or {} when it has none, so the replaced network's block does
+      // not survive. Held as well as sent, so a later save still sends it.
+      const metadata: NetworkMetadataBlock = parsed.metadata ?? {};
       // Into the store first, exactly as a designer frame would arrive, so the canvas
       // draws immediately rather than after the round trip.
       useEditorNetworkStore.getState().reconcileFromServer(networkId, {
         definition: parsed.definition,
         networkName: parsed.networkName,
         hocon: parsed.hocon,
+        metadata,
       });
       setImportError(undefined);
 
@@ -1121,6 +1141,9 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           definition: parsed.definition,
           networkName: parsed.networkName,
           message: `Import agent network "${parsed.networkName}"`,
+          // Passed as well as held, so a frame that reaches the store before this save
+          // goes out cannot change the block it sends.
+          metadata,
           onFrame: publishSlyData,
         });
         await waitForServedNetwork(apiUrl, parsed.networkName);
@@ -1166,7 +1189,13 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           return;
         }
 
-        const parsed: ParsedImport = { definition, networkName, hocon: payload.hocon, fileName: file.name };
+        const parsed: ParsedImport = {
+          definition,
+          networkName,
+          hocon: payload.hocon,
+          metadata: asMetadataBlock(payload.metadata),
+          fileName: file.name,
+        };
         // The server decides, because it is the one that knows the registry. Comparing
         // against the network on this canvas was too narrow: importing a name that is
         // already served overwrites it whether or not it happens to be open here.

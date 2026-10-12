@@ -195,3 +195,102 @@ describe("reconcile churn", () => {
     expect(entry().definition).toEqual(def("frontman", "barista"));
   });
 });
+
+describe("the metadata block", () => {
+  // The block every save sends back as agent_network_metadata. The store holds it per
+  // network; it is not part of the edit history.
+  const BLOCK = { sample_queries: ["Book me a trip to Paris."], date_created: "2026-01-01T00:00:00+00:00" };
+
+  beforeEach(() => {
+    useEditorNetworkStore.getState().reset(NET);
+  });
+
+  it("holds the block a payload carries, as a copy", () => {
+    const sent = { sample_queries: ["q"] };
+    useEditorNetworkStore.getState().reconcileFromServer(NET, { definition: def("frontman"), metadata: sent });
+    sent.sample_queries.push("changed later");
+
+    expect(entry().metadata).toEqual({ sample_queries: ["q"] });
+  });
+
+  it("keeps the held block when a payload says nothing about it", () => {
+    // Progress frames never carry the block, and must not wipe it.
+    const store = useEditorNetworkStore.getState();
+    store.reconcileFromServer(NET, { definition: def("frontman"), metadata: BLOCK });
+    store.reconcileFromServer(NET, { definition: def("frontman", "barista") });
+
+    expect(entry().metadata).toEqual(BLOCK);
+  });
+
+  it("drops the held block when a payload says the network has none", () => {
+    // What opening a file with no block says, so an older block is not saved onto it.
+    const store = useEditorNetworkStore.getState();
+    store.reconcileFromServer(NET, { definition: def("frontman"), metadata: BLOCK });
+    store.reconcileFromServer(NET, { definition: def("frontman"), metadata: null });
+
+    expect(entry().metadata).toBeUndefined();
+  });
+
+  it("takes a new block even when nothing else in the payload changed", () => {
+    // A save can change only the block (date_modified), and the next save has to
+    // send the new one.
+    const store = useEditorNetworkStore.getState();
+    store.reconcileFromServer(NET, { definition: def("frontman"), networkName: "coffee_shop", metadata: BLOCK });
+    const next = { ...BLOCK, date_modified: "2026-02-02T00:00:00+00:00" };
+    store.reconcileFromServer(NET, { definition: def("frontman"), networkName: "coffee_shop", metadata: next });
+
+    expect(entry().metadata).toEqual(next);
+  });
+
+  it("keeps the block through edits, undo and redo", () => {
+    const store = useEditorNetworkStore.getState();
+    store.reconcileFromServer(NET, { definition: def("frontman"), metadata: BLOCK });
+
+    store.applyEdit(NET, def("frontman", "barista"));
+    expect(entry().metadata).toEqual(BLOCK);
+    store.undo(NET);
+    expect(entry().definition).toEqual(def("frontman"));
+    expect(entry().metadata).toEqual(BLOCK);
+    store.redo(NET);
+    expect(entry().definition).toEqual(def("frontman", "barista"));
+    expect(entry().metadata).toEqual(BLOCK);
+  });
+
+  it("holds no block for a network built by hand", () => {
+    useEditorNetworkStore.getState().applyEdit(NET, def("frontman"));
+
+    expect(entry().metadata).toBeUndefined();
+  });
+
+  it("holds {} as a block, which is what an import or a name taken over another network leaves", () => {
+    useEditorNetworkStore.getState().reconcileFromServer(NET, { definition: def("frontman"), metadata: {} });
+
+    expect(entry().metadata).toEqual({});
+  });
+
+  it("keeps the block out of IndexedDB, so a reload cannot bring back an old one", async () => {
+    // After a reload a designer frame can bring the entry back onto the canvas with a
+    // fresh definition and no block. A block restored from storage would then be sent
+    // over whatever the file holds now.
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: def("frontman"),
+      networkName: "coffee_shop",
+      metadata: BLOCK,
+    });
+
+    // zustand's persist middleware writes asynchronously; let the microtask and the
+    // fake-indexeddb transaction settle before reading it back.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const { indexedDBStorage } = await import("../uiCommon");
+    const stored = (await indexedDBStorage.getItem("nsflow-editor-network")) as {
+      state: { entries: Record<string, Record<string, unknown>> };
+    } | null;
+
+    expect(stored?.state.entries[NET].definition).toEqual(def("frontman"));
+    expect(stored?.state.entries[NET].networkName).toBe("coffee_shop");
+    expect(stored?.state.entries[NET]).not.toHaveProperty("metadata");
+    // This page load still holds it.
+    expect(entry().metadata).toEqual(BLOCK);
+  });
+});

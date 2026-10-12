@@ -129,6 +129,41 @@ describe("applyFramesToStore", () => {
       { origin: "frontman", tools: ["barista"] },
     ]);
   });
+
+  it("holds the block a chat turn saved, so the next manual save sends it", () => {
+    // A designer turn generates sample queries and echoes the saved block in its
+    // sly_data. Holding on to the older block would make the next manual save
+    // send that one and lose the new queries.
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "frontman", tools: [] }],
+      metadata: { sample_queries: ["Old query."] },
+    });
+
+    applyFramesToStore(
+      NET,
+      undefined,
+      frame({
+        agent_network_definition: { frontman: { instructions: "Greet", tools: [] } },
+        agent_network_name: "coffee_shop",
+        agent_network_metadata: { sample_queries: ["Generated query."] },
+      }),
+      false
+    );
+
+    expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({ sample_queries: ["Generated query."] });
+  });
+
+  it("keeps the held block when the frame carries none", () => {
+    // Progress frames never carry the block.
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "frontman", tools: [] }],
+      metadata: { sample_queries: ["Held query."] },
+    });
+
+    applyFramesToStore(NET, frame({ connectivity_info: [{ origin: "frontman", tools: ["barista"] }] }), undefined, true);
+
+    expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({ sample_queries: ["Held query."] });
+  });
 });
 
 describe("useEditorProgressBridge", () => {

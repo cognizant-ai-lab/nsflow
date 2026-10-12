@@ -35,7 +35,7 @@ import { useChatContext } from "../context/ChatContext";
 import { type ConnectivityInfo } from "../uiCommon";
 import { latestNetworkPayload } from "../utils/progressHelper";
 import { toConnectivityList } from "./definitionShape";
-import { useEditorNetworkStore } from "./editorNetworkStore";
+import { asMetadataBlock, useEditorNetworkStore } from "./editorNetworkStore";
 
 type Frame = { text: string | object } | string | object | undefined;
 
@@ -70,9 +70,13 @@ export const applyFramesToStore = (
   if (!definition) return;
 
   const payload = latestNetworkPayload(progressFrame, slyDataFrame, preferProgress);
-  useEditorNetworkStore
-    .getState()
-    .reconcileFromServer(networkId, { definition, networkName: payload?.agent_network_name });
+  useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+    definition,
+    networkName: payload?.agent_network_name,
+    // The block a chat turn saved, so the next manual save keeps its sample queries.
+    // Taken from the same frame as the definition.
+    metadata: asMetadataBlock(payload?.agent_network_metadata),
+  });
 };
 
 /**

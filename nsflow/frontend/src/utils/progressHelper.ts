@@ -17,6 +17,8 @@ limitations under the License.
 export type ProgressPayload = {
   agent_network_definition?: Record<string, any> | Array<Record<string, any>>;
   agent_network_name?: string;
+  /** Only on a sly_data frame, which is the whole sly_data; progress frames carry no block. */
+  agent_network_metadata?: unknown;
 };
 
 /**

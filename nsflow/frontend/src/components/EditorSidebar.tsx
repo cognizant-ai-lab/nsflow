@@ -27,7 +27,7 @@ import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { toDesignerNetworkName, toServedNetworkPath } from "../utils/config";
-import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { asMetadataBlock, selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
 import type { ConnectivityInfo } from "../uiCommon";
@@ -298,6 +298,9 @@ const EditorSidebar = ({
           // which lands the save on the opened file; the consequences of that choice
           // are recorded on toDesignerNetworkName.
           networkName: toDesignerNetworkName(networkName),
+          // The file's block, which every save sends back. null when the file has
+          // none, so a block held from an earlier visit is dropped.
+          metadata: asMetadataBlock(payload?.agent_network_metadata) ?? null,
         });
         setSelectedNetworkId(networkName);
         // Tell the page as well, not just this component. EditorAgentFlow keys its
