@@ -16,7 +16,7 @@ limitations under the License.
 
 import { describe, expect, it } from "vitest";
 
-import { parseCodeFenceJSON } from "./progressHelper";
+import { parseCodeFenceJSON, progressIsNewer } from "./progressHelper";
 
 /** JSON in a ```json fence, the way the sly_data socket records a frame. */
 const fenced = (value: unknown) => `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
@@ -31,5 +31,22 @@ describe("parseCodeFenceJSON", () => {
 
   it("takes the first block when the text holds two fenced blocks", () => {
     expect(parseCodeFenceJSON(`${fenced({ first: 1 })}\nThen:\n${fenced({ second: 2 })}`)).toEqual({ first: 1 });
+  });
+});
+
+describe("progressIsNewer", () => {
+  it("is true only when the progress frame is strictly newer", () => {
+    expect(progressIsNewer(2, 1)).toBe(true);
+    expect(progressIsNewer(1, 2)).toBe(false);
+  });
+
+  it("gives a tie to the sly_data frame", () => {
+    expect(progressIsNewer(5, 5)).toBe(false);
+  });
+
+  it("treats a stream with no frame yet as oldest", () => {
+    expect(progressIsNewer(1, undefined)).toBe(true);
+    expect(progressIsNewer(undefined, 1)).toBe(false);
+    expect(progressIsNewer(undefined, undefined)).toBe(false);
   });
 });

@@ -205,8 +205,8 @@ describe("useEditorProgressBridge", () => {
       getLastSlyDataMessage: ({ network }: { network?: string }) => (network === DESIGNER ? slyData : undefined),
       progressTick: lastProgressAt,
       slyDataTick: lastSlyDataAt,
-      lastProgressAt,
-      lastSlyDataAt,
+      lastProgressAtByNetwork: { [DESIGNER]: lastProgressAt },
+      lastSlyDataAtByNetwork: { [DESIGNER]: lastSlyDataAt },
     });
   };
 
@@ -224,8 +224,8 @@ describe("useEditorProgressBridge", () => {
       getLastSlyDataMessage: () => undefined,
       progressTick: 1,
       slyDataTick: 0,
-      lastProgressAt: 2,
-      lastSlyDataAt: 1,
+      lastProgressAtByNetwork: { [DESIGNER]: 2 },
+      lastSlyDataAtByNetwork: { [DESIGNER]: 1 },
     });
 
     renderHook(() => useEditorProgressBridge(NET));
@@ -268,6 +268,27 @@ describe("useEditorProgressBridge", () => {
       expect(entry.metadata).toEqual({ sample_queries: ["Generated query."] });
       expect(entry.networkName).toBe(NET);
       expect(entry.definition).toEqual([{ origin: "frontman", tools: [], instructions: "Greet" }]);
+    });
+
+    it("decides on this stream's own times, not on the global ones", () => {
+      // The global times also move for frames that never reach this stream, so here
+      // they say progress is newer while the stream's own times say sly_data is.
+      hold(NET, NET, { sample_queries: ["Old query."] });
+      recordFrames(
+        frame({ agent_network_definition: GREET, agent_network_name: NET }),
+        frame({
+          agent_network_definition: GREET,
+          agent_network_name: NET,
+          agent_network_metadata: { sample_queries: ["Generated query."] },
+        }),
+        1,
+        2
+      );
+      Object.assign(chatContext, { lastProgressAt: 5, lastSlyDataAt: 2 });
+
+      renderHook(() => useEditorProgressBridge(NET));
+
+      expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({ sample_queries: ["Generated query."] });
     });
 
     it("keeps the block a sly_data frame gave when a newer progress frame arrives", () => {

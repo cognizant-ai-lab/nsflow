@@ -33,7 +33,7 @@ import { useEffect } from "react";
 
 import { useChatContext } from "../context/ChatContext";
 import { type ConnectivityInfo } from "../uiCommon";
-import { latestNetworkPayload } from "../utils/progressHelper";
+import { latestNetworkPayload, progressIsNewer } from "../utils/progressHelper";
 import { toConnectivityList } from "./definitionShape";
 import { asMetadataBlock, useEditorNetworkStore } from "./editorNetworkStore";
 
@@ -102,8 +102,8 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
     targetNetwork,
     progressTick,
     slyDataTick,
-    lastProgressAt,
-    lastSlyDataAt,
+    lastProgressAtByNetwork,
+    lastSlyDataAtByNetwork,
   } = useChatContext();
 
   useEffect(() => {
@@ -112,9 +112,9 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
       networkId,
       getLastProgressMessage({ network: targetNetwork }),
       getLastSlyDataMessage({ network: targetNetwork }),
-      // A tie goes to the sly_data frame, as in ChatContext. The frame that ends a turn
-      // can share a millisecond with its last progress frame, and it holds the saved block.
-      lastProgressAt > lastSlyDataAt
+      // This stream's own times, as ChatContext uses: the global times also move for
+      // frames that never reach it. A tie goes to the sly_data frame.
+      progressIsNewer(lastProgressAtByNetwork[targetNetwork], lastSlyDataAtByNetwork[targetNetwork])
     );
     // The getters are rebuilt on every ChatContext render, so this runs on every
     // render, not only when a frame is recorded.
@@ -123,8 +123,8 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
     targetNetwork,
     progressTick,
     slyDataTick,
-    lastProgressAt,
-    lastSlyDataAt,
+    lastProgressAtByNetwork,
+    lastSlyDataAtByNetwork,
     getLastProgressMessage,
     getLastSlyDataMessage,
   ]);

@@ -22,6 +22,7 @@ import {
   asObjectText,
   latestNetworkPayload,
   overlayNetworkPayload,
+  progressIsNewer,
 } from "../utils/progressHelper";
 import { withoutByokText } from "../state/byok";
 
@@ -126,6 +127,9 @@ type ChatContextType = {
   slyDataTick: number;
   lastProgressAt: number;
   lastSlyDataAt: number;
+  /** Per-network arrival times. Decide freshness with these, through progressIsNewer. */
+  lastProgressAtByNetwork: Record<string, number>;
+  lastSlyDataAtByNetwork: Record<string, number>;
 
   waitingForAgent: boolean;
   setWaitingForAgent: (waiting: boolean) => void;
@@ -275,8 +279,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const getLatestNetworkPayload = (network?: string): ProgressPayload | undefined => {
     const net = network ?? targetNetwork;
     if (!net) return undefined;
-    const preferProgress =
-      (lastProgressAtByNetwork[net] ?? 0) > (lastSlyDataAtByNetwork[net] ?? 0);
+    const preferProgress = progressIsNewer(lastProgressAtByNetwork[net], lastSlyDataAtByNetwork[net]);
     return latestNetworkPayload(lastProgressByNetwork[net], lastSlyDataByNetwork[net], preferProgress);
   };
 
@@ -303,8 +306,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     if (!net) return base;
-    const preferProgress =
-      (lastProgressAtByNetwork[net] ?? 0) > (lastSlyDataAtByNetwork[net] ?? 0);
+    const preferProgress = progressIsNewer(lastProgressAtByNetwork[net], lastSlyDataAtByNetwork[net]);
     if (lastSlyDataByNetwork[net]?.sender === "user" && !preferProgress) return base;
     return overlayNetworkPayload(base, getLatestNetworkPayload(net));
   };
@@ -347,7 +349,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       getLatestNetworkPayload, getEditorOutgoingSlyData, clearNetworkPayloadState,
 
       makeSlyDataConnectionId, makeLogConnectionId, makeProgressConnectionId,
-      progressTick, slyDataTick, lastProgressAt, lastSlyDataAt,
+      progressTick, slyDataTick, lastProgressAt, lastSlyDataAt, lastProgressAtByNetwork, lastSlyDataAtByNetwork,
       waitingForAgent, setWaitingForAgent
      }}>
       {children}

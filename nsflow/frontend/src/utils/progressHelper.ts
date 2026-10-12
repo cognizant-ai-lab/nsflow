@@ -69,6 +69,15 @@ function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefi
 }
 
 /**
+ * Whether a network's last progress frame is newer than its last sly_data frame.
+ * Pass that network's own arrival times. A tie goes to sly_data, whose frame ends a
+ * turn and holds the block the turn saved.
+ */
+export function progressIsNewer(progressAt: number | undefined, slyDataAt: number | undefined): boolean {
+  return (progressAt ?? 0) > (slyDataAt ?? 0);
+}
+
+/**
  * Pick the freshest network payload between the progress and slydata streams.
  * `preferProgress` decides which stream wins; the other is the fallback when
  * the preferred one has no payload — and payloads carrying an

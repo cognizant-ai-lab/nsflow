@@ -64,6 +64,8 @@ vi.mock("../context/ChatContext", () => ({
     slyDataTick: 0,
     lastProgressAt: 0,
     lastSlyDataAt: 0,
+    lastProgressAtByNetwork: {},
+    lastSlyDataAtByNetwork: {},
     waitingForAgent: false,
     targetNetwork: "",
   }),
