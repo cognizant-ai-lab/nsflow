@@ -73,8 +73,8 @@ export const applyFramesToStore = (
   useEditorNetworkStore.getState().reconcileFromServer(networkId, {
     definition,
     networkName: payload?.agent_network_name,
-    // The block a chat turn saved, so the next manual save keeps its sample queries.
-    // Taken from the same frame as the definition.
+    // The block a chat turn saved, from the same frame as the definition. The last
+    // sly_data frame alone may be another network's, or older than the held block.
     metadata: asMetadataBlock(payload?.agent_network_metadata),
   });
 };
@@ -112,10 +112,12 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
       networkId,
       getLastProgressMessage({ network: targetNetwork }),
       getLastSlyDataMessage({ network: targetNetwork }),
-      lastProgressAt >= lastSlyDataAt
+      // A tie goes to the sly_data frame, as in ChatContext. The frame that ends a turn
+      // can share a millisecond with its last progress frame, and it holds the saved block.
+      lastProgressAt > lastSlyDataAt
     );
-    // progressTick and slyDataTick change on every recorded frame, which is what
-    // makes this run per frame rather than per render.
+    // The getters are rebuilt on every ChatContext render, so this runs on every
+    // render, not only when a frame is recorded.
   }, [
     networkId,
     targetNetwork,

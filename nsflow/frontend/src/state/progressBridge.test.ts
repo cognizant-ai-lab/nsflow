@@ -167,16 +167,30 @@ describe("applyFramesToStore", () => {
 });
 
 describe("useEditorProgressBridge", () => {
+  const DESIGNER = "agent_network_designer";
+
   beforeEach(() => {
     useEditorNetworkStore.getState().reset(NET);
   });
+
+  /** Point the mocked ChatContext at one progress frame and one sly_data frame. */
+  const recordFrames = (progress: unknown, slyData: unknown, lastProgressAt: number, lastSlyDataAt: number) => {
+    Object.assign(chatContext, {
+      targetNetwork: DESIGNER,
+      getLastProgressMessage: ({ network }: { network?: string }) => (network === DESIGNER ? progress : undefined),
+      getLastSlyDataMessage: ({ network }: { network?: string }) => (network === DESIGNER ? slyData : undefined),
+      progressTick: lastProgressAt,
+      slyDataTick: lastSlyDataAt,
+      lastProgressAt,
+      lastSlyDataAt,
+    });
+  };
 
   it("reads frames under targetNetwork but stores them under the edited network", () => {
     // The regression this guards: in editor mode every progress frame is tagged with
     // ChatContext's targetNetwork (the designer agent), never with the network the
     // editor is showing. Looking frames up under the edited network finds an empty
     // bucket, and the canvas renders nothing at all.
-    const DESIGNER = "agent_network_designer";
     const progress = frame({ connectivity_info: [{ origin: "frontman", tools: ["barista"] }] });
 
     Object.assign(chatContext, {
@@ -195,5 +209,114 @@ describe("useEditorProgressBridge", () => {
     expect(useEditorNetworkStore.getState().entries[NET]?.definition).toEqual([
       { origin: "frontman", tools: ["barista"] },
     ]);
+  });
+
+  describe("the metadata block", () => {
+    const GREET = { frontman: { instructions: "Greet", tools: [] } };
+    const GREET_WARMLY = { frontman: { instructions: "Greet warmly", tools: [] } };
+
+    /** Hold a block for an entry, the way an earlier frame or save echo leaves one. */
+    const hold = (networkId: string, networkName: string, metadata: Record<string, unknown>) =>
+      useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+        definition: [{ origin: "frontman", tools: [] }],
+        networkName,
+        metadata,
+      });
+
+    it("takes the block of a sly_data frame recorded in the same millisecond as the last progress frame", () => {
+      // The sly_data frame ends the turn and carries the block it saved. Losing the
+      // tie keeps the older block, and the next manual save would send that one.
+      hold(NET, NET, { sample_queries: ["Old query."] });
+      recordFrames(
+        frame({ agent_network_definition: GREET, agent_network_name: NET }),
+        frame({
+          agent_network_definition: GREET,
+          agent_network_name: NET,
+          agent_network_metadata: { sample_queries: ["Generated query."] },
+        }),
+        1000,
+        1000
+      );
+
+      renderHook(() => useEditorProgressBridge(NET));
+
+      const entry = useEditorNetworkStore.getState().entries[NET];
+      expect(entry.metadata).toEqual({ sample_queries: ["Generated query."] });
+      expect(entry.networkName).toBe(NET);
+      expect(entry.definition).toEqual([{ origin: "frontman", tools: [], instructions: "Greet" }]);
+    });
+
+    it("keeps the block a sly_data frame gave when a newer progress frame arrives", () => {
+      // Progress frames never carry the block, so a newer one changes the definition
+      // and leaves the saved block alone.
+      hold(NET, NET, { sample_queries: ["Old query."] });
+      const slyData = frame({
+        agent_network_definition: GREET,
+        agent_network_name: NET,
+        agent_network_metadata: { sample_queries: ["Generated query."] },
+      });
+      recordFrames(undefined, slyData, 1, 2);
+      const { rerender } = renderHook(() => useEditorProgressBridge(NET));
+
+      recordFrames(frame({ agent_network_definition: GREET_WARMLY, agent_network_name: NET }), slyData, 3, 2);
+      rerender();
+
+      const entry = useEditorNetworkStore.getState().entries[NET];
+      expect(entry.definition).toEqual([{ origin: "frontman", tools: [], instructions: "Greet warmly" }]);
+      expect(entry.metadata).toEqual({ sample_queries: ["Generated query."] });
+    });
+
+    it("does not bring back an older block from the last sly_data frame when progress is newer", () => {
+      // A rename or an agent-panel save takes the echoed block straight into the
+      // store, and its echo never reaches the sly_data stream. That stream's last
+      // frame is then older than the held block.
+      hold(NET, NET, { sample_queries: ["q"], date_modified: "T2" });
+      recordFrames(
+        frame({ agent_network_definition: GREET_WARMLY, agent_network_name: NET }),
+        frame({
+          agent_network_definition: GREET,
+          agent_network_name: NET,
+          agent_network_metadata: { sample_queries: ["q"], date_modified: "T1" },
+        }),
+        3,
+        2
+      );
+
+      renderHook(() => useEditorProgressBridge(NET));
+
+      expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({
+        sample_queries: ["q"],
+        date_modified: "T2",
+      });
+    });
+
+    it("does not give a network the block of the network the last sly_data frame names", () => {
+      // Frames are kept per Editor visit, not per network. After the canvas moves to
+      // network B, the last sly_data frame can still be network A's.
+      const A = "generated/network_a";
+      const B = "generated/network_b";
+      useEditorNetworkStore.getState().reset(A);
+      useEditorNetworkStore.getState().reset(B);
+      recordFrames(
+        frame({ agent_network_definition: GREET_WARMLY, agent_network_name: "network_b" }),
+        frame({
+          agent_network_definition: GREET,
+          agent_network_name: "network_a",
+          agent_network_metadata: { sample_queries: ["A query."], date_created: "A0" },
+        }),
+        3,
+        2
+      );
+      const { rerender } = renderHook(({ networkId }) => useEditorProgressBridge(networkId), {
+        initialProps: { networkId: A },
+      });
+
+      rerender({ networkId: B });
+
+      const entry = useEditorNetworkStore.getState().entries[B];
+      expect(entry.networkName).toBe("network_b");
+      expect(entry.definition).toEqual([{ origin: "frontman", tools: [], instructions: "Greet warmly" }]);
+      expect(entry.metadata).toBeUndefined();
+    });
   });
 });
