@@ -102,8 +102,8 @@ const EditorSidebar = ({
   const didAutoSelectRef = useRef(false);
   const lastSeenNameRef = useRef<string | null>(null);
   const designPlaceholderRef = useRef<string | null>(null);
-  // The Load Existing fetch in flight. Aborted when this sidebar unmounts, so a
-  // sidebar that New network replaced cannot write an old network into the store.
+  // The Load Existing fetch in flight. Aborted by a newer load, and when this sidebar
+  // unmounts, so a replaced sidebar cannot write an old network into the store.
   const loadAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => loadAbortRef.current?.abort(), []);
 
@@ -252,6 +252,7 @@ const EditorSidebar = ({
     clearChat();
     regenerateSessionId(); // Triggers TabbedChatPanel to reconnect WebSocket
 
+    loadAbortRef.current?.abort();
     const load = new AbortController();
     loadAbortRef.current = load;
     setLoadingDefinition(true);
@@ -262,6 +263,7 @@ const EditorSidebar = ({
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+        if (load.signal.aborted) return;
         const detail = errData.detail || response.statusText;
         console.error("Failed to load network definition:", detail);
         // Said out loud, not just to the console. This failing quietly is why the
@@ -313,7 +315,8 @@ const EditorSidebar = ({
       console.error("Error loading network definition:", e);
       setError(e instanceof Error ? `Could not open "${networkName}": ${e.message}` : `Could not open "${networkName}".`);
     } finally {
-      setLoadingDefinition(false);
+      // A newer load is still running and owns the spinner.
+      if (loadAbortRef.current === load) setLoadingDefinition(false);
     }
   }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, onSelectNetwork]);
 

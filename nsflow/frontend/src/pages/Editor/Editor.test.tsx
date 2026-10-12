@@ -589,6 +589,54 @@ describe("the New network button", () => {
     expect(useEditorNetworkStore.getState().entries[B_KEY]).toBeUndefined();
   });
 
+  it("drops every load the old sidebar started, not only the last one", async () => {
+    await mountEditor();
+    let releaseDefinition: () => void = () => {};
+    definitionGate = new Promise<void>((resolve) => {
+      releaseDefinition = resolve;
+    });
+    // Pick network_a, then network_b, and click New network while both are loading.
+    await act(async () => {
+      pickerOnChange?.(null, A_KEY);
+    });
+    await act(async () => {
+      pickerOnChange?.(null, B_KEY);
+    });
+    await clickNewNetwork();
+
+    definitionGate = undefined;
+    await act(async () => {
+      releaseDefinition();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(useEditorNetworkStore.getState().entries[A_KEY]).toBeUndefined();
+    expect(useEditorNetworkStore.getState().entries[B_KEY]).toBeUndefined();
+  });
+
+  it("opens only the last of two networks picked one after the other, with no error", async () => {
+    await mountEditor();
+    let releaseDefinition: () => void = () => {};
+    definitionGate = new Promise<void>((resolve) => {
+      releaseDefinition = resolve;
+    });
+    await act(async () => {
+      pickerOnChange?.(null, A_KEY);
+    });
+    await act(async () => {
+      pickerOnChange?.(null, B_KEY);
+    });
+
+    definitionGate = undefined;
+    await act(async () => {
+      releaseDefinition();
+    });
+
+    await waitFor(() => expect(screen.getByText(`Editing: ${B_KEY}`)).toBeTruthy());
+    expect(useEditorNetworkStore.getState().entries[A_KEY]).toBeUndefined();
+    expect(screen.queryByText(/Could not open/)).toBeNull();
+  });
+
   it("ignores the old sidebar's delayed refresh after New network", async () => {
     await mountEditor();
     // A frame naming network_a and the designer's reply land in one render, so the
