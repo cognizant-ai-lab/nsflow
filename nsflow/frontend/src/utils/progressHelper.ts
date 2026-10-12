@@ -26,23 +26,30 @@ export type ProgressPayload = {
  * ```json
  * { "foo": "bar" }
  * ```
- * Strings in the JSON, such as agent instructions, may contain ``` too, so the
- * longest fenced body is parsed first, then the shortest, then the whole string,
+ * Strings in the JSON, such as agent instructions, may contain ``` too, so each
+ * closing fence after the first opener is tried in turn, then the whole string,
  * which covers unfenced JSON with ``` in its strings. Returns undefined when
  * nothing parses.
  */
 export function parseCodeFenceJSON(s: string): any | undefined {
-  const longest = s.match(/```(?:json)?\s*([\s\S]*)```/i);
-  const shortest = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidates = longest && shortest ? [longest[1], shortest[1], s] : [s];
-  for (const raw of candidates) {
-    try {
-      return JSON.parse(raw.trim());
-    } catch {
-      // Not JSON; try the next candidate.
+  const opener = s.match(/```(?:json)?\s*/i);
+  if (opener?.index !== undefined) {
+    const start = opener.index + opener[0].length;
+    for (let end = s.indexOf("```", start); end !== -1; end = s.indexOf("```", end + 3)) {
+      const parsed = parseJSON(s.slice(start, end));
+      if (parsed !== undefined) return parsed;
     }
   }
-  return undefined;
+  return parseJSON(s);
+}
+
+/** JSON.parse of the trimmed text, or undefined when it is not JSON. */
+function parseJSON(raw: string): unknown {
+  try {
+    return JSON.parse(raw.trim());
+  } catch {
+    return undefined;
+  }
 }
 
 /** Normalize text (string | object) → object */

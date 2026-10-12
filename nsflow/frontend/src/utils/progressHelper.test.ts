@@ -36,6 +36,11 @@ describe("parseCodeFenceJSON", () => {
     expect(parseCodeFenceJSON(JSON.stringify(value, null, 2))).toEqual(value);
   });
 
+  it("parses a first block that holds a code fence and is followed by another block", () => {
+    const value = { frontman: { instructions: "Reply in a ```python``` block.", tools: [] } };
+    expect(parseCodeFenceJSON(`${fenced(value)}\nThen:\n${fenced({ second: 2 })}`)).toEqual(value);
+  });
+
   it("takes the first block when the text holds two fenced blocks", () => {
     expect(parseCodeFenceJSON(`${fenced({ first: 1 })}\nThen:\n${fenced({ second: 2 })}`)).toEqual({ first: 1 });
   });
