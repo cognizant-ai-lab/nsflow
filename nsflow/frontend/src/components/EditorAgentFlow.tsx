@@ -123,7 +123,8 @@ type PendingNameOverwrite = {
   readonly decide: (overwrite: boolean) => void;
 };
 
-const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
+// Called when New network is clicked, so the page can leave the open network.
+const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: string; onNewNetwork?: () => void }) => {
   const { apiUrl } = useApiPort();
   // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -1906,7 +1907,15 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           <Tooltip title={`${isDraft ? "Start a new draft, discarding this one." : "Start a new agent network."} You can always describe a network in the chat instead of building it by hand.`}>
               <span style={{ display: 'inline-flex' }}>
                 <IconButton
+                  // Not while the designer is working, whose reply would be lost, or while
+                  // an edit is saving, whose late echo would bring back the old network.
+                  disabled={designerBusy || savingCount > 0}
                   onClick={() => {
+                    onNewNetwork?.();
+                    // An agent still selected on the old network would become the
+                    // parent of the next added agent, which is not in this network.
+                    setSelectedNodeId("");
+                    setSelectedAgentName(null);
                     // Start over the same way the Editor starts: ask for a name, then
                     // put the frontman down. A draft therefore always has both, and
                     // nothing can be added before the network's entry point exists.

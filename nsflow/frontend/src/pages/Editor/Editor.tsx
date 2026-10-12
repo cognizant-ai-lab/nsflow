@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import * as React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import EditorAgentFlow from "../../components/EditorAgentFlow";
@@ -26,11 +26,17 @@ import Header from "../../components/Header";
 import { ApiPortProvider } from "../../context/ApiPortContext";
 import { NeuroSanProvider } from "../../context/NeuroSanContext";
 import { ChatProvider, useChatContext } from "../../context/ChatContext";
+import { useChatControls } from "../../hooks/useChatControls";
 import { getInitialTheme } from "../../utils/theme";
 
 const EditorContent: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("");
-  const { setIsEditorMode } = useChatContext();
+  const { setIsEditorMode, regenerateSessionId } = useChatContext();
+  const { stopWebSocket, clearChat } = useChatControls();
+  // Changed by New network so the sidebar remounts with nothing selected.
+  const [sidebarKey, setSidebarKey] = useState(0);
+  // The live sidebar's key. A replaced sidebar can still call back from a fetch or a timer.
+  const sidebarKeyRef = useRef(0);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", getInitialTheme());
@@ -41,9 +47,22 @@ const EditorContent: React.FC = () => {
     return () => setIsEditorMode(false);
   }, [setIsEditorMode]);
 
-  // Callback to select a network in sidebar
-  const handleNetworkSelected = (networkName: string) => {
+  // Callback to select a network in sidebar. Only the live sidebar may select, so a
+  // replaced one cannot put the page back on the network it was showing.
+  const handleNetworkSelected = (fromKey: number) => (networkName: string) => {
+    if (fromKey !== sidebarKeyRef.current) return;
     setSelectedNetwork(networkName);
+  };
+
+  // Leave the open network the way Load Existing does, in the same click as the new
+  // draft, so the progress bridge cannot copy the old cache into it.
+  const handleNewNetwork = () => {
+    stopWebSocket();
+    clearChat();
+    regenerateSessionId();
+    setSelectedNetwork("");
+    sidebarKeyRef.current += 1;
+    setSidebarKey(sidebarKeyRef.current);
   };
 
   return (
@@ -62,13 +81,13 @@ const EditorContent: React.FC = () => {
               <PanelGroup direction="horizontal" autoSaveId="nsflow-editor-layout">
                 <Panel id="editor-sidebar" order={1} defaultSize={12} minSize={10} maxSize={25}>
                   {/* Editor Sidebar */}
-                  <EditorSidebar onSelectNetwork={handleNetworkSelected} />
+                  <EditorSidebar key={sidebarKey} onSelectNetwork={handleNetworkSelected(sidebarKey)} />
                 </Panel>
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
                 
                 <Panel id="editor-canvas" order={2} defaultSize={55} minSize={40}>
                   {/* Editable AgentFlow */}
-                  <EditorAgentFlow selectedNetwork={selectedNetwork} />
+                  <EditorAgentFlow selectedNetwork={selectedNetwork} onNewNetwork={handleNewNetwork} />
                 </Panel>
                 
                 <PanelResizeHandle className="w-1 bg-gray-700 cursor-ew-resize" />
