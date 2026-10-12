@@ -29,12 +29,18 @@ limitations under the License.
  *   - an entry with NO instructions/description keys is a TOOLBOX tool
  *   - an entry WITH them, even empty, is an LLM agent
  *
- * So a user who clears an agent's instructions and sends the list form has that agent
- * quietly reclassified as a toolbox tool, which then fails validation ("toolbox agent
- * 'x' references tool 'y'") and summons the designer LLM to repair the network:
- * verified against a live designer at 39 seconds and thousands of tokens per edit,
- * renaming and restructuring what the user drew. Sending the dict preserves the
- * distinction and the same edit applies deterministically in under a second.
+ * Empty instructions are not rare: the designer's own `AddAgent` writes a new agent's
+ * text fields as empty strings. Sent in the list form, such an agent is quietly
+ * reclassified as a toolbox tool, which then fails validation ("toolbox agent 'x'
+ * references tool 'y'") and summons the designer LLM to repair the network: verified
+ * against a live designer at 39 seconds and thousands of tokens per edit, renaming
+ * and restructuring what the user drew. Sending the dict keeps such an agent an LLM
+ * agent.
+ *
+ * That fixes the classification only. An empty value still fails the separate
+ * non-empty check, which summons the instructions writer instead (see
+ * `newAgentAttributes`). An edit applies deterministically in under a second only
+ * when both fields have text.
  */
 
 import type { ConnectivityInfo } from "../uiCommon";

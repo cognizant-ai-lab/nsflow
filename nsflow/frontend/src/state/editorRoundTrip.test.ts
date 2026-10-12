@@ -115,9 +115,9 @@ describe("sendEditorUpdate", () => {
 
     const body = JSON.parse(String(init.body));
     // Sent as the designer's dict shape, not the list shape the store holds. The
-    // designer's list-to-dict converter drops falsy values, so an agent whose
-    // instructions the user cleared would arrive with no instructions key at all and
-    // be reclassified as a toolbox tool.
+    // designer's list-to-dict converter drops falsy values, so an agent with empty
+    // instructions, as AddAgent writes them, would arrive with no instructions key at
+    // all and be reclassified as a toolbox tool.
     expect(body.sly_data.agent_network_definition).toEqual({
       coffee_frontman: { tools: ["barista"] },
     });

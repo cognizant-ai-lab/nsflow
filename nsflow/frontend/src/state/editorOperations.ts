@@ -74,9 +74,9 @@ export const uniqueAgentName = (definition: ConnectivityInfo[], base: string): s
  * what keeps a hand-added agent on the deterministic sub-second path.
  *
  * They stay deliberately generic, saying only what is certainly true rather than
- * inventing a purpose, because the user is expected to replace them. A user who then
- * clears them keeps the empty value: emptiness is preserved on the way to the
- * designer (see `definitionShape`), which is free to fill them in from there.
+ * inventing a purpose, because the user is expected to replace them. Replaced, not
+ * cleared: the agent panel refuses an empty value for either, because that same
+ * validator would hand it to the instructions writer rather than save it.
  */
 export const newAgentAttributes = (name: string): Record<string, unknown> => ({
   instructions: `You are ${name}.`,
