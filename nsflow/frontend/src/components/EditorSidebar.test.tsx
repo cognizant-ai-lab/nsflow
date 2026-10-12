@@ -27,7 +27,7 @@ limitations under the License.
  */
 
 import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EditorSidebar from "./EditorSidebar";
 import { updateAgent } from "../state/editorOperations";
@@ -60,6 +60,9 @@ vi.mock("../hooks/useChatControls", () => ({
   useChatControls: () => ({ stopWebSocket: vi.fn(), clearChat: vi.fn() }),
 }));
 
+/** Chat state a test sets over the defaults below; the sidebar reads it on its next render. */
+let chatState: Record<string, unknown> = {};
+
 vi.mock("../context/ChatContext", () => ({
   useChatContext: () => ({
     chatMessages: [],
@@ -71,6 +74,7 @@ vi.mock("../context/ChatContext", () => ({
     addSlyDataMessage: vi.fn(),
     regenerateSessionId: vi.fn(),
     waitingForAgent: false,
+    ...chatState,
   }),
 }));
 
@@ -96,6 +100,7 @@ describe("opening an existing agent network", () => {
   beforeEach(() => {
     autocompleteOnChange = undefined;
     definitionResponse = DEFINITION;
+    chatState = {};
     useEditorNetworkStore.setState({ entries: {} });
     window.history.replaceState({}, "", "/editor");
 
@@ -287,5 +292,57 @@ describe("opening an existing agent network", () => {
 
     expect(useEditorNetworkStore.getState().entries[NETWORK_NAME].metadata).toBeUndefined();
     expect(slyData).not.toHaveProperty("agent_network_metadata");
+  });
+});
+
+describe("following the network a chat turn names", () => {
+  beforeEach(() => {
+    chatState = {};
+    useEditorNetworkStore.setState({ entries: {} });
+    window.history.replaceState({}, "", "/editor");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ agents: [] }) }) as Response)
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The latest payload ChatContext reports for a frame naming `name`. */
+  const payloadFor = (name: string) => ({
+    agent_network_definition: { [`${name}_agent`]: { instructions: name, tools: [] } },
+    agent_network_name: name,
+  });
+
+  it("does not move back to the earlier network when the refresh after a message runs", async () => {
+    // Each render gets its own getter, as ChatContext's do, so a call kept from an
+    // earlier render reads that render's frames.
+    const coffee = payloadFor("coffee");
+    const beta = payloadFor("beta");
+    const onSelectNetwork = vi.fn();
+    chatState = { getLatestNetworkPayload: () => coffee, progressTick: 1 };
+    const { rerender } = render(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await act(async () => {});
+    expect(onSelectNetwork).toHaveBeenLastCalledWith("generated/coffee");
+
+    // The user's message arms the refresh while coffee's frame is still the latest.
+    chatState = { ...chatState, chatMessages: [{ sender: "system" }, { sender: "user" }] };
+    rerender(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await act(async () => {});
+
+    // Before it runs, the turn's first frame names a new network.
+    chatState = { ...chatState, getLatestNetworkPayload: () => beta, progressTick: 2 };
+    rerender(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await act(async () => {});
+    expect(onSelectNetwork).toHaveBeenLastCalledWith("generated/beta");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(onSelectNetwork).toHaveBeenLastCalledWith("generated/beta");
   });
 });

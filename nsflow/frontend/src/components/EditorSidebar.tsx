@@ -208,6 +208,11 @@ const EditorSidebar = ({
     }
   };
 
+  // The refresh from the latest render, for the delayed call below. The one from
+  // when it was armed reads older frames and can select a network the chat has left.
+  const refreshFromLogsRef = useRef(refreshFromLogs);
+  refreshFromLogsRef.current = refreshFromLogs;
+
   // Fetch available networks for Load Existing dropdown (view mode)
   useEffect(() => {
     if (!isNsReady || !apiUrl) return;
@@ -368,12 +373,11 @@ const EditorSidebar = ({
     // Only react when count increases and not the initial system message
     if (currentCount > lastChatMessageCount && currentCount > 1) {
       setTimeout(() => {
-        refreshFromLogs();
+        refreshFromLogsRef.current();
       }, 1000);
     }
 
     setLastChatMessageCount(currentCount);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, slyDataTick]);
 
   // keep true by default, but turn it off in view mode:
