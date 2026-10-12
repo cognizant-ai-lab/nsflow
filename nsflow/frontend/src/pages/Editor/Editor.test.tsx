@@ -147,6 +147,10 @@ const A_DEFINITION = {
 const B_DEFINITION = {
   network_b_agent: { instructions: "Front of B.", description: "B", tools: [] },
 };
+const X_KEY = "generated/network_x";
+const X_DEFINITION = {
+  network_x_agent: { instructions: "Front of X.", description: "X", tools: [] },
+};
 
 /** A save as the designer received it: the network name and its agents with their down-chains. */
 type Save = { name: unknown; agents: Record<string, string[]> };
@@ -164,6 +168,8 @@ describe("the New network button", () => {
   let echoSlyData = true;
   /** Held by a test to keep a Load Existing fetch in flight; undefined answers at once. */
   let definitionGate: Promise<void> | undefined;
+  /** Held by a test to keep a HOCON upload in flight; undefined answers at once. */
+  let importGate: Promise<void> | undefined;
 
   /** The agents of a store entry as "agent->[down-chains]", or undefined when there is no entry. */
   const entryAgents = (key: string): string[] | undefined =>
@@ -241,6 +247,7 @@ describe("the New network button", () => {
     saveGate = undefined;
     echoSlyData = true;
     definitionGate = undefined;
+    importGate = undefined;
     chat = undefined;
     panelAgentName = undefined;
     pickerOnChange = undefined;
@@ -257,7 +264,7 @@ describe("the New network button", () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ agents: [{ agent_name: A_KEY }, { agent_name: B_KEY }] }),
+            json: async () => ({ agents: [{ agent_name: A_KEY }, { agent_name: B_KEY }, { agent_name: X_KEY }] }),
           } as Response;
         }
         if (url.includes("/api/v1/network_definition/")) {
@@ -268,6 +275,14 @@ describe("the New network button", () => {
             ok: true,
             status: 200,
             json: async () => ({ agent_network_definition: definition, agent_network_name: key }),
+          } as Response;
+        }
+        if (url.includes("/api/v1/hocon/import")) {
+          if (importGate) await importGate;
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ definition: X_DEFINITION, network_name: "network_x", hocon: "# x", name_is_taken: false }),
           } as Response;
         }
         if (url.includes("/api/v1/hocon/name_taken")) {
@@ -422,6 +437,38 @@ describe("the New network button", () => {
     expect(screen.queryByText(`Editing: ${A_KEY}`)).toBeNull();
     expect(usedDrafts()).toEqual([]);
     expect(entryAgents(A_KEY)).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
+  });
+
+  it("waits for an import, from its upload to its save, so its echo cannot land on the new draft", async () => {
+    await mountEditor();
+    await loadExisting(A_KEY);
+    let releaseUpload: () => void = () => {};
+    importGate = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    let releaseSave: () => void = () => {};
+    saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+    });
+
+    expect(newNetworkButton().disabled).toBe(true);
+
+    importGate = undefined;
+    await act(async () => {
+      releaseUpload();
+    });
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(newNetworkButton().disabled).toBe(true);
+
+    saveGate = undefined;
+    await act(async () => {
+      releaseSave();
+    });
+    await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
   });
 
   it("is disabled while the designer is working", async () => {
