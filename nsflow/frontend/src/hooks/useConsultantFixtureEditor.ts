@@ -70,7 +70,10 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
       if (generation === requestGenerationRef.current) setFixtures(loaded);
       return loaded;
     } catch (loadError: unknown) {
-      if (generation === requestGenerationRef.current) setError(describeError(loadError));
+      if (generation === requestGenerationRef.current) {
+        setFixtures([]);
+        setError(describeError(loadError));
+      }
       return [];
     } finally {
       if (generation === requestGenerationRef.current) setLoading(false);
@@ -80,6 +83,7 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
   useEffect(() => {
     if (!open) return;
     const contextGeneration = ++contextGenerationRef.current;
+    setFixtures([]);
     setEditingNames(new Set());
     setDrafts({});
     setSaveErrors({});
