@@ -29,6 +29,8 @@ from matplotlib.ticker import MaxNLocator
 class NetworkConsultantChart:
     """Render Network Consultant test progress as a transparent PNG."""
 
+    PASS_THRESHOLD = 0.8
+
     PALETTE: ClassVar[dict[str, dict[str, str | list[str]]]] = {
         "light": {
             "fg": "#0b0b0b",
@@ -53,7 +55,7 @@ class NetworkConsultantChart:
     @classmethod
     def threshold_color(cls, passed: int, total: int, colors: dict[str, str | list[str]]) -> str:
         """Return the pass-threshold color for a complete test-suite checkpoint."""
-        color_name = "green" if total > 0 and passed / total >= 0.8 else "red"
+        color_name = "green" if total > 0 and passed / total >= cls.PASS_THRESHOLD else "red"
         return cls._color(colors, color_name)
 
     @staticmethod

@@ -105,8 +105,8 @@ class TestNetworkConsultantJobs:
         job.stop.assert_awaited_once_with(manager.STOP_GRACE_PERIOD_SECONDS)
 
     @staticmethod
-    def test_malformed_progress_does_not_break_status(tmp_path: Path) -> None:
-        """Ignore malformed checkpoints and return the rest of the job status."""
+    def test_malformed_progress_does_not_break_status(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Warn about malformed checkpoints and return the rest of the job status."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
         (directory / "job-1.progress.jsonl").write_text(
             '{"passed": {}, "total": "broken", "segments": [1, null]}\nnot-json\n',
@@ -117,6 +117,18 @@ class TestNetworkConsultantJobs:
 
         assert status.running is False
         assert status.progress_chart is None
+        assert "Ignoring malformed progress" in caplog.text
+
+    @staticmethod
+    def test_malformed_results_are_reported(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Warn when a results sidecar cannot be decoded."""
+        manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
+        (directory / "job-1.results.json").write_text("not-json", encoding="utf-8")
+
+        status = asyncio.run(manager.status("job-1"))
+
+        assert status.results == []
+        assert "Ignoring malformed results" in caplog.text
 
     @staticmethod
     def test_chart_failure_does_not_break_status(tmp_path: Path) -> None:
@@ -140,11 +152,14 @@ class TestNetworkConsultantJobs:
     def test_pruning_removes_finished_files_and_job_record(tmp_path: Path) -> None:
         """Remove a completed job from storage and memory as one lifecycle operation."""
         manager, job, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
+        unrelated_path = directory / "other-instance.log"
+        unrelated_path.write_text("owned elsewhere", encoding="utf-8")
 
         asyncio.run(manager._prune_finished_jobs(directory))  # pylint: disable=protected-access
 
         job.close.assert_awaited_once_with(manager.STOP_GRACE_PERIOD_SECONDS)
         assert not (directory / "job-1.log").exists()
+        assert unrelated_path.is_file()
         with pytest.raises(JobNotFoundError):
             asyncio.run(manager.status("job-1"))
 
