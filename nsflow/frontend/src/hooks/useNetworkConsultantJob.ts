@@ -31,6 +31,7 @@ import {
 } from "../utils/networkConsultantApi";
 
 export const CONSULTANT_POLL_INTERVAL_MS = 2000;
+export const CONSULTANT_POLL_MAX_CONSECUTIVE_FAILURES = 3;
 
 interface UseNetworkConsultantJobOptions {
   apiUrl: string;
@@ -93,12 +94,15 @@ export const useNetworkConsultantJob = ({
     (id: string, jobNetwork: string) => {
       stopPolling();
       const generation = pollGenerationRef.current;
+      let consecutiveFailures = 0;
 
       const pollOnce = async () => {
         try {
           const status = await getConsultantJob(apiUrl, id, themeMode);
           const isCurrentJob = generation === pollGenerationRef.current && jobNetwork === networkRef.current;
           if (!isCurrentJob) return;
+          consecutiveFailures = 0;
+          setError(null);
           applyStatus(status);
           if (status.running) {
             pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
@@ -109,7 +113,12 @@ export const useNetworkConsultantJob = ({
         } catch (pollError: unknown) {
           if (generation !== pollGenerationRef.current || jobNetwork !== networkRef.current) return;
           setError(describeError(pollError));
-          stopPolling();
+          consecutiveFailures += 1;
+          if (consecutiveFailures < CONSULTANT_POLL_MAX_CONSECUTIVE_FAILURES) {
+            pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
+          } else {
+            stopPolling();
+          }
         }
       };
 

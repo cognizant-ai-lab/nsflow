@@ -117,6 +117,31 @@ describe("useNetworkConsultantJob", () => {
     expect(onFinished).toHaveBeenCalledWith("network-a");
   });
 
+  it("recovers when one status poll fails temporarily", async () => {
+    mockedGetJob
+      .mockRejectedValueOnce(new Error("Temporary network error"))
+      .mockResolvedValueOnce({ job_id: "job-1", running: false, returncode: 0, results: [] });
+    const onFinished = vi.fn();
+    const { result } = renderHook(() =>
+      useNetworkConsultantJob({
+        apiUrl: "http://api",
+        networkName: "network-a",
+        sessionId: "session",
+        themeMode: "light",
+        onFinished,
+      }),
+    );
+
+    await act(async () => result.current.start("run-tests", "tests", { network_name: "network-a" }));
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
+    expect(result.current.error).toBe("Temporary network error");
+
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
+    expect(result.current.error).toBeNull();
+    expect(result.current.running).toBe(false);
+    expect(onFinished).toHaveBeenCalledWith("network-a");
+  });
+
   it("clears the previous chart as soon as any new job starts", async () => {
     mockedGetJob.mockResolvedValue({
       job_id: "job-1",
