@@ -248,7 +248,7 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     ...(!isEditorMode && pluginNetworkConsultant
       ? [{
           id: "consultant",
-          label: "Network Consultant",
+          label: "Self-Improvement",
           icon: <ConsultantIcon />,
           component: <NetworkConsultantPanel selectedNetwork={activeNetwork} />,
         }]
