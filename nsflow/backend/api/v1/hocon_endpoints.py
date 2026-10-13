@@ -53,6 +53,7 @@ from fastapi.responses import JSONResponse
 from neuro_san.internals.graph.persistence.agent_network_restorer import AgentNetworkRestorer
 
 from nsflow.backend.utils.agentutils.agent_network_utils import REGISTRY_DIR
+from nsflow.backend.utils.agentutils.network_metadata_block import NetworkMetadataBlock
 
 router = APIRouter(prefix="/api/v1")
 
@@ -208,6 +209,9 @@ async def import_hocon(file: UploadFile = File(...)) -> Dict[str, Any]:
         # The original text, so the editor can offer it straight back for export
         # before the designer has echoed a canonical version.
         "hocon": text,
+        # None when the file has no block. The import save sends this block, or an empty
+        # one, so the network it replaces does not keep its old sample queries.
+        "metadata": NetworkMetadataBlock.from_config(config),
     }
 
 

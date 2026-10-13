@@ -39,7 +39,18 @@ import {
   type ConnectivityInfo,
 } from "../uiCommon";
 import { listToDict, toConnectivityList } from "./definitionShape";
-import { type ServerNetworkPayload, useEditorNetworkStore } from "./editorNetworkStore";
+import {
+  asMetadataBlock,
+  type NetworkMetadataBlock,
+  type ServerNetworkPayload,
+  useEditorNetworkStore,
+} from "./editorNetworkStore";
+
+/**
+ * The designer's sly_data key for the metadata block. Absent or null: the designer
+ * keeps the block of the file it saves over. Present, even {}: written as sent.
+ */
+export const AGENT_NETWORK_METADATA_KEY = "agent_network_metadata";
 
 /** One line of the stream: neuro-san wraps each chat message under `response`. */
 type StreamFrame = { response?: ChatMessage & { sly_data?: Record<string, unknown> } };
@@ -67,6 +78,9 @@ export const parseEchoedPayload = (frame: unknown): ServerNetworkPayload | undef
     definition,
     networkName: slyData[AGENT_NETWORK_NAME_KEY] as string | undefined,
     hocon: slyData[AGENT_NETWORK_HOCON] as string | undefined,
+    // The block the designer just saved, so the next save sends it back. A frame with
+    // none leaves the held block alone.
+    metadata: asMetadataBlock(slyData[AGENT_NETWORK_METADATA_KEY]),
   };
 };
 
@@ -118,6 +132,11 @@ export type SendEditorUpdateArgs = {
    * naming the network says so instead.
    */
   readonly message?: string;
+  /**
+   * The metadata block to send. Defaults to the block the store holds, and no key when
+   * it holds none. An import passes it, with {} when the file has none.
+   */
+  readonly metadata?: NetworkMetadataBlock;
   readonly signal?: AbortSignal;
   /** Called per streamed frame, for progress feedback while an edit applies. */
   readonly onFrame?: (frame: ChatMessage) => void;
@@ -130,6 +149,7 @@ export const sendEditorUpdate = async ({
   definition,
   networkName,
   message,
+  metadata,
   signal,
   onFrame,
 }: SendEditorUpdateArgs): Promise<void> => {
@@ -137,6 +157,9 @@ export const sendEditorUpdate = async ({
   // Fall back to the name the store already learned from a previous echo, so an
   // edit cannot silently stop persisting just because a caller omitted it.
   const targetName = networkName ?? store.entries[networkId]?.networkName;
+  // Never made up here: an empty block would wipe the file's block, so a network
+  // with no block sends no key.
+  const metadataBlock = metadata ?? asMetadataBlock(store.entries[networkId]?.metadata);
 
   const response = await fetch(`${apiUrl}/api/v1/${AGENT_NETWORK_DESIGNER_ID}/streaming_chat`, {
     method: "POST",
@@ -151,6 +174,7 @@ export const sendEditorUpdate = async ({
         // shape silently reclassifies an agent with empty instructions as a tool.
         [AGENT_NETWORK_DEFINITION_KEY]: listToDict(definition),
         ...(targetName ? { [AGENT_NETWORK_NAME_KEY]: targetName } : {}),
+        ...(metadataBlock ? { [AGENT_NETWORK_METADATA_KEY]: metadataBlock } : {}),
         // Apply the edit as given instead of having the designer reason about the
         // whole network again.
         skip_designer: true,
