@@ -210,6 +210,7 @@ describe("useNetworkConsultantJob", () => {
     expect(result.current.jobId).toBeNull();
     expect(result.current.running).toBe(false);
     expect(mockedGetJob).not.toHaveBeenCalled();
+    expect(mockedStopJob).toHaveBeenCalledWith("http://api", "old-job");
   });
 
   it("does not report late answer or stop failures in a newly selected network", async () => {

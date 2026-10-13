@@ -160,7 +160,14 @@ export const useNetworkConsultantJob = ({
     setProgressChart(null);
     try {
       const id = await startConsultantJob(apiUrl, endpoint, { ...body, session_id: sessionId });
-      if (operationGeneration !== pollGenerationRef.current || jobNetwork !== networkRef.current) return false;
+      if (operationGeneration !== pollGenerationRef.current || jobNetwork !== networkRef.current) {
+        try {
+          await stopConsultantJob(apiUrl, id);
+        } catch (cleanupError: unknown) {
+          console.error("Failed to stop stale Network Consultant job:", cleanupError);
+        }
+        return false;
+      }
       setJobId(id);
       setRunning(true);
       beginPolling(id, jobNetwork);
