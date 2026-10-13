@@ -58,6 +58,7 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
   const [creating, setCreating] = useState(false);
   const [slyDataKeys, setSlyDataKeys] = useState<string[]>([]);
   const requestGenerationRef = useRef(0);
+  const contextGenerationRef = useRef(0);
 
   const fetchFixtures = useCallback(async (): Promise<ConsultantFixture[]> => {
     if (!networkName) return [];
@@ -78,21 +79,31 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
 
   useEffect(() => {
     if (!open) return;
-    let active = true;
+    const contextGeneration = ++contextGenerationRef.current;
     setEditingNames(new Set());
     setDrafts({});
     setSaveErrors({});
     setNewFixture(null);
+    setNewFixtureErrors([]);
+    setViewingFile(null);
+    setJustCreatedName(null);
+    setSavingName(null);
+    setDuplicatingName(null);
+    setDeletingName(null);
+    setCreating(false);
+    setSlyDataKeys([]);
     void fetchFixtures();
     void listSlyDataKeys(apiUrl, networkName)
       .then((keys) => {
-        if (active) setSlyDataKeys(keys);
+        if (contextGeneration === contextGenerationRef.current) setSlyDataKeys(keys);
       })
-      .catch(() => {
-        if (active) setSlyDataKeys([]);
+      .catch((discoveryError: unknown) => {
+        if (contextGeneration !== contextGenerationRef.current) return;
+        setSlyDataKeys([]);
+        setError(describeError(discoveryError));
       });
     return () => {
-      active = false;
+      if (contextGeneration === contextGenerationRef.current) contextGenerationRef.current += 1;
       requestGenerationRef.current += 1;
     };
   }, [apiUrl, fetchFixtures, networkName, open]);
@@ -120,6 +131,7 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
     setDrafts((previous) => ({ ...previous, [fixtureName]: updater(previous[fixtureName]) }));
 
   const duplicateFixture = async (fixture: ConsultantFixture) => {
+    const contextGeneration = contextGenerationRef.current;
     setDuplicatingName(fixture.name);
     setError(null);
     try {
@@ -130,7 +142,9 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
         connections: fixture.connections.length ? fixture.connections : ["direct"],
         interactions: rawInteractionsToPayload(fixture.interactions),
       });
+      if (contextGeneration !== contextGenerationRef.current) return;
       const loaded = await fetchFixtures();
+      if (contextGeneration !== contextGenerationRef.current) return;
       const created = loaded.find((candidate) => candidate.name === `${copyName}.hocon`);
       if (created) {
         setJustCreatedName(created.name);
@@ -138,24 +152,26 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
         setEditingNames((previous) => new Set(previous).add(created.name));
       }
     } catch (duplicateError: unknown) {
-      setError(describeError(duplicateError));
+      if (contextGeneration === contextGenerationRef.current) setError(describeError(duplicateError));
     } finally {
-      setDuplicatingName(null);
+      if (contextGeneration === contextGenerationRef.current) setDuplicatingName(null);
     }
   };
 
   const deleteFixture = async (fixture: ConsultantFixture) => {
     if (!window.confirm(`Delete "${fixture.name}"? This cannot be undone.`)) return;
+    const contextGeneration = contextGenerationRef.current;
     setDeletingName(fixture.name);
     setError(null);
     try {
       await deleteConsultantFixture(apiUrl, networkName, fixture.name);
+      if (contextGeneration !== contextGenerationRef.current) return;
       cancelEditing(fixture.name);
       void fetchFixtures();
     } catch (deleteError: unknown) {
-      setError(describeError(deleteError));
+      if (contextGeneration === contextGenerationRef.current) setError(describeError(deleteError));
     } finally {
-      setDeletingName(null);
+      if (contextGeneration === contextGenerationRef.current) setDeletingName(null);
     }
   };
 
@@ -168,6 +184,7 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
       setSaveErrors((previous) => ({ ...previous, [fixture.name]: payloadErrors }));
       return;
     }
+    const contextGeneration = contextGenerationRef.current;
     setSavingName(fixture.name);
     setSaveErrors((previous) => ({ ...previous, [fixture.name]: [] }));
     try {
@@ -183,12 +200,15 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
         },
         fixture.name,
       );
+      if (contextGeneration !== contextGenerationRef.current) return;
       cancelEditing(fixture.name);
       void fetchFixtures();
     } catch (saveError: unknown) {
-      setSaveErrors((previous) => ({ ...previous, [fixture.name]: describeErrors(saveError) }));
+      if (contextGeneration === contextGenerationRef.current) {
+        setSaveErrors((previous) => ({ ...previous, [fixture.name]: describeErrors(saveError) }));
+      }
     } finally {
-      setSavingName(null);
+      if (contextGeneration === contextGenerationRef.current) setSavingName(null);
     }
   };
 
@@ -204,6 +224,7 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
       setNewFixtureErrors(payloadErrors);
       return;
     }
+    const contextGeneration = contextGenerationRef.current;
     setCreating(true);
     setNewFixtureErrors([]);
     try {
@@ -213,12 +234,13 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
         connections: ["direct"],
         interactions,
       });
+      if (contextGeneration !== contextGenerationRef.current) return;
       setNewFixture(null);
       void fetchFixtures();
     } catch (createError: unknown) {
-      setNewFixtureErrors(describeErrors(createError));
+      if (contextGeneration === contextGenerationRef.current) setNewFixtureErrors(describeErrors(createError));
     } finally {
-      setCreating(false);
+      if (contextGeneration === contextGenerationRef.current) setCreating(false);
     }
   };
 
