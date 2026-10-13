@@ -124,6 +124,7 @@ describe("network consultant fixture state", () => {
 
     const interaction = emptyInteraction();
     interaction.timeoutInSeconds = "Infinity";
+    interaction.checks[0].value = "Expected response";
 
     expect(buildInteractionsPayload([interaction]).errors).toEqual([
       "Turn 1: a prompt is required.",
