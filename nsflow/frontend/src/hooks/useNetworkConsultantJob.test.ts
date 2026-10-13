@@ -26,17 +26,26 @@ vi.mock("../utils/networkConsultantApi", () => ({
 }));
 
 import { CONSULTANT_POLL_INTERVAL_MS, useNetworkConsultantJob } from "./useNetworkConsultantJob";
-import { getConsultantJob, startConsultantJob } from "../utils/networkConsultantApi";
+import {
+  answerConsultantJob,
+  getConsultantJob,
+  startConsultantJob,
+  stopConsultantJob,
+} from "../utils/networkConsultantApi";
 
 const mockedGetJob = vi.mocked(getConsultantJob);
 const mockedStartJob = vi.mocked(startConsultantJob);
+const mockedAnswerJob = vi.mocked(answerConsultantJob);
+const mockedStopJob = vi.mocked(stopConsultantJob);
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 };
 
 describe("useNetworkConsultantJob", () => {
@@ -171,5 +180,73 @@ describe("useNetworkConsultantJob", () => {
       pendingStart.resolve("job-1");
       await firstStart!;
     });
+  });
+
+  it("ignores a start response that arrives after the selected network changes", async () => {
+    const pendingStart = deferred<string>();
+    mockedStartJob.mockReturnValue(pendingStart.promise);
+    const { result, rerender } = renderHook(
+      ({ networkName }) =>
+        useNetworkConsultantJob({
+          apiUrl: "http://api",
+          networkName,
+          sessionId: "session",
+          themeMode: "light",
+          onFinished: vi.fn(),
+        }),
+      { initialProps: { networkName: "network-a" } },
+    );
+
+    let startPromise: Promise<boolean>;
+    act(() => {
+      startPromise = result.current.start("run-tests", "tests", { network_name: "network-a" });
+    });
+    rerender({ networkName: "network-b" });
+    await act(async () => {
+      pendingStart.resolve("old-job");
+      await startPromise!;
+    });
+
+    expect(result.current.jobId).toBeNull();
+    expect(result.current.running).toBe(false);
+    expect(mockedGetJob).not.toHaveBeenCalled();
+  });
+
+  it("does not report late answer or stop failures in a newly selected network", async () => {
+    mockedGetJob.mockResolvedValue({ job_id: "job-1", running: true, returncode: null });
+    const pendingAnswer = deferred<void>();
+    const pendingStop = deferred<void>();
+    mockedAnswerJob.mockReturnValue(pendingAnswer.promise);
+    mockedStopJob.mockReturnValue(pendingStop.promise);
+    const { result, rerender } = renderHook(
+      ({ networkName }) =>
+        useNetworkConsultantJob({
+          apiUrl: "http://api",
+          networkName,
+          sessionId: "session",
+          themeMode: "light",
+          onFinished: vi.fn(),
+        }),
+      { initialProps: { networkName: "network-a" } },
+    );
+    await act(async () => result.current.start("run-tests", "tests", { network_name: "network-a" }));
+
+    let answerPromise: Promise<boolean>;
+    let stopPromise: Promise<void>;
+    act(() => {
+      answerPromise = result.current.submitAnswer("continue");
+      stopPromise = result.current.stop();
+    });
+    rerender({ networkName: "network-b" });
+    await act(async () => {
+      pendingAnswer.reject(new Error("Old answer failed"));
+      pendingStop.reject(new Error("Old stop failed"));
+      await Promise.all([answerPromise!, stopPromise!]);
+    });
+
+    expect(await answerPromise!).toBe(false);
+    expect(result.current.submittingAnswer).toBe(false);
+    expect(result.current.stopping).toBe(false);
+    expect(result.current.error).toBeNull();
   });
 });

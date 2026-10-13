@@ -132,6 +132,8 @@ export const useNetworkConsultantJob = ({
     setUngrounded([]);
     setProgressChart(null);
     setResults({});
+    setSubmittingAnswer(false);
+    setStopping(false);
   }, [networkName, stopPolling]);
 
   useEffect(() => stopPolling, [stopPolling]);
@@ -145,6 +147,7 @@ export const useNetworkConsultantJob = ({
     busyRef.current = true;
     setStarting(true);
     stopPolling();
+    const operationGeneration = pollGenerationRef.current;
     const jobNetwork = networkName;
     setJobOrigin(origin);
     setError(null);
@@ -157,7 +160,7 @@ export const useNetworkConsultantJob = ({
     setProgressChart(null);
     try {
       const id = await startConsultantJob(apiUrl, endpoint, { ...body, session_id: sessionId });
-      if (jobNetwork !== networkRef.current) return false;
+      if (operationGeneration !== pollGenerationRef.current || jobNetwork !== networkRef.current) return false;
       setJobId(id);
       setRunning(true);
       beginPolling(id, jobNetwork);
@@ -175,27 +178,30 @@ export const useNetworkConsultantJob = ({
 
   const submitAnswer = async (answer: string) => {
     if (!jobId || !answer.trim()) return false;
+    const operationGeneration = pollGenerationRef.current;
     setSubmittingAnswer(true);
     try {
       await answerConsultantJob(apiUrl, jobId, answer);
+      if (operationGeneration !== pollGenerationRef.current) return false;
       return true;
     } catch (answerError: unknown) {
-      setError(describeError(answerError));
+      if (operationGeneration === pollGenerationRef.current) setError(describeError(answerError));
       return false;
     } finally {
-      setSubmittingAnswer(false);
+      if (operationGeneration === pollGenerationRef.current) setSubmittingAnswer(false);
     }
   };
 
   const stop = async () => {
     if (!jobId) return;
+    const operationGeneration = pollGenerationRef.current;
     setStopping(true);
     try {
       await stopConsultantJob(apiUrl, jobId);
     } catch (stopError: unknown) {
-      setError(describeError(stopError));
+      if (operationGeneration === pollGenerationRef.current) setError(describeError(stopError));
     } finally {
-      setStopping(false);
+      if (operationGeneration === pollGenerationRef.current) setStopping(false);
     }
   };
 
