@@ -171,7 +171,7 @@ const buildSlyData = (
       if (entry.value.trim()) errors.push(`${label}: a sly_data entry needs a variable name.`);
       return;
     }
-    if (Object.hasOwn(slyData, key)) {
+    if (key in slyData) {
       errors.push(`${label}: sly_data "${key}" can only be used once.`);
       return;
     }
@@ -221,7 +221,7 @@ const buildChecks = (
 ): Record<string, unknown> => {
   const checks: Record<string, unknown> = {};
   interaction.checks.forEach((check) => {
-    if (Object.hasOwn(checks, check.checkType)) {
+    if (check.checkType in checks) {
       errors.push(`${label}: "${check.checkType}" can only be used once.`);
       return;
     }
