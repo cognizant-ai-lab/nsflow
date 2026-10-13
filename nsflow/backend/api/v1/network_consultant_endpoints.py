@@ -18,6 +18,7 @@
 
 import logging
 import os
+from typing import Literal
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -38,6 +39,7 @@ from nsflow.backend.models.network_consultant.sly_data_keys_response import SlyD
 from nsflow.backend.utils.consultant_job_manager import ConsultantJobManager
 from nsflow.backend.utils.fixture_not_found_error import FixtureNotFoundError
 from nsflow.backend.utils.fixture_repository import FixtureRepository
+from nsflow.backend.utils.fixture_save_context import FixtureSaveContext
 from nsflow.backend.utils.invalid_network_name_error import InvalidNetworkNameError
 from nsflow.backend.utils.job_not_found_error import JobNotFoundError
 from nsflow.backend.utils.job_state_error import JobStateError
@@ -88,7 +90,7 @@ class NetworkConsultantEndpoints:
                 network_name,
                 fixture_name,
                 request.fixture,
-                original_fixture_name,
+                FixtureSaveContext(original_fixture_name, request.source_hocon),
             )
         except InvalidNetworkNameError as error:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
@@ -108,6 +110,8 @@ class NetworkConsultantEndpoints:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
         except FixtureNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"Fixture '{error.args[0]}' not found.") from error
+        except OSError as error:
+            raise HTTPException(status_code=500, detail=f"Could not delete fixture: {error}") from error
         return FixtureDeleteResponse(message=f"Deleted {safe_name}.")
 
     @staticmethod
@@ -185,7 +189,7 @@ class NetworkConsultantEndpoints:
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
-    async def get_job_status(job_id: str, theme: str = "light") -> JobStatusResponse:
+    async def get_job_status(job_id: str, theme: Literal["light", "dark"] = "light") -> JobStatusResponse:
         """Return current process state and output for a job."""
         try:
             return await job_manager.status(job_id, theme)

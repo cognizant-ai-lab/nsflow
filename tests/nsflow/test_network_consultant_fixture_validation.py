@@ -79,6 +79,14 @@ class TestNetworkConsultantFixtureValidation(unittest.TestCase):
         errors = FixtureRepository.validate_fixture(fixture)
         self.assertTrue(any("not a valid check type" in error for error in errors))
 
+    def test_structure_only_response_is_valid(self) -> None:
+        """Accept response.structure checks that the text-check editor does not manage."""
+        fixture = self.valid_fixture()
+        interaction = fixture.get("interactions", [])[0]
+        interaction.update({"response": {"structure": {"genre": {"value": "rock"}}}})
+
+        self.assertEqual(FixtureRepository.validate_fixture(fixture), [])
+
     def test_empty_interactions_short_circuits(self) -> None:
         """Report an empty interaction list without inspecting its elements."""
         fixture = self.valid_fixture()
