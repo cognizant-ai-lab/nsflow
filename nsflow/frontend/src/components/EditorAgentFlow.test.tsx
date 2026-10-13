@@ -64,6 +64,8 @@ vi.mock("../context/ChatContext", () => ({
     slyDataTick: 0,
     lastProgressAt: 0,
     lastSlyDataAt: 0,
+    lastProgressAtByNetwork: {},
+    lastSlyDataAtByNetwork: {},
     waitingForAgent: false,
     targetNetwork: "",
   }),
@@ -90,6 +92,7 @@ vi.mock("../utils/config", async () => {
 
 import EditorAgentFlow from "./EditorAgentFlow";
 import { useEditorNetworkStore } from "../state/editorNetworkStore";
+import { sendEditorUpdate } from "../state/editorRoundTrip";
 import type { AgentNetworkDefinitionEntry } from "../uiCommon";
 import { isDraftKey } from "../state/editorSession";
 import * as config from "../utils/config";
@@ -252,6 +255,52 @@ describe("naming a network after one that already exists", () => {
     expect(savedSlyData).toEqual([]);
     expect(screen.queryByTestId("node-travel_agent")).toBeNull();
     expect(draftEntries().some((entry) => entry.networkName || entry.definition.length > 0)).toBe(false);
+  });
+
+  it("sends no metadata block for a network built by hand under a new name", async () => {
+    // A draft holds no block, so its saves leave the key out and the designer starts
+    // a fresh block, since no file has the name yet. Taking a name another network
+    // has is different, and is covered below.
+    nameIsTaken = false;
+    await nameFirstAgent("coffee_shop");
+
+    await waitFor(() => expect(savedSlyData.length).toBeGreaterThan(0));
+    for (const slyData of savedSlyData) {
+      expect(slyData).not.toHaveProperty("agent_network_metadata");
+    }
+  });
+
+  it("sends {} when a draft takes a name another network has, so that network's block is wiped", async () => {
+    // With no key the designer would keep the replaced network's block, and with it
+    // sample queries written for a network that is no longer there. The save that
+    // carries the name is the frontman's, which comes after the naming.
+    await nameFirstAgent("travel");
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    });
+
+    await waitFor(() => expect(savedNames()).toEqual(["travel"]));
+    expect(savedSlyData[0].agent_network_metadata).toEqual({});
+  });
+
+  it("sends the network's own block when it is renamed over another network", async () => {
+    // The network written under the name is this one, so its block is the one to keep.
+    const ownBlock = { sample_queries: ["Recommend an album."] };
+    openMusicNerd();
+    useEditorNetworkStore.getState().reconcileFromServer("basic/music_nerd", {
+      definition: useEditorNetworkStore.getState().entries["basic/music_nerd"].definition,
+      metadata: ownBlock,
+    });
+
+    await renameOpenNetwork("basic/music_nerd", "travel");
+    await waitFor(() => expect(screen.getByText("Overwrite travel?")).toBeTruthy());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    });
+
+    await waitFor(() => expect(savedNames()).toEqual(["travel"]));
+    expect(savedSlyData[0].agent_network_metadata).toEqual(ownBlock);
   });
 
   it("names a draft without asking when no other network has the name", async () => {
@@ -749,5 +798,127 @@ describe("downloading the network as .hocon", () => {
       ])
     );
     await waitFor(() => expect(downloads).toEqual(["car_wash.hocon"]));
+  });
+});
+
+describe("importing a .hocon file", () => {
+  // Importing replaces the network, so its save has to carry the file's metadata
+  // block. With no key the designer keeps the block of the file it saves over, which
+  // for a taken name is the old network's, sample queries and all.
+  const IMPORTED_BLOCK = { description: "Plans trips.", sample_queries: ["Imported query."] };
+  const OLD_BLOCK = { sample_queries: ["Old query."], date_created: "2026-01-01T00:00:00+00:00" };
+  /** The sly_data of every save sent to the designer, in order. */
+  const savedSlyData: Record<string, unknown>[] = [];
+  /** What the stubbed import endpoint answers in the current test. */
+  let importResponse: Record<string, unknown> = {};
+
+  /** The import endpoint's answer for travel.hocon, with `overrides` applied. */
+  const importedTravel = (overrides: Record<string, unknown> = {}) => ({
+    network_name: "travel",
+    name_is_taken: false,
+    definition: { frontman: { instructions: "You are the front man." } },
+    hocon: "# travel.hocon",
+    metadata: IMPORTED_BLOCK,
+    ...overrides,
+  });
+
+  /** Seed the store with the saved network named travel, as Load Existing leaves it. */
+  const openOldTravel = () =>
+    useEditorNetworkStore.getState().reconcileFromServer("generated/travel", {
+      definition: [{ origin: "old_frontman", tools: [] }],
+      networkName: "travel",
+      metadata: OLD_BLOCK,
+    });
+
+  /** Mount the Editor on `selectedNetwork` and choose travel.hocon in the import control. */
+  const importTravel = async (selectedNetwork: string) => {
+    const { container } = render(
+      <ReactFlowProvider>
+        <EditorAgentFlow selectedNetwork={selectedNetwork} />
+      </ReactFlowProvider>
+    );
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(["# travel.hocon"], "travel.hocon")] } });
+    });
+  };
+
+  beforeEach(() => {
+    renderedNodeIds.length = 0;
+    savedSlyData.length = 0;
+    importResponse = importedTravel();
+    localStorage.clear();
+    useEditorNetworkStore.setState({ entries: {} });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/v1/hocon/import")) {
+          return { ok: true, status: 200, json: async () => importResponse } as Response;
+        }
+        if (url.includes("/streaming_chat")) {
+          savedSlyData.push(JSON.parse(String(init?.body)).sly_data);
+        }
+        // No body, so the save throws once it is recorded: what is under test is what
+        // was sent, not how the designer answers.
+        return { ok: true, body: null, status: 200, statusText: "OK", json: async () => ({}) } as unknown as Response;
+      })
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the file's block when it imports under a new name", async () => {
+    await importTravel("");
+
+    await waitFor(() => expect(savedSlyData).toHaveLength(1));
+    expect(savedSlyData[0].agent_network_name).toBe("travel");
+    expect(savedSlyData[0].agent_network_metadata).toEqual(IMPORTED_BLOCK);
+  });
+
+  it("sends the file's block, not the old network's, when it overwrites a network of that name", async () => {
+    openOldTravel();
+    importResponse = importedTravel({ name_is_taken: true });
+
+    await importTravel("generated/travel");
+    // Nothing is saved until the user agrees to replace the network.
+    expect(savedSlyData).toHaveLength(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    });
+
+    await waitFor(() => expect(savedSlyData).toHaveLength(1));
+    expect(savedSlyData[0].agent_network_metadata).toEqual(IMPORTED_BLOCK);
+    expect(useEditorNetworkStore.getState().entries["generated/travel"].metadata).toEqual(IMPORTED_BLOCK);
+  });
+
+  it("sends {} for a file with no block, so the old network's block does not survive", async () => {
+    openOldTravel();
+    importResponse = importedTravel({ name_is_taken: true, metadata: null });
+
+    await importTravel("generated/travel");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    });
+
+    await waitFor(() => expect(savedSlyData).toHaveLength(1));
+    expect(savedSlyData[0].agent_network_metadata).toEqual({});
+    expect(useEditorNetworkStore.getState().entries["generated/travel"].metadata).toEqual({});
+
+    // The stub gives the import save no stream, so it failed and the old block is
+    // still on the file. The next save has to send {} again, or the designer keeps it.
+    await expect(
+      sendEditorUpdate({
+        apiUrl: "http://api",
+        networkId: "generated/travel",
+        agentName: "frontman",
+        definition: useEditorNetworkStore.getState().entries["generated/travel"].definition,
+      })
+    ).rejects.toThrow();
+    expect(savedSlyData).toHaveLength(2);
+    expect(savedSlyData[1].agent_network_name).toBe("travel");
+    expect(savedSlyData[1].agent_network_metadata).toEqual({});
   });
 });

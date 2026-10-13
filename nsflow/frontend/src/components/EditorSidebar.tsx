@@ -27,7 +27,7 @@ import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { toDesignerNetworkName, toServedNetworkPath } from "../utils/config";
-import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { asMetadataBlock, selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
 import type { ConnectivityInfo } from "../uiCommon";
@@ -208,6 +208,11 @@ const EditorSidebar = ({
     }
   };
 
+  // The refresh from the latest render, for the delayed call below. The one from
+  // when it was armed reads older frames and can select a network the chat has left.
+  const refreshFromLogsRef = useRef(refreshFromLogs);
+  refreshFromLogsRef.current = refreshFromLogs;
+
   // Fetch available networks for Load Existing dropdown (view mode)
   useEffect(() => {
     if (!isNsReady || !apiUrl) return;
@@ -298,6 +303,9 @@ const EditorSidebar = ({
           // which lands the save on the opened file; the consequences of that choice
           // are recorded on toDesignerNetworkName.
           networkName: toDesignerNetworkName(networkName),
+          // The file's block, which every save sends back. null when the file has
+          // none, so a block held from an earlier visit is dropped.
+          metadata: asMetadataBlock(payload?.agent_network_metadata) ?? null,
         });
         setSelectedNetworkId(networkName);
         // Tell the page as well, not just this component. EditorAgentFlow keys its
@@ -365,12 +373,11 @@ const EditorSidebar = ({
     // Only react when count increases and not the initial system message
     if (currentCount > lastChatMessageCount && currentCount > 1) {
       setTimeout(() => {
-        refreshFromLogs();
+        refreshFromLogsRef.current();
       }, 1000);
     }
 
     setLastChatMessageCount(currentCount);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, lastChatMessageCount, selectedNetworkOption, slyDataTick]);
 
   // keep true by default, but turn it off in view mode:

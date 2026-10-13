@@ -50,16 +50,42 @@ export const MAX_HISTORY_SNAPSHOTS = 50;
 
 const STORE_KEY = "nsflow-editor-network";
 
+/**
+ * A network's top-level metadata block (sample_queries, dates, description, ...), as
+ * the designer reads and writes it under the sly_data key agent_network_metadata.
+ */
+export type NetworkMetadataBlock = Record<string, unknown>;
+
+/**
+ * The value as a metadata block, or undefined when it is not one. Only a plain
+ * object is a block: the designer ignores anything else, and so does the store.
+ */
+export const asMetadataBlock = (value: unknown): NetworkMetadataBlock | undefined =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as NetworkMetadataBlock)
+    : undefined;
+
 export type ServerNetworkPayload = {
   readonly definition: ConnectivityInfo[];
   readonly networkName?: string;
   readonly hocon?: string;
+  /**
+   * The network's metadata block: undefined keeps the held block, null drops it, and
+   * a block replaces it. Opening a network passes null, so an old block is dropped.
+   */
+  readonly metadata?: NetworkMetadataBlock | null;
 };
 
 export type EditorNetworkEntry = {
   readonly networkName?: string;
   readonly definition: ConnectivityInfo[];
   readonly hocon?: string;
+  /**
+   * The metadata block every save sends back. Absent means none is held, and the
+   * designer keeps the block of the file it saves over. {} is a block too: it wipes
+   * the block of a network this one replaced. Not in the undo history, not persisted.
+   */
+  readonly metadata?: NetworkMetadataBlock;
   readonly slyData: Record<string, unknown>;
   readonly history: ConnectivityInfo[][];
   readonly cursor: number;
@@ -90,6 +116,19 @@ const EMPTY_ENTRY: EditorNetworkEntry = {
 const snapshot = (definition: ConnectivityInfo[]): ConnectivityInfo[] =>
   JSON.parse(JSON.stringify(definition)) as ConnectivityInfo[];
 
+/**
+ * The block an entry holds after a payload, following the three cases on
+ * ServerNetworkPayload.metadata. Copied for the same reason snapshot copies.
+ */
+const nextMetadata = (
+  held: NetworkMetadataBlock | undefined,
+  incoming: NetworkMetadataBlock | null | undefined
+): NetworkMetadataBlock | undefined => {
+  if (incoming === undefined) return held;
+  const block = asMetadataBlock(incoming);
+  return block ? (JSON.parse(JSON.stringify(block)) as NetworkMetadataBlock) : undefined;
+};
+
 export const canUndo = (entry: EditorNetworkEntry | undefined): boolean => Boolean(entry) && entry!.cursor > 0;
 
 export const canRedo = (entry: EditorNetworkEntry | undefined): boolean =>
@@ -102,6 +141,19 @@ export const selectEntry = (
 
 /** Only `entries` is persisted; the actions are recreated on load. */
 type PersistedEditorState = Pick<EditorNetworkStore, "entries">;
+
+/**
+ * The entries without their metadata blocks, for persisting. A block restored after a
+ * reload may be older than the file; with none held, the designer reads the file.
+ */
+const withoutMetadata = (entries: Record<string, EditorNetworkEntry>): Record<string, EditorNetworkEntry> => {
+  const persisted: Record<string, EditorNetworkEntry> = {};
+  for (const [networkId, entry] of Object.entries(entries)) {
+    const { metadata: _metadata, ...rest } = entry;
+    persisted[networkId] = rest;
+  }
+  return persisted;
+};
 
 const editorStorage: PersistStorage<PersistedEditorState> = {
   getItem: async (name) => (await indexedDBStorage.getItem(name)) as StorageValue<PersistedEditorState> | null,
@@ -143,6 +195,7 @@ export const useEditorNetworkStore = create<EditorNetworkStore>()(
       reconcileFromServer: (networkId, payload) =>
         set((state) => {
           const existing = state.entries[networkId] ?? EMPTY_ENTRY;
+          const metadata = nextMetadata(existing.metadata, payload.metadata);
 
           // The designer emits progress frames continuously during generation, and
           // most repeat a definition we already hold. Returning the identical state
@@ -152,7 +205,9 @@ export const useEditorNetworkStore = create<EditorNetworkStore>()(
             state.entries[networkId] &&
             payload.networkName === existing.networkName &&
             payload.hocon === existing.hocon &&
-            JSON.stringify(payload.definition) === JSON.stringify(existing.definition)
+            JSON.stringify(payload.definition) === JSON.stringify(existing.definition) &&
+            // A save can change only the block (date_modified), and that has to land.
+            JSON.stringify(metadata) === JSON.stringify(existing.metadata)
           ) {
             return state;
           }
@@ -174,6 +229,7 @@ export const useEditorNetworkStore = create<EditorNetworkStore>()(
                 // definition with a stale name can overwrite another network.
                 networkName: payload.networkName ?? existing.networkName,
                 hocon: payload.hocon ?? existing.hocon,
+                metadata,
               },
             },
           };
@@ -220,7 +276,7 @@ export const useEditorNetworkStore = create<EditorNetworkStore>()(
     {
       name: STORE_KEY,
       storage: editorStorage,
-      partialize: (state): PersistedEditorState => ({ entries: state.entries }),
+      partialize: (state): PersistedEditorState => ({ entries: withoutMetadata(state.entries) }),
     }
   )
 );

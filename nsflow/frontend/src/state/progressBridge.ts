@@ -33,9 +33,10 @@ import { useEffect } from "react";
 
 import { useChatContext } from "../context/ChatContext";
 import { type ConnectivityInfo } from "../uiCommon";
-import { latestNetworkPayload } from "../utils/progressHelper";
+import { toDesignerNetworkName } from "../utils/config";
+import { latestNetworkPayload, progressIsNewer } from "../utils/progressHelper";
 import { toConnectivityList } from "./definitionShape";
-import { useEditorNetworkStore } from "./editorNetworkStore";
+import { asMetadataBlock, useEditorNetworkStore } from "./editorNetworkStore";
 
 type Frame = { text: string | object } | string | object | undefined;
 
@@ -70,9 +71,18 @@ export const applyFramesToStore = (
   if (!definition) return;
 
   const payload = latestNetworkPayload(progressFrame, slyDataFrame, preferProgress);
-  useEditorNetworkStore
-    .getState()
-    .reconcileFromServer(networkId, { definition, networkName: payload?.agent_network_name });
+  const name = payload?.agent_network_name;
+  // Frames are kept for the whole Editor visit, so the last one may be another
+  // network's. A named frame lands only on its own network; a draft key matches no name.
+  if (name && toDesignerNetworkName(name) !== toDesignerNetworkName(networkId)) return;
+
+  useEditorNetworkStore.getState().reconcileFromServer(networkId, {
+    definition,
+    networkName: name,
+    // The block a chat turn saved, from the same frame as the definition. The last
+    // sly_data frame alone may be another network's, or older than the held block.
+    metadata: asMetadataBlock(payload?.agent_network_metadata),
+  });
 };
 
 /**
@@ -98,8 +108,8 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
     targetNetwork,
     progressTick,
     slyDataTick,
-    lastProgressAt,
-    lastSlyDataAt,
+    lastProgressAtByNetwork,
+    lastSlyDataAtByNetwork,
   } = useChatContext();
 
   useEffect(() => {
@@ -108,17 +118,19 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
       networkId,
       getLastProgressMessage({ network: targetNetwork }),
       getLastSlyDataMessage({ network: targetNetwork }),
-      lastProgressAt >= lastSlyDataAt
+      // This stream's own times, as ChatContext uses: the global times also move for
+      // frames that never reach it. A tie goes to the sly_data frame.
+      progressIsNewer(lastProgressAtByNetwork[targetNetwork], lastSlyDataAtByNetwork[targetNetwork])
     );
-    // progressTick and slyDataTick change on every recorded frame, which is what
-    // makes this run per frame rather than per render.
+    // The getters are rebuilt on every ChatContext render, so this runs on every
+    // render, not only when a frame is recorded.
   }, [
     networkId,
     targetNetwork,
     progressTick,
     slyDataTick,
-    lastProgressAt,
-    lastSlyDataAt,
+    lastProgressAtByNetwork,
+    lastSlyDataAtByNetwork,
     getLastProgressMessage,
     getLastSlyDataMessage,
   ]);

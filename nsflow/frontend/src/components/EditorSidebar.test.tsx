@@ -27,7 +27,7 @@ limitations under the License.
  */
 
 import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EditorSidebar from "./EditorSidebar";
 import { updateAgent } from "../state/editorOperations";
@@ -45,6 +45,9 @@ const DEFINITION = {
   agent_network_name: NETWORK_NAME,
 };
 
+/** What /api/v1/network_definition answers in the current test. */
+let definitionResponse: Record<string, unknown> = DEFINITION;
+
 vi.mock("../context/ApiPortContext", () => ({
   useApiPort: () => ({ apiUrl: "http://localhost:4173", isReady: true }),
 }));
@@ -57,6 +60,9 @@ vi.mock("../hooks/useChatControls", () => ({
   useChatControls: () => ({ stopWebSocket: vi.fn(), clearChat: vi.fn() }),
 }));
 
+/** Chat state a test sets over the defaults below; the sidebar reads it on its next render. */
+let chatState: Record<string, unknown> = {};
+
 vi.mock("../context/ChatContext", () => ({
   useChatContext: () => ({
     chatMessages: [],
@@ -68,6 +74,7 @@ vi.mock("../context/ChatContext", () => ({
     addSlyDataMessage: vi.fn(),
     regenerateSessionId: vi.fn(),
     waitingForAgent: false,
+    ...chatState,
   }),
 }));
 
@@ -92,6 +99,8 @@ vi.mock("@mui/material", async () => {
 describe("opening an existing agent network", () => {
   beforeEach(() => {
     autocompleteOnChange = undefined;
+    definitionResponse = DEFINITION;
+    chatState = {};
     useEditorNetworkStore.setState({ entries: {} });
     window.history.replaceState({}, "", "/editor");
 
@@ -100,7 +109,7 @@ describe("opening an existing agent network", () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url.includes("/api/v1/network_definition/")) {
-          return { ok: true, status: 200, json: async () => DEFINITION } as Response;
+          return { ok: true, status: 200, json: async () => definitionResponse } as Response;
         }
         if (url.includes("/streaming_chat")) {
           // One frame is all sendEditorUpdate needs to count the save as delivered.
@@ -232,5 +241,108 @@ describe("opening an existing agent network", () => {
       frontman: { instructions: "You are the front man.", description: "Front desk.", tools: ["helper"] },
       helper: { instructions: "You help more.", description: "Helps." },
     });
+  });
+
+  /** Open `name` through the dropdown and save it once, as the agent panel's Save does. */
+  const openAndSave = async (name: string) => {
+    render(<EditorSidebar onSelectNetwork={vi.fn()} />);
+    await waitFor(() => expect(autocompleteOnChange).toBeTypeOf("function"));
+    await act(async () => {
+      autocompleteOnChange!(null, name);
+    });
+    await waitFor(() => expect(useEditorNetworkStore.getState().entries[name]?.definition.length).toBe(2));
+
+    await sendEditorUpdate({
+      apiUrl: "http://localhost:4173",
+      networkId: name,
+      agentName: "helper",
+      definition: useEditorNetworkStore.getState().entries[name].definition,
+    });
+    const save = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/streaming_chat"));
+    expect(save).toBeDefined();
+    return JSON.parse(String((save![1] as RequestInit).body)).sly_data as Record<string, unknown>;
+  };
+
+  it("sends the opened file's metadata block on the next save", async () => {
+    // A network outside the designer's folder saves as a new file inside it, so the
+    // designer has no file of that name to keep the block of. Without the block the
+    // copy would start with no sample queries.
+    const block = {
+      description: "Talks music.",
+      sample_queries: ["Who sang Imagine?"],
+      date_created: "2026-01-01T00:00:00+00:00",
+    };
+    definitionResponse = { ...DEFINITION, agent_network_name: "basic/music_nerd", agent_network_metadata: block };
+
+    const slyData = await openAndSave("basic/music_nerd");
+
+    expect(slyData.agent_network_name).toBe("music_nerd");
+    expect(slyData.agent_network_metadata).toEqual(block);
+  });
+
+  it("drops a block held from an earlier visit when the file has none, and sends no key", async () => {
+    // The store survives a reload, so the entry can hold a block the file no longer
+    // has. Sending it would write it back; sending {} would wipe the file's block.
+    useEditorNetworkStore.getState().reconcileFromServer(NETWORK_NAME, {
+      definition: [{ origin: "frontman", tools: [] }],
+      metadata: { sample_queries: ["Stale query."] },
+    });
+
+    const slyData = await openAndSave(NETWORK_NAME);
+
+    expect(useEditorNetworkStore.getState().entries[NETWORK_NAME].metadata).toBeUndefined();
+    expect(slyData).not.toHaveProperty("agent_network_metadata");
+  });
+});
+
+describe("following the network a chat turn names", () => {
+  beforeEach(() => {
+    chatState = {};
+    useEditorNetworkStore.setState({ entries: {} });
+    window.history.replaceState({}, "", "/editor");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ agents: [] }) }) as Response)
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The latest payload ChatContext reports for a frame naming `name`. */
+  const payloadFor = (name: string) => ({
+    agent_network_definition: { [`${name}_agent`]: { instructions: name, tools: [] } },
+    agent_network_name: name,
+  });
+
+  it("does not move back to the earlier network when the refresh after a message runs", async () => {
+    // Each render gets its own getter, as ChatContext's do, so a call kept from an
+    // earlier render reads that render's frames.
+    const coffee = payloadFor("coffee");
+    const beta = payloadFor("beta");
+    const onSelectNetwork = vi.fn();
+    chatState = { getLatestNetworkPayload: () => coffee, progressTick: 1 };
+    const { rerender } = render(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await act(async () => {});
+    expect(onSelectNetwork).toHaveBeenLastCalledWith("generated/coffee");
+
+    // The user's message arms the refresh while coffee's frame is still the latest.
+    chatState = { ...chatState, chatMessages: [{ sender: "system" }, { sender: "user" }] };
+    rerender(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await act(async () => {});
+
+    // Before it runs, the turn's first frame names a new network.
+    chatState = { ...chatState, getLatestNetworkPayload: () => beta, progressTick: 2 };
+    rerender(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await act(async () => {});
+    expect(onSelectNetwork).toHaveBeenLastCalledWith("generated/beta");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(onSelectNetwork).toHaveBeenLastCalledWith("generated/beta");
   });
 });
