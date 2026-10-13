@@ -27,6 +27,7 @@ import type { ConsultantFixture } from "../types/networkConsultant";
 describe("network consultant fixture state", () => {
   it("converts numeric and list checks to their wire types", () => {
     const interaction = emptyInteraction();
+    interaction.text = "Test prompt";
     interaction.checks = [
       { id: "gist", checkType: "gist", value: "first line\nsecond line" },
       { id: "greater", checkType: "greater", value: "12.5" },
@@ -43,6 +44,7 @@ describe("network consultant fixture state", () => {
 
   it("reports invalid checks and unnamed sly data together", () => {
     const interaction = emptyInteraction();
+    interaction.text = "Test prompt";
     interaction.checks = [{ id: "value", checkType: "value", value: "not a number" }];
     interaction.slyData = [{ id: "sly", key: "", value: "present", valueType: "string" }];
 
@@ -56,6 +58,7 @@ describe("network consultant fixture state", () => {
 
   it("assigns a fixture value to a coded tool sly data variable", () => {
     const interaction = emptyInteraction();
+    interaction.text = "Test prompt";
     interaction.checks = [{ id: "gist", checkType: "gist", value: "Uses the requested timezone" }];
     interaction.slyData = [
       { id: "timezone", key: "timezone", value: "America/Los_Angeles", valueType: "string" },
@@ -101,6 +104,7 @@ describe("network consultant fixture state", () => {
 
   it("rejects invalid typed sly data values", () => {
     const interaction = emptyInteraction();
+    interaction.text = "Test prompt";
     interaction.checks = [{ id: "gist", checkType: "gist", value: "Valid check" }];
     interaction.slyData = [
       { id: "retries", key: "retries", value: "many", valueType: "number" },
@@ -113,6 +117,40 @@ describe("network consultant fixture state", () => {
       'Turn 1: sly_data "retries" must be a number.',
       'Turn 1: sly_data "settings" must contain valid JSON.',
     ]);
+  });
+
+  it("rejects missing turns, prompts, and finite positive timeouts", () => {
+    expect(buildInteractionsPayload([]).errors).toEqual(["At least one turn is required."]);
+
+    const interaction = emptyInteraction();
+    interaction.timeoutInSeconds = "Infinity";
+
+    expect(buildInteractionsPayload([interaction]).errors).toEqual([
+      "Turn 1: a prompt is required.",
+      "Turn 1: timeout must be a positive number.",
+    ]);
+  });
+
+  it("rejects duplicate check types and sly data keys instead of overwriting them", () => {
+    const interaction = emptyInteraction();
+    interaction.text = "Test prompt";
+    interaction.checks = [
+      { id: "gist-1", checkType: "gist", value: "first" },
+      { id: "gist-2", checkType: "gist", value: "second" },
+    ];
+    interaction.slyData = [
+      { id: "timezone-1", key: "timezone", value: "UTC", valueType: "string" },
+      { id: "timezone-2", key: "timezone", value: "PST", valueType: "string" },
+    ];
+
+    const result = buildInteractionsPayload([interaction]);
+
+    expect(result.errors).toEqual([
+      'Turn 1: sly_data "timezone" can only be used once.',
+      'Turn 1: "gist" can only be used once.',
+    ]);
+    expect(result.interactions[0].sly_data).toEqual({ timezone: "UTC" });
+    expect(result.interactions[0].response.text).toEqual({ gist: ["first"] });
   });
 
   it("increments duplicate names until it finds a free one", () => {

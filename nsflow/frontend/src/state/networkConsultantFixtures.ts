@@ -139,13 +139,19 @@ export const buildInteractionsPayload = (
   draftInteractions: DraftInteraction[],
 ): { interactions: FixtureInteractionPayload[]; errors: string[] } => {
   const errors: string[] = [];
+  if (!draftInteractions.length) errors.push("At least one turn is required.");
   const interactions = draftInteractions.map((interaction, index) => {
     const label = `Turn ${index + 1}`;
+    const timeout = Number(interaction.timeoutInSeconds);
+    if (!interaction.text.trim()) errors.push(`${label}: a prompt is required.`);
+    if (!interaction.timeoutInSeconds.trim() || !Number.isFinite(timeout) || timeout <= 0) {
+      errors.push(`${label}: timeout must be a positive number.`);
+    }
     const slyData = buildSlyData(interaction, label, errors);
     const checks = buildChecks(interaction, label, errors);
     return {
       text: interaction.text,
-      timeout_in_seconds: Number(interaction.timeoutInSeconds) || 400,
+      timeout_in_seconds: Number.isFinite(timeout) && timeout > 0 ? timeout : 400,
       response: { text: checks },
       sly_data: slyData,
     };
@@ -163,6 +169,10 @@ const buildSlyData = (
     const key = entry.key.trim();
     if (!key) {
       if (entry.value.trim()) errors.push(`${label}: a sly_data entry needs a variable name.`);
+      return;
+    }
+    if (Object.hasOwn(slyData, key)) {
+      errors.push(`${label}: sly_data "${key}" can only be used once.`);
       return;
     }
     if (entry.valueType === "string") {
@@ -211,9 +221,13 @@ const buildChecks = (
 ): Record<string, unknown> => {
   const checks: Record<string, unknown> = {};
   interaction.checks.forEach((check) => {
+    if (Object.hasOwn(checks, check.checkType)) {
+      errors.push(`${label}: "${check.checkType}" can only be used once.`);
+      return;
+    }
     if (NUMERIC_CHECK_TYPES.has(check.checkType)) {
       const value = Number(check.value);
-      if (!check.value.trim() || Number.isNaN(value)) {
+      if (!check.value.trim() || !Number.isFinite(value)) {
         errors.push(`${label}: "${check.checkType}" must be a number.`);
       } else {
         checks[check.checkType] = value;
