@@ -26,6 +26,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 from typing import ClassVar
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -45,6 +46,7 @@ class ConsultantJobManager:
 
     STOP_GRACE_PERIOD_SECONDS = 5
     RESULT_FIELDS: ClassVar[set[str]] = {"passed", "message", "infrastructure_error"}
+    SIDECAR_EXTENSIONS: ClassVar[dict[str, str]] = {"progress": "jsonl", "results": "json"}
 
     def __init__(self, project_root: str) -> None:
         """Create a manager for consultant jobs in one target project."""
@@ -89,7 +91,7 @@ class ConsultantJobManager:
         """Register a job for lifecycle and status operations."""
         self._jobs.update({job_id: job})
 
-    async def status(self, job_id: str, theme: str = "light") -> JobStatusResponse:
+    async def status(self, job_id: str, theme: Literal["light", "dark"] = "light") -> JobStatusResponse:
         """Build a status response from process state and its sidecar files."""
         job = self._job(job_id)
         log_path = job.log_path()
@@ -141,7 +143,7 @@ class ConsultantJobManager:
         return job
 
     async def _prune_finished_jobs(self, log_directory: Path) -> None:
-        """Remove completed records and every artifact not owned by a running job."""
+        """Remove completed records and artifacts owned by this manager."""
         finished_job_ids: list[str] = []
         for job_id, job in self._jobs.items():
             if not job.is_running():
@@ -157,19 +159,17 @@ class ConsultantJobManager:
             owner: job_id for owner, job_id in self._job_owners.items() if job_id not in finished_job_ids
         }
 
-        for path in log_directory.iterdir():
-            job = self._jobs.get(path.name.split(".", 1)[0])
-            if job is not None and job.is_running():
-                continue
-            try:
-                path.unlink()
-            except OSError as error:
-                logger.warning("Could not remove leftover job file %s: %s", path.name, error)
+        for job_id in finished_job_ids:
+            for path in log_directory.glob(f"{job_id}.*"):
+                try:
+                    path.unlink()
+                except OSError as error:
+                    logger.warning("Could not remove job file %s: %s", path.name, error)
 
     @staticmethod
     def _sidecar_path(job_id: str, directory: Path, suffix: str) -> Path:
         """Return the path for one job sidecar file."""
-        extension = "json" if suffix == "results" else "jsonl" if suffix == "progress" else "txt"
+        extension = ConsultantJobManager.SIDECAR_EXTENSIONS.get(suffix, "txt")
         return directory / f"{job_id}.{suffix}.{extension}"
 
     def _read_optional_text(self, job_id: str, directory: Path, suffix: str) -> str | None:
@@ -197,7 +197,10 @@ class ConsultantJobManager:
                 for name, verdict in sorted(recorded.items())
                 if isinstance(name, str) and isinstance(verdict, dict)
             ]
-        except (FileNotFoundError, json.JSONDecodeError, ValidationError):
+        except FileNotFoundError:
+            return []
+        except (json.JSONDecodeError, OSError, UnicodeError, ValidationError) as error:
+            logger.warning("Ignoring malformed results for job %s: %s", job_id, error)
             return []
 
     def _read_progress(self, job_id: str, directory: Path) -> list[dict[str, Any]]:
@@ -211,9 +214,11 @@ class ConsultantJobManager:
         for line in lines:
             try:
                 entry = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as error:
+                logger.warning("Ignoring malformed progress JSON for job %s: %s", job_id, error)
                 continue
             if not isinstance(entry, dict):
+                logger.warning("Ignoring non-object progress entry for job %s", job_id)
                 continue
             try:
                 validated = ConsultantProgressEntry.model_validate(entry)
@@ -226,7 +231,7 @@ class ConsultantJobManager:
     async def _render_progress_chart(
         self,
         progress: list[dict[str, Any]],
-        theme: str,
+        theme: Literal["light", "dark"],
     ) -> str | None:
         """Render a chart for progress data when available."""
         if not progress:

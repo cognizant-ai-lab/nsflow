@@ -23,6 +23,7 @@ import pytest
 
 from nsflow.backend.utils.fixture_not_found_error import FixtureNotFoundError
 from nsflow.backend.utils.fixture_repository import FixtureRepository
+from nsflow.backend.utils.fixture_save_context import FixtureSaveContext
 from nsflow.backend.utils.invalid_network_name_error import InvalidNetworkNameError
 
 
@@ -59,7 +60,7 @@ class TestNetworkConsultantFixtureRepository:
             "basic/coffee",
             "second",
             TestNetworkConsultantFixtureRepository.valid_fixture(),
-            original_fixture_name="first.hocon",
+            FixtureSaveContext(original_fixture_name="first.hocon"),
         )
         assert second_name == "second.hocon"
         assert [fixture.name for fixture in repository.list("basic/coffee")] == ["second.hocon"]
@@ -104,3 +105,50 @@ class TestNetworkConsultantFixtureRepository:
         assert fixtures[0].name == "broken.hocon"
         assert fixtures[0].raw_hocon == '{"agent": '
         assert fixtures[0].parse_error
+
+    @staticmethod
+    def test_full_definition_and_leading_comments_survive_an_edit(tmp_path: Path) -> None:
+        """Retain fixture fields outside the editor and the original license block."""
+        repository = FixtureRepository(str(tmp_path))
+        source = (
+            "# Project license\n"
+            "# Keep this notice\n\n"
+            '{"agent": "basic/music", "use_direct": true, "success_ratio": "1/1", '
+            '"connections": ["direct"], "interactions": [{"text": "Recommend music", '
+            '"timeout_in_seconds": 90, "continue_conversation": true, '
+            '"response": {"structure": {"genre": {"value": "rock"}}}}]}'
+        )
+        fixture_directory = tmp_path / "tests" / "fixtures" / "basic" / "music"
+        fixture_directory.mkdir(parents=True)
+        (fixture_directory / "structure.hocon").write_text(source, encoding="utf-8")
+
+        loaded = repository.list("basic/music")[0]
+        definition = dict(loaded.definition)
+        definition.update({"success_ratio": "2/2"})
+        repository.save(
+            "basic/music",
+            "structure",
+            definition,
+            FixtureSaveContext("structure.hocon", loaded.raw_hocon),
+        )
+        saved = repository.list("basic/music")[0]
+
+        assert saved.definition.get("use_direct") is True
+        interaction = saved.definition.get("interactions", [])[0]
+        assert interaction.get("timeout_in_seconds") == 90
+        assert interaction.get("continue_conversation") is True
+        assert interaction.get("response", {}).get("structure") == {"genre": {"value": "rock"}}
+        assert saved.raw_hocon.startswith("# Project license\n# Keep this notice")
+
+    @staticmethod
+    def test_non_utf8_fixture_does_not_break_listing(tmp_path: Path) -> None:
+        """Return an unreadable fixture as an individual parse error."""
+        fixture_directory = tmp_path / "tests" / "fixtures" / "basic" / "coffee"
+        fixture_directory.mkdir(parents=True)
+        (fixture_directory / "binary.hocon").write_bytes(b"\xff\xfe")
+
+        fixture = FixtureRepository(str(tmp_path)).list("basic/coffee")[0]
+
+        assert fixture.name == "binary.hocon"
+        assert fixture.raw_hocon == ""
+        assert fixture.parse_error

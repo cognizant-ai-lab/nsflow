@@ -28,3 +28,7 @@ class FixtureSaveRequest(BaseModel):
     fixture: dict[str, Any] = Field(
         ..., description="Full fixture object: agent, success_ratio, connections, interactions."
     )
+    source_hocon: str | None = Field(
+        default=None,
+        description="Original source used only to retain its leading license and comment block.",
+    )

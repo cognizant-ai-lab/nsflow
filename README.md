@@ -155,6 +155,12 @@ Follow these [instructions](./docs/VQA_README.md)
 
 ---
 
+### Enabling Network Consultant
+
+Follow these [instructions](./docs/NETWORK_CONSULTANT.md).
+
+---
+
 ### Connecting OAuth-protected MCP servers
 
 Connect MCP servers that require OAuth (e.g. You.com, Linear, GitHub, Salesforce)
