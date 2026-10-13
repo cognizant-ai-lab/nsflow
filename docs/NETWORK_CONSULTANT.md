@@ -1,19 +1,19 @@
 # Setting up Network Consultant
 
-Network Consultant can generate, run and improve Neuro SAN Studio test fixtures from nsflow. It is disabled by
-default because its jobs require a Neuro SAN Studio installation that provides the following command:
+Network Consultant can generate, run and improve Neuro SAN Studio test fixtures from nsflow. Its jobs require a
+Neuro SAN Studio installation that provides the following command:
 
 ```bash
 python -m neuro_san_studio consultant
 ```
 
-Install a compatible Neuro SAN Studio version before enabling the feature. Until that command is available in a
-released Studio version, use the corresponding Studio development branch.
+Install a compatible Neuro SAN Studio version before using the feature.
 
-Set the feature flag before starting nsflow:
+Network Consultant is enabled by default. To hide the tab and disable its API routes, set the feature flag before
+starting nsflow:
 
 ```bash
-export NSFLOW_PLUGIN_NETWORK_CONSULTANT=true
+export NSFLOW_PLUGIN_NETWORK_CONSULTANT=false
 ```
 
 By default, Network Consultant reads registries and test fixtures from nsflow's current working directory. To work
