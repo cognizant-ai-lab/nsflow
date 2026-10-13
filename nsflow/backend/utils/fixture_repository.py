@@ -222,7 +222,7 @@ class FixtureRepository:
             return Fixture(name=path.name, raw_hocon="", parse_error=str(error))
 
         try:
-            parsed = ConfigFactory.parse_string(raw_hocon).as_plain_ordered_dict()
+            parsed = ConfigFactory.parse_file(str(path)).as_plain_ordered_dict()
             interactions = [
                 FixtureInteraction(
                     text=turn.get("text", ""),
