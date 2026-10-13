@@ -47,6 +47,7 @@ from typing import Any
 from typing import AsyncIterator
 from typing import Dict
 
+import httpx
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
@@ -54,6 +55,11 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 
 from nsflow.backend.utils.agentutils.ns_agent_client import NsAgentClient
+from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
+
+# Long enough for a cold agent network to answer, short enough that a wedged server
+# does not hold a request open indefinitely.
+NEURO_SAN_TIMEOUT_SECONDS = 30.0
 
 router = APIRouter(prefix="/api/v1")
 
@@ -78,11 +84,71 @@ async def _ndjson_lines(client: NsAgentClient, chat_request: Dict[str, Any]) -> 
         logging.exception("streaming_chat failed for %s: %s", client.agent_name, exc)
 
 
+async def _get_from_neuro_san(agent_name: str, method: str) -> Dict[str, Any]:
+    """
+    Fetch one of neuro-san's read-only endpoints, keeping the status it answered with.
+
+    Why not ``NsAgentClient``: neuro-san's HTTP client parses the body without looking
+    at the status first (``json.loads(response.text)`` in
+    ``http_service_agent_session.py``). An unknown agent answers 404 with an empty body,
+    so the parse fails and the client raises the same generic ValueError it raises when
+    the server is unreachable. By the time nsflow sees it there is nothing left to tell
+    the two apart, and everything became 502.
+
+    This route is a passthrough, so it asks neuro-san over the same HTTP contract it
+    mirrors and reports what comes back: 404 stays 404, anything else that is not a
+    success is a genuine gateway failure.
+
+    :param agent_name: The agent network. May contain slashes.
+    :param method: The neuro-san method to call, "connectivity" or "function".
+    :return: neuro-san's payload, unmodified.
+    :raises HTTPException: 404 if no such agent network, 502 if neuro-san failed.
+    """
+    config = NsConfigsRegistry.get_current()
+    host, port, scheme = config.host, config.port, config.connection_type
+
+    # Same URL rules nsflow already uses for the concierge list, which is the code path
+    # proven against both a local server and a hosted one.
+    if str(host) in ("localhost", "127.0.0.1"):
+        scheme = "http"
+    base = f"{scheme}://{host}" if str(port) == "443" else f"{scheme}://{host}:{port}"
+    url = f"{base}/api/v1/{agent_name}/{method}"
+
+    try:
+        async with httpx.AsyncClient(verify=True) as http_client:
+            response = await http_client.get(
+                url,
+                headers={"Accept": "*/*", "Host": str(host)},
+                timeout=NEURO_SAN_TIMEOUT_SECONDS,
+            )
+    except httpx.RequestError as exc:
+        logging.warning("Could not reach neuro-san at %s: %s", url, exc)
+        raise HTTPException(status_code=502, detail=f"Could not reach the neuro-san server: {exc}") from exc
+
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail=f"Agent network '{agent_name}' not found.")
+
+    if response.status_code >= 400:
+        logging.warning("neuro-san returned %s for %s", response.status_code, url)
+        raise HTTPException(
+            status_code=502,
+            detail=f"The neuro-san server returned {response.status_code} for '{agent_name}'.",
+        )
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"The neuro-san server did not return JSON for '{agent_name}'."
+        ) from exc
+
+
 @router.get(
     "/{agent_name:path}/connectivity",
     summary="Get an agent network's connectivity, in neuro-san's own shape.",
     responses={
         200: {"description": "neuro-san's ConnectivityResponse verbatim: {'connectivity_info': [...]}"},
+        404: {"description": "The server serves no agent network by that name"},
         502: {"description": "The neuro-san server could not be reached or failed"},
     },
 )
@@ -96,12 +162,7 @@ async def get_connectivity(agent_name: str) -> JSONResponse:
     :param agent_name: The agent network. May contain slashes.
     :return: neuro-san's connectivity payload, unmodified.
     """
-    try:
-        result: Dict[str, Any] = NsAgentClient(agent_name).connectivity()
-    except Exception as exc:
-        logging.exception("Failed to get connectivity for %s: %s", agent_name, exc)
-        raise HTTPException(status_code=502, detail=f"Failed to get connectivity for '{agent_name}'") from exc
-
+    result: Dict[str, Any] = await _get_from_neuro_san(agent_name, "connectivity")
     return JSONResponse(content=result)
 
 
@@ -110,6 +171,7 @@ async def get_connectivity(agent_name: str) -> JSONResponse:
     summary="Get an agent network's function description, in neuro-san's own shape.",
     responses={
         200: {"description": "neuro-san's FunctionResponse verbatim: {'function': {...}}"},
+        404: {"description": "The server serves no agent network by that name"},
         502: {"description": "The neuro-san server could not be reached or failed"},
     },
 )
@@ -120,12 +182,7 @@ async def get_function(agent_name: str) -> JSONResponse:
     :param agent_name: The agent network. May contain slashes.
     :return: neuro-san's function payload, unmodified.
     """
-    try:
-        result: Dict[str, Any] = NsAgentClient(agent_name).function()
-    except Exception as exc:
-        logging.exception("Failed to get function for %s: %s", agent_name, exc)
-        raise HTTPException(status_code=502, detail=f"Failed to get function for '{agent_name}'") from exc
-
+    result: Dict[str, Any] = await _get_from_neuro_san(agent_name, "function")
     return JSONResponse(content=result)
 
 
