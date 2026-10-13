@@ -17,6 +17,7 @@ import logging
 import os
 from typing import Any
 from typing import Dict
+from typing import Optional
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -24,6 +25,7 @@ from fastapi.responses import JSONResponse
 from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
+from nsflow.backend.utils.agentutils.network_metadata_block import NetworkMetadataBlock
 from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
 from nsflow.backend.utils.agentutils.served_networks import resolve_served_network
@@ -125,10 +127,14 @@ async def get_network_definition(network_name: str):
                 agent_def["tools"] = child_tools
             agent_network_definition[name] = agent_def
 
+    metadata: Optional[Dict[str, Any]] = NetworkMetadataBlock.from_config(config)
     return JSONResponse(
         content={
             "agent_network_definition": agent_network_definition,
             "agent_network_name": network_name,
+            # The Editor sends this block back on every save, so the saved network keeps it.
+            # Left out when the file has none: the designer then keeps the block of the file it saves over.
+            **({"agent_network_metadata": metadata} if metadata is not None else {}),
         }
     )
 

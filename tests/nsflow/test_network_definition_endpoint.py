@@ -93,6 +93,40 @@ DESCRIBED_NETWORK = """
 }
 """
 
+# A network with a metadata block, as the designer writes one. The list values matter:
+# sample_queries is what a save loses when the block is not sent back.
+CATALOGUED_NETWORK = """
+{
+    "metadata": {
+        "description": "Plans trips.",
+        "sample_queries": ["Book me a trip to Paris.", "What is the weather in Rome?"],
+        "tags": ["travel"],
+        "date_created": "2026-01-01T00:00:00+00:00"
+    },
+    "tools": [
+        {"name": "frontman", "instructions": "You are the front man.", "tools": ["helper"]},
+        {"name": "helper", "instructions": "You help."}
+    ]
+}
+"""
+
+# An empty block is still a block. Sent back as {}, it keeps the copy a save makes
+# from picking up the block of whatever file it lands on.
+EMPTY_METADATA_NETWORK = """
+{
+    "metadata": {},
+    "tools": [{"name": "frontman", "instructions": "You are the front man."}]
+}
+"""
+
+# A `metadata` that is not a block. Nothing in it can be sent back as one.
+MISFILED_METADATA_NETWORK = """
+{
+    "metadata": "not a block",
+    "tools": [{"name": "frontman", "instructions": "You are the front man."}]
+}
+"""
+
 
 @pytest.fixture(name="registry")
 def registry_fixture(tmp_path: Path, monkeypatch) -> Path:
@@ -229,12 +263,13 @@ def test_works_both_as_a_studio_library_and_from_a_studio_checkout(client: TestC
 
 class TestNetworkDefinitionEndpoint(unittest.TestCase):
     """
-    Covers the descriptions GET /api/v1/network_definition hands the Editor.
+    Covers the descriptions and the metadata block GET /api/v1/network_definition hands the Editor.
 
     The Editor sends the definition it was given straight back on every save, so an
     agent whose description is missing here has it written back blank by the next
     edit, whichever agent that edit was to. These tests pin down where a description
     is read from, and that nothing else about an entry changed to make room for it.
+    The metadata block goes back the same way, so these also pin down when it is sent.
 
     The registry is laid out as the module's registry fixture lays it out: a manifest
     that serves the network, the network in generated/, and the server started from a
@@ -244,14 +279,21 @@ class TestNetworkDefinitionEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """
-        Build a temporary registry that serves one described network, and a client.
+        Build a temporary registry that serves the networks these tests read, and a client.
         """
         self.root: str = tempfile.mkdtemp()
         registry: Path = Path(self.root) / "registries"
         (registry / "generated").mkdir(parents=True)
         (registry / "generated" / "travel.hocon").write_text(DESCRIBED_NETWORK, encoding="utf-8")
+        (registry / "generated" / "planner.hocon").write_text(CATALOGUED_NETWORK, encoding="utf-8")
+        (registry / "generated" / "misfiled.hocon").write_text(MISFILED_METADATA_NETWORK, encoding="utf-8")
+        (registry / "generated" / "empty_block.hocon").write_text(EMPTY_METADATA_NETWORK, encoding="utf-8")
         manifest: Path = registry / "manifest.hocon"
-        manifest.write_text('{\n "generated/travel.hocon": true\n}\n', encoding="utf-8")
+        manifest.write_text(
+            '{\n "generated/travel.hocon": true\n "generated/planner.hocon": true\n'
+            ' "generated/misfiled.hocon": true\n "generated/empty_block.hocon": true\n}\n',
+            encoding="utf-8",
+        )
 
         # Patched on served_networks, which binds both names at import time, so patching
         # agent_network_utils where they are defined would not reach the endpoint.
@@ -284,11 +326,20 @@ class TestNetworkDefinitionEndpoint(unittest.TestCase):
         :return: The ``agent_network_definition`` the Editor would receive, keyed by
                  agent name.
         """
+        return self.network("travel")["agent_network_definition"]
+
+    def network(self, name: str) -> Dict[str, Any]:
+        """
+        Fetch a generated network through the real app.
+
+        :param name: The network's name inside generated/, without ``.hocon``.
+        :return: The whole response body the Editor would receive.
+        """
         # Any, because the class it returns depends on whether starlette's TestClient
         # found httpx2 or httpx installed.
-        response: Any = self.client.get("/api/v1/network_definition/generated/travel")
+        response: Any = self.client.get(f"/api/v1/network_definition/generated/{name}")
         self.assertEqual(response.status_code, 200, response.text)
-        return response.json()["agent_network_definition"]
+        return response.json()
 
     def test_returns_a_top_level_description(self) -> None:
         """
@@ -379,3 +430,53 @@ class TestNetworkDefinitionEndpoint(unittest.TestCase):
 
         for name, instructions in expected.items():
             self.assertEqual(definition[name]["instructions"], instructions, name)
+
+    def test_returns_the_metadata_block(self) -> None:
+        """
+        The file's metadata block comes back as agent_network_metadata, list values included.
+        """
+        self.assertEqual(
+            self.network("planner")["agent_network_metadata"],
+            {
+                "description": "Plans trips.",
+                "sample_queries": ["Book me a trip to Paris.", "What is the weather in Rome?"],
+                "tags": ["travel"],
+                "date_created": "2026-01-01T00:00:00+00:00",
+            },
+        )
+
+    def test_changes_nothing_else_when_the_file_has_a_block(self) -> None:
+        """
+        The block is one more key. The name and the definition come back as before.
+        """
+        body: Dict[str, Any] = self.network("planner")
+
+        self.assertEqual(set(body), {"agent_network_definition", "agent_network_name", "agent_network_metadata"})
+        self.assertEqual(body["agent_network_name"], "generated/planner")
+        self.assertEqual(
+            body["agent_network_definition"],
+            {
+                "frontman": {"instructions": "You are the front man.", "tools": ["helper"]},
+                "helper": {"instructions": "You help."},
+            },
+        )
+
+    def test_leaves_the_key_out_when_the_file_has_no_block(self) -> None:
+        """
+        No block means no key, not an empty one. An empty block would tell the designer
+        to wipe the block of the file a save goes over.
+        """
+        self.assertEqual(set(self.network("travel")), {"agent_network_definition", "agent_network_name"})
+
+    def test_returns_an_empty_block_as_an_empty_block(self) -> None:
+        """
+        An empty block comes back as {}, not left out. Left out, the Editor would send no
+        key, and the designer would keep the block of the file the save lands on.
+        """
+        self.assertEqual(self.network("empty_block")["agent_network_metadata"], {})
+
+    def test_leaves_the_key_out_when_the_metadata_is_not_a_block(self) -> None:
+        """
+        A ``metadata`` that is not a dict is not a block, so it is not sent either.
+        """
+        self.assertEqual(set(self.network("misfiled")), {"agent_network_definition", "agent_network_name"})

@@ -17,6 +17,8 @@ limitations under the License.
 export type ProgressPayload = {
   agent_network_definition?: Record<string, any> | Array<Record<string, any>>;
   agent_network_name?: string;
+  /** Only on a sly_data frame, which is the whole sly_data; progress frames carry no block. */
+  agent_network_metadata?: unknown;
 };
 
 /**
@@ -24,13 +26,28 @@ export type ProgressPayload = {
  * ```json
  * { "foo": "bar" }
  * ```
- * Performs a strict JSON.parse on the extracted content; on parse failure, returns undefined.
+ * Text that is JSON as a whole is the payload, even when its strings hold ```, so
+ * it is tried first. Otherwise each closing fence after the first opener is tried
+ * in turn, because strings in the fenced JSON may contain ``` too. Returns
+ * undefined when nothing parses.
  */
 export function parseCodeFenceJSON(s: string): any | undefined {
-  const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = (m ? m[1] : s).trim();
+  const whole = parseJSON(s);
+  if (whole !== undefined) return whole;
+  const opener = s.match(/```(?:json)?\s*/i);
+  if (opener?.index === undefined) return undefined;
+  const start = opener.index + opener[0].length;
+  for (let end = s.indexOf("```", start); end !== -1; end = s.indexOf("```", end + 3)) {
+    const parsed = parseJSON(s.slice(start, end));
+    if (parsed !== undefined) return parsed;
+  }
+  return undefined;
+}
+
+/** JSON.parse of the trimmed text, or undefined when it is not JSON. */
+function parseJSON(raw: string): unknown {
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw.trim());
   } catch {
     return undefined;
   }
@@ -58,6 +75,15 @@ function normalizePayloadObj(obj: Record<string, any>): ProgressPayload | undefi
     return obj as ProgressPayload;
   }
   return undefined;
+}
+
+/**
+ * Whether a network's last progress frame is newer than its last sly_data frame.
+ * Pass that network's own arrival times. A tie goes to sly_data, whose frame ends a
+ * turn and holds the block the turn saved.
+ */
+export function progressIsNewer(progressAt: number | undefined, slyDataAt: number | undefined): boolean {
+  return (progressAt ?? 0) > (slyDataAt ?? 0);
 }
 
 /**

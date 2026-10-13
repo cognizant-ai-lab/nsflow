@@ -96,6 +96,21 @@ describe("useConsultantFixtureEditor", () => {
     expect(result.current.justCreatedName).toBeNull();
   });
 
+  it("clears fixtures from the previous network when the next load fails", async () => {
+    const { result, rerender } = renderHook(
+      ({ networkName }) =>
+        useConsultantFixtureEditor({ apiUrl: "http://api", networkName, open: true }),
+      { initialProps: { networkName: "network-a" } },
+    );
+    await waitFor(() => expect(result.current.fixtures).toEqual([fixture]));
+    mockedListFixtures.mockRejectedValueOnce(new Error("Network B failed"));
+
+    rerender({ networkName: "network-b" });
+
+    await waitFor(() => expect(result.current.error).toBe("Network B failed"));
+    expect(result.current.fixtures).toEqual([]);
+  });
+
   it("reports sly data discovery failures for the current network", async () => {
     mockedListSlyDataKeys.mockRejectedValue(new Error("Discovery failed"));
     const { result } = renderHook(() =>
