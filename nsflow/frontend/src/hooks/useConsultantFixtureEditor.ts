@@ -20,7 +20,6 @@ import {
   buildInteractionsPayload,
   emptyDraftFixture,
   fixtureToDraft,
-  rawInteractionsToPayload,
   uniqueCopyName,
 } from "../state/networkConsultantFixtures";
 import type { DraftFixture } from "../state/networkConsultantFixtures";
@@ -140,12 +139,14 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
     setError(null);
     try {
       const copyName = uniqueCopyName(fixtures, fixture.name.replace(/\.hocon$/, ""));
-      await saveConsultantFixture(apiUrl, networkName, copyName, {
-        agent: fixture.agent,
-        success_ratio: fixture.success_ratio,
-        connections: fixture.connections.length ? fixture.connections : ["direct"],
-        interactions: rawInteractionsToPayload(fixture.interactions),
-      });
+      await saveConsultantFixture(
+        apiUrl,
+        networkName,
+        copyName,
+        fixture.definition ?? {},
+        undefined,
+        fixture.raw_hocon,
+      );
       if (contextGeneration !== contextGenerationRef.current) return;
       const loaded = await fetchFixtures();
       if (contextGeneration !== contextGenerationRef.current) return;
@@ -197,12 +198,14 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
         networkName,
         fileName,
         {
+          ...(fixture.definition ?? {}),
           agent: fixture.agent,
           success_ratio: draft.successRatio,
           connections: fixture.connections.length ? fixture.connections : ["direct"],
           interactions,
         },
         fixture.name,
+        fixture.raw_hocon,
       );
       if (contextGeneration !== contextGenerationRef.current) return;
       cancelEditing(fixture.name);

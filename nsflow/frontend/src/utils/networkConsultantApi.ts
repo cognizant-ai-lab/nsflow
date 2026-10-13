@@ -78,6 +78,7 @@ export const saveConsultantFixture = async (
   fixtureName: string,
   fixture: Record<string, unknown>,
   originalFixtureName?: string,
+  sourceHocon?: string,
 ): Promise<void> => {
   const query = new URLSearchParams({ network_name: networkName, fixture_name: fixtureName });
   if (originalFixtureName) query.set("original_fixture_name", originalFixtureName);
@@ -85,7 +86,7 @@ export const saveConsultantFixture = async (
     await fetch(`${consultantUrl(apiUrl, "fixtures")}?${query}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fixture }),
+      body: JSON.stringify({ fixture, source_hocon: sourceHocon }),
     }),
   );
 };
@@ -121,14 +122,14 @@ export const getConsultantJob = async (
   themeMode: string,
 ): Promise<ConsultantJobStatus> => {
   const query = new URLSearchParams({ theme: themeMode });
-  const rawResponse = await fetch(`${consultantUrl(apiUrl, `jobs/${jobId}`)}?${query}`);
+  const rawResponse = await fetch(`${consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}`)}?${query}`);
   const response = await expectSuccess(rawResponse, `Status check failed (${rawResponse.status})`);
   return response.json();
 };
 
 export const answerConsultantJob = async (apiUrl: string, jobId: string, answer: string): Promise<void> => {
   await expectSuccess(
-    await fetch(consultantUrl(apiUrl, `jobs/${jobId}/answer`), {
+    await fetch(consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}/answer`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answer }),
@@ -137,5 +138,7 @@ export const answerConsultantJob = async (apiUrl: string, jobId: string, answer:
 };
 
 export const stopConsultantJob = async (apiUrl: string, jobId: string): Promise<void> => {
-  await expectSuccess(await fetch(consultantUrl(apiUrl, `jobs/${jobId}/stop`), { method: "POST" }));
+  await expectSuccess(
+    await fetch(consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}/stop`), { method: "POST" }),
+  );
 };

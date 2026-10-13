@@ -40,7 +40,11 @@ import {
 } from "@mui/material";
 
 import InteractionsEditor from "./InteractionsEditor";
-import { formatCheckTypeLabel, SUCCESS_RATIO_PATTERN } from "../../state/networkConsultantFixtures";
+import {
+  formatCheckTypeLabel,
+  SUCCESS_RATIO_PATTERN,
+  unmanagedResponseSections,
+} from "../../state/networkConsultantFixtures";
 import type { DraftFixture } from "../../state/networkConsultantFixtures";
 import type { ConsultantFixture, FixtureResult } from "../../types/networkConsultant";
 import type { ViewableFile } from "../FileViewerDialog";
@@ -108,6 +112,7 @@ const ConsultantFixtureCard = ({
 }: ConsultantFixtureCardProps) => {
   const theme = useTheme();
   const ratioValid = !draft || SUCCESS_RATIO_PATTERN.test(draft.successRatio);
+  const unmanagedSections = unmanagedResponseSections(fixture);
   const viewRaw = () =>
     onViewRaw({
       file: new File([fixture.raw_hocon], fixture.name, { type: "text/plain" }),
@@ -210,6 +215,12 @@ const ConsultantFixtureCard = ({
         </Box>
       </AccordionSummary>
       <AccordionDetails>
+        {unmanagedSections.length > 0 && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This fixture also checks response.{unmanagedSections.join(" and response.")}. These checks are preserved
+            when you edit or duplicate it; use raw HOCON to change them.
+          </Alert>
+        )}
         {result && !result.passed && result.message && (
           <Alert
             severity={result.infrastructure_error ? "warning" : "error"}

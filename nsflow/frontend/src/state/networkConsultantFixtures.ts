@@ -16,7 +16,6 @@ limitations under the License.
 
 import type {
   ConsultantFixture,
-  FixtureInteraction,
   FixtureInteractionPayload,
 } from "../types/networkConsultant";
 
@@ -43,6 +42,7 @@ export const NUMERIC_CHECK_TYPES = new Set([
 ]);
 
 export const SUCCESS_RATIO_PATTERN = /^\d+\/\d+$/;
+export const DEFAULT_FIXTURE_TIMEOUT_SECONDS = 400;
 
 let nextDraftId = 0;
 export const newDraftId = (): string => String(nextDraftId++);
@@ -76,6 +76,7 @@ export interface DraftInteraction {
   timeoutInSeconds: string;
   slyData: DraftSlyDataEntry[];
   checks: DraftCheck[];
+  original: Record<string, unknown>;
 }
 
 export interface DraftFixture {
@@ -101,32 +102,48 @@ const slyDataValueToDraft = (value: unknown): Pick<DraftSlyDataEntry, "value" | 
   return { value: JSON.stringify(value, null, 2) ?? "", valueType: "json" };
 };
 
-export const fixtureToDraft = (fixture: ConsultantFixture): DraftFixture => ({
-  fileName: fixture.name.replace(/\.hocon$/, ""),
-  successRatio: fixture.success_ratio ?? "",
-  interactions: fixture.interactions.map((interaction) => ({
-    id: newDraftId(),
-    text: interaction.text,
-    timeoutInSeconds: interaction.timeout_in_seconds != null ? String(interaction.timeout_in_seconds) : "400",
-    slyData: Object.entries(interaction.sly_data ?? {}).map(([key, value]) => ({
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const originalInteractions = (fixture: ConsultantFixture): Record<string, unknown>[] => {
+  const interactions = fixture.definition?.interactions;
+  return Array.isArray(interactions) ? interactions.map(asRecord) : [];
+};
+
+export const fixtureToDraft = (fixture: ConsultantFixture): DraftFixture => {
+  const originals = originalInteractions(fixture);
+  return {
+    fileName: fixture.name.replace(/\.hocon$/, ""),
+    successRatio: fixture.success_ratio ?? "",
+    interactions: fixture.interactions.map((interaction, index) => ({
       id: newDraftId(),
-      key,
-      ...slyDataValueToDraft(value),
+      text: interaction.text,
+      timeoutInSeconds:
+        interaction.timeout_in_seconds != null
+          ? String(interaction.timeout_in_seconds)
+          : String(DEFAULT_FIXTURE_TIMEOUT_SECONDS),
+      slyData: Object.entries(interaction.sly_data ?? {}).map(([key, value]) => ({
+        id: newDraftId(),
+        key,
+        ...slyDataValueToDraft(value),
+      })),
+      checks: Object.entries(interaction.response_checks).map(([checkType, value]) => ({
+        id: newDraftId(),
+        checkType,
+        value: checkValueToText(value),
+      })),
+      original: originals[index] ?? {},
     })),
-    checks: Object.entries(interaction.response_checks).map(([checkType, value]) => ({
-      id: newDraftId(),
-      checkType,
-      value: checkValueToText(value),
-    })),
-  })),
-});
+  };
+};
 
 export const emptyInteraction = (): DraftInteraction => ({
   id: newDraftId(),
   text: "",
-  timeoutInSeconds: "400",
+  timeoutInSeconds: String(DEFAULT_FIXTURE_TIMEOUT_SECONDS),
   slyData: [],
   checks: [{ id: newDraftId(), checkType: "gist", value: "" }],
+  original: {},
 });
 
 export const emptyDraftFixture = (): DraftFixture => ({
@@ -149,10 +166,15 @@ export const buildInteractionsPayload = (
     }
     const slyData = buildSlyData(interaction, label, errors);
     const checks = buildChecks(interaction, label, errors);
+    const originalResponse = asRecord(interaction.original.response);
+    const response = { ...originalResponse };
+    if (interaction.checks.length > 0 || "text" in originalResponse) response.text = checks;
     return {
+      ...interaction.original,
       text: interaction.text,
-      timeout_in_seconds: Number.isFinite(timeout) && timeout > 0 ? timeout : 400,
-      response: { text: checks },
+      timeout_in_seconds:
+        Number.isFinite(timeout) && timeout > 0 ? timeout : DEFAULT_FIXTURE_TIMEOUT_SECONDS,
+      response,
       sly_data: slyData,
     };
   });
@@ -241,15 +263,12 @@ const buildChecks = (
   return checks;
 };
 
-export const rawInteractionsToPayload = (
-  interactions: FixtureInteraction[],
-): FixtureInteractionPayload[] =>
-  interactions.map((interaction) => ({
-    text: interaction.text,
-    timeout_in_seconds: interaction.timeout_in_seconds ?? 400,
-    response: { text: interaction.response_checks },
-    sly_data: interaction.sly_data ?? {},
-  }));
+export const unmanagedResponseSections = (fixture: ConsultantFixture): string[] => {
+  const sections = originalInteractions(fixture).flatMap((interaction) =>
+    Object.keys(asRecord(interaction.response)).filter((key) => key !== "text"),
+  );
+  return [...new Set(sections)];
+};
 
 export const uniqueCopyName = (fixtures: ConsultantFixture[], base: string): string => {
   const existingNames = new Set(fixtures.map((fixture) => fixture.name.replace(/\.hocon$/, "")));
