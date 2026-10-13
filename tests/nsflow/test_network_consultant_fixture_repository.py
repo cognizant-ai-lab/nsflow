@@ -113,7 +113,7 @@ class TestNetworkConsultantFixtureRepository:
         source = (
             "# Project license\n"
             "# Keep this notice\n\n"
-            '{"agent": "basic/music", "use_direct": true, "success_ratio": "1/1", '
+            '{"agent": "basic/music",\n# Keep this fixture note\n"use_direct": true, "success_ratio": "1/1", '
             '"connections": ["direct"], "interactions": [{"text": "Recommend music", '
             '"timeout_in_seconds": 90, "continue_conversation": true, '
             '"response": {"structure": {"genre": {"value": "rock"}}}}]}'
@@ -139,6 +139,7 @@ class TestNetworkConsultantFixtureRepository:
         assert interaction.get("continue_conversation") is True
         assert interaction.get("response", {}).get("structure") == {"genre": {"value": "rock"}}
         assert saved.raw_hocon.startswith("# Project license\n# Keep this notice")
+        assert "# Keep this fixture note" in saved.raw_hocon
 
     @staticmethod
     def test_non_utf8_fixture_does_not_break_listing(tmp_path: Path) -> None:

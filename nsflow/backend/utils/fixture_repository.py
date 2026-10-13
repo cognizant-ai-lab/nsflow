@@ -95,9 +95,7 @@ class FixtureRepository:
         fixture_directory.mkdir(parents=True, exist_ok=True)
         safe_name = self.safe_fixture_file_name(fixture_name)
         output_path = fixture_directory / safe_name
-        preamble = (
-            self._leading_comment_block(context.source_hocon if context else None) or self.FIXTURE_REFERENCE_COMMENT
-        )
+        preamble = self._comment_block(context.source_hocon if context else None) or self.FIXTURE_REFERENCE_COMMENT
         content = f"{preamble.rstrip()}\n\n{json.dumps(fixture, indent=4, ensure_ascii=False)}\n"
 
         descriptor, temporary_path = tempfile.mkstemp(dir=fixture_directory)
@@ -280,18 +278,11 @@ class FixtureRepository:
         return set(cls.SLY_DATA_GET_PATTERN.findall(source)) | set(cls.SLY_DATA_ITEM_PATTERN.findall(source))
 
     @staticmethod
-    def _leading_comment_block(source_hocon: str | None) -> str:
-        """Return leading blank and full-line comments from existing HOCON source."""
+    def _comment_block(source_hocon: str | None) -> str:
+        """Return full-line comments from existing HOCON source."""
         if not source_hocon:
             return ""
-        lines: list[str] = []
-        for line in source_hocon.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith(("#", "//")):
-                lines.append(line)
-                continue
-            break
-        return "\n".join(lines).strip()
+        return "\n".join(line for line in source_hocon.splitlines() if line.strip().startswith(("#", "//"))).strip()
 
     @classmethod
     def _remove_renamed_fixture(
