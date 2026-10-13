@@ -102,6 +102,10 @@ const EditorSidebar = ({
   const didAutoSelectRef = useRef(false);
   const lastSeenNameRef = useRef<string | null>(null);
   const designPlaceholderRef = useRef<string | null>(null);
+  // The Load Existing fetch in flight. Aborted by a newer load, and when this sidebar
+  // unmounts, so a replaced sidebar cannot write an old network into the store.
+  const loadAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => loadAbortRef.current?.abort(), []);
 
   // Build the sidebar's agent list from the store. This used to POST the
   // definition to /connectivity/from_json (or GET the andeditor session) purely to
@@ -248,12 +252,18 @@ const EditorSidebar = ({
     clearChat();
     regenerateSessionId(); // Triggers TabbedChatPanel to reconnect WebSocket
 
+    loadAbortRef.current?.abort();
+    const load = new AbortController();
+    loadAbortRef.current = load;
     setLoadingDefinition(true);
     try {
       setError("");
-      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`);
+      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`, {
+        signal: load.signal,
+      });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+        if (load.signal.aborted) return;
         const detail = errData.detail || response.statusText;
         console.error("Failed to load network definition:", detail);
         // Said out loud, not just to the console. This failing quietly is why the
@@ -263,6 +273,7 @@ const EditorSidebar = ({
         return;
       }
       const payload = await response.json();
+      if (load.signal.aborted) return;
       const definition = payload?.agent_network_definition ?? payload;
       // Straight into the store, which the canvas and this sidebar both render
       // from. The old code posted it back as a sly_data chat message purely so it
@@ -300,10 +311,12 @@ const EditorSidebar = ({
         onSelectNetwork(networkName);
       }
     } catch (e) {
+      if (load.signal.aborted) return;
       console.error("Error loading network definition:", e);
       setError(e instanceof Error ? `Could not open "${networkName}": ${e.message}` : `Could not open "${networkName}".`);
     } finally {
-      setLoadingDefinition(false);
+      // A newer load is still running and owns the spinner.
+      if (loadAbortRef.current === load) setLoadingDefinition(false);
     }
   }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, onSelectNetwork]);
 

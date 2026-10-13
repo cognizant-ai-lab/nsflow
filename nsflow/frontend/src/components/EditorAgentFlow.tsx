@@ -123,7 +123,8 @@ type PendingNameOverwrite = {
   readonly decide: (overwrite: boolean) => void;
 };
 
-const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
+// Called when New network is clicked, so the page can leave the open network.
+const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: string; onNewNetwork?: () => void }) => {
   const { apiUrl } = useApiPort();
   // v12 needs the node/edge type explicitly: an untyped useNodesState([]) infers never[].
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -510,6 +511,9 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
    * to fix a case that no longer misbehaves.
    */
   const [savingCount, setSavingCount] = useState(0);
+  // Imports still running, from the upload until the network is served. New network
+  // waits for them, because an import's late echo would land on the new draft.
+  const [importsInFlight, setImportsInFlight] = useState(0);
 
   // Manual edits go over HTTP, so nothing about them reaches the sly_data websocket
   // the Sly Data panel listens to, and the panel sat on whatever the last chat turn
@@ -1108,6 +1112,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
       // registry reload, and Launch before then opens nothing. `skip_designer` is set
       // inside sendEditorUpdate, so this saves the network exactly as imported.
       setRegistryReloadPending(true);
+      setImportsInFlight((count) => count + 1);
       try {
         await sendEditorUpdate({
           apiUrl,
@@ -1123,6 +1128,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         setImportError(error instanceof Error ? error.message : "Could not save that network.");
       } finally {
         setRegistryReloadPending(false);
+        setImportsInFlight((count) => count - 1);
       }
     },
     [apiUrl, networkId, publishSlyData]
@@ -1143,6 +1149,7 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
     async (file: File) => {
       if (!apiUrl) return;
       setImportError(undefined);
+      setImportsInFlight((count) => count + 1);
       const body = new FormData();
       body.append("file", file);
       try {
@@ -1170,6 +1177,8 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
         await applyImport(parsed);
       } catch (error) {
         setImportError(error instanceof Error ? error.message : "Could not read that file.");
+      } finally {
+        setImportsInFlight((count) => count - 1);
       }
     },
     [apiUrl, applyImport]
@@ -1906,7 +1915,15 @@ const EditorAgentFlow = ({ selectedNetwork }: { selectedNetwork: string }) => {
           <Tooltip title={`${isDraft ? "Start a new draft, discarding this one." : "Start a new agent network."} You can always describe a network in the chat instead of building it by hand.`}>
               <span style={{ display: 'inline-flex' }}>
                 <IconButton
+                  // Not while the designer is working, whose reply would be lost, or while an
+                  // edit or import is saving, whose late echo would bring back the old network.
+                  disabled={designerBusy || savingCount > 0 || importsInFlight > 0}
                   onClick={() => {
+                    onNewNetwork?.();
+                    // An agent still selected on the old network would become the
+                    // parent of the next added agent, which is not in this network.
+                    setSelectedNodeId("");
+                    setSelectedAgentName(null);
                     // Start over the same way the Editor starts: ask for a name, then
                     // put the frontman down. A draft therefore always has both, and
                     // nothing can be added before the network's entry point exists.
