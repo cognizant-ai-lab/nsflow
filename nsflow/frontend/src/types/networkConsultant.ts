@@ -30,12 +30,12 @@ export interface FixtureInteraction {
   sly_data: Record<string, unknown>;
 }
 
-export interface FixtureInteractionPayload {
+export type FixtureInteractionPayload = Record<string, unknown> & {
   text: string;
   timeout_in_seconds: number;
-  response: { text: Record<string, unknown> };
+  response: Record<string, unknown>;
   sly_data: Record<string, unknown>;
-}
+};
 
 export interface ConsultantFixture {
   name: string;
@@ -43,6 +43,7 @@ export interface ConsultantFixture {
   success_ratio: string | null;
   connections: string[];
   interactions: FixtureInteraction[];
+  definition?: Record<string, unknown>;
   raw_hocon: string;
   parse_error: string | null;
 }

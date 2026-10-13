@@ -43,7 +43,21 @@ const fixture: ConsultantFixture = {
       sly_data: {},
     },
   ],
-  raw_hocon: "",
+  definition: {
+    agent: "sample",
+    success_ratio: "1/1",
+    connections: ["direct"],
+    use_direct: true,
+    interactions: [
+      {
+        text: "Say hello",
+        timeout_in_seconds: 400,
+        response: { text: { gist: ["hello"] } },
+        sly_data: {},
+      },
+    ],
+  },
+  raw_hocon: "# License\n{}",
   parse_error: null,
 };
 
@@ -80,6 +94,14 @@ describe("useConsultantFixtureEditor", () => {
     act(() => {
       duplicatePromise = result.current.duplicateFixture(fixture);
     });
+    expect(mockedSaveFixture).toHaveBeenCalledWith(
+      "http://api",
+      "network-a",
+      "sample_copy",
+      fixture.definition,
+      undefined,
+      fixture.raw_hocon,
+    );
     rerender({ networkName: "network-b" });
     await waitFor(() => expect(mockedListFixtures).toHaveBeenCalledWith(
       "http://api",

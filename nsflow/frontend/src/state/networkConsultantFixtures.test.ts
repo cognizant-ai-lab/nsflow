@@ -20,6 +20,7 @@ import {
   buildInteractionsPayload,
   emptyInteraction,
   fixtureToDraft,
+  unmanagedResponseSections,
   uniqueCopyName,
 } from "./networkConsultantFixtures";
 import type { ConsultantFixture } from "../types/networkConsultant";
@@ -100,6 +101,45 @@ describe("network consultant fixture state", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.interactions[0].sly_data).toEqual(fixture.interactions[0].sly_data);
+  });
+
+  it("preserves fields and response sections that the editor does not manage", () => {
+    const originalInteraction = {
+      text: "Recommend music",
+      timeout_in_seconds: 90,
+      continue_conversation: true,
+      chat_filter: "MAXIMAL",
+      response: { structure: { genre: { value: "rock" } } },
+      sly_data: {},
+    };
+    const fixture: ConsultantFixture = {
+      name: "structure.hocon",
+      agent: "basic/music",
+      success_ratio: "1/1",
+      connections: ["direct"],
+      interactions: [
+        {
+          text: "Recommend music",
+          timeout_in_seconds: 90,
+          response_checks: {},
+          sly_data: {},
+        },
+      ],
+      definition: {
+        agent: "basic/music",
+        use_direct: true,
+        timeout_in_seconds: 90,
+        interactions: [originalInteraction],
+      },
+      raw_hocon: "# License\n{}",
+      parse_error: null,
+    };
+
+    const result = buildInteractionsPayload(fixtureToDraft(fixture).interactions);
+
+    expect(result.errors).toEqual([]);
+    expect(result.interactions[0]).toEqual(originalInteraction);
+    expect(unmanagedResponseSections(fixture)).toEqual(["structure"]);
   });
 
   it("rejects invalid typed sly data values", () => {

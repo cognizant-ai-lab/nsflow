@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import re
 import tempfile
@@ -34,7 +35,10 @@ from pyparsing import ParseBaseException
 from nsflow.backend.models.network_consultant.fixture import Fixture
 from nsflow.backend.models.network_consultant.fixture_interaction import FixtureInteraction
 from nsflow.backend.utils.fixture_not_found_error import FixtureNotFoundError
+from nsflow.backend.utils.fixture_save_context import FixtureSaveContext
 from nsflow.backend.utils.invalid_network_name_error import InvalidNetworkNameError
+
+logger = logging.getLogger(__name__)
 
 
 class FixtureRepository:
@@ -80,7 +84,7 @@ class FixtureRepository:
         network_name: str,
         fixture_name: str,
         fixture: dict[str, Any],
-        original_fixture_name: str | None = None,
+        context: FixtureSaveContext | None = None,
     ) -> str:
         """Atomically create or replace a fixture and return its safe filename."""
         errors = self.validate_fixture(fixture)
@@ -91,7 +95,10 @@ class FixtureRepository:
         fixture_directory.mkdir(parents=True, exist_ok=True)
         safe_name = self.safe_fixture_file_name(fixture_name)
         output_path = fixture_directory / safe_name
-        content = f"{self.FIXTURE_REFERENCE_COMMENT}\n{json.dumps(fixture, indent=4, ensure_ascii=False)}\n"
+        preamble = (
+            self._leading_comment_block(context.source_hocon if context else None) or self.FIXTURE_REFERENCE_COMMENT
+        )
+        content = f"{preamble.rstrip()}\n\n{json.dumps(fixture, indent=4, ensure_ascii=False)}\n"
 
         descriptor, temporary_path = tempfile.mkstemp(dir=fixture_directory)
         try:
@@ -103,7 +110,11 @@ class FixtureRepository:
                 os.remove(temporary_path)
             raise
 
-        self._remove_renamed_fixture(fixture_directory, original_fixture_name, safe_name)
+        self._remove_renamed_fixture(
+            fixture_directory,
+            context.original_fixture_name if context else None,
+            safe_name,
+        )
         return safe_name
 
     def delete(self, network_name: str, fixture_name: str) -> str:
@@ -119,9 +130,14 @@ class FixtureRepository:
         """Find literal sly_data keys referenced by a network's coded tools."""
         hocon_path = self._registry_path(network_name)
         if not hocon_path.is_file():
+            logger.warning("Cannot discover sly_data keys because network file does not exist: %s", hocon_path)
             return []
 
-        hocon_text = hocon_path.read_text(encoding="utf-8")
+        try:
+            hocon_text = hocon_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            logger.warning("Cannot read network file %s: %s", hocon_path, error)
+            return []
         keys: set[str] = set()
         for class_reference in self.CLASS_REFERENCE_PATTERN.findall(hocon_text):
             class_file = self._resolve_class_file(class_reference, network_name)
@@ -162,10 +178,15 @@ class FixtureRepository:
             if not isinstance(interaction, dict) or not str(interaction.get("text", "")).strip():
                 errors.append(f"{prefix}: 'text' is required.")
                 continue
-            response = interaction.get("response") or {}
-            checks = response.get("text") if isinstance(response, dict) else None
-            if not isinstance(checks, dict) or not checks:
+            response = interaction.get("response")
+            if not isinstance(response, dict) or not any(response.values()):
                 errors.append(f"{prefix}: at least one response check is required.")
+                continue
+            checks = response.get("text")
+            if checks is None:
+                continue
+            if not isinstance(checks, dict) or not checks:
+                errors.append(f"{prefix}: 'response.text' must contain at least one check.")
                 continue
             for key in checks:
                 if key not in cls.STOCK_TEST_KEYS:
@@ -194,9 +215,14 @@ class FixtureRepository:
     @staticmethod
     def _load_fixture(path: Path) -> Fixture:
         """Load a fixture while retaining malformed input for the editor."""
-        raw_hocon = path.read_text(encoding="utf-8")
         try:
-            parsed = ConfigFactory.parse_file(str(path)).as_plain_ordered_dict()
+            raw_hocon = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            logger.warning("Cannot read fixture %s: %s", path, error)
+            return Fixture(name=path.name, raw_hocon="", parse_error=str(error))
+
+        try:
+            parsed = ConfigFactory.parse_string(raw_hocon).as_plain_ordered_dict()
             interactions = [
                 FixtureInteraction(
                     text=turn.get("text", ""),
@@ -212,6 +238,7 @@ class FixtureRepository:
                 success_ratio=parsed.get("success_ratio"),
                 connections=parsed.get("connections", []),
                 interactions=interactions,
+                definition=parsed,
                 raw_hocon=raw_hocon,
             )
         except (AttributeError, ConfigException, OSError, ParseBaseException, TypeError, ValueError) as error:
@@ -224,18 +251,21 @@ class FixtureRepository:
             return None
 
         module_parts = parts[:-1]
-        coded_tools_root = (self.project_root / "coded_tools").resolve()
-        if class_reference.startswith("coded_tools."):
+        coded_tools_roots = [
+            (self.project_root / "coded_tools").resolve(),
+            (self.project_root / "neuro_san_studio" / "coded_tools").resolve(),
+        ]
+        if class_reference.startswith(("coded_tools.", "neuro_san_studio.coded_tools.")):
             candidates = [self.project_root.joinpath(*module_parts).with_suffix(".py")]
         else:
             candidates = [
-                coded_tools_root.joinpath(*network_name.split("/"), *module_parts).with_suffix(".py"),
-                coded_tools_root.joinpath(*module_parts).with_suffix(".py"),
+                coded_tools_roots[0].joinpath(*network_name.split("/"), *module_parts).with_suffix(".py"),
+                coded_tools_roots[0].joinpath(*module_parts).with_suffix(".py"),
             ]
 
         for candidate in candidates:
             resolved = candidate.resolve()
-            if coded_tools_root in resolved.parents and resolved.is_file():
+            if any(root in resolved.parents for root in coded_tools_roots) and resolved.is_file():
                 return resolved
         return None
 
@@ -244,9 +274,24 @@ class FixtureRepository:
         """Extract literal sly-data keys from one coded-tool source file."""
         try:
             source = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeError) as error:
+            logger.warning("Cannot inspect coded-tool file %s: %s", path, error)
             return set()
         return set(cls.SLY_DATA_GET_PATTERN.findall(source)) | set(cls.SLY_DATA_ITEM_PATTERN.findall(source))
+
+    @staticmethod
+    def _leading_comment_block(source_hocon: str | None) -> str:
+        """Return leading blank and full-line comments from existing HOCON source."""
+        if not source_hocon:
+            return ""
+        lines: list[str] = []
+        for line in source_hocon.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("#", "//")):
+                lines.append(line)
+                continue
+            break
+        return "\n".join(lines).strip()
 
     @classmethod
     def _remove_renamed_fixture(

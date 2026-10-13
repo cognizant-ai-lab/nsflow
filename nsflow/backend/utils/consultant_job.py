@@ -79,6 +79,7 @@ class ConsultantJob:
             try:
                 self.terminate()
             except ProcessLookupError:
+                # The process can exit between is_running() and delivery of the signal.
                 pass
             try:
                 await asyncio.wait_for(self.wait(), timeout=grace_period_seconds)
@@ -86,6 +87,7 @@ class ConsultantJob:
                 try:
                     self.kill()
                 except ProcessLookupError:
+                    # A process that exits after the timeout no longer needs a forced signal.
                     pass
                 await self.wait()
         await self._log_task

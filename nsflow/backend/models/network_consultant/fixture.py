@@ -16,6 +16,8 @@
 
 """Model for a Network Consultant fixture."""
 
+from typing import Any
+
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -30,6 +32,10 @@ class Fixture(BaseModel):
     success_ratio: str | None = None
     connections: list[str] = Field(default_factory=list)
     interactions: list[FixtureInteraction] = Field(default_factory=list)
+    definition: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Complete parsed fixture used to preserve fields the editor does not manage.",
+    )
     raw_hocon: str
     parse_error: str | None = Field(
         default=None, description="Set instead of the parsed fields above if this file failed to parse."
