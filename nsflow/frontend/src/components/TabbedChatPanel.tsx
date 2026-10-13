@@ -18,12 +18,15 @@ limitations under the License.
 import { useState, useRef, useEffect } from "react";
 import { Box, Tabs, Tab, Paper, alpha } from "@mui/material";
 import { Chat as ChatIcon, BugReport as InternalIcon,
-  DataObject as SlyDataIcon, Settings as ConfigIcon, Hub as HubIcon } from "@mui/icons-material";
+  DataObject as SlyDataIcon, Settings as ConfigIcon, Hub as HubIcon,
+  BuildCircle as ConsultantIcon } from "@mui/icons-material";
 import ChatPanel from "./ChatPanel";
 import InternalChatPanel from "./InternalChatPanel";
 import EditorSlyDataPanel from "./slydata/EditorSlyDataPanel";
 import McpConnectorsPanel from "./mcp/McpConnectorsPanel";
 import ConfigPanel from "./ConfigPanel";
+import NetworkConsultantPanel from "./NetworkConsultantPanel";
+import { getFeatureFlags } from "../utils/config";
 import { useApiPort } from "../context/ApiPortContext";
 import { useChatContext } from "../context/ChatContext";
 import { useTheme } from '../context/ThemeContext';
@@ -32,8 +35,11 @@ interface TabbedChatPanelProps {
 }
 
 const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
-  const [activeTab, setActiveTab] = useState<"chat" | "internal" | "slydata" | "connectors" | "config">("chat");
+  const [activeTab, setActiveTab] = useState<
+    "chat" | "internal" | "slydata" | "connectors" | "config" | "consultant"
+  >("chat");
   const { wsUrl } = useApiPort();
+  const { pluginNetworkConsultant } = getFeatureFlags();
   const { theme } = useTheme();
   const { sessionId, activeNetwork, targetNetwork,
     addChatMessage, addInternalChatMessage, addSlyDataMessage, addProgressMessage,
@@ -239,6 +245,14 @@ const TabbedChatPanel = ({ isEditorMode = false }: TabbedChatPanelProps) => {
     { id: "chat", label: "Chat", icon: <ChatIcon />, component: <ChatPanel /> },
     ...(!isEditorMode ? [{ id: "internal", label: "Internal Chat", icon: <InternalIcon />, component: <InternalChatPanel /> }] : []),
     { id: "slydata", label: "SlyData", icon: <SlyDataIcon />, component: <EditorSlyDataPanel /> },
+    ...(!isEditorMode && pluginNetworkConsultant
+      ? [{
+          id: "consultant",
+          label: "Self-Improvement",
+          icon: <ConsultantIcon />,
+          component: <NetworkConsultantPanel selectedNetwork={activeNetwork} />,
+        }]
+      : []),
     { id: "connectors", label: "Connectors", icon: <HubIcon />, component: <McpConnectorsPanel /> },
     ...(!isEditorMode ? [{ id: "config", label: "Config", icon: <ConfigIcon />, component: <ConfigPanel selectedNetwork={activeNetwork} /> }] : []),
   ];
