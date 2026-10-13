@@ -35,7 +35,7 @@ from .v1 import vqa_endpoints
 from .v1.neuro_san import agent as neuro_san_agent
 
 NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
-NSFLOW_PLUGIN_NETWORK_CONSULTANT = os.getenv("NSFLOW_PLUGIN_NETWORK_CONSULTANT", "").strip().lower() in {
+NSFLOW_PLUGIN_NETWORK_CONSULTANT = os.getenv("NSFLOW_PLUGIN_NETWORK_CONSULTANT", "true").strip().lower() in {
     "1",
     "on",
     "true",
