@@ -31,7 +31,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
 import { type EditorNetworkEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
-import type { AgentNetworkDefinitionEntry } from "../uiCommon";
+import type { AgentNetworkDefinitionEntry, ChatMessage } from "../uiCommon";
 
 const NETWORK = "coffee_shop";
 
@@ -101,12 +101,13 @@ describe("saving an agent from the panel", () => {
     vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/streaming_chat"));
 
   /** Open the panel on `agentName`. */
-  const renderPanel = (agentName: string, onAgentUpdated = vi.fn()) => {
+  const renderPanel = (agentName: string, onAgentUpdated = vi.fn(), onSaveFrame: (frame: ChatMessage) => void = vi.fn()) => {
     render(
       <NetworkAgentEditorPanel
         networkId={NETWORK}
         selectedAgentName={agentName}
         onAgentUpdated={onAgentUpdated}
+        onSaveFrame={onSaveFrame}
         openRequest={1}
       />
     );
@@ -274,6 +275,52 @@ describe("saving an agent from the panel", () => {
     expect(body.sly_data.agent_network_definition.helper).toEqual({
       instructions: "You help a lot.",
       description: "Helps a lot.",
+    });
+  });
+
+  describe("the frames a save streams back", () => {
+    /** Two frames, so the tests can see that every one is passed on, in order. */
+    const FRAMES = [
+      { type: "AGENT", text: "applying" },
+      { type: "AGENT", text: "saved" },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/streaming_chat")) {
+          const lines = FRAMES.map((response) => JSON.stringify({ response })).join("\n");
+          return new Response(`${lines}\n`, { status: 200 });
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      });
+    });
+
+    it("hands each frame of a Save to onSaveFrame", async () => {
+      // The page puts them in the chat's cache, which the canvas and the next chat
+      // message are built from.
+      const onSaveFrame = vi.fn();
+      renderPanel("helper", vi.fn(), onSaveFrame);
+
+      await editAndClickSave({ instructions: "You help a lot.", description: "Helps a lot." });
+
+      await waitFor(() => expect(screen.getByText(SUCCESS_TEXT)).toBeTruthy());
+      expect(onSaveFrame.mock.calls).toEqual([[FRAMES[0]], [FRAMES[1]]]);
+    });
+
+    it("hands each frame of a rename to onSaveFrame", async () => {
+      const onSaveFrame = vi.fn();
+      renderPanel("helper", vi.fn(), onSaveFrame);
+      await waitFor(() => expect(jsonEditorOnUpdate).toBeTypeOf("function"));
+
+      // A new name is saved at once, without Save.
+      await act(async () => {
+        jsonEditorOnUpdate!({ newData: { name: "assistant", instructions: "You help.", description: "Helps." } });
+      });
+
+      await waitFor(() => expect(onSaveFrame).toHaveBeenCalledTimes(2));
+      expect(onSaveFrame.mock.calls).toEqual([[FRAMES[0]], [FRAMES[1]]]);
+      const body = JSON.parse(String((streamingChatCalls()[0][1] as RequestInit).body));
+      expect(Object.keys(body.sly_data.agent_network_definition)).toContain("assistant");
     });
   });
 });

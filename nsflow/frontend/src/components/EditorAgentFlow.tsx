@@ -192,7 +192,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
 
   // We'll read the latest agent_network_definition from logs in view-mode
   const { getLatestNetworkPayload, addSlyDataMessage, targetNetwork,
-    progressTick, slyDataTick, waitingForAgent } = useChatContext();
+    progressTick, slyDataTick, waitingForAgent, sessionId } = useChatContext();
 
   // The launch button becomes visible as soon as the designer reports a network name,
   // but a freshly-generated network isn't actually finished/registered until the agent
@@ -546,6 +546,21 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     [addSlyDataMessage, targetNetwork]
   );
 
+  // Read when a save's echo arrives, which can be after the user has left the network.
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const publishSlyDataRef = useRef(publishSlyData);
+  publishSlyDataRef.current = publishSlyData;
+
+  // A save's echo reaches the chat's cache only in the session the save started in. Load
+  // Existing and New network start a new session; a page move caused by an echo does not.
+  const publishEcho = useCallback(
+    (frame: ChatMessage) => {
+      if (sessionId === sessionIdRef.current) publishSlyDataRef.current(frame);
+    },
+    [sessionId]
+  );
+
   const applyAndSync = useCallback(
     async (next: ConnectivityInfo[], agentName: string, message?: string) => {
       if (!apiUrl) return;
@@ -577,7 +592,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           definition: next,
           message,
           signal: controller.signal,
-          onFrame: publishSlyData,
+          onFrame: publishEcho,
         });
       } catch (error) {
         // An abort is this function superseding itself, not a failure.
@@ -589,7 +604,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
         if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
       }
     },
-    [networkId, apiUrl, applyEdit, publishSlyData, launchableNetworkName]
+    [networkId, apiUrl, applyEdit, publishEcho, launchableNetworkName]
   );
 
   // Handle edge connection.
@@ -871,16 +886,15 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     [apiUrl]
   );
 
-  // Name a network that is still a draft.
+  // Name a draft, or rename the open network.
   //
   // The name is what decides persistence: verified against a live designer, an edit
   // sent without `agent_network_name` is canonicalised and echoed but never saved,
   // while one sent with a name is assembled and saved under it. So naming a draft is
   // also the moment it starts being persisted.
   //
-  // Offered for a first name only. Renaming an already-saved network would save it
-  // again under the new name and leave the old registry entry behind, which needs
-  // designer-side cleanup this cannot do from here.
+  // Renaming a saved network saves it again under the new name and moves the page there.
+  // The old file stays, since the designer has no rename or delete step.
   //
   // Resolves to whether the name was applied. The user can decline to replace a network
   // that already has the name, and a caller about to build on the name (the first-agent
@@ -970,6 +984,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           networkName: name,
           message: `Name this agent network "${name}"`,
           signal: controller.signal,
+          onFrame: publishEcho,
         });
       } catch (error) {
         if ((error as Error)?.name !== "AbortError") {
@@ -982,7 +997,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       // sends it again.
       return true;
     },
-    [apiUrl, networkId, reconcileFromServer, selectedNetwork, isNameTaken]
+    [apiUrl, networkId, reconcileFromServer, selectedNetwork, isNameTaken, publishEcho]
   );
 
   /** The agent under the cursor during a drag, if any. */
@@ -1042,6 +1057,14 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     // Nothing to refetch: the panel writes through the store, which re-renders the
     // canvas on its own.
   };
+
+  // Follow a renamed agent so the panel and the selection stay on it. Stable across
+  // renders, so the panel's callbacks are not rebuilt on every chat render.
+  const followRenamedAgent = useCallback((newName: string) => {
+    setSelectedAgentName(newName);
+    setSelectedNodeId(newName);
+  }, []);
+  const closeAgentPanel = useCallback(() => setSelectedAgentName(null), []);
 
   /**
    * Download the network as a .hocon file.
@@ -1144,7 +1167,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           // Passed as well as held, so a frame that reaches the store before this save
           // goes out cannot change the block it sends.
           metadata,
-          onFrame: publishSlyData,
+          onFrame: publishEcho,
         });
         await waitForServedNetwork(apiUrl, parsed.networkName);
       } catch (error) {
@@ -1154,7 +1177,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
         setImportsInFlight((count) => count - 1);
       }
     },
-    [apiUrl, networkId, publishSlyData]
+    [apiUrl, networkId, publishEcho]
   );
 
   /**
@@ -2111,15 +2134,11 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       {/* Network Agent Editor Panel */}
       <NetworkAgentEditorPanel
         networkId={networkId}
+        onSaveFrame={publishEcho}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
-        onAgentRenamed={(newName) => {
-          // Follow the agent so the panel and the canvas selection do not stay on a
-          // name that no longer exists.
-          setSelectedAgentName(newName);
-          setSelectedNodeId(newName);
-        }}
-        onClose={() => setSelectedAgentName(null)}
+        onAgentRenamed={followRenamedAgent}
+        onClose={closeAgentPanel}
         openRequest={panelOpenRequests}
         readOnly={designerBusy}
       />

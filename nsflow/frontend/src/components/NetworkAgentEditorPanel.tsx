@@ -33,7 +33,7 @@ import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore"
 import { isExternalName, isToolboxTool } from "../state/definitionShape";
 import { canRename, renameAgent, updateAgent } from "../state/editorOperations";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
-import type { ConnectivityInfo } from "../uiCommon";
+import type { ChatMessage, ConnectivityInfo } from "../uiCommon";
 
 /**
  * Which of an agent's fields this panel edits.
@@ -93,6 +93,11 @@ const isLlmAgent = (definition: ConnectivityInfo[], name: string): boolean => {
 
 interface NetworkAgentEditorPanelProps {
   networkId: string;
+  /**
+   * Gets every frame a save streams back, so the chat's cache holds what was saved.
+   * Required, because the next chat message is built from that cache.
+   */
+  onSaveFrame: (frame: ChatMessage) => void;
   selectedAgentName: string | null;
   onAgentUpdated: () => void;
   /** Called with the new name after a rename, so the caller can follow the agent. */
@@ -120,6 +125,7 @@ interface NetworkAgentEditorPanelProps {
 
 const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   networkId,
+  onSaveFrame,
   selectedAgentName,
   onAgentUpdated,
   onAgentRenamed,
@@ -179,6 +185,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
         agentName: proposed,
         definition: next,
         message: `Rename agent "${selectedAgentName}" to "${proposed}"`,
+        onFrame: onSaveFrame,
       });
     } catch (err) {
       console.error('Failed to rename agent:', err);
@@ -192,7 +199,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
           : 'Renamed here but not saved.'
       );
     }
-  }, [entry?.definition, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed]);
+  }, [entry?.definition, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed, onSaveFrame]);
 
   // Data validation helpers
   const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
@@ -450,6 +457,7 @@ const cleanAgentData = (data: any): any => {
         networkId,
         agentName: selectedAgentName,
         definition: next,
+        onFrame: onSaveFrame,
       });
 
       setSuccess('Agent updated successfully');

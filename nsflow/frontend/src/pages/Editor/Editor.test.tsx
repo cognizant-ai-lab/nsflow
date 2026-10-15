@@ -15,7 +15,8 @@ limitations under the License.
 */
 
 /**
- * Does New network leave the network that is open?
+ * Does New network leave the network that is open, and does a save's echo land only
+ * on the network it was saved for?
  *
  * The page owns the selected network, the sidebar keeps its own selection, and the
  * chat keeps a cache of the designer's frames. All three decide what the canvas
@@ -26,6 +27,9 @@ limitations under the License.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/** The canvas's handler for edges deleted with the Delete key, so a test can delete one. */
+let deleteEdges: ((edges: { source: string; target: string }[]) => void) | undefined;
+
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
   return {
@@ -35,24 +39,29 @@ vi.mock("@xyflow/react", async () => {
       children,
       onNodeClick,
       onNodeDoubleClick,
+      onEdgesDelete,
     }: {
       nodes: { id: string }[];
       children?: React.ReactNode;
       onNodeClick?: (event: unknown, node: unknown) => void;
       onNodeDoubleClick?: (event: unknown, node: unknown) => void;
-    }) => (
-      <div data-testid="rf">
-        {nodes.map((node) => (
-          <div
-            key={node.id}
-            data-testid={`node-${node.id}`}
-            onClick={(event) => onNodeClick?.(event, node)}
-            onDoubleClick={(event) => onNodeDoubleClick?.(event, node)}
-          />
-        ))}
-        {children}
-      </div>
-    ),
+      onEdgesDelete?: (edges: { source: string; target: string }[]) => void;
+    }) => {
+      deleteEdges = onEdgesDelete;
+      return (
+        <div data-testid="rf">
+          {nodes.map((node) => (
+            <div
+              key={node.id}
+              data-testid={`node-${node.id}`}
+              onClick={(event) => onNodeClick?.(event, node)}
+              onDoubleClick={(event) => onNodeDoubleClick?.(event, node)}
+            />
+          ))}
+          {children}
+        </div>
+      );
+    },
     Background: () => null,
     Controls: () => null,
   };
@@ -93,10 +102,28 @@ vi.mock("../../components/TabbedChatPanel", () => ({
 
 /** The agent the agent panel was last given, or undefined before it renders. */
 let panelAgentName: string | null | undefined;
+/** Where the page told the agent panel to send the frames its saves stream back. */
+let panelOnSaveFrame: ((frame: ChatMessage) => void) | undefined;
+/** The page's other callbacks for the agent panel, to check they keep their identity. */
+let panelOnAgentRenamed: ((newName: string) => void) | undefined;
+let panelOnClose: (() => void) | undefined;
 
 vi.mock("../../components/NetworkAgentEditorPanel", () => ({
-  default: ({ selectedAgentName }: { selectedAgentName: string | null }) => {
+  default: ({
+    selectedAgentName,
+    onSaveFrame,
+    onAgentRenamed,
+    onClose,
+  }: {
+    selectedAgentName: string | null;
+    onSaveFrame: (frame: ChatMessage) => void;
+    onAgentRenamed?: (newName: string) => void;
+    onClose?: () => void;
+  }) => {
     panelAgentName = selectedAgentName;
+    panelOnSaveFrame = onSaveFrame;
+    panelOnAgentRenamed = onAgentRenamed;
+    panelOnClose = onClose;
     return null;
   },
 }));
@@ -135,7 +162,10 @@ vi.mock("@mui/material", async () => {
 import Editor from "./Editor";
 import { useChatContext } from "../../context/ChatContext";
 import { useEditorNetworkStore } from "../../state/editorNetworkStore";
+import { updateAgent } from "../../state/editorOperations";
+import { sendEditorUpdate } from "../../state/editorRoundTrip";
 import { isDraftKey } from "../../state/editorSession";
+import type { AgentNetworkDefinitionEntry, ChatMessage } from "../../uiCommon";
 
 const DESIGNER = "agent_network_designer";
 const A_KEY = "generated/network_a";
@@ -155,174 +185,185 @@ const X_DEFINITION = {
 /** A save as the designer received it: the network name and its agents with their down-chains. */
 type Save = { name: unknown; agents: Record<string, string[]> };
 
+/** Every save sent to the designer, in order. */
+const saves: Save[] = [];
+/** The names the server was asked about, in order. */
+const nameChecks: string[] = [];
+/** Names the stubbed server reports as taken. */
+let takenNames: string[] = [];
+/** Held by a test to keep a save in flight; undefined lets saves answer at once. */
+let saveGate: Promise<void> | undefined;
+/** Set by a test to hold each save until its own release is called, in this list. */
+let saveReleases: (() => void)[] | undefined;
+/** Whether a save's echo carries sly_data, as the designer's does. */
+let echoSlyData = true;
+/** Held by a test to keep a Load Existing fetch in flight; undefined answers at once. */
+let definitionGate: Promise<void> | undefined;
+/** Held by a test to keep a HOCON upload in flight; undefined answers at once. */
+let importGate: Promise<void> | undefined;
+
+/** The agents of a store entry as "agent->[down-chains]", or undefined when there is no entry. */
+const entryAgents = (key: string): string[] | undefined =>
+  useEditorNetworkStore
+    .getState()
+    .entries[key]?.definition.map((agent) => `${agent.origin}->[${(agent.tools ?? []).join(",")}]`);
+
+/** Every draft entry in the store that holds a name or an agent. */
+const usedDrafts = () =>
+  Object.entries(useEditorNetworkStore.getState().entries).filter(
+    ([key, entry]) => isDraftKey(key) && (entry.networkName || entry.definition.length > 0)
+  );
+
+/** The New network button itself; its tooltip's label sits on the span around it. */
+const newNetworkButton = (): HTMLButtonElement =>
+  screen.getByLabelText(/Start a new/).querySelector("button") as HTMLButtonElement;
+
+const mountEditor = async () => {
+  render(<Editor />);
+  await waitFor(() => expect(pickerOnChange).toBeTypeOf("function"));
+};
+
+/** Open a network with the sidebar's Load Existing picker. */
+const loadExisting = async (key: string) => {
+  await act(async () => {
+    pickerOnChange?.(null, key);
+  });
+  await waitFor(() => expect(screen.getByText(`Editing: ${key}`)).toBeTruthy());
+};
+
+/** A designer chat turn that builds network_a, recorded the way the chat panel records it. */
+const chatTurnBuildsA = async () => {
+  await act(async () => {
+    chat?.addProgressMessage({
+      sender: DESIGNER,
+      text: { agent_network_definition: A_DEFINITION, agent_network_name: "network_a" },
+      network: DESIGNER,
+    });
+  });
+  await act(async () => {
+    chat?.addSlyDataMessage({
+      sender: DESIGNER,
+      text: `\`\`\`json\n${JSON.stringify({
+        agent_network_definition: A_DEFINITION,
+        agent_network_name: "network_a",
+        agent_network_hocon_text: "# network_a",
+      })}\n\`\`\``,
+      network: DESIGNER,
+    });
+  });
+  await waitFor(() => expect(screen.getByText(`Editing: ${A_KEY}`)).toBeTruthy());
+  await waitFor(() => expect(screen.getByTestId("node-network_a_agent")).toBeTruthy());
+};
+
+const clickNewNetwork = async () => {
+  await act(async () => {
+    fireEvent.click(newNetworkButton());
+  });
+};
+
+/** Submit `name` in the naming dialog that New network opens. */
+const submitName = async (name: string) => {
+  await act(async () => {
+    fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: name } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Save network name"));
+  });
+};
+
+beforeEach(() => {
+  saves.length = 0;
+  nameChecks.length = 0;
+  takenNames = [];
+  saveGate = undefined;
+  saveReleases = undefined;
+  echoSlyData = true;
+  definitionGate = undefined;
+  importGate = undefined;
+  chat = undefined;
+  panelAgentName = undefined;
+  panelOnSaveFrame = undefined;
+  panelOnAgentRenamed = undefined;
+  panelOnClose = undefined;
+  deleteEdges = undefined;
+  pickerOnChange = undefined;
+  pickerValue = undefined;
+  sessionStorage.clear();
+  localStorage.clear();
+  window.history.replaceState({}, "", "/editor");
+  useEditorNetworkStore.setState({ entries: {} });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/v1/list")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ agents: [{ agent_name: A_KEY }, { agent_name: B_KEY }, { agent_name: X_KEY }] }),
+        } as Response;
+      }
+      if (url.includes("/api/v1/network_definition/")) {
+        if (definitionGate) await definitionGate;
+        const key = decodeURIComponent(url.split("/api/v1/network_definition/")[1]);
+        const definition = key === B_KEY ? B_DEFINITION : A_DEFINITION;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ agent_network_definition: definition, agent_network_name: key }),
+        } as Response;
+      }
+      if (url.includes("/api/v1/hocon/import")) {
+        if (importGate) await importGate;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ definition: X_DEFINITION, network_name: "network_x", hocon: "# x", name_is_taken: false }),
+        } as Response;
+      }
+      if (url.includes("/api/v1/hocon/name_taken")) {
+        const name = new URL(url).searchParams.get("name") ?? "";
+        nameChecks.push(name);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ network_name: name, name_is_taken: takenNames.includes(name) }),
+        } as Response;
+      }
+      if (url.includes("/streaming_chat")) {
+        const sent = JSON.parse(String(init?.body)).sly_data as Record<string, unknown>;
+        const definition = (sent.agent_network_definition ?? {}) as Record<string, { tools?: string[] }>;
+        const agents: Record<string, string[]> = {};
+        for (const [agent, spec] of Object.entries(definition)) agents[agent] = spec.tools ?? [];
+        saves.push({ name: sent.agent_network_name, agents });
+        if (saveGate) await saveGate;
+        const releases = saveReleases;
+        if (releases) await new Promise<void>((resolve) => releases.push(resolve));
+        // The designer echoes what it saved, which is how a save reaches the chat's cache.
+        // A named save also carries the HOCON text it wrote.
+        const response = echoSlyData
+          ? {
+              type: "AGENT",
+              text: "saved",
+              sly_data: {
+                agent_network_definition: sent.agent_network_definition,
+                agent_network_name: sent.agent_network_name,
+                ...(sent.agent_network_name ? { agent_network_hocon_text: `# saved ${sent.agent_network_name}` } : {}),
+              },
+            }
+          : { type: "AGENT", text: "saved" };
+        return new Response(`${JSON.stringify({ response })}\n`, { status: 200 });
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    })
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("the New network button", () => {
-  /** Every save sent to the designer, in order. */
-  const saves: Save[] = [];
-  /** The names the server was asked about, in order. */
-  const nameChecks: string[] = [];
-  /** Names the stubbed server reports as taken. */
-  let takenNames: string[] = [];
-  /** Held by a test to keep a save in flight; undefined lets saves answer at once. */
-  let saveGate: Promise<void> | undefined;
-  /** Whether a save's echo carries sly_data, as the designer's does. */
-  let echoSlyData = true;
-  /** Held by a test to keep a Load Existing fetch in flight; undefined answers at once. */
-  let definitionGate: Promise<void> | undefined;
-  /** Held by a test to keep a HOCON upload in flight; undefined answers at once. */
-  let importGate: Promise<void> | undefined;
-
-  /** The agents of a store entry as "agent->[down-chains]", or undefined when there is no entry. */
-  const entryAgents = (key: string): string[] | undefined =>
-    useEditorNetworkStore
-      .getState()
-      .entries[key]?.definition.map((agent) => `${agent.origin}->[${(agent.tools ?? []).join(",")}]`);
-
-  /** Every draft entry in the store that holds a name or an agent. */
-  const usedDrafts = () =>
-    Object.entries(useEditorNetworkStore.getState().entries).filter(
-      ([key, entry]) => isDraftKey(key) && (entry.networkName || entry.definition.length > 0)
-    );
-
-  /** The New network button itself; its tooltip's label sits on the span around it. */
-  const newNetworkButton = (): HTMLButtonElement =>
-    screen.getByLabelText(/Start a new/).querySelector("button") as HTMLButtonElement;
-
-  const mountEditor = async () => {
-    render(<Editor />);
-    await waitFor(() => expect(pickerOnChange).toBeTypeOf("function"));
-  };
-
-  /** Open a network with the sidebar's Load Existing picker. */
-  const loadExisting = async (key: string) => {
-    await act(async () => {
-      pickerOnChange?.(null, key);
-    });
-    await waitFor(() => expect(screen.getByText(`Editing: ${key}`)).toBeTruthy());
-  };
-
-  /** A designer chat turn that builds network_a, recorded the way the chat panel records it. */
-  const chatTurnBuildsA = async () => {
-    await act(async () => {
-      chat?.addProgressMessage({
-        sender: DESIGNER,
-        text: { agent_network_definition: A_DEFINITION, agent_network_name: "network_a" },
-        network: DESIGNER,
-      });
-    });
-    await act(async () => {
-      chat?.addSlyDataMessage({
-        sender: DESIGNER,
-        text: `\`\`\`json\n${JSON.stringify({
-          agent_network_definition: A_DEFINITION,
-          agent_network_name: "network_a",
-          agent_network_hocon_text: "# network_a",
-        })}\n\`\`\``,
-        network: DESIGNER,
-      });
-    });
-    await waitFor(() => expect(screen.getByText(`Editing: ${A_KEY}`)).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId("node-network_a_agent")).toBeTruthy());
-  };
-
-  const clickNewNetwork = async () => {
-    await act(async () => {
-      fireEvent.click(newNetworkButton());
-    });
-  };
-
-  /** Submit `name` in the naming dialog that New network opens. */
-  const submitName = async (name: string) => {
-    await act(async () => {
-      fireEvent.change(screen.getByPlaceholderText("Name this network"), { target: { value: name } });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByLabelText("Save network name"));
-    });
-  };
-
-  beforeEach(() => {
-    saves.length = 0;
-    nameChecks.length = 0;
-    takenNames = [];
-    saveGate = undefined;
-    echoSlyData = true;
-    definitionGate = undefined;
-    importGate = undefined;
-    chat = undefined;
-    panelAgentName = undefined;
-    pickerOnChange = undefined;
-    pickerValue = undefined;
-    sessionStorage.clear();
-    localStorage.clear();
-    window.history.replaceState({}, "", "/editor");
-    useEditorNetworkStore.setState({ entries: {} });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.includes("/api/v1/list")) {
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ agents: [{ agent_name: A_KEY }, { agent_name: B_KEY }, { agent_name: X_KEY }] }),
-          } as Response;
-        }
-        if (url.includes("/api/v1/network_definition/")) {
-          if (definitionGate) await definitionGate;
-          const key = decodeURIComponent(url.split("/api/v1/network_definition/")[1]);
-          const definition = key === B_KEY ? B_DEFINITION : A_DEFINITION;
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ agent_network_definition: definition, agent_network_name: key }),
-          } as Response;
-        }
-        if (url.includes("/api/v1/hocon/import")) {
-          if (importGate) await importGate;
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ definition: X_DEFINITION, network_name: "network_x", hocon: "# x", name_is_taken: false }),
-          } as Response;
-        }
-        if (url.includes("/api/v1/hocon/name_taken")) {
-          const name = new URL(url).searchParams.get("name") ?? "";
-          nameChecks.push(name);
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ network_name: name, name_is_taken: takenNames.includes(name) }),
-          } as Response;
-        }
-        if (url.includes("/streaming_chat")) {
-          const sent = JSON.parse(String(init?.body)).sly_data as Record<string, unknown>;
-          const definition = (sent.agent_network_definition ?? {}) as Record<string, { tools?: string[] }>;
-          const agents: Record<string, string[]> = {};
-          for (const [agent, spec] of Object.entries(definition)) agents[agent] = spec.tools ?? [];
-          saves.push({ name: sent.agent_network_name, agents });
-          if (saveGate) await saveGate;
-          // The designer echoes what it saved, which is how a save reaches the chat's cache.
-          const response = echoSlyData
-            ? {
-                type: "AGENT",
-                text: "saved",
-                sly_data: {
-                  agent_network_definition: sent.agent_network_definition,
-                  agent_network_name: sent.agent_network_name,
-                },
-              }
-            : { type: "AGENT", text: "saved" };
-          return new Response(`${JSON.stringify({ response })}\n`, { status: 200 });
-        }
-        return { ok: true, status: 200, json: async () => ({}) } as Response;
-      })
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("starts an empty draft, and naming it saves only the new network", async () => {
     await mountEditor();
     await loadExisting(A_KEY);
@@ -693,5 +734,431 @@ describe("the New network button", () => {
 
     expect(pickerValue).toBe(A_KEY);
     expect(saves).toEqual([]);
+  });
+});
+
+describe("a save's echo", () => {
+  /** Render the chat context again with no new frame, as any log line or chat message does. */
+  const renderChatAgain = async () => {
+    await act(async () => {
+      chat?.addLogMessage({ sender: "system", text: "An unrelated log line.", network: "" });
+    });
+  };
+
+  /** Let any effect a late echo sets off run before the page is checked. */
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  };
+
+  /** Hold every save until the returned function is called. */
+  const holdSaves = (): (() => Promise<void>) => {
+    let release: () => void = () => {};
+    saveGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return async () => {
+      saveGate = undefined;
+      await act(async () => {
+        release();
+      });
+    };
+  };
+
+  /**
+   * Hold each save on its own. The returned function waits until the save at `index`
+   * has been sent, then lets the server answer it.
+   */
+  const holdEachSave = (): ((index: number) => Promise<void>) => {
+    const releases: (() => void)[] = [];
+    saveReleases = releases;
+    return async (index: number) => {
+      await waitFor(() => expect(releases.length).toBeGreaterThan(index));
+      await act(async () => {
+        releases[index]();
+      });
+    };
+  };
+
+  /** Hold the next Load Existing fetch until the returned function is called. */
+  const holdDefinitionFetch = (): (() => Promise<void>) => {
+    let release: () => void = () => {};
+    definitionGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return async () => {
+      definitionGate = undefined;
+      await act(async () => {
+        release();
+      });
+    };
+  };
+
+  /** Record the sly_data of a chat message the way the chat panel does when it sends one. */
+  const recordChatSend = async () => {
+    await act(async () => {
+      chat?.addSlyDataMessage({
+        sender: "user",
+        text: JSON.stringify(chat.getEditorOutgoingSlyData(), null, 2),
+        network: DESIGNER,
+      });
+    });
+  };
+
+  /** An agent's instructions in a store entry. */
+  const instructionsOf = (key: string, agent: string) =>
+    (
+      useEditorNetworkStore.getState().entries[key]?.definition.find((entry) => entry.origin === agent) as
+        | AgentNetworkDefinitionEntry
+        | undefined
+    )?.instructions;
+
+  /** The agents in the sly_data the next chat message carries. */
+  const outgoingAgents = () =>
+    Object.keys((chat?.getEditorOutgoingSlyData().agent_network_definition ?? {}) as Record<string, unknown>);
+
+  /** An agent's instructions in the sly_data the next chat message carries. */
+  const outgoingInstructionsOf = (agent: string) =>
+    (chat?.getEditorOutgoingSlyData().agent_network_definition as Record<string, { instructions?: string }> | undefined)?.[
+      agent
+    ]?.instructions;
+
+  /**
+   * Start saving new instructions for an agent the way the agent panel's Save does. The
+   * panel is stubbed here, so this sends the save with the frame callback the page gave it.
+   */
+  const startPanelSave = (key: string, agent: string, instructions: string): Promise<void> => {
+    const next = updateAgent(useEditorNetworkStore.getState().entries[key]?.definition ?? [], agent, { instructions });
+    useEditorNetworkStore.getState().applyEdit(key, next);
+    return sendEditorUpdate({ apiUrl: "http://api", networkId: key, agentName: agent, definition: next, onFrame: panelOnSaveFrame });
+  };
+
+  /** Save new instructions for an agent the way the agent panel's Save does, and wait for the answer. */
+  const panelSave = async (key: string, agent: string, instructions: string) => {
+    await act(async () => {
+      await startPanelSave(key, agent, instructions);
+    });
+  };
+
+  /** Rename the open network with the pencil and the naming field. */
+  const renameNetwork = async (name: string) => {
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Rename this network"));
+    });
+    await submitName(name);
+  };
+
+  it("keeps an agent panel save after the chat renders again, and the next chat message carries it", async () => {
+    await mountEditor();
+    await chatTurnBuildsA();
+
+    await panelSave(A_KEY, "a_child", "Edited in the panel.");
+    await renderChatAgain();
+
+    expect(instructionsOf(A_KEY, "a_child")).toBe("Edited in the panel.");
+    expect(outgoingInstructionsOf("a_child")).toBe("Edited in the panel.");
+    expect(screen.getByText(`Editing: ${A_KEY}`)).toBeTruthy();
+  });
+
+  it("gives the agent panel the same callbacks when the chat renders again", async () => {
+    // New ones on each chat render would rebuild the panel's own callbacks each time,
+    // and make it add its click-outside listener again.
+    await mountEditor();
+    await chatTurnBuildsA();
+    const saveFrameBefore = panelOnSaveFrame;
+    const agentRenamedBefore = panelOnAgentRenamed;
+    const closeBefore = panelOnClose;
+
+    await renderChatAgain();
+
+    expect(saveFrameBefore).toBeTypeOf("function");
+    expect(panelOnSaveFrame).toBe(saveFrameBefore);
+    expect(panelOnAgentRenamed).toBe(agentRenamedBefore);
+    expect(panelOnClose).toBe(closeBefore);
+  });
+
+  it("moves the page to the file an agent panel save wrote, for a network opened from another folder", async () => {
+    // Saves go to generated/<file name>, so the page follows the save there.
+    await mountEditor();
+    await loadExisting("basic/foo");
+
+    await panelSave("basic/foo", "a_child", "Edited in the panel.");
+
+    await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
+    expect(saves).toEqual([{ name: "foo", agents: { network_a_agent: ["a_child"], a_child: [] } }]);
+    expect(pickerValue).toBe("generated/foo");
+    expect(instructionsOf("generated/foo", "a_child")).toBe("Edited in the panel.");
+  });
+
+  it("gives the entry the page moves to the HOCON text the save wrote, over one from an earlier visit", async () => {
+    // Export downloads the entry's HOCON text first.
+    useEditorNetworkStore.getState().reconcileFromServer("generated/foo", {
+      definition: [{ origin: "old_front", tools: [] }],
+      networkName: "foo",
+      hocon: "# generated/foo from an earlier visit",
+    });
+    await mountEditor();
+    await loadExisting("basic/foo");
+
+    await panelSave("basic/foo", "a_child", "Edited in the panel.");
+
+    await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
+    expect(useEditorNetworkStore.getState().entries["generated/foo"]?.hocon).toBe("# saved foo");
+  });
+
+  it("moves the page to the new name when the open network is renamed, and keeps it there", async () => {
+    await mountEditor();
+    await chatTurnBuildsA();
+
+    await renameNetwork("network_z");
+
+    await waitFor(() => expect(screen.getByText("Editing: generated/network_z")).toBeTruthy());
+    await renderChatAgain();
+
+    expect(screen.getByText("Editing: generated/network_z")).toBeTruthy();
+    expect(saves).toEqual([{ name: "network_z", agents: { network_a_agent: ["a_child"], a_child: [] } }]);
+    // The page's new entry holds what the save echoed, and the next chat message names it.
+    expect(useEditorNetworkStore.getState().entries["generated/network_z"]?.networkName).toBe("network_z");
+    expect(entryAgents("generated/network_z")).toEqual(["network_a_agent->[a_child]", "a_child->[]"]);
+    expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_z");
+  });
+
+  it("keeps a canvas edit that is held back after an unrelated chat render (a log line)", async () => {
+    await mountEditor();
+    await chatTurnBuildsA();
+
+    // Deleting the only connection leaves a_child with no parent, which is kept on the
+    // canvas and not saved.
+    await act(async () => {
+      deleteEdges?.([{ source: "network_a_agent", target: "a_child" }]);
+    });
+    expect(entryAgents(A_KEY)).toEqual(["network_a_agent->[]", "a_child->[]"]);
+    await renderChatAgain();
+
+    expect(entryAgents(A_KEY)).toEqual(["network_a_agent->[]", "a_child->[]"]);
+    expect(saves).toEqual([]);
+  });
+
+  describe("of a second save, after the first save's echo moved the page", () => {
+    it("keeps a canvas edit made while an agent panel save was saving a network from another folder", async () => {
+      await mountEditor();
+      await loadExisting("basic/foo");
+      const release = holdEachSave();
+      let panelSaving: Promise<void> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave("basic/foo", "a_child", "Edited in the panel.");
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+
+      await release(0);
+      await act(async () => {
+        await panelSaving;
+      });
+      await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
+      await release(1);
+      await settle();
+
+      expect(saves.map((save) => save.name)).toEqual(["foo", "foo"]);
+      expect(entryAgents("generated/foo")).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
+      expect(instructionsOf("generated/foo", "a_child")).toBe("Edited in the panel.");
+      expect(outgoingAgents()).toEqual(["network_a_agent", "a_child", "agent"]);
+    });
+
+    it("keeps a canvas edit made while an import was saving", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+
+      await release(0);
+      await waitFor(() => expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy());
+      await release(1);
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
+      await settle();
+
+      expect(saves.map((save) => save.name)).toEqual(["network_x", "network_x"]);
+      expect(entryAgents(X_KEY)).toEqual(["network_x_agent->[agent]", "agent->[]"]);
+      expect(outgoingAgents()).toEqual(["network_x_agent", "agent"]);
+    });
+  });
+
+  describe("that arrives after Load Existing opened another network", () => {
+    it.each([
+      ["a different name", B_KEY, ["network_b_agent->[]"]],
+      ["the same file name in another folder", "basic/network_a", ["network_a_agent->[a_child]", "a_child->[]"]],
+    ])("leaves the page and the entry of a network with %s alone", async (_kind, otherKey, openedAgents) => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await loadExisting(otherKey);
+      expect(entryAgents(otherKey)).toEqual(openedAgents);
+
+      await releaseSaves();
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false));
+      await settle();
+
+      expect(screen.getByText(`Editing: ${otherKey}`)).toBeTruthy();
+      expect(pickerValue).toBe(otherKey);
+      expect(entryAgents(otherKey)).toEqual(openedAgents);
+      // network_a's own entry still takes the echo.
+      expect(entryAgents(A_KEY)).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
+    });
+
+    it("leaves the page alone when the save was an import", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await loadExisting(B_KEY);
+
+      await releaseSaves();
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
+      await settle();
+
+      expect(screen.getByText(`Editing: ${B_KEY}`)).toBeTruthy();
+      expect(pickerValue).toBe(B_KEY);
+      expect(entryAgents(B_KEY)).toEqual(["network_b_agent->[]"]);
+    });
+
+    it("leaves the page and the entry alone when the save was an agent panel save", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      let saving: Promise<void> = Promise.resolve();
+      await act(async () => {
+        saving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await loadExisting("basic/network_a");
+
+      await releaseSaves();
+      await act(async () => {
+        await saving;
+      });
+      await settle();
+
+      expect(screen.getByText("Editing: basic/network_a")).toBeTruthy();
+      expect(pickerValue).toBe("basic/network_a");
+      expect(instructionsOf("basic/network_a", "a_child")).toBe("Child of A.");
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBeUndefined();
+      expect(instructionsOf(A_KEY, "a_child")).toBe("Edited in the panel.");
+    });
+
+    it("leaves the page alone when the save was a rename of the network", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      await renameNetwork("network_z");
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await loadExisting(B_KEY);
+
+      await releaseSaves();
+      await settle();
+
+      expect(screen.getByText(`Editing: ${B_KEY}`)).toBeTruthy();
+      expect(pickerValue).toBe(B_KEY);
+      expect(entryAgents(B_KEY)).toEqual(["network_b_agent->[]"]);
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBeUndefined();
+    });
+  });
+
+  describe("that arrives while Load Existing is still fetching another network", () => {
+    it.each([
+      ["a different name", B_KEY, ["network_b_agent->[]"]],
+      ["the same file name in another folder", "basic/network_a", ["network_a_agent->[a_child]", "a_child->[]"]],
+    ])("leaves the network with %s and the next chat message alone", async (_kind, otherKey, openedAgents) => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+
+      // The click clears the chat, and the page changes network only once the fetch answers.
+      const releaseFetch = holdDefinitionFetch();
+      await act(async () => {
+        pickerOnChange?.(null, otherKey);
+      });
+      await releaseSaves();
+      await settle();
+      await releaseFetch();
+      await waitFor(() => expect(screen.getByText(`Editing: ${otherKey}`)).toBeTruthy());
+      await settle();
+
+      expect(entryAgents(otherKey)).toEqual(openedAgents);
+      expect(pickerValue).toBe(otherKey);
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBeUndefined();
+      // network_a's own entry still takes the echo.
+      expect(entryAgents(A_KEY)).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
+
+      await recordChatSend();
+      await settle();
+      expect(screen.getByText(`Editing: ${otherKey}`)).toBeTruthy();
+    });
+  });
+
+  // New network stays enabled during these saves, so the new session is what drops their echo.
+  describe("that arrives after New network was clicked", () => {
+    it("leaves the new draft alone when the save was an agent panel save", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      let saving: Promise<void> = Promise.resolve();
+      await act(async () => {
+        saving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await clickNewNetwork();
+
+      await releaseSaves();
+      await act(async () => {
+        await saving;
+      });
+      await settle();
+
+      expect(screen.queryByText(`Editing: ${A_KEY}`)).toBeNull();
+      expect(screen.getByText("Name this agent network")).toBeTruthy();
+      expect(usedDrafts()).toEqual([]);
+      expect(chat?.getEditorOutgoingSlyData()).toEqual({});
+      // network_a's own entry still takes the echo.
+      expect(instructionsOf(A_KEY, "a_child")).toBe("Edited in the panel.");
+    });
+
+    it("leaves the new draft alone when the save was a rename of the network", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      await renameNetwork("network_z");
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await clickNewNetwork();
+
+      await releaseSaves();
+      await settle();
+
+      expect(screen.queryByText("Editing: generated/network_z")).toBeNull();
+      expect(screen.queryByText(`Editing: ${A_KEY}`)).toBeNull();
+      expect(screen.getByText("Name this agent network")).toBeTruthy();
+      expect(usedDrafts()).toEqual([]);
+      expect(chat?.getEditorOutgoingSlyData()).toEqual({});
+    });
   });
 });
