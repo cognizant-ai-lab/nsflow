@@ -154,7 +154,7 @@ describe("loadNetworkThroughDesigner", () => {
     expect((await load()).metadata).toEqual(expected);
   });
 
-  it("keeps a coded tool a tool, and an entry with instructions an agent", async () => {
+  it("keeps a coded tool a tool, and an agent with blank instructions an agent", async () => {
     answer(
       streamOf(
         loadedReply({
@@ -175,8 +175,8 @@ describe("loadNetworkThroughDesigner", () => {
 
     const { definition } = await load();
 
-    // A tool in nsflow has neither text field. An instructions key keeps an entry an
-    // agent, even when it is blank.
+    // A tool in nsflow has neither text field. An agent keeps both, even when they are
+    // blank, and gets back the blank instructions the designer dropped.
     expect(definition).toStrictEqual([
       {
         origin: "front",
@@ -186,11 +186,11 @@ describe("loadNetworkThroughDesigner", () => {
       },
       { origin: "blank", tools: [], instructions: "", description: "" },
       { origin: "Calc", tools: [] },
-      { origin: "unwritten", tools: [] },
+      { origin: "unwritten", tools: [], instructions: "", description: "" },
     ]);
     expect(isToolboxTool(definition[1])).toBe(false);
     expect(isToolboxTool(definition[2])).toBe(true);
-    expect(isToolboxTool(definition[3])).toBe(true);
+    expect(isToolboxTool(definition[3])).toBe(false);
   });
 
   it("leaves the entry of an external reference as it came", async () => {

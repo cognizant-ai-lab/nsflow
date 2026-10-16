@@ -163,8 +163,11 @@ export const loadNetworkThroughDesigner = async ({
     const withText = entry as ConnectivityInfo & { instructions?: string; description?: string };
     const external = entry.origin !== undefined && isExternalName(entry.origin);
     if (external || withText.instructions !== undefined || withText.description === undefined) return entry;
-    // The designer returns a coded tool, or an agent with blank instructions, with only its
-    // description. nsflow tells a tool from an agent by it having neither text field (isToolboxTool).
+    // The designer drops blank instructions but keeps an empty description, which only an
+    // agent gets. Put the instructions key back so the entry stays an agent.
+    if (withText.description === "") return { ...withText, instructions: "" } as ConnectivityInfo;
+    // A coded tool comes back with only its description, and nsflow tells a tool from an agent
+    // by it having neither text field (isToolboxTool).
     const { description: _description, ...tool } = withText;
     return tool;
   });
