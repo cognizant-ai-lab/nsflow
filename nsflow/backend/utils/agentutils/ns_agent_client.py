@@ -75,12 +75,11 @@ class NsAgentClient:
         """
         Stream a chat turn, yielding neuro-san's chat responses as they arrive.
 
-        Each yielded item is one ``{"response": {...}}`` dict, exactly as
-        ``AgentSession.streaming_chat`` produces it and exactly what a neuro-san
-        server sends on the wire, so callers can serialise them straight to
-        newline-delimited JSON.
+        Each yielded item is one ``{"response": {...}}`` dict, in the shape
+        ``AgentSession.streaming_chat`` produces and a neuro-san server sends on
+        the wire, so callers can serialise them straight to newline-delimited JSON.
 
-        Before dispatch this applies the same two steps the WebSocket chat path
+        This applies the same steps to ``sly_data`` the WebSocket chat path
         applies, so the HTTP route is not a way around them:
 
         1. The client's ``sly_data`` is merged through
@@ -91,6 +90,9 @@ class NsAgentClient:
         2. ``inject_mcp_auth_headers`` adds Authorization headers for the
            OAuth-connected MCP servers this network declares it needs, so the agent
            can reach them without the user pasting a token.
+        3. Each chunk goes through ``redact_chunk_for_surface`` before it is
+           yielded. neuro-san repeats the request on every line, so this keeps the
+           tokens from step 2 away from the caller.
 
         Unlike the WebSocket path this is stateless: there is no per-session state
         carried between turns, so tokens are injected fresh on every request and
@@ -116,4 +118,24 @@ class NsAgentClient:
 
         responses = utils.session.streaming_chat(outgoing)
         async for chunk in AsyncStreamingInputProcessor.async_wrap_iter(responses):
-            yield chunk
+            yield self.redact_chunk_for_surface(chunk)
+
+    @staticmethod
+    def redact_chunk_for_surface(chunk: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Return a copy of one streamed chunk with credential header values masked in
+        its ``request.sly_data`` and ``response.sly_data``. The rest is unchanged.
+
+        :param chunk: One chat response, as the session streamed it.
+        :return: A copy of the chunk that is safe to send to the caller.
+        """
+        redacted: Dict[str, Any] = dict(chunk)
+        for part in ("request", "response"):
+            section: Any = chunk.get(part)
+            if isinstance(section, dict) and "sly_data" in section:
+                # Copy each level instead of editing it. The echoed request can be the
+                # same dict that was sent to neuro-san, which must keep the real token.
+                masked_section: Dict[str, Any] = dict(section)
+                masked_section["sly_data"] = NsWebsocketUtils.redact_sly_data_for_surface(section["sly_data"])
+                redacted[part] = masked_section
+        return redacted
