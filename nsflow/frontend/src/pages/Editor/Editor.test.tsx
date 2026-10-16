@@ -1185,6 +1185,41 @@ describe("a save's echo", () => {
       expect(outgoingAgents()).toEqual(["network_x_agent"]);
     });
 
+    it("is not aborted by a rename to the last part of its nested name", async () => {
+      await mountEditor();
+      await act(async () => {
+        chat?.addSlyDataMessage({
+          sender: DESIGNER,
+          text: `\`\`\`json\n${JSON.stringify({
+            agent_network_definition: A_DEFINITION,
+            agent_network_name: "team/coffee",
+            agent_network_hocon_text: "# team/coffee",
+          })}\n\`\`\``,
+          network: DESIGNER,
+        });
+      });
+      await waitFor(() => expect(screen.getByText("Editing: generated/team/coffee")).toBeTruthy());
+      const release = holdEachSave();
+      let panelSaving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave("generated/team/coffee", "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await renameNetwork("coffee");
+      await waitFor(() => expect(saves).toHaveLength(2));
+      expect(saves.map((save) => save.name)).toEqual(["team/coffee", "coffee"]);
+
+      // team/coffee and coffee are different files, so the first save still finishes.
+      expect(saveSignals[0]?.aborted).toBe(false);
+      await release(1);
+      await release(0);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await panelSaving;
+      });
+      expect(outcome).toBe("saved");
+    });
+
     it("is dropped, and the older save still finishes, when it was a rename and the newer save an import", async () => {
       await mountEditor();
       await loadExisting(A_KEY);
@@ -1479,6 +1514,40 @@ describe("a save's echo", () => {
       expect(entryAgents(B_KEY)).toEqual(["network_b_agent->[]"]);
       expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBeUndefined();
     });
+  });
+
+  it("leaves a save on the network now open alone when an import from the network left finishes later", async () => {
+    await mountEditor();
+    await loadExisting(A_KEY);
+    let releaseUpload: () => void = () => {};
+    importGate = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+    });
+    await loadExisting(B_KEY);
+    const release = holdEachSave();
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Add agent"));
+    });
+    await waitFor(() => expect(saves).toHaveLength(1));
+
+    // The import started on network_a, so its save belongs to that session.
+    importGate = undefined;
+    await act(async () => {
+      releaseUpload();
+    });
+    await waitFor(() => expect(saves).toHaveLength(2));
+    await release(1);
+    await release(0);
+    await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
+    await settle();
+
+    expect(screen.getByText(`Editing: ${B_KEY}`)).toBeTruthy();
+    expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_b");
+    expect(outgoingAgents()).toEqual(["network_b_agent", "agent"]);
   });
 
   describe("that arrives while Load Existing is still fetching another network", () => {

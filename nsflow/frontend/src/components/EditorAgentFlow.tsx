@@ -135,7 +135,7 @@ type PageSave = {
   readonly controller: AbortController;
   /** The chat session it started in. */
   readonly sessionId: string;
-  /** The file it writes: the network's designer name, or "" for an unnamed draft. */
+  /** The name it sends as agent_network_name, which is the file it writes, or "" for a draft. */
   readonly file: string;
   /** Set once a newer edit makes its reply stale. It still finishes on the server. */
   replyDropped: boolean;
@@ -569,7 +569,8 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
    *
    * A late reply from a save in flight would undo this one. So every such save is aborted
    * when this one writes the same file: canvas, naming and panel saves send the whole
-   * definition, so they carry its edit, and an import of that name replaces it.
+   * definition, so they carry its edit, and an import of that name replaces it. The save
+   * belongs to the session of the render that started it, as its echo does.
    *
    * @param targetName the network name this save writes, or undefined for an unnamed draft.
    * @returns the new save, for sendEditorUpdate and endSave.
@@ -577,8 +578,8 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
   const beginSave = useCallback((targetName: string | undefined): PageSave => {
     const save: PageSave = {
       controller: new AbortController(),
-      sessionId: sessionIdRef.current,
-      file: toDesignerNetworkName(targetName ?? ""),
+      sessionId,
+      file: targetName ?? "",
       replyDropped: false,
     };
     for (const pending of inFlightSavesRef.current) {
@@ -591,7 +592,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     }
     inFlightSavesRef.current.add(save);
     return save;
-  }, []);
+  }, [sessionId]);
   const endSave = useCallback((save: PageSave): void => {
     inFlightSavesRef.current.delete(save);
   }, []);
