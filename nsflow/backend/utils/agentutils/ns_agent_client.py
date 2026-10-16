@@ -133,8 +133,6 @@ class NsAgentClient:
         for part in ("request", "response"):
             section: Any = chunk.get(part)
             if isinstance(section, dict) and "sly_data" in section:
-                # Copy each level instead of editing it. The echoed request can be the
-                # same dict that was sent to neuro-san, which must keep the real token.
                 masked_section: Dict[str, Any] = dict(section)
                 masked_section["sly_data"] = NsWebsocketUtils.redact_sly_data_for_surface(section["sly_data"])
                 redacted[part] = masked_section

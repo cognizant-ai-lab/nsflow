@@ -79,8 +79,8 @@ class TestNsAgentClient(unittest.IsolatedAsyncioTestCase):
         """
         chunks: List[Dict[str, Any]] = []
         for reply_type in REPLY_TYPES:
-            # neuro-san puts the same request object on every line. Doing the same here
-            # means a fix that edited a chunk in place would also change the session's copy.
+            # Every line holds the very dict the session was sent. A fix that edited a
+            # chunk in place would then change what was sent, which the tests would catch.
             chunks.append({"response": {"type": reply_type, "text": reply_type}, "request": chat_request})
         return chunks
 
