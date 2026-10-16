@@ -507,8 +507,8 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
 
   /** Set when the naming dialog is closing in order to hand over to the chat. */
   const focusChatOnCloseRef = useRef(false);
-  /** The save in flight on this page; see beginSave. */
-  const inFlightSaveRef = useRef<PageSave | null>(null);
+  /** The saves in flight on this page; see beginSave. */
+  const inFlightSavesRef = useRef<Set<PageSave>>(new Set());
   /**
    * How many edits are being saved right now.
    *
@@ -567,9 +567,9 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
   /**
    * Start a save: a canvas edit, naming, an import or an agent panel save.
    *
-   * A late reply from the save in flight would undo this one. So that save is aborted when
-   * this one writes the same file: canvas, naming and panel saves send the whole definition,
-   * so they carry its edit, and an import of that name replaces it.
+   * A late reply from a save in flight would undo this one. So every such save is aborted
+   * when this one writes the same file: canvas, naming and panel saves send the whole
+   * definition, so they carry its edit, and an import of that name replaces it.
    *
    * @param targetName the network name this save writes, or undefined for an unnamed draft.
    * @returns the new save, for sendEditorUpdate and endSave.
@@ -581,19 +581,19 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       file: toDesignerNetworkName(targetName ?? ""),
       replyDropped: false,
     };
-    const previous = inFlightSaveRef.current;
-    // A save from an earlier session is for a network the user left: it runs on, and its
-    // reply goes to that network's own entry.
-    if (previous && previous.sessionId === save.sessionId) {
-      if (previous.file === save.file) previous.controller.abort();
+    for (const pending of inFlightSavesRef.current) {
+      // A save from an earlier session is for a network the user left: it runs on, and its
+      // reply goes to that network's own entry.
+      if (pending.sessionId !== save.sessionId) continue;
+      if (pending.file === save.file) pending.controller.abort();
       // This save does not carry it, so it still finishes, but its reply is dropped.
-      else previous.replyDropped = true;
+      else pending.replyDropped = true;
     }
-    inFlightSaveRef.current = save;
+    inFlightSavesRef.current.add(save);
     return save;
   }, []);
   const endSave = useCallback((save: PageSave): void => {
-    if (inFlightSaveRef.current === save) inFlightSaveRef.current = null;
+    inFlightSavesRef.current.delete(save);
   }, []);
 
   // Apply an edit locally, then let the designer canonicalise it. The optimistic

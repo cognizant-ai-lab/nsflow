@@ -1146,6 +1146,45 @@ describe("a save's echo", () => {
       expect(outcome).toBe("saved");
     });
 
+    it("is aborted with every older save of the same file, not only the last one (A, then B, then A)", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      let panelSaving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+      // The page is still on network_a, so naming it network_a again does not ask.
+      await renameNetwork("network_a");
+      await waitFor(() => expect(saves).toHaveLength(3));
+      expect(saves.map((save) => save.name)).toEqual(["network_a", "network_x", "network_a"]);
+
+      // The rename writes network_a again, so the first save of network_a is aborted
+      // even though the import started in between.
+      expect(saveSignals[0]?.aborted).toBe(true);
+      expect(saveSignals[1]?.aborted).toBe(false);
+
+      await release(2);
+      await release(1);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await panelSaving;
+      });
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
+      await settle();
+
+      expect(outcome).toBe("superseded");
+      expect(screen.getByText(`Editing: ${A_KEY}`)).toBeTruthy();
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_a");
+      expect(outgoingAgents()).toEqual(["network_x_agent"]);
+    });
+
     it("is dropped, and the older save still finishes, when it was a rename and the newer save an import", async () => {
       await mountEditor();
       await loadExisting(A_KEY);
