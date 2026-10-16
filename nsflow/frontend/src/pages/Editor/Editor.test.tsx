@@ -102,8 +102,8 @@ vi.mock("../../components/TabbedChatPanel", () => ({
 
 /** The agent the agent panel was last given, or undefined before it renders. */
 let panelAgentName: string | null | undefined;
-/** Where the page told the agent panel to send the frames its saves stream back. */
-let panelOnSaveFrame: ((frame: ChatMessage) => void) | undefined;
+/** How the page told the agent panel to save an edit. */
+let panelSaveEdit: ((edit: AgentPanelSave) => Promise<AgentPanelSaveResult>) | undefined;
 /** The page's other callbacks for the agent panel, to check they keep their identity. */
 let panelOnAgentRenamed: ((newName: string) => void) | undefined;
 let panelOnClose: (() => void) | undefined;
@@ -111,17 +111,17 @@ let panelOnClose: (() => void) | undefined;
 vi.mock("../../components/NetworkAgentEditorPanel", () => ({
   default: ({
     selectedAgentName,
-    onSaveFrame,
+    saveEdit,
     onAgentRenamed,
     onClose,
   }: {
     selectedAgentName: string | null;
-    onSaveFrame: (frame: ChatMessage) => void;
+    saveEdit: (edit: AgentPanelSave) => Promise<AgentPanelSaveResult>;
     onAgentRenamed?: (newName: string) => void;
     onClose?: () => void;
   }) => {
     panelAgentName = selectedAgentName;
-    panelOnSaveFrame = onSaveFrame;
+    panelSaveEdit = saveEdit;
     panelOnAgentRenamed = onAgentRenamed;
     panelOnClose = onClose;
     return null;
@@ -160,12 +160,12 @@ vi.mock("@mui/material", async () => {
 });
 
 import Editor from "./Editor";
+import type { AgentPanelSave, AgentPanelSaveResult } from "../../components/NetworkAgentEditorPanel";
 import { useChatContext } from "../../context/ChatContext";
 import { useEditorNetworkStore } from "../../state/editorNetworkStore";
 import { updateAgent } from "../../state/editorOperations";
-import { sendEditorUpdate } from "../../state/editorRoundTrip";
 import { isDraftKey } from "../../state/editorSession";
-import type { AgentNetworkDefinitionEntry, ChatMessage } from "../../uiCommon";
+import type { AgentNetworkDefinitionEntry } from "../../uiCommon";
 
 const DESIGNER = "agent_network_designer";
 const A_KEY = "generated/network_a";
@@ -187,6 +187,10 @@ type Save = { name: unknown; agents: Record<string, string[]> };
 
 /** Every save sent to the designer, in order. */
 const saves: Save[] = [];
+/** Each save's abort signal, in the same order. */
+const saveSignals: (AbortSignal | null | undefined)[] = [];
+/** The networks /api/v1/list serves. */
+let servedNetworks: string[] = [];
 /** The names the server was asked about, in order. */
 const nameChecks: string[] = [];
 /** Names the stubbed server reports as taken. */
@@ -201,6 +205,22 @@ let echoSlyData = true;
 let definitionGate: Promise<void> | undefined;
 /** Held by a test to keep a HOCON upload in flight; undefined answers at once. */
 let importGate: Promise<void> | undefined;
+/** Held by a test to send a save's echo in two frames and hold back the second. */
+let lastFrameGate: Promise<void> | undefined;
+
+/** The error fetch rejects with when its request is aborted. */
+const abortError = () => new DOMException("The operation was aborted.", "AbortError");
+
+/** Wait for `gate`, or reject the way fetch does when `signal` aborts first. */
+const unlessAborted = (gate: Promise<void>, signal?: AbortSignal | null): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    signal?.addEventListener("abort", () => reject(abortError()), { once: true });
+    void gate.then(resolve);
+  });
 
 /** The agents of a store entry as "agent->[down-chains]", or undefined when there is no entry. */
 const entryAgents = (key: string): string[] | undefined =>
@@ -273,6 +293,8 @@ const submitName = async (name: string) => {
 
 beforeEach(() => {
   saves.length = 0;
+  saveSignals.length = 0;
+  servedNetworks = [A_KEY, B_KEY, X_KEY];
   nameChecks.length = 0;
   takenNames = [];
   saveGate = undefined;
@@ -280,9 +302,10 @@ beforeEach(() => {
   echoSlyData = true;
   definitionGate = undefined;
   importGate = undefined;
+  lastFrameGate = undefined;
   chat = undefined;
   panelAgentName = undefined;
-  panelOnSaveFrame = undefined;
+  panelSaveEdit = undefined;
   panelOnAgentRenamed = undefined;
   panelOnClose = undefined;
   deleteEdges = undefined;
@@ -300,7 +323,7 @@ beforeEach(() => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ agents: [{ agent_name: A_KEY }, { agent_name: B_KEY }, { agent_name: X_KEY }] }),
+          json: async () => ({ agents: servedNetworks.map((name) => ({ agent_name: name })) }),
         } as Response;
       }
       if (url.includes("/api/v1/network_definition/")) {
@@ -331,14 +354,18 @@ beforeEach(() => {
         } as Response;
       }
       if (url.includes("/streaming_chat")) {
+        // An aborted request is never sent.
+        if (init?.signal?.aborted) throw abortError();
         const sent = JSON.parse(String(init?.body)).sly_data as Record<string, unknown>;
         const definition = (sent.agent_network_definition ?? {}) as Record<string, { tools?: string[] }>;
         const agents: Record<string, string[]> = {};
         for (const [agent, spec] of Object.entries(definition)) agents[agent] = spec.tools ?? [];
         saves.push({ name: sent.agent_network_name, agents });
-        if (saveGate) await saveGate;
+        saveSignals.push(init?.signal);
+        // A held save has no response yet, so aborting it rejects the fetch.
+        if (saveGate) await unlessAborted(saveGate, init?.signal);
         const releases = saveReleases;
-        if (releases) await new Promise<void>((resolve) => releases.push(resolve));
+        if (releases) await unlessAborted(new Promise<void>((resolve) => releases.push(resolve)), init?.signal);
         // The designer echoes what it saved, which is how a save reaches the chat's cache.
         // A named save also carries the HOCON text it wrote.
         const response = echoSlyData
@@ -352,7 +379,24 @@ beforeEach(() => {
               },
             }
           : { type: "AGENT", text: "saved" };
-        return new Response(`${JSON.stringify({ response })}\n`, { status: 200 });
+        const gate = lastFrameGate;
+        if (!gate) return new Response(`${JSON.stringify({ response })}\n`, { status: 200 });
+        // The same echo again as a last frame, with its own HOCON text, sent once the gate opens.
+        const last = {
+          ...response,
+          sly_data: { ...response.sly_data, agent_network_hocon_text: `# last frame of ${sent.agent_network_name}` },
+        };
+        const encoder = new TextEncoder();
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(`${JSON.stringify({ response })}\n`));
+            void gate.then(() => {
+              controller.enqueue(encoder.encode(`${JSON.stringify({ response: last })}\n`));
+              controller.close();
+            });
+          },
+        });
+        return new Response(body, { status: 200 });
       }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     })
@@ -826,12 +870,14 @@ describe("a save's echo", () => {
 
   /**
    * Start saving new instructions for an agent the way the agent panel's Save does. The
-   * panel is stubbed here, so this sends the save with the frame callback the page gave it.
+   * panel is stubbed here, so this applies the edit and saves it with the function the
+   * page gave the panel.
    */
-  const startPanelSave = (key: string, agent: string, instructions: string): Promise<void> => {
+  const startPanelSave = (key: string, agent: string, instructions: string): Promise<AgentPanelSaveResult> => {
     const next = updateAgent(useEditorNetworkStore.getState().entries[key]?.definition ?? [], agent, { instructions });
     useEditorNetworkStore.getState().applyEdit(key, next);
-    return sendEditorUpdate({ apiUrl: "http://api", networkId: key, agentName: agent, definition: next, onFrame: panelOnSaveFrame });
+    if (!panelSaveEdit) throw new Error("The page gave the agent panel no saveEdit.");
+    return panelSaveEdit({ agentName: agent, definition: next });
   };
 
   /** Save new instructions for an agent the way the agent panel's Save does, and wait for the answer. */
@@ -866,14 +912,14 @@ describe("a save's echo", () => {
     // and make it add its click-outside listener again.
     await mountEditor();
     await chatTurnBuildsA();
-    const saveFrameBefore = panelOnSaveFrame;
+    const saveEditBefore = panelSaveEdit;
     const agentRenamedBefore = panelOnAgentRenamed;
     const closeBefore = panelOnClose;
 
     await renderChatAgain();
 
-    expect(saveFrameBefore).toBeTypeOf("function");
-    expect(panelOnSaveFrame).toBe(saveFrameBefore);
+    expect(saveEditBefore).toBeTypeOf("function");
+    expect(panelSaveEdit).toBe(saveEditBefore);
     expect(panelOnAgentRenamed).toBe(agentRenamedBefore);
     expect(panelOnClose).toBe(closeBefore);
   });
@@ -940,34 +986,39 @@ describe("a save's echo", () => {
     expect(saves).toEqual([]);
   });
 
-  describe("of a second save, after the first save's echo moved the page", () => {
-    it("keeps a canvas edit made while an agent panel save was saving a network from another folder", async () => {
+  describe("of a save that a newer save replaced, arriving before the newer save's", () => {
+    it("is dropped when it was an agent panel save on a network from another folder", async () => {
       await mountEditor();
       await loadExisting("basic/foo");
       const release = holdEachSave();
-      let panelSaving: Promise<void> = Promise.resolve();
+      let panelSaving: Promise<unknown> = Promise.resolve();
       await act(async () => {
         panelSaving = startPanelSave("basic/foo", "a_child", "Edited in the panel.");
       });
       await act(async () => {
         fireEvent.click(screen.getByLabelText("Add agent"));
       });
+      await waitFor(() => expect(saves).toHaveLength(2));
 
       await release(0);
+      let outcome: unknown;
       await act(async () => {
-        await panelSaving;
+        outcome = await panelSaving;
       });
-      await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
+      await settle();
+      expect(screen.getByText("Editing: basic/foo")).toBeTruthy();
       await release(1);
+      await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
       await settle();
 
+      expect(outcome).toBe("superseded");
       expect(saves.map((save) => save.name)).toEqual(["foo", "foo"]);
       expect(entryAgents("generated/foo")).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
       expect(instructionsOf("generated/foo", "a_child")).toBe("Edited in the panel.");
       expect(outgoingAgents()).toEqual(["network_a_agent", "a_child", "agent"]);
     });
 
-    it("keeps a canvas edit made while an import was saving", async () => {
+    it("is dropped, with no import error, when it was an import", async () => {
       await mountEditor();
       await loadExisting(A_KEY);
       const release = holdEachSave();
@@ -979,17 +1030,274 @@ describe("a save's echo", () => {
       await act(async () => {
         fireEvent.click(screen.getByLabelText("Add agent"));
       });
+      await waitFor(() => expect(saves).toHaveLength(2));
 
       await release(0);
-      await waitFor(() => expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy());
+      await settle();
+      expect(screen.getByText(`Editing: ${A_KEY}`)).toBeTruthy();
       await release(1);
+      await waitFor(() => expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy());
       await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
       await settle();
 
       expect(saves.map((save) => save.name)).toEqual(["network_x", "network_x"]);
       expect(entryAgents(X_KEY)).toEqual(["network_x_agent->[agent]", "agent->[]"]);
       expect(outgoingAgents()).toEqual(["network_x_agent", "agent"]);
+      expect(screen.queryAllByRole("alert")).toEqual([]);
     });
+
+    it("still holds Launch until the network is served, when it was an import", async () => {
+      servedNetworks = [A_KEY, B_KEY];
+      const launchButton = () => screen.getByRole("button", { name: /^Launch/ }) as HTMLButtonElement;
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+      await settle();
+      expect(saveSignals[0]?.aborted).toBe(true);
+      expect(launchButton().disabled).toBe(true);
+
+      await release(1);
+      await settle();
+      expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy();
+      expect(launchButton().disabled).toBe(true);
+
+      servedNetworks = [A_KEY, B_KEY, X_KEY];
+      await waitFor(() => expect(launchButton().disabled).toBe(false), { timeout: 3000 });
+    });
+  });
+
+  // The older reply must not undo the newer save, whatever kind it was.
+  describe("of an older save, arriving after the newer save's", () => {
+    it("is dropped, and the older save still finishes, when the newer save renamed the network", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      let panelSaving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await renameNetwork("network_z");
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await waitFor(() => expect(screen.getByText("Editing: generated/network_z")).toBeTruthy());
+      await release(0);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await panelSaving;
+      });
+      await settle();
+
+      expect(pickerValue).toBe("generated/network_z");
+      expect(screen.getByText("Editing: generated/network_z")).toBeTruthy();
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_z");
+      expect(useEditorNetworkStore.getState().entries["generated/network_z"]?.networkName).toBe("network_z");
+      // The rename carried the panel's edit.
+      expect(saves[1]).toEqual({ name: "network_z", agents: { network_a_agent: ["a_child"], a_child: [] } });
+      expect(instructionsOf("generated/network_z", "a_child")).toBe("Edited in the panel.");
+      expect(outgoingInstructionsOf("a_child")).toBe("Edited in the panel.");
+      // The rename writes another file, so network_a's own save is not cancelled.
+      expect(saveSignals[0]?.aborted).toBe(false);
+      expect(outcome).toBe("saved");
+    });
+
+    it("is dropped, and the older save still finishes, when the newer save was an import", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      let panelSaving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await waitFor(() => expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy());
+      await release(0);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await panelSaving;
+      });
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
+      await settle();
+
+      expect(pickerValue).toBe(X_KEY);
+      expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy();
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_x");
+      expect(entryAgents(X_KEY)).toEqual(["network_x_agent->[]"]);
+      expect(outgoingAgents()).toEqual(["network_x_agent"]);
+      // The import does not carry the panel's edit, so network_a's own save is not cancelled.
+      expect(saveSignals[0]?.aborted).toBe(false);
+      expect(outcome).toBe("saved");
+    });
+
+    it("is dropped, and the older save still finishes, when it was a rename and the newer save an import", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      await renameNetwork("network_z");
+      await waitFor(() => expect(saves).toHaveLength(1));
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await waitFor(() => expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy());
+      await release(0);
+      await settle();
+
+      expect(screen.getByText(`Editing: ${X_KEY}`)).toBeTruthy();
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_x");
+      expect(saveSignals[0]?.aborted).toBe(false);
+    });
+
+    it("is dropped, and the older save still finishes, when it was an import and the newer save a rename", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [new File(["# x"], "network_x.hocon")] } });
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await renameNetwork("network_z");
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await waitFor(() => expect(screen.getByText("Editing: generated/network_z")).toBeTruthy());
+      await release(0);
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false), { timeout: 5000 });
+      await settle();
+
+      expect(screen.getByText("Editing: generated/network_z")).toBeTruthy();
+      expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBe("network_z");
+      expect(saveSignals[0]?.aborted).toBe(false);
+    });
+
+    it("is dropped when the newer save was a canvas edit that moved the page to generated/", async () => {
+      await mountEditor();
+      await loadExisting("basic/foo");
+      const release = holdEachSave();
+      let panelSaving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave("basic/foo", "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
+      await release(0);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await panelSaving;
+      });
+      await settle();
+
+      expect(screen.getByText("Editing: generated/foo")).toBeTruthy();
+      expect(entryAgents("generated/foo")).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
+      expect(instructionsOf("generated/foo", "a_child")).toBe("Edited in the panel.");
+      expect(outgoingAgents()).toEqual(["network_a_agent", "a_child", "agent"]);
+      expect(outcome).toBe("superseded");
+    });
+
+    it("is dropped when it was a canvas edit and the newer save an agent panel save", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      let panelSaving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        panelSaving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await panelSaving;
+      });
+      await release(0);
+      await settle();
+
+      expect(outcome).toBe("saved");
+      expect(entryAgents(A_KEY)).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
+      expect(instructionsOf(A_KEY, "a_child")).toBe("Edited in the panel.");
+      expect(outgoingInstructionsOf("a_child")).toBe("Edited in the panel.");
+    });
+
+    it("is dropped when it was a rename and the newer save a canvas edit", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      await renameNetwork("network_z");
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await waitFor(() => expect(screen.getByText("Editing: generated/network_z")).toBeTruthy());
+      await release(0);
+      await settle();
+
+      expect(saves.map((save) => save.name)).toEqual(["network_z", "network_z"]);
+      expect(entryAgents("generated/network_z")).toEqual([
+        "network_a_agent->[a_child,agent]",
+        "a_child->[]",
+        "agent->[]",
+      ]);
+      expect(outgoingAgents()).toEqual(["network_a_agent", "a_child", "agent"]);
+    });
+  });
+
+  it("keeps the rest of a save's echo after its first frame moved the page", async () => {
+    // Nothing aborts a save when its own echo moves the page to generated/.
+    await mountEditor();
+    await loadExisting("basic/foo");
+    let releaseLastFrame: () => void = () => {};
+    lastFrameGate = new Promise<void>((resolve) => {
+      releaseLastFrame = resolve;
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Add agent"));
+    });
+    await waitFor(() => expect(screen.getByText("Editing: generated/foo")).toBeTruthy());
+    expect(useEditorNetworkStore.getState().entries["generated/foo"]?.hocon).toBe("# saved foo");
+
+    await act(async () => {
+      releaseLastFrame();
+    });
+    await waitFor(() => expect(newNetworkButton().disabled).toBe(false));
+    await settle();
+
+    expect(screen.getByText("Editing: generated/foo")).toBeTruthy();
+    expect(useEditorNetworkStore.getState().entries["generated/foo"]?.hocon).toBe("# last frame of foo");
+    expect(entryAgents("generated/foo")).toEqual(["network_a_agent->[a_child,agent]", "a_child->[]", "agent->[]"]);
   });
 
   describe("that arrives after Load Existing opened another network", () => {
@@ -1042,7 +1350,7 @@ describe("a save's echo", () => {
       await mountEditor();
       await loadExisting(A_KEY);
       const releaseSaves = holdSaves();
-      let saving: Promise<void> = Promise.resolve();
+      let saving: Promise<unknown> = Promise.resolve();
       await act(async () => {
         saving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
       });
@@ -1060,6 +1368,60 @@ describe("a save's echo", () => {
       expect(instructionsOf("basic/network_a", "a_child")).toBe("Child of A.");
       expect(chat?.getEditorOutgoingSlyData().agent_network_name).toBeUndefined();
       expect(instructionsOf(A_KEY, "a_child")).toBe("Edited in the panel.");
+    });
+
+    it("still reaches network_a's entry when the other network's first edit is held back", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const releaseSaves = holdSaves();
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await loadExisting("basic/network_a");
+      // Leaves a_child with no parent, so it is kept on the canvas and not saved.
+      await act(async () => {
+        deleteEdges?.([{ source: "network_a_agent", target: "a_child" }]);
+      });
+
+      await releaseSaves();
+      await waitFor(() => expect(newNetworkButton().disabled).toBe(false));
+      await settle();
+
+      expect(saves).toHaveLength(1);
+      expect(entryAgents("basic/network_a")).toEqual(["network_a_agent->[]", "a_child->[]"]);
+      expect(useEditorNetworkStore.getState().entries[A_KEY]?.hocon).toBe("# saved network_a");
+    });
+
+    it("still finishes when the save was an agent panel save and the other network saves first", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      let saving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        saving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await loadExisting(B_KEY);
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Add agent"));
+      });
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await release(0);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await saving;
+      });
+      await settle();
+
+      // network_b's save carries none of network_a's edit, so it must not cancel it.
+      expect(saveSignals[0]?.aborted).toBe(false);
+      expect(outcome).toBe("saved");
+      expect(useEditorNetworkStore.getState().entries[A_KEY]?.hocon).toBe("# saved network_a");
+      expect(screen.getByText(`Editing: ${B_KEY}`)).toBeTruthy();
+      expect(entryAgents(B_KEY)).toEqual(["network_b_agent->[agent]", "agent->[]"]);
     });
 
     it("leaves the page alone when the save was a rename of the network", async () => {
@@ -1122,7 +1484,7 @@ describe("a save's echo", () => {
       await mountEditor();
       await loadExisting(A_KEY);
       const releaseSaves = holdSaves();
-      let saving: Promise<void> = Promise.resolve();
+      let saving: Promise<unknown> = Promise.resolve();
       await act(async () => {
         saving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
       });
@@ -1141,6 +1503,33 @@ describe("a save's echo", () => {
       expect(chat?.getEditorOutgoingSlyData()).toEqual({});
       // network_a's own entry still takes the echo.
       expect(instructionsOf(A_KEY, "a_child")).toBe("Edited in the panel.");
+    });
+
+    it("still finishes when the save was an agent panel save and the new network saves first", async () => {
+      await mountEditor();
+      await loadExisting(A_KEY);
+      const release = holdEachSave();
+      let saving: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        saving = startPanelSave(A_KEY, "a_child", "Edited in the panel.");
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      await clickNewNetwork();
+      await submitName("network_c");
+      await waitFor(() => expect(saves).toHaveLength(2));
+
+      await release(1);
+      await release(0);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await saving;
+      });
+      await settle();
+
+      expect(saves[1]?.name).toBe("network_c");
+      expect(saveSignals[0]?.aborted).toBe(false);
+      expect(outcome).toBe("saved");
+      expect(useEditorNetworkStore.getState().entries[A_KEY]?.hocon).toBe("# saved network_a");
     });
 
     it("leaves the new draft alone when the save was a rename of the network", async () => {

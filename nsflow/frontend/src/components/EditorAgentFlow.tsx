@@ -24,7 +24,7 @@ import FloatingEdge from "./FloatingEdge";
 import AgentContextMenu from "./AgentContextMenu";
 import EdgeContextMenu from "./EdgeContextMenu";
 import EditorPalette from "./EditorPalette";
-import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
+import NetworkAgentEditorPanel, { type AgentPanelSave, type AgentPanelSaveResult } from "./NetworkAgentEditorPanel";
 import NetworkFileActions from "./NetworkFileActions";
 import NetworkNameField from "./NetworkNameField";
 import { useApiPort } from "../context/ApiPortContext";
@@ -128,6 +128,17 @@ type PendingNameOverwrite = {
   readonly name: string;
   /** Settles the naming that asked: true to save over the other network, false to keep the old name. */
   readonly decide: (overwrite: boolean) => void;
+};
+
+/** A save this page has sent, kept so a newer save can decide what happens to it. */
+type PageSave = {
+  readonly controller: AbortController;
+  /** The chat session it started in. */
+  readonly sessionId: string;
+  /** The file it writes: the network's designer name, or "" for an unnamed draft. */
+  readonly file: string;
+  /** Set once a newer edit makes its reply stale. It still finishes on the server. */
+  replyDropped: boolean;
 };
 
 // Called when New network is clicked, so the page can leave the open network.
@@ -494,18 +505,10 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     }
   }, [layoutManager, getNodes, getEdges, setNodes, fitView]);
 
-  // Apply an edit locally, then let the designer canonicalise it. The optimistic
-  // apply is what makes editing feel immediate; the round-trip is what persists it.
-  //
-  // A newer edit supersedes an older one still in flight. Every edit sends the WHOLE
-  // definition, so the newest send already contains everything the older one did and
-  // the last write wins server-side regardless. What the abort prevents is the older
-  // response arriving afterwards and reconciling a definition that is now stale,
-  // which would undo the newer edit on the canvas. It also stops a queue building up
-  // when a user adds several agents in quick succession.
   /** Set when the naming dialog is closing in order to hand over to the chat. */
   const focusChatOnCloseRef = useRef(false);
-  const inFlightEditRef = useRef<AbortController | null>(null);
+  /** The save in flight on this page; see beginSave. */
+  const inFlightSaveRef = useRef<PageSave | null>(null);
   /**
    * How many edits are being saved right now.
    *
@@ -561,6 +564,40 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     [sessionId]
   );
 
+  /**
+   * Start a save: a canvas edit, naming, an import or an agent panel save.
+   *
+   * A late reply from the save in flight would undo this one. So that save is aborted when
+   * this one writes the same file: canvas, naming and panel saves send the whole definition,
+   * so they carry its edit, and an import of that name replaces it.
+   *
+   * @param targetName the network name this save writes, or undefined for an unnamed draft.
+   * @returns the new save, for sendEditorUpdate and endSave.
+   */
+  const beginSave = useCallback((targetName: string | undefined): PageSave => {
+    const save: PageSave = {
+      controller: new AbortController(),
+      sessionId: sessionIdRef.current,
+      file: toDesignerNetworkName(targetName ?? ""),
+      replyDropped: false,
+    };
+    const previous = inFlightSaveRef.current;
+    // A save from an earlier session is for a network the user left: it runs on, and its
+    // reply goes to that network's own entry.
+    if (previous && previous.sessionId === save.sessionId) {
+      if (previous.file === save.file) previous.controller.abort();
+      // This save does not carry it, so it still finishes, but its reply is dropped.
+      else previous.replyDropped = true;
+    }
+    inFlightSaveRef.current = save;
+    return save;
+  }, []);
+  const endSave = useCallback((save: PageSave): void => {
+    if (inFlightSaveRef.current === save) inFlightSaveRef.current = null;
+  }, []);
+
+  // Apply an edit locally, then let the designer canonicalise it. The optimistic
+  // apply is what makes editing feel immediate; the round-trip is what persists it.
   const applyAndSync = useCallback(
     async (next: ConnectivityInfo[], agentName: string, message?: string) => {
       if (!apiUrl) return;
@@ -579,9 +616,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       // canvas still shows the change; the next valid edit persists everything.
       if (definitionIssues(next).length > 0) return;
 
-      inFlightEditRef.current?.abort();
-      const controller = new AbortController();
-      inFlightEditRef.current = controller;
+      const save = beginSave(useEditorNetworkStore.getState().entries[networkId]?.networkName);
 
       setSavingCount((count) => count + 1);
       try {
@@ -591,7 +626,8 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           agentName,
           definition: next,
           message,
-          signal: controller.signal,
+          signal: save.controller.signal,
+          isCurrent: () => !save.replyDropped,
           onFrame: publishEcho,
         });
       } catch (error) {
@@ -601,10 +637,10 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
         }
       } finally {
         setSavingCount((count) => Math.max(0, count - 1));
-        if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
+        endSave(save);
       }
     },
-    [networkId, apiUrl, applyEdit, publishEcho, launchableNetworkName]
+    [networkId, apiUrl, applyEdit, publishEcho, launchableNetworkName, beginSave, endSave]
   );
 
   // Handle edge connection.
@@ -968,12 +1004,8 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       // edit persist instead of being dropped for a missing agent_network_name.
       if (definition.length === 0) return true;
 
-      // Supersede any in-flight edit, for the same reason applyAndSync does: this
-      // send carries the whole definition, and an older response landing afterwards
-      // would reconcile a definition that predates the name.
-      inFlightEditRef.current?.abort();
-      const controller = new AbortController();
-      inFlightEditRef.current = controller;
+      // A late reply from the save in flight would undo the name, so beginSave keeps it out.
+      const save = beginSave(name);
 
       try {
         await sendEditorUpdate({
@@ -983,7 +1015,8 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           definition,
           networkName: name,
           message: `Name this agent network "${name}"`,
-          signal: controller.signal,
+          signal: save.controller.signal,
+          isCurrent: () => !save.replyDropped,
           onFrame: publishEcho,
         });
       } catch (error) {
@@ -991,13 +1024,13 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           console.error(`Failed to name the network ${name}:`, error);
         }
       } finally {
-        if (inFlightEditRef.current === controller) inFlightEditRef.current = null;
+        endSave(save);
       }
       // Applied even when the save failed: the name is recorded, and the next edit
       // sends it again.
       return true;
     },
-    [apiUrl, networkId, reconcileFromServer, selectedNetwork, isNameTaken, publishEcho]
+    [apiUrl, networkId, reconcileFromServer, selectedNetwork, isNameTaken, publishEcho, beginSave, endSave]
   );
 
   /** The agent under the cursor during a drag, if any. */
@@ -1065,6 +1098,34 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
     setSelectedNodeId(newName);
   }, []);
   const closeAgentPanel = useCallback(() => setSelectedAgentName(null), []);
+
+  // The agent panel's saves, sharing the one in-flight save with every other save here.
+  const savePanelEdit = useCallback(
+    async ({ agentName, definition, message }: AgentPanelSave): Promise<AgentPanelSaveResult> => {
+      if (!apiUrl) throw new Error("Not connected to the server.");
+      const save = beginSave(useEditorNetworkStore.getState().entries[networkId]?.networkName);
+      try {
+        await sendEditorUpdate({
+          apiUrl,
+          networkId,
+          agentName,
+          definition,
+          message,
+          signal: save.controller.signal,
+          isCurrent: () => !save.replyDropped,
+          onFrame: publishEcho,
+        });
+        return "saved";
+      } catch (error) {
+        // A newer save of this network took over, so this is not a failure.
+        if ((error as Error)?.name === "AbortError") return "superseded";
+        throw error;
+      } finally {
+        endSave(save);
+      }
+    },
+    [apiUrl, networkId, publishEcho, beginSave, endSave]
+  );
 
   /**
    * Download the network as a .hocon file.
@@ -1156,6 +1217,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       // inside sendEditorUpdate, so this saves the network exactly as imported.
       setRegistryReloadPending(true);
       setImportsInFlight((count) => count + 1);
+      const save = beginSave(parsed.networkName);
       try {
         await sendEditorUpdate({
           apiUrl,
@@ -1167,17 +1229,25 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
           // Passed as well as held, so a frame that reaches the store before this save
           // goes out cannot change the block it sends.
           metadata,
+          signal: save.controller.signal,
+          isCurrent: () => !save.replyDropped,
           onFrame: publishEcho,
         });
         await waitForServedNetwork(apiUrl, parsed.networkName);
       } catch (error) {
-        setImportError(error instanceof Error ? error.message : "Could not save that network.");
+        if ((error as Error)?.name !== "AbortError") {
+          setImportError(error instanceof Error ? error.message : "Could not save that network.");
+        } else {
+          // A newer save of this network took over, so Launch still waits for it to be served.
+          await waitForServedNetwork(apiUrl, parsed.networkName);
+        }
       } finally {
+        endSave(save);
         setRegistryReloadPending(false);
         setImportsInFlight((count) => count - 1);
       }
     },
-    [apiUrl, networkId, publishEcho]
+    [apiUrl, networkId, publishEcho, beginSave, endSave]
   );
 
   /**
@@ -2134,7 +2204,7 @@ const EditorAgentFlow = ({ selectedNetwork, onNewNetwork }: { selectedNetwork: s
       {/* Network Agent Editor Panel */}
       <NetworkAgentEditorPanel
         networkId={networkId}
-        onSaveFrame={publishEcho}
+        saveEdit={savePanelEdit}
         selectedAgentName={selectedAgentName}
         onAgentUpdated={handleAgentUpdated}
         onAgentRenamed={followRenamedAgent}
