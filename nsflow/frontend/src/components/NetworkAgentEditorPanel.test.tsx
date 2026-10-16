@@ -29,11 +29,13 @@ limitations under the License.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import NetworkAgentEditorPanel from "./NetworkAgentEditorPanel";
+import NetworkAgentEditorPanel, { type AgentPanelSave, type AgentPanelSaveResult } from "./NetworkAgentEditorPanel";
 import { type EditorNetworkEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { sendEditorUpdate } from "../state/editorRoundTrip";
 import type { AgentNetworkDefinitionEntry } from "../uiCommon";
 
 const NETWORK = "coffee_shop";
+const API_URL = "http://localhost:4173";
 
 /**
  * The network the panel edits: a frontman, the agent under test, and three names
@@ -73,7 +75,7 @@ type Baseline = { entry: EditorNetworkEntry; requests: number; updates: number }
 const UNTOUCHED: Baseline = { entry: SEEDED_ENTRY, requests: 0, updates: 0 };
 
 vi.mock("../context/ApiPortContext", () => ({
-  useApiPort: () => ({ apiUrl: "http://localhost:4173", isReady: true }),
+  useApiPort: () => ({ apiUrl: API_URL, isReady: true }),
 }));
 
 // The editor's colours come from the app's theme provider, which is not under test.
@@ -100,13 +102,24 @@ describe("saving an agent from the panel", () => {
   const streamingChatCalls = () =>
     vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/streaming_chat"));
 
+  /** Saves the way the page does, without the page: straight to the stubbed server. */
+  const saveToServer = async (edit: AgentPanelSave): Promise<AgentPanelSaveResult> => {
+    await sendEditorUpdate({ apiUrl: API_URL, networkId: NETWORK, ...edit });
+    return "saved";
+  };
+
   /** Open the panel on `agentName`. */
-  const renderPanel = (agentName: string, onAgentUpdated = vi.fn()) => {
+  const renderPanel = (
+    agentName: string,
+    onAgentUpdated = vi.fn(),
+    saveEdit: (edit: AgentPanelSave) => Promise<AgentPanelSaveResult> = saveToServer
+  ) => {
     render(
       <NetworkAgentEditorPanel
         networkId={NETWORK}
         selectedAgentName={agentName}
         onAgentUpdated={onAgentUpdated}
+        saveEdit={saveEdit}
         openRequest={1}
       />
     );
@@ -274,6 +287,99 @@ describe("saving an agent from the panel", () => {
     expect(body.sly_data.agent_network_definition.helper).toEqual({
       instructions: "You help a lot.",
       description: "Helps a lot.",
+    });
+  });
+
+  describe("saving through the page", () => {
+    /** Change the open panel's agent name from "helper" to "assistant", which saves at once. */
+    const renameHelper = async () => {
+      await waitFor(() => expect(jsonEditorOnUpdate).toBeTypeOf("function"));
+      await act(async () => {
+        jsonEditorOnUpdate!({ newData: { name: "assistant", instructions: "You help.", description: "Helps." } });
+      });
+    };
+
+    /** The store's definition for the network. */
+    const storedDefinition = () => useEditorNetworkStore.getState().entries[NETWORK].definition;
+
+    it("hands a Save's edit, as applied to the store, to saveEdit", async () => {
+      const saveEdit = vi.fn(saveToServer);
+      renderPanel("helper", vi.fn(), saveEdit);
+
+      await editAndClickSave({ instructions: "You help a lot.", description: "Helps a lot." });
+
+      await waitFor(() => expect(screen.getByText(SUCCESS_TEXT)).toBeTruthy());
+      expect(saveEdit.mock.calls).toEqual([[{ agentName: "helper", definition: storedDefinition() }]]);
+    });
+
+    it("hands a rename to saveEdit, with a message that says so", async () => {
+      const saveEdit = vi.fn(saveToServer);
+      renderPanel("helper", vi.fn(), saveEdit);
+
+      await renameHelper();
+
+      await waitFor(() => expect(saveEdit).toHaveBeenCalledTimes(1));
+      expect(saveEdit.mock.calls[0][0]).toEqual({
+        agentName: "assistant",
+        definition: storedDefinition(),
+        message: 'Rename agent "helper" to "assistant"',
+      });
+      expect(storedDefinition().map((agent) => agent.origin)).toContain("assistant");
+    });
+
+    it("shows no message, and keeps the edit, for a Save that a newer save replaced", async () => {
+      // The newer save carries the edit, and its result is not known here.
+      const saveEdit = vi.fn(async (): Promise<AgentPanelSaveResult> => "superseded");
+      const onAgentUpdated = renderPanel("helper", vi.fn(), saveEdit);
+
+      await editAndClickSave({ instructions: "You help a lot.", description: "Helps a lot." });
+
+      await waitFor(() => expect(onAgentUpdated).toHaveBeenCalledTimes(1));
+      expect(screen.queryAllByRole("alert")).toEqual([]);
+      expect(storedDefinition().find((agent) => agent.origin === "helper")).toEqual(
+        expect.objectContaining({ instructions: "You help a lot.", description: "Helps a lot." })
+      );
+      // Nothing is left to save.
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    });
+
+    it("shows no error for a rename that a newer save replaced", async () => {
+      const saveEdit = vi.fn(async (): Promise<AgentPanelSaveResult> => "superseded");
+      renderPanel("helper", vi.fn(), saveEdit);
+
+      await renameHelper();
+
+      await waitFor(() => expect(saveEdit).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await saveEdit.mock.results[0].value;
+      });
+      expect(screen.queryAllByRole("alert")).toEqual([]);
+      expect(storedDefinition().map((agent) => agent.origin)).toContain("assistant");
+    });
+
+    it("still says so when a Save fails", async () => {
+      const saveEdit = vi.fn(async (): Promise<AgentPanelSaveResult> => {
+        throw new Error("Editor update failed: 502 Bad Gateway");
+      });
+      const onAgentUpdated = renderPanel("helper", vi.fn(), saveEdit);
+
+      await editAndClickSave({ instructions: "You help a lot.", description: "Helps a lot." });
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toBe("Editor update failed: 502 Bad Gateway");
+      expect(onAgentUpdated).not.toHaveBeenCalled();
+    });
+
+    it("still says so when a rename fails", async () => {
+      const saveEdit = vi.fn(async (): Promise<AgentPanelSaveResult> => {
+        throw new Error("Editor update failed: 502 Bad Gateway");
+      });
+      renderPanel("helper", vi.fn(), saveEdit);
+
+      await renameHelper();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toBe("Renamed here but not saved: Editor update failed: 502 Bad Gateway");
     });
   });
 });
