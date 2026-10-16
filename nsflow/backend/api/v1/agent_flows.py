@@ -15,20 +15,14 @@
 # END COPYRIGHT
 import logging
 import os
-from typing import Any
-from typing import Dict
-from typing import Optional
 
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
-from leaf_common.persistence.easy.easy_hocon_persistence import EasyHoconPersistence
 
 from nsflow.backend.utils.agentutils.agent_network_utils import AgentNetworkUtils
-from nsflow.backend.utils.agentutils.network_metadata_block import NetworkMetadataBlock
 from nsflow.backend.utils.agentutils.ns_network_utils import NsNetworkUtils
 from nsflow.backend.utils.agentutils.ns_websocket_utils import NsWebsocketUtils
-from nsflow.backend.utils.agentutils.served_networks import resolve_served_network
 
 router = APIRouter(prefix="/api/v1")
 agent_utils = AgentNetworkUtils()  # Instantiate utility class
@@ -51,92 +45,6 @@ async def get_agent_network(network_name: str):
     network_utils = NsNetworkUtils()
     res = network_utils.build_nodes_and_edges(result)
     return JSONResponse(content=res)
-
-
-@router.get(
-    "/network_definition/{network_name:path}",
-    responses={
-        200: {"description": "Network definition found"},
-        400: {"description": "Invalid network name"},
-        404: {"description": "Network not found"},
-    },
-)
-async def get_network_definition(network_name: str):
-    """Converts a HOCON agent network into an agent_network_definition dict for the editor."""
-    # Looked up in the manifest rather than joined onto a directory. The old path was
-    # the literal "registries/<name>.hocon", which is relative and so only resolved when
-    # the server happened to be started from a project root with a registries/ beside
-    # it. Everywhere else this 404d, and since the Editor fills its canvas from here,
-    # every existing network opened blank.
-    #
-    # Going through the manifest fixes where it looks and what it will open in one go:
-    # the name selects a manifest entry and the path comes from that entry, so a name
-    # from the URL is never part of the path and cannot walk out of the registry.
-    hocon_path = resolve_served_network(network_name)
-    if hocon_path is None:
-        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found")
-
-    try:
-        hocon = EasyHoconPersistence(full_ref=hocon_path, must_exist=True)
-        config = hocon.restore()
-    except (FileNotFoundError, TypeError) as e:
-        raise HTTPException(status_code=404, detail=f"Network '{network_name}' not found") from e
-    except Exception as e:
-        logging.exception("Failed to load network '%s': %s", network_name, e)
-        raise HTTPException(status_code=500, detail="Failed to load network definition") from e
-
-    tools = config.get("tools", [])
-
-    agent_network_definition: Dict[str, Any] = {}
-    for tool in tools:
-        if not isinstance(tool, dict) or "name" not in tool:
-            continue
-
-        name = tool["name"]
-        has_class = "class" in tool
-        has_toolbox = "toolbox" in tool
-
-        if has_toolbox or has_class:
-            # Toolbox tools and coded tools: empty dict in sly_data
-            # (same as AND's CreateNetwork for is_tool=True)
-            agent_network_definition[name] = {}
-        else:
-            # Agent nodes: include instructions and use "tools" key for children
-            # (matches AND's UpdateAgent which sets network_def[agent]["tools"])
-            agent_def: Dict[str, Any] = {
-                "instructions": tool.get("instructions", ""),
-            }
-            # The description is what the agents above this one read when deciding
-            # whether to call it, and the Editor sends this whole definition back on
-            # every save, so anything left out here is written back blank by the very
-            # next edit, even one to a different agent.
-            #
-            # Read from the same two places the HOCON import reads: a top-level
-            # `description` first, then `function.description`, which is where a network
-            # HOCON, and every network the designer generates, keeps it. On presence,
-            # not truthiness, so an empty description comes back empty instead of
-            # disappearing.
-            if "description" in tool:
-                agent_def["description"] = tool["description"]
-            else:
-                function = tool.get("function")
-                if isinstance(function, dict) and "description" in function:
-                    agent_def["description"] = function["description"]
-            child_tools = tool.get("tools", [])
-            if child_tools:
-                agent_def["tools"] = child_tools
-            agent_network_definition[name] = agent_def
-
-    metadata: Optional[Dict[str, Any]] = NetworkMetadataBlock.from_config(config)
-    return JSONResponse(
-        content={
-            "agent_network_definition": agent_network_definition,
-            "agent_network_name": network_name,
-            # The Editor sends this block back on every save, so the saved network keeps it.
-            # Left out when the file has none: the designer then keeps the block of the file it saves over.
-            **({"agent_network_metadata": metadata} if metadata is not None else {}),
-        }
-    )
 
 
 @router.get(

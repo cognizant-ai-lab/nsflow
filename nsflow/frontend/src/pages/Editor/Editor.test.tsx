@@ -201,8 +201,12 @@ let saveGate: Promise<void> | undefined;
 let saveReleases: (() => void)[] | undefined;
 /** Whether a save's echo carries sly_data, as the designer's does. */
 let echoSlyData = true;
-/** Held by a test to keep a Load Existing fetch in flight; undefined answers at once. */
+/** Held by a test to keep a Load Existing turn in flight, unless it is aborted; undefined answers at once. */
 let definitionGate: Promise<void> | undefined;
+/** The files the designer was asked to load, in order. */
+const loads: string[] = [];
+/** Set by a test to answer each load with this designer error instead of the network. */
+let loadError: string | undefined;
 /** Held by a test to keep a HOCON upload in flight; undefined answers at once. */
 let importGate: Promise<void> | undefined;
 /** Held by a test to send a save's echo in two frames and hold back the second. */
@@ -301,6 +305,8 @@ beforeEach(() => {
   saveReleases = undefined;
   echoSlyData = true;
   definitionGate = undefined;
+  loads.length = 0;
+  loadError = undefined;
   importGate = undefined;
   lastFrameGate = undefined;
   chat = undefined;
@@ -326,16 +332,6 @@ beforeEach(() => {
           json: async () => ({ agents: servedNetworks.map((name) => ({ agent_name: name })) }),
         } as Response;
       }
-      if (url.includes("/api/v1/network_definition/")) {
-        if (definitionGate) await definitionGate;
-        const key = decodeURIComponent(url.split("/api/v1/network_definition/")[1]);
-        const definition = key === B_KEY ? B_DEFINITION : A_DEFINITION;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ agent_network_definition: definition, agent_network_name: key }),
-        } as Response;
-      }
       if (url.includes("/api/v1/hocon/import")) {
         if (importGate) await importGate;
         return {
@@ -357,6 +353,25 @@ beforeEach(() => {
         // An aborted request is never sent.
         if (init?.signal?.aborted) throw abortError();
         const sent = JSON.parse(String(init?.body)).sly_data as Record<string, unknown>;
+        // A load-only turn: the designer reads the file and saves nothing, so it is not a save.
+        if (sent.agent_network_hocon_file && !sent.agent_network_definition) {
+          const file = String(sent.agent_network_hocon_file);
+          loads.push(file);
+          if (definitionGate) await unlessAborted(definitionGate, init?.signal);
+          const stem = file.slice(file.lastIndexOf("/") + 1).replace(/\.hocon$/, "");
+          const reply = loadError
+            ? { type: "AGENT_FRAMEWORK", text: "", structure: { error: loadError, tool: DESIGNER } }
+            : {
+                type: "AGENT_FRAMEWORK",
+                text: `The network ${stem} has been loaded.`,
+                sly_data: {
+                  agent_network_definition: file === `${B_KEY}.hocon` ? B_DEFINITION : A_DEFINITION,
+                  agent_network_name: stem,
+                  agent_network_metadata: {},
+                },
+              };
+          return new Response(`${JSON.stringify({ response: reply })}\n`, { status: 200 });
+        }
         const definition = (sent.agent_network_definition ?? {}) as Record<string, { tools?: string[] }>;
         const agents: Record<string, string[]> = {};
         for (const [agent, spec] of Object.entries(definition)) agents[agent] = spec.tools ?? [];
@@ -825,7 +840,7 @@ describe("a save's echo", () => {
     };
   };
 
-  /** Hold the next Load Existing fetch until the returned function is called. */
+  /** Hold the next Load Existing turn until the returned function is called. */
   const holdDefinitionFetch = (): (() => Promise<void>) => {
     let release: () => void = () => {};
     definitionGate = new Promise<void>((resolve) => {
@@ -1657,5 +1672,44 @@ describe("a save's echo", () => {
       expect(usedDrafts()).toEqual([]);
       expect(chat?.getEditorOutgoingSlyData()).toEqual({});
     });
+  });
+});
+
+describe("Load Existing", () => {
+  it("opens a network from another folder and stays on it", async () => {
+    await mountEditor();
+    await loadExisting("basic/network_a");
+    // Let anything the reply set off run before the page is checked.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // Had the reply reached the chat's cache, the page would have moved to generated/network_a.
+    expect(screen.getByText("Editing: basic/network_a")).toBeTruthy();
+    expect(entryAgents("basic/network_a")).toEqual(["network_a_agent->[a_child]", "a_child->[]"]);
+    expect(useEditorNetworkStore.getState().entries[A_KEY]).toBeUndefined();
+    expect(loads).toEqual(["basic/network_a.hocon"]);
+    expect(saves).toEqual([]);
+    expect(chat?.getEditorOutgoingSlyData()).toEqual({});
+  });
+
+  it("shows a load error and stays on the open network", async () => {
+    await mountEditor();
+    await loadExisting(A_KEY);
+    loadError = "Error: Failed to parse agent network config file 'generated/network_b.hocon'.";
+
+    await act(async () => {
+      pickerOnChange?.(null, B_KEY);
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(`Could not open "${B_KEY}": Failed to parse agent network config file 'generated/network_b.hocon'.`)
+      ).toBeTruthy()
+    );
+    expect(screen.getByText(`Editing: ${A_KEY}`)).toBeTruthy();
+    expect(useEditorNetworkStore.getState().entries[B_KEY]).toBeUndefined();
+    expect(loads).toEqual([`${A_KEY}.hocon`, `${B_KEY}.hocon`]);
+    expect(saves).toEqual([]);
   });
 });
