@@ -27,6 +27,7 @@ from .v1 import fast_websocket
 from .v1 import fastapi_concierge_endpoints
 from .v1 import hocon_endpoints
 from .v1 import mcp_oauth_endpoints
+from .v1 import network_consultant_endpoints
 from .v1 import oneshot_endpoints
 from .v1 import pdf_endpoints
 from .v1 import toolbox_endpoints
@@ -34,6 +35,12 @@ from .v1 import vqa_endpoints
 from .v1.neuro_san import agent as neuro_san_agent
 
 NSFLOW_PLUGIN_VQA_ENDPOINT = os.getenv("NSFLOW_PLUGIN_VQA_ENDPOINT", None)
+NSFLOW_PLUGIN_NETWORK_CONSULTANT = os.getenv("NSFLOW_PLUGIN_NETWORK_CONSULTANT", "true").strip().lower() in {
+    "1",
+    "on",
+    "true",
+    "yes",
+}
 
 router = APIRouter()
 
@@ -50,6 +57,8 @@ router.include_router(toolbox_endpoints.router, tags=["Toolbox"])
 router.include_router(designer_endpoints.router, tags=["Designer"])
 router.include_router(hocon_endpoints.router, tags=["HOCON Import"])
 router.include_router(mcp_oauth_endpoints.router, tags=["MCP OAuth"])
+if NSFLOW_PLUGIN_NETWORK_CONSULTANT:
+    router.include_router(network_consultant_endpoints.router, tags=["Network Consultant"])
 if NSFLOW_PLUGIN_VQA_ENDPOINT:
     router.include_router(vqa_endpoints.router, tags=["Visual Question Answering"])
 
