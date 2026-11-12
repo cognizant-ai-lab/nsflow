@@ -95,6 +95,13 @@ class FixtureRepository:
         fixture_directory.mkdir(parents=True, exist_ok=True)
         safe_name = self.safe_fixture_file_name(fixture_name)
         output_path = fixture_directory / safe_name
+        # A create or rename must never replace a different fixture that already has this name.
+        if output_path.exists() and (
+            not context
+            or not context.original_fixture_name
+            or self.safe_fixture_file_name(context.original_fixture_name) != safe_name
+        ):
+            raise FileExistsError(f"A test named {safe_name} already exists.")
         preamble = self._comment_block(context.source_hocon if context else None) or self.FIXTURE_REFERENCE_COMMENT
         content = f"{preamble.rstrip()}\n\n{json.dumps(fixture, indent=4, ensure_ascii=False)}\n"
 
@@ -147,6 +154,13 @@ class FixtureRepository:
     def network_hocon_file(network_name: str) -> str:
         """Return a network registry name with its HOCON suffix."""
         return network_name if network_name.endswith(".hocon") else f"{network_name}.hocon"
+
+    def existing_network_hocon_file(self, network_name: str) -> str:
+        """Return a contained network HOCON reference after confirming that it exists."""
+        path = self._registry_path(network_name)
+        if not path.is_file():
+            raise FileNotFoundError(self.network_hocon_file(network_name))
+        return path.relative_to((self.project_root / "registries").resolve()).as_posix()
 
     @staticmethod
     def safe_fixture_file_name(fixture_name: str) -> str:

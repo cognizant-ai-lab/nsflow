@@ -17,13 +17,16 @@
 """Tests for Network Consultant job lifecycle and status."""
 
 import asyncio
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
+from nsflow.backend.models.network_consultant.answer_job_request import AnswerJobRequest
 from nsflow.backend.utils import consultant_job_manager as consultant_job_manager_module
 from nsflow.backend.utils.consultant_job import ConsultantJob
 from nsflow.backend.utils.consultant_job_manager import ConsultantJobManager
@@ -78,10 +81,17 @@ class TestNetworkConsultantJobs:
             encoding="utf-8",
         )
 
-        with patch.object(consultant_job_manager_module.NetworkConsultantChart, "png_bytes", return_value=b"png"):
+        with patch.object(
+            consultant_job_manager_module.NetworkConsultantChart,
+            "png_bytes",
+            return_value=b"png",
+        ) as png_bytes:
             status = asyncio.run(manager.status("job-1"))
+            cached_status = asyncio.run(manager.status("job-1"))
 
         assert status.progress_chart == "data:image/png;base64,cG5n"
+        assert cached_status.progress_chart == status.progress_chart
+        png_bytes.assert_called_once()
         assert not (tmp_path / "logs" / "network_consultant_charts").exists()
 
     @staticmethod
@@ -95,6 +105,23 @@ class TestNetworkConsultantJobs:
         manager.answer("job-1", "Keep the current behavior")
 
         assert (directory / "job-1.answer.txt").read_text(encoding="utf-8") == "Keep the current behavior"
+
+    @staticmethod
+    def test_answer_is_published_atomically(tmp_path: Path) -> None:
+        """Publish a complete clarification answer through an atomic replacement."""
+        manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path)
+        (directory / "job-1.question.txt").write_text("Which behavior?", encoding="utf-8")
+        with patch("nsflow.backend.utils.consultant_job_manager.os.replace", wraps=os.replace) as replace:
+            manager.answer("job-1", "Keep the current behavior")
+
+        replace.assert_called_once()
+        assert (directory / "job-1.answer.txt").read_text(encoding="utf-8") == "Keep the current behavior"
+
+    @staticmethod
+    def test_blank_answer_is_rejected() -> None:
+        """Reject clarification answers that contain no visible text."""
+        with pytest.raises(ValidationError):
+            AnswerJobRequest(answer="   \n")
 
     @staticmethod
     def test_stop_terminates_a_running_job(tmp_path: Path) -> None:
@@ -194,6 +221,7 @@ class TestNetworkConsultantJobs:
         asyncio.run(manager.start(["--hocon-file", "basic/coffee.hocon"], "basic/coffee", "session"))
 
         command = create_process.await_args.args
+        options = create_process.await_args.kwargs
         assert command[:5] == (
             consultant_job_manager_module.sys.executable,
             "-u",
@@ -201,10 +229,11 @@ class TestNetworkConsultantJobs:
             "neuro_san_studio",
             "consultant",
         )
+        assert options.get("start_new_session") is True
 
     @staticmethod
-    def test_duplicate_owner_cannot_start_two_jobs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Reject a second running job for the same network and browser session."""
+    def test_duplicate_network_cannot_start_two_jobs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Reject a second running job for the same network after the browser session changes."""
         process = Mock(pid=123)
         create_process = AsyncMock(return_value=process)
         job = Mock(spec=ConsultantJob)
@@ -215,6 +244,6 @@ class TestNetworkConsultantJobs:
 
         asyncio.run(manager.start([], "basic/coffee", "session"))
         with pytest.raises(JobStateError):
-            asyncio.run(manager.start([], "basic/coffee", "session"))
+            asyncio.run(manager.start([], "basic/coffee", "reloaded-session"))
 
         assert create_process.await_count == 1

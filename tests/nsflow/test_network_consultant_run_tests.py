@@ -27,9 +27,12 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 from nsflow.backend.api.v1.network_consultant_endpoints import NetworkConsultantEndpoints
+from nsflow.backend.models.network_consultant.fixture_save_request import FixtureSaveRequest
 from nsflow.backend.models.network_consultant.generate_tests_request import GenerateTestsRequest
 from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
 from nsflow.backend.models.network_consultant.run_tests_request import RunTestsRequest
+from nsflow.backend.utils.fixture_repository import FixtureRepository
+from nsflow.backend.utils.invalid_network_name_error import InvalidNetworkNameError
 from nsflow.backend.utils.job_state_error import JobStateError
 
 
@@ -47,7 +50,13 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
             captured.update({"args": args, "agent_name": agent_name, "session_id": session_id})
             return JobStartResponse(job_id="jid", message="Job started.")
 
-        with patch.object(NetworkConsultantEndpoints, "_start_job", fake_start_job):
+        with (
+            patch.object(NetworkConsultantEndpoints, "_start_job", fake_start_job),
+            patch(
+                "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.existing_network_hocon_file",
+                side_effect=FixtureRepository.network_hocon_file,
+            ),
+        ):
             asyncio.run(coroutine_factory())
         return captured
 
@@ -132,6 +141,45 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
                 asyncio.run(
                     NetworkConsultantEndpoints._start_job(  # pylint: disable=protected-access
                         [], "basic/coffee", "session"
+                    )
+                )
+
+        self.assertEqual(context.exception.status_code, 409)
+
+    def test_missing_network_returns_not_found(self) -> None:
+        """Reject a job request when its registry HOCON does not exist."""
+        with patch(
+            "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.existing_network_hocon_file",
+            side_effect=FileNotFoundError("basic/missing.hocon"),
+        ):
+            with self.assertRaises(HTTPException) as context:
+                asyncio.run(NetworkConsultantEndpoints.run_tests(RunTestsRequest(network_name="basic/missing")))
+
+        self.assertEqual(context.exception.status_code, 404)
+
+    def test_unsafe_network_returns_bad_request(self) -> None:
+        """Reject a job request whose network path escapes the registry directory."""
+        with patch(
+            "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.existing_network_hocon_file",
+            side_effect=InvalidNetworkNameError("../outside"),
+        ):
+            with self.assertRaises(HTTPException) as context:
+                asyncio.run(NetworkConsultantEndpoints.run_tests(RunTestsRequest(network_name="../outside")))
+
+        self.assertEqual(context.exception.status_code, 400)
+
+    def test_taken_fixture_name_returns_conflict(self) -> None:
+        """Return an HTTP conflict instead of overwriting another fixture."""
+        with patch(
+            "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.save",
+            side_effect=FileExistsError("A test named existing.hocon already exists."),
+        ):
+            with self.assertRaises(HTTPException) as context:
+                asyncio.run(
+                    NetworkConsultantEndpoints.save_fixture(
+                        "basic/coffee",
+                        "existing",
+                        FixtureSaveRequest(fixture={}),
                     )
                 )
 
