@@ -192,7 +192,7 @@ const ConsultantFixtureCard = ({
             <IconButton
               size="small"
               title="Duplicate this test"
-              disabled={duplicating}
+              disabled={duplicating || jobRunning}
               onClick={(event) => {
                 event.stopPropagation();
                 onDuplicate(fixture);
@@ -204,7 +204,7 @@ const ConsultantFixtureCard = ({
           <IconButton
             size="small"
             title="Delete this test"
-            disabled={deleting}
+            disabled={deleting || jobRunning}
             onClick={(event) => {
               event.stopPropagation();
               onDelete(fixture);
@@ -257,7 +257,12 @@ const ConsultantFixtureCard = ({
               </Alert>
             )}
             <Box sx={{ display: "flex", gap: 1 }}>
-              <Button variant="contained" size="small" disabled={!ratioValid || saving} onClick={() => onSave(fixture)}>
+              <Button
+                variant="contained"
+                size="small"
+                disabled={!ratioValid || saving || jobRunning}
+                onClick={() => onSave(fixture)}
+              >
                 {saving ? "Saving..." : "Save"}
               </Button>
               <Button size="small" disabled={saving} onClick={() => onCancel(fixture.name)}>Cancel</Button>

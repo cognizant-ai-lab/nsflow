@@ -184,6 +184,14 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
     const draft = drafts[fixture.name];
     if (!draft) return;
     const fileName = draft.fileName.trim() || fixture.name.replace(/\.hocon$/, "");
+    const baseName = fileName.replace(/\.hocon$/, "");
+    const renamedOntoAnother =
+      baseName !== fixture.name.replace(/\.hocon$/, "") &&
+      fixtures.some((other) => other.name.replace(/\.hocon$/, "") === baseName);
+    if (renamedOntoAnother) {
+      setSaveErrors((previous) => ({ ...previous, [fixture.name]: [`A test named "${baseName}" already exists.`] }));
+      return;
+    }
     const { interactions, errors: payloadErrors } = buildInteractionsPayload(draft.interactions);
     if (payloadErrors.length) {
       setSaveErrors((previous) => ({ ...previous, [fixture.name]: payloadErrors }));
@@ -224,6 +232,10 @@ export const useConsultantFixtureEditor = ({ apiUrl, networkName, open }: UseCon
     const fileName = newFixture.fileName.trim();
     if (!fileName) {
       setNewFixtureErrors(["File name is required."]);
+      return;
+    }
+    if (fixtures.some((other) => other.name.replace(/\.hocon$/, "") === fileName.replace(/\.hocon$/, ""))) {
+      setNewFixtureErrors([`A test named "${fileName}" already exists.`]);
       return;
     }
     const { interactions, errors: payloadErrors } = buildInteractionsPayload(newFixture.interactions);

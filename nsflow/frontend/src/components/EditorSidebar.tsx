@@ -27,10 +27,10 @@ import { useChatContext } from "../context/ChatContext";
 import { useChatControls } from "../hooks/useChatControls";
 import { useNeuroSan } from "../context/NeuroSanContext";
 import { toDesignerNetworkName, toServedNetworkPath } from "../utils/config";
-import { asMetadataBlock, selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
+import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { buildEditorGraph } from "../state/editorGraph";
 import { toConnectivityList } from "../state/definitionShape";
-import type { ConnectivityInfo } from "../uiCommon";
+import { loadNetworkThroughDesigner } from "../state/designerLoad";
 
 
 
@@ -78,7 +78,7 @@ const EditorSidebar = ({
   const { apiUrl, isReady } = useApiPort();
   const { chatMessages, getLatestNetworkPayload,
     progressTick, slyDataTick, targetNetwork,
-    activeNetwork, addSlyDataMessage, regenerateSessionId, waitingForAgent } = useChatContext();
+    regenerateSessionId, waitingForAgent } = useChatContext();
   const { host, port, connectionType, isNsReady } = useNeuroSan();
   const { stopWebSocket, clearChat } = useChatControls();
   const [searchQuery, setSearchQuery] = useState("");
@@ -263,61 +263,20 @@ const EditorSidebar = ({
     setLoadingDefinition(true);
     try {
       setError("");
-      const response = await fetch(`${apiUrl}/api/v1/network_definition/${encodeURIComponent(networkName)}`, {
-        signal: load.signal,
-      });
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        if (load.signal.aborted) return;
-        const detail = errData.detail || response.statusText;
-        console.error("Failed to load network definition:", detail);
-        // Said out loud, not just to the console. This failing quietly is why the
-        // server looking in the wrong directory showed up as an empty canvas with
-        // nothing to suggest anything had gone wrong.
-        setError(`Could not open "${networkName}": ${detail}`);
-        return;
-      }
-      const payload = await response.json();
+      const loaded = await loadNetworkThroughDesigner({ apiUrl, servedName: networkName, signal: load.signal });
       if (load.signal.aborted) return;
-      const definition = payload?.agent_network_definition ?? payload;
-      // Straight into the store, which the canvas and this sidebar both render
-      // from. The old code posted it back as a sly_data chat message purely so it
-      // would come back around through the stream.
-      if (definition) {
-        reconcileFromServer(networkName, {
-          definition: Array.isArray(definition)
-            ? (definition as ConnectivityInfo[])
-            : Object.entries(definition).map(([origin, v]) => ({
-                // Spread first. With it last it overwrote the tools computed just
-                // below, which is the one key here that has to end up an array.
-                ...((v ?? {}) as Record<string, unknown>),
-                origin,
-                tools: ((v ?? {}) as { tools?: string[]; down_chains?: string[] }).tools ??
-                  ((v ?? {}) as { down_chains?: string[] }).down_chains ?? [],
-              })) as ConnectivityInfo[],
-          // The store KEY stays the served path ("generated/foo"): it is what
-          // /api/v1/list returns and what the canvas looks up. The name INSIDE the
-          // entry is what every save sends as agent_network_name, and the designer
-          // writes that name verbatim under its own folder, so handing it the served
-          // path made it add the folder again (#304). It gets the file's stem instead,
-          // which lands the save on the opened file; the consequences of that choice
-          // are recorded on toDesignerNetworkName.
-          networkName: toDesignerNetworkName(networkName),
-          // The file's block, which every save sends back. null when the file has
-          // none, so a block held from an earlier visit is dropped.
-          metadata: asMetadataBlock(payload?.agent_network_metadata) ?? null,
-        });
-        setSelectedNetworkId(networkName);
-        // Tell the page as well, not just this component. EditorAgentFlow keys its
-        // store lookup on the network the page holds, so without this it keeps reading
-        // the empty draft entry and the canvas stays blank however well the fetch went.
-        //
-        // This used to happen by accident. The old code posted the definition into the
-        // chat as a sly_data message, the designer stream echoed it back, and the
-        // handler for that echo called onSelectNetwork. Replacing the round trip with a
-        // direct store write dropped that side effect with it.
-        onSelectNetwork(networkName);
-      }
+      reconcileFromServer(networkName, {
+        definition: loaded.definition,
+        // The store key stays the served path, which the canvas looks up. The entry's
+        // name is the file's stem, because the designer adds its own folder on save.
+        networkName: toDesignerNetworkName(networkName),
+        // null when the file has no block, so a block held from an earlier visit is dropped.
+        metadata: loaded.metadata,
+      });
+      setSelectedNetworkId(networkName);
+      // Tell the page as well. The canvas reads the network the page holds, so without
+      // this it stays on the empty draft.
+      onSelectNetwork(networkName);
     } catch (e) {
       if (load.signal.aborted) return;
       console.error("Error loading network definition:", e);
@@ -326,7 +285,7 @@ const EditorSidebar = ({
       // A newer load is still running and owns the spinner.
       if (loadAbortRef.current === load) setLoadingDefinition(false);
     }
-  }, [apiUrl, targetNetwork, activeNetwork, addSlyDataMessage, onSelectNetwork]);
+  }, [apiUrl, onSelectNetwork, reconcileFromServer, stopWebSocket, clearChat, regenerateSessionId]);
 
   /* -------------------- Effects -------------------- */
   // Reset selection to "none" whenever mode flips or app becomes ready

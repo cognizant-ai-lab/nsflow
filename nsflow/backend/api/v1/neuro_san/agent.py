@@ -21,6 +21,7 @@ whether it is pointed at nsflow or at a neuro-san server, without a neuro-san AP
 layer living in the browser.
 
 They are deliberately thin passthroughs. neuro-san's payloads are returned as-is,
+apart from credential headers masked in streamed chat (see ``NsAgentClient``),
 with no Pydantic models mirroring its schemas: those schemas are generated on
 neuro-san's side, so hand-copying them here would only create drift, and the
 frontend already gets real types from ui-common's generated client. Passing the

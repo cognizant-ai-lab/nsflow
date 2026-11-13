@@ -70,6 +70,40 @@ class TestNetworkConsultantFixtureRepository:
             repository.delete("basic/coffee", "second")
 
     @staticmethod
+    def test_save_does_not_replace_a_different_fixture(tmp_path: Path) -> None:
+        """Reject create and rename operations whose safe name is already taken."""
+        repository = FixtureRepository(str(tmp_path))
+        fixture = TestNetworkConsultantFixtureRepository.valid_fixture()
+        repository.save("basic/coffee", "my test", fixture)
+        repository.save("basic/coffee", "other", fixture)
+
+        with pytest.raises(FileExistsError):
+            repository.save("basic/coffee", "my_test", fixture)
+        with pytest.raises(FileExistsError):
+            repository.save(
+                "basic/coffee",
+                "my_test",
+                fixture,
+                FixtureSaveContext(original_fixture_name="other.hocon"),
+            )
+
+        assert sorted(item.name for item in repository.list("basic/coffee")) == ["my_test.hocon", "other.hocon"]
+
+    @staticmethod
+    def test_existing_network_hocon_file_is_contained_and_present(tmp_path: Path) -> None:
+        """Return only an existing network beneath the project's registry directory."""
+        repository = FixtureRepository(str(tmp_path))
+        registry = tmp_path / "registries" / "basic"
+        registry.mkdir(parents=True)
+        (registry / "coffee.hocon").write_text("{}", encoding="utf-8")
+
+        assert repository.existing_network_hocon_file("basic/coffee") == "basic/coffee.hocon"
+        with pytest.raises(FileNotFoundError):
+            repository.existing_network_hocon_file("basic/missing")
+        with pytest.raises(InvalidNetworkNameError):
+            repository.existing_network_hocon_file("../outside")
+
+    @staticmethod
     @pytest.mark.parametrize("network_name", ["../outside", "basic/../../../outside", "/tmp/outside"])
     def test_network_path_traversal_is_rejected(tmp_path: Path, network_name: str) -> None:
         """Reject relative and absolute paths that escape the fixture root."""

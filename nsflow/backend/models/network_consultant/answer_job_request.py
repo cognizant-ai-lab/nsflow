@@ -16,11 +16,17 @@
 
 """Request model for answering a Network Consultant job."""
 
+from typing import Annotated
+
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import StringConstraints
 
 
 class AnswerJobRequest(BaseModel):
     """Request to answer a job's pending clarification question."""
 
-    answer: str = Field(..., description="The human's answer to the job's current pending_question.")
+    answer: Annotated[str, StringConstraints(pattern=r"\S")] = Field(
+        ...,
+        description="The human's nonblank answer to the job's current pending_question.",
+    )

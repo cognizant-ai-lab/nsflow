@@ -17,6 +17,7 @@ limitations under the License.
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AgentNetworkDefinitionEntry } from "../uiCommon";
 import { useEditorNetworkStore } from "./editorNetworkStore";
 import { draftKeyFor } from "./editorSession";
 import { applyFramesToStore, definitionFromFrames, useEditorProgressBridge } from "./progressBridge";
@@ -189,6 +190,38 @@ describe("applyFramesToStore", () => {
 
     expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual({ sample_queries: ["Held query."] });
   });
+
+  it("holds the HOCON text a sly_data frame carries, so Export downloads what was saved", () => {
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "frontman", tools: [] }],
+      hocon: "# an older save",
+    });
+
+    applyFramesToStore(
+      NET,
+      undefined,
+      frame({
+        agent_network_definition: { frontman: { tools: ["barista"] } },
+        agent_network_name: NET,
+        agent_network_hocon_text: "# the save this frame ends",
+      }),
+      false
+    );
+
+    expect(useEditorNetworkStore.getState().entries[NET].hocon).toBe("# the save this frame ends");
+  });
+
+  it("keeps the held HOCON text when the frame carries none", () => {
+    // Progress frames never carry it.
+    useEditorNetworkStore.getState().reconcileFromServer(NET, {
+      definition: [{ origin: "frontman", tools: [] }],
+      hocon: "# held",
+    });
+
+    applyFramesToStore(NET, frame({ connectivity_info: [{ origin: "frontman", tools: ["barista"] }] }), undefined, true);
+
+    expect(useEditorNetworkStore.getState().entries[NET].hocon).toBe("# held");
+  });
 });
 
 describe("useEditorProgressBridge", () => {
@@ -313,9 +346,8 @@ describe("useEditorProgressBridge", () => {
     });
 
     it("does not bring back an older block from the last sly_data frame when progress is newer", () => {
-      // A rename or an agent-panel save takes the echoed block straight into the
-      // store, and its echo never reaches the sly_data stream. That stream's last
-      // frame is then older than the held block.
+      // A save that ends in a later chat session puts its block in the store but not on
+      // the sly_data stream, so that stream's last frame is older than the held block.
       hold(NET, NET, { sample_queries: ["q"], date_modified: "T2" });
       recordFrames(
         frame({ agent_network_definition: GREET_WARMLY, agent_network_name: NET }),
@@ -365,6 +397,85 @@ describe("useEditorProgressBridge", () => {
       expect(entry.metadata).toBeUndefined();
       // The winning frame names B, so A never took it while A was on the canvas.
       expect(useEditorNetworkStore.getState().entries[A]).toBeUndefined();
+    });
+  });
+
+  describe("frames it has already applied", () => {
+    const OTHER = "generated/other";
+    const GREET = { frontman: { instructions: "Greet", tools: [] } };
+
+    /** The frontman's instructions in an entry, which is all these tests change. */
+    const instructions = (networkId: string) =>
+      (useEditorNetworkStore.getState().entries[networkId]?.definition[0] as AgentNetworkDefinitionEntry | undefined)
+        ?.instructions;
+
+    /** A change the frames do not hold, as a panel save or a held-back edit leaves one. */
+    const changeLocally = (networkId: string) => {
+      const changed: AgentNetworkDefinitionEntry[] = [{ origin: "frontman", tools: [], instructions: "Changed here" }];
+      useEditorNetworkStore.getState().applyEdit(networkId, changed);
+    };
+
+    const renderBridge = (networkId: string) =>
+      renderHook(({ networkId: id }) => useEditorProgressBridge(id), { initialProps: { networkId } });
+
+    beforeEach(() => {
+      useEditorNetworkStore.getState().reset(OTHER);
+    });
+
+    it("does not apply the same frames again when ChatContext renders again", () => {
+      // ChatContext rebuilds its getters on every render, so the bridge runs again with
+      // frames it has already applied. Applying them again would undo the change.
+      const progress = frame({ agent_network_definition: GREET });
+      recordFrames(progress, undefined, 1, 0);
+      const { rerender } = renderBridge(NET);
+      changeLocally(NET);
+
+      // The same frame behind new getters, as a ChatContext render gives it.
+      recordFrames(progress, undefined, 1, 0);
+      rerender({ networkId: NET });
+
+      expect(instructions(NET)).toBe("Changed here");
+    });
+
+    it("applies a new frame", () => {
+      recordFrames(frame({ agent_network_definition: GREET }), undefined, 1, 0);
+      const { rerender } = renderBridge(NET);
+      changeLocally(NET);
+
+      recordFrames(
+        frame({ agent_network_definition: { frontman: { instructions: "Greet warmly", tools: [] } } }),
+        undefined,
+        2,
+        0
+      );
+      rerender({ networkId: NET });
+
+      expect(instructions(NET)).toBe("Greet warmly");
+    });
+
+    it("applies the same frames to the network they name when the page moves there", () => {
+      const progress = frame({ agent_network_definition: GREET, agent_network_name: "other" });
+      recordFrames(progress, undefined, 1, 0);
+      const { rerender } = renderBridge(NET);
+
+      recordFrames(progress, undefined, 1, 0);
+      rerender({ networkId: OTHER });
+
+      expect(instructions(OTHER)).toBe("Greet");
+    });
+
+    it("does not apply them again when the page comes back to a network that had them", () => {
+      const progress = frame({ agent_network_definition: GREET });
+      recordFrames(progress, undefined, 1, 0);
+      const { rerender } = renderBridge(NET);
+      changeLocally(NET);
+      rerender({ networkId: OTHER });
+
+      recordFrames(progress, undefined, 1, 0);
+      rerender({ networkId: NET });
+
+      expect(instructions(NET)).toBe("Changed here");
+      expect(instructions(OTHER)).toBe("Greet");
     });
   });
 

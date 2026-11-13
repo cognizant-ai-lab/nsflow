@@ -345,3 +345,206 @@ describe("the metadata block", () => {
     expect(useEditorNetworkStore.getState().entries[NET].metadata).toEqual(ECHOED);
   });
 });
+
+describe("a save whose signal aborts", () => {
+  /** A frame echoing a one-agent definition, named by its text so each can be told apart. */
+  const echoLine = (text: string) =>
+    new TextEncoder().encode(
+      `${JSON.stringify({
+        response: { type: "AGENT_FRAMEWORK", text, sly_data: { agent_network_definition: [{ origin: text, tools: [] }] } },
+      })}\n`
+    );
+
+  /**
+   * A stream the test feeds by hand. It is not tied to the signal, like a chunk the
+   * browser had already read when the abort came.
+   */
+  const handFedFetch = () => {
+    let feed: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        feed = controller;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 200 })));
+    return () => feed as ReadableStreamDefaultController<Uint8Array>;
+  };
+
+  /** How a save ended: the error's name, or "resolved". */
+  const endedHow = (error?: unknown) => (error as Error | undefined)?.name ?? "resolved";
+
+  /** The agents the store holds for the network. */
+  const storedAgents = () => useEditorNetworkStore.getState().entries[NET]?.definition.map((agent) => agent.origin);
+
+  beforeEach(() => {
+    useEditorNetworkStore.getState().reset(NET);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("passes on and reconciles nothing that arrives after the abort", async () => {
+    const feed = handFedFetch();
+    const controller = new AbortController();
+    const seen: unknown[] = [];
+    let firstSeen: () => void = () => {};
+    const first = new Promise<void>((resolve) => {
+      firstSeen = resolve;
+    });
+
+    const saving = sendEditorUpdate({
+      apiUrl: API,
+      networkId: NET,
+      agentName: "a",
+      definition: [],
+      signal: controller.signal,
+      onFrame: (frame) => {
+        seen.push(frame.text);
+        firstSeen();
+      },
+    });
+    feed().enqueue(echoLine("first"));
+    await first;
+    controller.abort();
+    feed().enqueue(echoLine("second"));
+    feed().close();
+
+    const ending = await saving.then(endedHow, endedHow);
+
+    expect(seen).toEqual(["first"]);
+    expect(storedAgents()).toEqual(["first"]);
+    expect(ending).toBe("AbortError");
+  });
+
+  it("stops between two frames of one chunk", async () => {
+    const feed = handFedFetch();
+    const controller = new AbortController();
+    const seen: unknown[] = [];
+
+    const saving = sendEditorUpdate({
+      apiUrl: API,
+      networkId: NET,
+      agentName: "a",
+      definition: [],
+      signal: controller.signal,
+      onFrame: (frame) => {
+        seen.push(frame.text);
+        controller.abort();
+      },
+    });
+    const first = echoLine("first");
+    const second = echoLine("second");
+    const chunk = new Uint8Array(first.length + second.length);
+    chunk.set(first);
+    chunk.set(second, first.length);
+    feed().enqueue(chunk);
+    feed().close();
+
+    const ending = await saving.then(endedHow, endedHow);
+
+    expect(seen).toEqual(["first"]);
+    expect(storedAgents()).toEqual(["first"]);
+    expect(ending).toBe("AbortError");
+  });
+
+  it("reports the abort, not an empty stream, when it aborts before any frame", async () => {
+    // The caller treats an abort as a newer save taking over, and an empty stream as a failure.
+    const feed = handFedFetch();
+    const controller = new AbortController();
+
+    const saving = sendEditorUpdate({ apiUrl: API, networkId: NET, agentName: "a", definition: [], signal: controller.signal });
+    controller.abort();
+    feed().close();
+
+    expect(await saving.then(endedHow, endedHow)).toBe("AbortError");
+  });
+});
+
+describe("a save that stops being current", () => {
+  /** A frame echoing a one-agent definition, named by its text so each can be told apart. */
+  const echo = (text: string) =>
+    JSON.stringify({
+      response: { type: "AGENT_FRAMEWORK", text, sly_data: { agent_network_definition: [{ origin: text, tools: [] }] } },
+    });
+
+  /** A stream the test feeds by hand, and whether it was cancelled. */
+  const handFedFetch = () => {
+    let feed: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const state = { cancelled: false };
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        feed = controller;
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 200 })));
+    return { feed: () => feed as ReadableStreamDefaultController<Uint8Array>, state };
+  };
+
+  /** The agents the store holds for the network. */
+  const storedAgents = () => useEditorNetworkStore.getState().entries[NET]?.definition.map((agent) => agent.origin);
+
+  beforeEach(() => {
+    useEditorNetworkStore.getState().reset(NET);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("passes on and reconciles nothing after that, but reads the stream to its end", async () => {
+    // The server finishes a save only while its stream is read.
+    const { feed, state } = handFedFetch();
+    let current = true;
+    const seen: unknown[] = [];
+    let ended = false;
+
+    const saving = sendEditorUpdate({
+      apiUrl: API,
+      networkId: NET,
+      agentName: "a",
+      definition: [],
+      isCurrent: () => current,
+      onFrame: (frame) => {
+        seen.push(frame.text);
+        current = false;
+      },
+    }).then(() => {
+      ended = true;
+    });
+    feed().enqueue(new TextEncoder().encode(`${echo("first")}\n${echo("second")}\n`));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ended).toBe(false);
+    feed().enqueue(new TextEncoder().encode(echo("last")));
+    feed().close();
+    await saving;
+
+    expect(seen).toEqual(["first"]);
+    expect(storedAgents()).toEqual(["first"]);
+    expect(ended).toBe(true);
+    expect(state.cancelled).toBe(false);
+  });
+
+  it("still resolves when it was never current, because its frames are still counted", async () => {
+    const { feed } = handFedFetch();
+    const seen: unknown[] = [];
+
+    const saving = sendEditorUpdate({
+      apiUrl: API,
+      networkId: NET,
+      agentName: "a",
+      definition: [],
+      isCurrent: () => false,
+      onFrame: (frame) => seen.push(frame.text),
+    });
+    feed().enqueue(new TextEncoder().encode(echo("only")));
+    feed().close();
+
+    await expect(saving).resolves.toBeUndefined();
+    expect(seen).toEqual([]);
+    expect(storedAgents()).toBeUndefined();
+  });
+});

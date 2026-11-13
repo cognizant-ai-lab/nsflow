@@ -18,6 +18,8 @@
 
 import asyncio
 import logging
+import os
+import signal
 from asyncio.subprocess import Process
 from pathlib import Path
 
@@ -61,12 +63,22 @@ class ConsultantJob:
         return self._log_path
 
     def terminate(self) -> None:
-        """Ask the subprocess to terminate gracefully."""
-        self._process.terminate()
+        """
+        Ask the job's whole process group to stop, the way Ctrl-C does, so studio stops its worker and cleans up.
+        """
+        if hasattr(os, "killpg"):
+            os.killpg(self._process.pid, signal.SIGINT)
+        else:
+            self._process.terminate()
 
     def kill(self) -> None:
-        """Force the subprocess to stop."""
-        self._process.kill()
+        """
+        Force every process in the job's process group to stop.
+        """
+        if hasattr(os, "killpg"):
+            os.killpg(self._process.pid, signal.SIGKILL)
+        else:
+            self._process.kill()
 
     async def wait(self) -> int:
         """Wait for the subprocess to finish and return its exit code."""
