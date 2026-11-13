@@ -84,9 +84,10 @@ describe("NetworkConsultantPanel", () => {
     });
   });
 
-  it("caps improvement iterations at the backend limit and warns about in-place edits", () => {
+  it("caps improvement iterations at the backend limit and notes in-place edits", () => {
     render(<NetworkConsultantPanel selectedNetwork="basic/coffee" />);
 
+    expect(screen.getByText("Note:")).toBeTruthy();
     expect(screen.getByText("Improving edits the network file in place. Commit your work first.")).toBeTruthy();
     fireEvent.change(screen.getByRole("spinbutton", { name: "Max iterations" }), { target: { value: "101" } });
     fireEvent.click(screen.getByRole("button", { name: "Improve" }));

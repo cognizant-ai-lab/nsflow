@@ -183,7 +183,10 @@ const ConsultantControls = ({
             Improve
           </Button>
         </Box>
-        <Typography variant="caption" sx={{ display: "block", mt: 1, color: theme.palette.warning.main }}>
+        <Typography variant="caption" sx={{ display: "block", mt: 1, color: theme.palette.text.secondary }}>
+          <Box component="span" sx={{ fontWeight: 600 }}>
+            Note:
+          </Box>{" "}
           Improving edits the network file in place. Commit your work first.
         </Typography>
         <TextField
