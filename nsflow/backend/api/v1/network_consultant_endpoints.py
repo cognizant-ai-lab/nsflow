@@ -57,6 +57,16 @@ class NetworkConsultantEndpoints:
     DEFAULT_DIRECTION = "Fix any currently failing tests without changing the network's intended behavior."
 
     @staticmethod
+    def _network_hocon_file(network_name: str) -> str:
+        """Return an existing contained network HOCON reference or an actionable HTTP error."""
+        try:
+            return fixture_repository.existing_network_hocon_file(network_name)
+        except InvalidNetworkNameError as error:
+            raise HTTPException(status_code=400, detail="Invalid network_name.") from error
+        except FileNotFoundError as error:
+            raise HTTPException(status_code=404, detail=f"Network '{error.args[0]}' not found.") from error
+
+    @staticmethod
     @router.get("/fixtures", response_model=FixturesResponse)
     async def list_fixtures(network_name: str) -> FixturesResponse:
         """List the test fixtures stored for a network."""
@@ -96,6 +106,8 @@ class NetworkConsultantEndpoints:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail={"errors": error.args[0]}) from error
+        except FileExistsError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
         except OSError as error:
             raise HTTPException(status_code=500, detail=f"Could not write fixture: {error}") from error
         return FixtureSaveResponse(message=f"Saved {safe_name}.")
@@ -133,7 +145,7 @@ class NetworkConsultantEndpoints:
         return await NetworkConsultantEndpoints._start_job(
             [
                 "--hocon-file",
-                FixtureRepository.network_hocon_file(request.network_name),
+                NetworkConsultantEndpoints._network_hocon_file(request.network_name),
                 "--direction",
                 "Generate tests only -- no fix loop requested.",
                 "--test-level",
@@ -155,7 +167,7 @@ class NetworkConsultantEndpoints:
         return await NetworkConsultantEndpoints._start_job(
             [
                 "--hocon-file",
-                FixtureRepository.network_hocon_file(request.network_name),
+                NetworkConsultantEndpoints._network_hocon_file(request.network_name),
                 "--direction",
                 NetworkConsultantEndpoints.DEFAULT_DIRECTION,
                 *(["--only-fixtures", FixtureRepository.safe_fixture_file_name(fixture_name)] if fixture_name else []),
@@ -173,7 +185,7 @@ class NetworkConsultantEndpoints:
         return await NetworkConsultantEndpoints._start_job(
             [
                 "--hocon-file",
-                FixtureRepository.network_hocon_file(request.network_name),
+                NetworkConsultantEndpoints._network_hocon_file(request.network_name),
                 "--direction",
                 request.direction.strip() or NetworkConsultantEndpoints.DEFAULT_DIRECTION,
                 "--test-level",

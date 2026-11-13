@@ -19,6 +19,8 @@ export type ProgressPayload = {
   agent_network_name?: string;
   /** Only on a sly_data frame, which is the whole sly_data; progress frames carry no block. */
   agent_network_metadata?: unknown;
+  /** Only on a sly_data frame: the HOCON text the designer wrote. */
+  agent_network_hocon_text?: unknown;
 };
 
 /**

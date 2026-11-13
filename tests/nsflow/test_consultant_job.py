@@ -17,12 +17,14 @@
 """Tests for ownership of one Network Consultant subprocess and its log task."""
 
 import asyncio
+import signal
 import unittest
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
+from unittest.mock import call
 from unittest.mock import patch
 
 from nsflow.backend.utils.consultant_job import ConsultantJob
@@ -40,9 +42,12 @@ class TestConsultantJob(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             log_path = Path(directory) / "job.log"
             log_path.write_text("final line\n", encoding="utf-8")
-            with patch(
-                "nsflow.backend.utils.consultant_job.LogsRegistry.register",
-                return_value=log_manager,
+            with (
+                patch("nsflow.backend.utils.consultant_job.os.killpg"),
+                patch(
+                    "nsflow.backend.utils.consultant_job.LogsRegistry.register",
+                    return_value=log_manager,
+                ),
             ):
                 job = ConsultantJob(process, log_path, "basic/coffee", "session")
                 await job.close(0.1)
@@ -54,9 +59,9 @@ class TestConsultantJob(unittest.IsolatedAsyncioTestCase):
     async def test_close_kills_a_process_that_ignores_terminate(self) -> None:
         """Force-kill a process after its graceful shutdown deadline expires."""
         completion = asyncio.get_running_loop().create_future()
-        process = Mock()
+        process = Mock(pid=4242)
         process.wait = AsyncMock(side_effect=partial(self._wait_for_completion, completion))
-        process.kill.side_effect = partial(self._complete_process, completion, 9)
+        killpg = Mock(side_effect=partial(self._complete_on_signal, completion, signal.SIGKILL, 9))
         log_manager = Mock()
         log_manager.log_event = AsyncMock()
         with TemporaryDirectory() as directory:
@@ -64,6 +69,7 @@ class TestConsultantJob(unittest.IsolatedAsyncioTestCase):
             log_path.write_text("", encoding="utf-8")
             with (
                 patch.object(ConsultantJob, "TAIL_POLL_INTERVAL_SECONDS", 0),
+                patch("nsflow.backend.utils.consultant_job.os.killpg", killpg),
                 patch(
                     "nsflow.backend.utils.consultant_job.LogsRegistry.register",
                     return_value=log_manager,
@@ -72,8 +78,7 @@ class TestConsultantJob(unittest.IsolatedAsyncioTestCase):
                 job = ConsultantJob(process, log_path, "basic/coffee", "session")
                 await job.close(0.001)
 
-        process.terminate.assert_called_once_with()
-        process.kill.assert_called_once_with()
+        self.assertEqual(killpg.call_args_list, [call(4242, signal.SIGINT), call(4242, signal.SIGKILL)])
         self.assertEqual(job.exit_code(), 9)
 
     @staticmethod
@@ -82,6 +87,21 @@ class TestConsultantJob(unittest.IsolatedAsyncioTestCase):
         return await completion
 
     @staticmethod
-    def _complete_process(completion: asyncio.Future[int], returncode: int) -> None:
-        """Resolve a test-controlled process completion value."""
-        completion.set_result(returncode)
+    def _complete_on_signal(
+        completion: asyncio.Future[int],
+        expected_signal: int,
+        returncode: int,
+        _process_group: int,
+        signal_number: int,
+    ) -> None:
+        """
+        Finish the fake process when the test sends it the expected signal.
+
+        :param completion: The future that the fake process wait returns.
+        :param expected_signal: The signal that ends the fake process.
+        :param returncode: The exit code the fake process reports.
+        :param _process_group: The process group that received the signal.
+        :param signal_number: The signal that was sent.
+        """
+        if signal_number == expected_signal:
+            completion.set_result(returncode)

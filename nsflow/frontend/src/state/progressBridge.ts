@@ -29,7 +29,7 @@ limitations under the License.
  * as-is; this module is the consumer it anticipated.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useChatContext } from "../context/ChatContext";
 import { type ConnectivityInfo } from "../uiCommon";
@@ -82,6 +82,9 @@ export const applyFramesToStore = (
     // The block a chat turn saved, from the same frame as the definition. The last
     // sly_data frame alone may be another network's, or older than the held block.
     metadata: asMetadataBlock(payload?.agent_network_metadata),
+    // The file that frame's save wrote, so Export downloads it. A frame with none keeps
+    // the held text.
+    hocon: typeof payload?.agent_network_hocon_text === "string" ? payload.agent_network_hocon_text : undefined,
   });
 };
 
@@ -112,18 +115,27 @@ export const useEditorProgressBridge = (networkId: string | undefined): void => 
     lastSlyDataAtByNetwork,
   } = useChatContext();
 
+  // The frames each network was last given. Giving them again would undo any change
+  // made since, such as a held-back edit or a save the frames do not hold.
+  const appliedRef = useRef<Record<string, { progress: unknown; slyData: unknown }>>({});
+
   useEffect(() => {
     if (!networkId || !targetNetwork) return;
+    const progress = getLastProgressMessage({ network: targetNetwork });
+    const slyData = getLastSlyDataMessage({ network: targetNetwork });
+    const applied = appliedRef.current[networkId];
+    if (applied?.progress === progress && applied?.slyData === slyData) return;
+    appliedRef.current[networkId] = { progress, slyData };
     applyFramesToStore(
       networkId,
-      getLastProgressMessage({ network: targetNetwork }),
-      getLastSlyDataMessage({ network: targetNetwork }),
+      progress,
+      slyData,
       // This stream's own times, as ChatContext uses: the global times also move for
       // frames that never reach it. A tie goes to the sly_data frame.
       progressIsNewer(lastProgressAtByNetwork[targetNetwork], lastSlyDataAtByNetwork[targetNetwork])
     );
     // The getters are rebuilt on every ChatContext render, so this runs on every
-    // render, not only when a frame is recorded.
+    // render. The check above lets through only frames this network has not had.
   }, [
     networkId,
     targetNetwork,

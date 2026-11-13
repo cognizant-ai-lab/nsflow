@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
@@ -52,7 +53,8 @@ class ConsultantJobManager:
         """Create a manager for consultant jobs in one target project."""
         self._project_root = Path(project_root).resolve()
         self._jobs: dict[str, ConsultantJob] = {}
-        self._job_owners: dict[tuple[str, str], str] = {}
+        self._job_owners: dict[str, str] = {}
+        self._chart_cache: dict[tuple[str, str], tuple[str, str]] = {}
         self._start_lock = asyncio.Lock()
 
     async def start(self, args: list[str], agent_name: str, session_id: str) -> str:
@@ -62,10 +64,10 @@ class ConsultantJobManager:
             log_directory = self._project_root / "logs" / "network_consultant_jobs"
             log_directory.mkdir(parents=True, exist_ok=True)
             await self._prune_finished_jobs(log_directory)
-            owner = (agent_name, session_id)
+            owner = agent_name
             active_job_id = self._job_owners.get(owner)
             if active_job_id is not None:
-                raise JobStateError(f"Job '{active_job_id}' is already running for this network and session.")
+                raise JobStateError(f"Job '{active_job_id}' is already running for this network.")
             log_path = log_directory / f"{job_id}.log"
 
             with log_path.open("wb") as log_file:
@@ -80,6 +82,8 @@ class ConsultantJobManager:
                     stdout=log_file,
                     stderr=asyncio.subprocess.STDOUT,
                     env={**os.environ, "NSFLOW_JOB_ID": job_id, "NSFLOW_JOB_DIR": str(log_directory)},
+                    # Give the job its own process group, so Stop also reaches studio's worker process.
+                    start_new_session=True,
                 )
 
             self.register(job_id, ConsultantJob(process, log_path, agent_name, session_id))
@@ -96,7 +100,7 @@ class ConsultantJobManager:
         job = self._job(job_id)
         log_path = job.log_path()
         progress = self._read_progress(job_id, log_path.parent)
-        progress_chart = await self._render_progress_chart(progress, theme)
+        progress_chart = await self._render_progress_chart(job_id, progress, theme)
         return JobStatusResponse(
             job_id=job_id,
             running=job.is_running(),
@@ -117,7 +121,16 @@ class ConsultantJobManager:
         question_path = self._sidecar_path(job_id, directory, "question")
         if not question_path.is_file():
             raise JobStateError("This job isn't waiting on a clarification question.")
-        self._sidecar_path(job_id, directory, "answer").write_text(answer, encoding="utf-8")
+        answer_path = self._sidecar_path(job_id, directory, "answer")
+        descriptor, temporary_path = tempfile.mkstemp(dir=directory)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as temporary_file:
+                temporary_file.write(answer)
+            os.replace(temporary_path, answer_path)
+        except OSError:
+            if os.path.exists(temporary_path):
+                os.remove(temporary_path)
+            raise
 
     async def stop(self, job_id: str) -> bool:
         """Stop a running job, returning False when it had already completed."""
@@ -134,6 +147,7 @@ class ConsultantJobManager:
                 logger.error("Could not close a Network Consultant job: %s", error)
         self._jobs.clear()
         self._job_owners.clear()
+        self._chart_cache.clear()
 
     def _job(self, job_id: str) -> ConsultantJob:
         """Return a registered job or report an unknown identifier."""
@@ -158,6 +172,7 @@ class ConsultantJobManager:
         self._job_owners = {
             owner: job_id for owner, job_id in self._job_owners.items() if job_id not in finished_job_ids
         }
+        self._chart_cache = {key: value for key, value in self._chart_cache.items() if key[0] not in finished_job_ids}
 
         for job_id in finished_job_ids:
             for path in log_directory.glob(f"{job_id}.*"):
@@ -230,15 +245,23 @@ class ConsultantJobManager:
 
     async def _render_progress_chart(
         self,
+        job_id: str,
         progress: list[dict[str, Any]],
         theme: Literal["light", "dark"],
     ) -> str | None:
         """Render a chart for progress data when available."""
         if not progress:
             return None
+        progress_json = json.dumps(progress, sort_keys=True, separators=(",", ":"))
+        cache_key = (job_id, theme)
+        cached_chart = self._chart_cache.get(cache_key)
+        if cached_chart is not None and cached_chart[0] == progress_json:
+            return cached_chart[1]
         try:
             png_bytes = await asyncio.to_thread(NetworkConsultantChart.png_bytes, progress, theme)
         except (RuntimeError, TypeError, ValueError) as error:
             logger.warning("Could not render Network Consultant progress chart: %s", error)
             return None
-        return f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
+        chart = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
+        self._chart_cache.update({cache_key: (progress_json, chart)})
+        return chart
