@@ -111,7 +111,7 @@ const TestFixturesDialog = ({ open, onClose, networkName, onRunFixture, jobRunni
           <Button
             size="small"
             startIcon={<AddIcon fontSize="small" />}
-            disabled={!!newFixture}
+            disabled={!!newFixture || jobRunning}
             onClick={startNewFixture}
           >
             New Test

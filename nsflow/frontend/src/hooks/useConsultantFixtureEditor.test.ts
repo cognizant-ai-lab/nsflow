@@ -141,4 +141,37 @@ describe("useConsultantFixtureEditor", () => {
 
     await waitFor(() => expect(result.current.error).toBe("Discovery failed"));
   });
+
+  it("rejects renaming a fixture onto an existing name", async () => {
+    const existingFixture = { ...fixture, name: "existing.hocon" };
+    mockedListFixtures.mockResolvedValue([fixture, existingFixture]);
+    const { result } = renderHook(() =>
+      useConsultantFixtureEditor({ apiUrl: "http://api", networkName: "network-a", open: true }),
+    );
+    await waitFor(() => expect(result.current.fixtures).toHaveLength(2));
+
+    act(() => result.current.toggleEditAll());
+    act(() =>
+      result.current.updateDraft(fixture.name, (draft) => ({ ...draft, fileName: "existing" })),
+    );
+    await act(async () => result.current.saveFixture(fixture));
+
+    expect(mockedSaveFixture).not.toHaveBeenCalled();
+    expect(result.current.saveErrors[fixture.name]).toEqual(['A test named "existing" already exists.']);
+  });
+
+  it("rejects creating a fixture with an existing name", async () => {
+    const { result } = renderHook(() =>
+      useConsultantFixtureEditor({ apiUrl: "http://api", networkName: "network-a", open: true }),
+    );
+    await waitFor(() => expect(result.current.fixtures).toEqual([fixture]));
+
+    act(() => result.current.startNewFixture());
+    await waitFor(() => expect(result.current.newFixture).not.toBeNull());
+    act(() => result.current.setNewFixture({ ...result.current.newFixture!, fileName: "sample" }));
+    await act(async () => result.current.createFixture());
+
+    expect(mockedSaveFixture).not.toHaveBeenCalled();
+    expect(result.current.newFixtureErrors).toEqual(['A test named "sample" already exists.']);
+  });
 });

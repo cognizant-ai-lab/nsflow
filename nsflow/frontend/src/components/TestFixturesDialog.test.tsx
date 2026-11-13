@@ -61,4 +61,30 @@ describe("TestFixturesDialog", () => {
     const rawDialog = screen.getByRole("dialog", { name: "broken.hocon" });
     expect(rawDialog.textContent).toContain('{"agent": ');
   });
+
+  it("disables fixture mutations while a consultant job is running", async () => {
+    mockedListFixtures.mockResolvedValue([
+      {
+        name: "sample.hocon",
+        agent: "basic/coffee",
+        success_ratio: "1/1",
+        connections: ["direct"],
+        interactions: [
+          { text: "Find coffee", timeout_in_seconds: 400, response_checks: { gist: ["Names a shop"] }, sly_data: {} },
+        ],
+        definition: {},
+        raw_hocon: "{}",
+        parse_error: null,
+      },
+    ]);
+    render(<TestFixturesDialog open onClose={vi.fn()} networkName="basic/coffee" jobRunning />);
+
+    expect((await screen.findByRole("button", { name: "New Test" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTitle("Duplicate this test") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTitle("Delete this test") as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByText("sample"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect((await screen.findByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });
