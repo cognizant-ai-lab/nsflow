@@ -26,27 +26,42 @@ limitations under the License.
  * the URL parameter the pen icon uses.
  */
 
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EditorSidebar from "./EditorSidebar";
+import { isToolboxTool } from "../state/definitionShape";
 import { updateAgent } from "../state/editorOperations";
 import { useEditorNetworkStore } from "../state/editorNetworkStore";
 import { sendEditorUpdate } from "../state/editorRoundTrip";
 
 const NETWORK_NAME = "generated/coffee_shop";
 
-/** What /api/v1/network_definition returns for that network. */
+/** The sly_data of the designer's reply when it loads that network. */
 const DEFINITION = {
   agent_network_definition: {
     frontman: { instructions: "You are the front man.", description: "Front desk.", tools: ["helper"] },
     helper: { instructions: "You help.", description: "Helps." },
   },
-  agent_network_name: NETWORK_NAME,
+  agent_network_name: "coffee_shop",
+  agent_network_metadata: {},
 };
 
-/** What /api/v1/network_definition answers in the current test. */
+/** The sly_data the designer's load reply carries in the current test. */
 let definitionResponse: Record<string, unknown> = DEFINITION;
+
+/** The frames the designer answers a load with in the current test; undefined sends definitionResponse. */
+let loadFrames: object[] | undefined;
+
+/** The designer's reply to a load: its text, then the network in the last frame's sly_data. */
+const loadReply = (slyData: Record<string, unknown>): object[] => {
+  const text = `The network ${String(slyData.agent_network_name)} has been loaded.`;
+  return [
+    { response: { type: "SYSTEM", text: "You are the agent network designer." } },
+    { response: { type: "AI", text } },
+    { response: { type: "AGENT_FRAMEWORK", text, sly_data: slyData } },
+  ];
+};
 
 vi.mock("../context/ApiPortContext", () => ({
   useApiPort: () => ({ apiUrl: "http://localhost:4173", isReady: true }),
@@ -100,18 +115,22 @@ describe("opening an existing agent network", () => {
   beforeEach(() => {
     autocompleteOnChange = undefined;
     definitionResponse = DEFINITION;
+    loadFrames = undefined;
     chatState = {};
     useEditorNetworkStore.setState({ entries: {} });
     window.history.replaceState({}, "", "/editor");
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
-        if (url.includes("/api/v1/network_definition/")) {
-          return { ok: true, status: 200, json: async () => definitionResponse } as Response;
-        }
         if (url.includes("/streaming_chat")) {
+          const slyData = JSON.parse(String(init?.body)).sly_data as Record<string, unknown>;
+          // A load-only turn: a file to load, and no definition to save.
+          if (slyData.agent_network_hocon_file && !slyData.agent_network_definition) {
+            const frames = loadFrames ?? loadReply(definitionResponse);
+            return new Response(frames.map((frame) => `${JSON.stringify(frame)}\n`).join(""), { status: 200 });
+          }
           // One frame is all sendEditorUpdate needs to count the save as delivered.
           return new Response('{"response":{"type":"AGENT","text":"saved"}}\n', { status: 200 });
         }
@@ -126,6 +145,16 @@ describe("opening an existing agent network", () => {
       })
     );
   });
+
+  /** The last save the stub was sent: a designer turn whose sly_data carries a definition. */
+  const lastSave = () => {
+    const saves = vi.mocked(fetch).mock.calls.filter(
+      ([input, init]) =>
+        String(input).includes("/streaming_chat") &&
+        "agent_network_definition" in JSON.parse(String(init?.body)).sly_data
+    );
+    return saves[saves.length - 1];
+  };
 
   it("tells the page which network was opened, so the canvas can render it", async () => {
     const onSelectNetwork = vi.fn();
@@ -162,6 +191,8 @@ describe("opening an existing agent network", () => {
   });
 
   it("stores the designer's own name for the entry, which a save then sends as agent_network_name", async () => {
+    // A reply name unlike the stem, so the test shows that the entry's name comes from the served path.
+    definitionResponse = { ...DEFINITION, agent_network_name: "not_the_stem" };
     const onSelectNetwork = vi.fn();
     render(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
 
@@ -189,7 +220,7 @@ describe("opening an existing agent network", () => {
       agentName: "helper",
       definition: useEditorNetworkStore.getState().entries[NETWORK_NAME]!.definition,
     });
-    const saveCall = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/streaming_chat"));
+    const saveCall = lastSave();
     expect(saveCall).toBeTruthy();
     const body = JSON.parse(String((saveCall![1] as RequestInit).body));
     expect(body.sly_data.agent_network_name).toBe("coffee_shop");
@@ -234,7 +265,7 @@ describe("opening an existing agent network", () => {
       definition: updateAgent(loaded, "helper", { instructions: "You help more." }),
     });
 
-    const save = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/streaming_chat"));
+    const save = lastSave();
     expect(save).toBeDefined();
     const body = JSON.parse(String((save![1] as RequestInit).body));
     expect(body.sly_data.agent_network_definition).toEqual({
@@ -258,7 +289,7 @@ describe("opening an existing agent network", () => {
       agentName: "helper",
       definition: useEditorNetworkStore.getState().entries[name].definition,
     });
-    const save = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/streaming_chat"));
+    const save = lastSave();
     expect(save).toBeDefined();
     return JSON.parse(String((save![1] as RequestInit).body)).sly_data as Record<string, unknown>;
   };
@@ -272,7 +303,7 @@ describe("opening an existing agent network", () => {
       sample_queries: ["Who sang Imagine?"],
       date_created: "2026-01-01T00:00:00+00:00",
     };
-    definitionResponse = { ...DEFINITION, agent_network_name: "basic/music_nerd", agent_network_metadata: block };
+    definitionResponse = { ...DEFINITION, agent_network_name: "music_nerd", agent_network_metadata: block };
 
     const slyData = await openAndSave("basic/music_nerd");
 
@@ -292,6 +323,97 @@ describe("opening an existing agent network", () => {
 
     expect(useEditorNetworkStore.getState().entries[NETWORK_NAME].metadata).toBeUndefined();
     expect(slyData).not.toHaveProperty("agent_network_metadata");
+  });
+
+  /** Render the sidebar and pick NETWORK_NAME in its dropdown. */
+  const pick = async (onSelectNetwork: (network: string) => void = vi.fn()) => {
+    render(<EditorSidebar onSelectNetwork={onSelectNetwork} />);
+    await waitFor(() => expect(autocompleteOnChange).toBeTypeOf("function"));
+    await act(async () => {
+      autocompleteOnChange!(null, NETWORK_NAME);
+    });
+  };
+
+  it("asks the designer to load the file", async () => {
+    await pick();
+    await waitFor(() => expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]).toBeTruthy());
+
+    const calls = vi.mocked(fetch).mock.calls;
+    const loadCall = calls.find(([input]) => String(input).endsWith("/api/v1/agent_network_designer/streaming_chat"));
+    expect(loadCall).toBeDefined();
+    // The file and the boolean true, and nothing else: sent with a definition, the
+    // designer saves that instead of loading the file.
+    expect(JSON.parse(String((loadCall![1] as RequestInit).body)).sly_data).toEqual({
+      agent_network_hocon_file: "generated/coffee_shop.hocon",
+      skip_designer: true,
+    });
+    expect(calls.filter(([input]) => String(input).includes("network_definition"))).toEqual([]);
+  });
+
+  it("shows the designer's error and opens nothing", async () => {
+    const error = {
+      error: "Error: Failed to parse agent network config file 'generated/coffee_shop.hocon'.",
+      tool: "agent_network_designer",
+    };
+    loadFrames = [
+      { response: { type: "AI", text: `\`\`\`json\n${JSON.stringify(error)}\n\`\`\`` } },
+      { response: { type: "AGENT_FRAMEWORK", text: "", structure: error } },
+    ];
+    const onSelectNetwork = vi.fn();
+
+    await pick(onSelectNetwork);
+
+    expect(
+      await screen.findByText(
+        `Could not open "${NETWORK_NAME}": Failed to parse agent network config file 'generated/coffee_shop.hocon'.`
+      )
+    ).toBeTruthy();
+    expect(onSelectNetwork).not.toHaveBeenCalled();
+    expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]).toBeUndefined();
+  });
+
+  it("refuses a reply that saved instead of loading", async () => {
+    // Older studio saves on this request, and its reply carries the HOCON text it wrote.
+    definitionResponse = { ...DEFINITION, agent_network_hocon_text: "# coffee_shop" };
+    const onSelectNetwork = vi.fn();
+
+    await pick(onSelectNetwork);
+
+    expect(
+      await screen.findByText(
+        /^Could not open "generated\/coffee_shop": neuro-san-studio saved this network instead of opening it\./
+      )
+    ).toBeTruthy();
+    expect(onSelectNetwork).not.toHaveBeenCalled();
+    expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]).toBeUndefined();
+  });
+
+  it("posts nothing to the chat", async () => {
+    // The chat's cache turns a reply's name into generated/<name>, which would move the page.
+    const addSlyDataMessage = vi.fn();
+    chatState = { addSlyDataMessage };
+
+    await pick();
+
+    await waitFor(() => expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]?.definition).toHaveLength(2));
+    expect(addSlyDataMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps a coded tool a tool", async () => {
+    definitionResponse = {
+      ...DEFINITION,
+      agent_network_definition: {
+        frontman: { instructions: "You are the front man.", description: "Front desk.", tools: ["Calc"] },
+        // How the designer sends a coded tool: its description alone.
+        Calc: { description: "Adds two numbers." },
+      },
+    };
+
+    await pick();
+
+    await waitFor(() => expect(useEditorNetworkStore.getState().entries[NETWORK_NAME]).toBeTruthy());
+    const { definition } = useEditorNetworkStore.getState().entries[NETWORK_NAME];
+    expect(isToolboxTool(definition.find((agent) => agent.origin === "Calc"))).toBe(true);
   });
 });
 

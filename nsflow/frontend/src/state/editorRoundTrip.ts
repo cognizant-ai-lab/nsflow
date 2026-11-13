@@ -108,6 +108,14 @@ const handleFrameLine = (
   if (payload) useEditorNetworkStore.getState().reconcileFromServer(networkId, payload);
 };
 
+/**
+ * Throw the error an aborted fetch throws. A chunk read before the abort can still
+ * arrive after it, so the stream is checked here too.
+ */
+const throwIfAborted = (signal?: AbortSignal): void => {
+  if (signal?.aborted) throw new DOMException("The save was aborted.", "AbortError");
+};
+
 export type SendEditorUpdateArgs = {
   /** nsflow's own API origin. */
   readonly apiUrl: string;
@@ -137,7 +145,16 @@ export type SendEditorUpdateArgs = {
    * it holds none. An import passes it, with {} when the file has none.
    */
   readonly metadata?: NetworkMetadataBlock;
+  /**
+   * Once it aborts, no further frame reaches onFrame or the store, and the call
+   * rejects with an AbortError.
+   */
   readonly signal?: AbortSignal;
+  /**
+   * Checked before each frame. Once it returns false, no further frame reaches onFrame
+   * or the store, but the stream is still read to its end, so the server finishes the save.
+   */
+  readonly isCurrent?: () => boolean;
   /** Called per streamed frame, for progress feedback while an edit applies. */
   readonly onFrame?: (frame: ChatMessage) => void;
 };
@@ -151,6 +168,7 @@ export const sendEditorUpdate = async ({
   message,
   metadata,
   signal,
+  isCurrent = () => true,
   onFrame,
 }: SendEditorUpdateArgs): Promise<void> => {
   const store = useEditorNetworkStore.getState();
@@ -200,12 +218,15 @@ export const sendEditorUpdate = async ({
     const lines = buffered.split("\n");
     buffered = lines.pop() ?? "";
     for (const line of lines) {
+      throwIfAborted(signal);
       if (line.trim()) frames += 1;
-      handleFrameLine(line, networkId, onFrame);
+      if (isCurrent()) handleFrameLine(line, networkId, onFrame);
     }
   }
+  // Before the empty-stream check, so an aborted save reports the abort.
+  throwIfAborted(signal);
   if (buffered.trim()) frames += 1;
-  handleFrameLine(buffered, networkId, onFrame);
+  if (isCurrent()) handleFrameLine(buffered, networkId, onFrame);
 
   // A streaming response commits its 200 before the first chunk, so a failure
   // partway through cannot change the status: the backend logs it and the stream

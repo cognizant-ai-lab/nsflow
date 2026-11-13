@@ -32,7 +32,6 @@ import { JsonEditor, ThemeInput } from 'json-edit-react';
 import { selectEntry, useEditorNetworkStore } from "../state/editorNetworkStore";
 import { isExternalName, isToolboxTool } from "../state/definitionShape";
 import { canRename, renameAgent, updateAgent } from "../state/editorOperations";
-import { sendEditorUpdate } from "../state/editorRoundTrip";
 import type { ConnectivityInfo } from "../uiCommon";
 
 /**
@@ -91,8 +90,24 @@ const isLlmAgent = (definition: ConnectivityInfo[], name: string): boolean => {
 };
 
 
+/** An edit the panel has already applied to the store, for the page to save. */
+export type AgentPanelSave = {
+  readonly agentName: string;
+  readonly definition: ConnectivityInfo[];
+  /** What the edit was, for the chat transcript. Defaults to naming the agent. */
+  readonly message?: string;
+};
+
+/** "superseded" when a newer save of the same network took over before this one finished. */
+export type AgentPanelSaveResult = "saved" | "superseded";
+
 interface NetworkAgentEditorPanelProps {
   networkId: string;
+  /**
+   * Saves an edit through the page, which decides what happens to the save already in
+   * flight and passes the reply to the chat's cache. Throws when the save fails.
+   */
+  saveEdit: (edit: AgentPanelSave) => Promise<AgentPanelSaveResult>;
   selectedAgentName: string | null;
   onAgentUpdated: () => void;
   /** Called with the new name after a rename, so the caller can follow the agent. */
@@ -120,6 +135,7 @@ interface NetworkAgentEditorPanelProps {
 
 const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
   networkId,
+  saveEdit,
   selectedAgentName,
   onAgentUpdated,
   onAgentRenamed,
@@ -173,9 +189,8 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
     // longer exists.
     onAgentRenamed?.(proposed);
     try {
-      await sendEditorUpdate({
-        apiUrl,
-        networkId,
+      // A superseded rename resolves: a newer save of this network took over.
+      await saveEdit({
         agentName: proposed,
         definition: next,
         message: `Rename agent "${selectedAgentName}" to "${proposed}"`,
@@ -192,7 +207,7 @@ const NetworkAgentEditorPanel: React.FC<NetworkAgentEditorPanelProps> = ({
           : 'Renamed here but not saved.'
       );
     }
-  }, [entry?.definition, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed]);
+  }, [entry?.definition, selectedAgentName, apiUrl, networkId, applyEdit, onAgentRenamed, saveEdit]);
 
   // Data validation helpers
   const hasData = jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && Object.keys(jsonData).length > 0;
@@ -445,21 +460,19 @@ const cleanAgentData = (data: any): any => {
       // canonicalise it. `updateAgent` returns the same array when nothing matched.
       const next = updateAgent(entry.definition, selectedAgentName, cleanedData);
       applyEdit(networkId, next);
-      await sendEditorUpdate({
-        apiUrl: apiUrl as string,
-        networkId,
-        agentName: selectedAgentName,
-        definition: next,
-      });
+      const result = await saveEdit({ agentName: selectedAgentName, definition: next });
 
-      setSuccess('Agent updated successfully');
+      // A superseded save shows no message: a newer save of this network took over, and
+      // its result is not known here. The edit stays applied either way.
+      if (result === 'saved') {
+        setSuccess('Agent updated successfully');
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccess(null), 3000);
+      }
       setHasChanges(false);
       setOriginalData(cleanedData);
 
       onAgentUpdated();
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Error saving agent data:', err);
       setError(err instanceof Error ? err.message : 'Failed to save agent data');
