@@ -31,11 +31,14 @@ vi.mock("../hooks/useNetworkConsultantJob", () => ({ useNetworkConsultantJob: vi
 
 const mockedJobHook = vi.mocked(useNetworkConsultantJob);
 const start = vi.fn();
+const retryPolling = vi.fn();
+let pollingStopped = false;
 
 describe("NetworkConsultantPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedJobHook.mockReturnValue({
+    pollingStopped = false;
+    mockedJobHook.mockImplementation(() => ({
       jobId: null,
       jobOrigin: null,
       starting: false,
@@ -51,10 +54,12 @@ describe("NetworkConsultantPanel", () => {
       results: {},
       submittingAnswer: false,
       stopping: false,
+      pollingStopped,
       start,
       submitAnswer: vi.fn(),
       stop: vi.fn(),
-    });
+      retryPolling,
+    }));
   });
 
   it("keeps the existing run, generate, and improve request payloads", () => {
@@ -77,5 +82,30 @@ describe("NetworkConsultantPanel", () => {
       max_iterations: 10,
       success_ratio: "3/3",
     });
+  });
+
+  it("caps improvement iterations at the backend limit and warns about in-place edits", () => {
+    render(<NetworkConsultantPanel selectedNetwork="basic/coffee" />);
+
+    expect(screen.getByText("Improving edits the network file in place. Commit your work first.")).toBeTruthy();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Max iterations" }), { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Improve" }));
+
+    expect(start).toHaveBeenCalledWith("improve", "improve", {
+      network_name: "basic/coffee",
+      direction: "",
+      test_level: "normal",
+      max_iterations: 100,
+      success_ratio: "3/3",
+    });
+  });
+
+  it("offers status polling again after repeated status failures", () => {
+    pollingStopped = true;
+    render(<NetworkConsultantPanel selectedNetwork="basic/coffee" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry status" }));
+
+    expect(retryPolling).toHaveBeenCalledOnce();
   });
 });

@@ -159,7 +159,8 @@ const ConsultantControls = ({
             type="number"
             label="Max iterations"
             value={maxIterations}
-            onChange={(event) => onMaxIterationsChange(Math.max(1, Number(event.target.value) || 1))}
+            onChange={(event) => onMaxIterationsChange(Math.min(100, Math.max(1, Number(event.target.value) || 1)))}
+            slotProps={{ htmlInput: { min: 1, max: 100 } }}
             sx={{ width: 120 }}
           />
           <TextField
@@ -182,6 +183,9 @@ const ConsultantControls = ({
             Improve
           </Button>
         </Box>
+        <Typography variant="caption" sx={{ display: "block", mt: 1, color: theme.palette.warning.main }}>
+          Improving edits the network file in place. Commit your work first.
+        </Typography>
         <TextField
           label="What do you want this network to do? (optional)"
           placeholder="e.g. Preserve order lookup, but stop asking for a ZIP code unless the user gives a location"

@@ -41,6 +41,11 @@ interface UseNetworkConsultantJobOptions {
   onFinished: (networkName: string) => void;
 }
 
+interface TrackedConsultantJob {
+  id: string;
+  origin: ConsultantJobOrigin;
+}
+
 const resultsByFixture = (results: FixtureResult[]): Record<string, FixtureResult> =>
   Object.fromEntries(results.map((result) => [result.fixture, result]));
 
@@ -64,10 +69,12 @@ export const useNetworkConsultantJob = ({
   const [results, setResults] = useState<Record<string, FixtureResult>>({});
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [pollingStopped, setPollingStopped] = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollGenerationRef = useRef(0);
   const busyRef = useRef(false);
+  const jobsByNetworkRef = useRef(new Map<string, TrackedConsultantJob>());
   const networkRef = useRef(networkName);
   const onFinishedRef = useRef(onFinished);
   onFinishedRef.current = onFinished;
@@ -81,6 +88,7 @@ export const useNetworkConsultantJob = ({
 
   const applyStatus = useCallback((status: ConsultantJobStatus) => {
     busyRef.current = status.running;
+    setPollingStopped(false);
     setRunning(status.running);
     setReturncode(status.returncode);
     setPendingQuestion(status.pending_question ?? null);
@@ -108,6 +116,7 @@ export const useNetworkConsultantJob = ({
             pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
           } else {
             pollTimerRef.current = null;
+            jobsByNetworkRef.current.delete(jobNetwork);
             onFinishedRef.current(jobNetwork);
           }
         } catch (pollError: unknown) {
@@ -117,6 +126,7 @@ export const useNetworkConsultantJob = ({
           if (consecutiveFailures < CONSULTANT_POLL_MAX_CONSECUTIVE_FAILURES) {
             pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
           } else {
+            setPollingStopped(true);
             stopPolling();
           }
         }
@@ -129,11 +139,12 @@ export const useNetworkConsultantJob = ({
 
   useEffect(() => {
     stopPolling();
-    busyRef.current = false;
-    setJobId(null);
-    setJobOrigin(null);
+    const trackedJob = jobsByNetworkRef.current.get(networkName);
+    busyRef.current = Boolean(trackedJob);
+    setJobId(trackedJob?.id ?? null);
+    setJobOrigin(trackedJob?.origin ?? null);
     setStarting(false);
-    setRunning(false);
+    setRunning(Boolean(trackedJob));
     setReturncode(null);
     setError(null);
     setPendingQuestion(null);
@@ -143,7 +154,9 @@ export const useNetworkConsultantJob = ({
     setResults({});
     setSubmittingAnswer(false);
     setStopping(false);
-  }, [networkName, stopPolling]);
+    setPollingStopped(false);
+    if (trackedJob) beginPolling(trackedJob.id, networkName);
+  }, [beginPolling, networkName, stopPolling]);
 
   useEffect(() => stopPolling, [stopPolling]);
 
@@ -167,6 +180,7 @@ export const useNetworkConsultantJob = ({
     setUngrounded([]);
     setResults({});
     setProgressChart(null);
+    setPollingStopped(false);
     try {
       const id = await startConsultantJob(apiUrl, endpoint, { ...body, session_id: sessionId });
       if (operationGeneration !== pollGenerationRef.current || jobNetwork !== networkRef.current) {
@@ -177,6 +191,7 @@ export const useNetworkConsultantJob = ({
         }
         return false;
       }
+      jobsByNetworkRef.current.set(jobNetwork, { id, origin });
       setJobId(id);
       setRunning(true);
       beginPolling(id, jobNetwork);
@@ -221,6 +236,13 @@ export const useNetworkConsultantJob = ({
     }
   };
 
+  const retryPolling = () => {
+    if (!jobId || !jobOrigin) return;
+    setError(null);
+    setPollingStopped(false);
+    beginPolling(jobId, networkName);
+  };
+
   return {
     jobId,
     jobOrigin,
@@ -237,8 +259,10 @@ export const useNetworkConsultantJob = ({
     results,
     submittingAnswer,
     stopping,
+    pollingStopped,
     start,
     submitAnswer,
     stop,
+    retryPolling,
   };
 };

@@ -142,6 +142,61 @@ describe("useNetworkConsultantJob", () => {
     expect(onFinished).toHaveBeenCalledWith("network-a");
   });
 
+  it("restores a running job when its network is selected again", async () => {
+    mockedGetJob.mockResolvedValue({ job_id: "job-1", running: true, returncode: null, results: [] });
+    const { result, rerender } = renderHook(
+      ({ networkName }) =>
+        useNetworkConsultantJob({
+          apiUrl: "http://api",
+          networkName,
+          sessionId: "session",
+          themeMode: "light",
+          onFinished: vi.fn(),
+        }),
+      { initialProps: { networkName: "network-a" } },
+    );
+
+    await act(async () => result.current.start("improve", "improve", { network_name: "network-a" }));
+    rerender({ networkName: "network-b" });
+    expect(result.current.jobId).toBeNull();
+    expect(result.current.running).toBe(false);
+
+    rerender({ networkName: "network-a" });
+    expect(result.current.jobId).toBe("job-1");
+    expect(result.current.running).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
+    expect(mockedGetJob).toHaveBeenCalledWith("http://api", "job-1", "light");
+  });
+
+  it("offers a status retry after polling exhausts its retries", async () => {
+    mockedGetJob.mockRejectedValue(new Error("Status unavailable"));
+    const { result } = renderHook(() =>
+      useNetworkConsultantJob({
+        apiUrl: "http://api",
+        networkName: "network-a",
+        sessionId: "session",
+        themeMode: "light",
+        onFinished: vi.fn(),
+      }),
+    );
+
+    await act(async () => result.current.start("run-tests", "tests", { network_name: "network-a" }));
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS * 3));
+
+    expect(mockedGetJob).toHaveBeenCalledTimes(3);
+    expect(result.current.running).toBe(true);
+    expect(result.current.pollingStopped).toBe(true);
+    expect(result.current.error).toBe("Status unavailable");
+
+    mockedGetJob.mockResolvedValue({ job_id: "job-1", running: false, returncode: 0, results: [] });
+    act(() => result.current.retryPolling());
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
+
+    expect(result.current.pollingStopped).toBe(false);
+    expect(result.current.running).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
   it("clears the previous chart as soon as any new job starts", async () => {
     mockedGetJob.mockResolvedValue({
       job_id: "job-1",

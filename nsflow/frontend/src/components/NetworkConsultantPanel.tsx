@@ -67,9 +67,11 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     results,
     submittingAnswer,
     stopping,
+    pollingStopped,
     start,
     submitAnswer,
     stop,
+    retryPolling,
   } = useNetworkConsultantJob({
     apiUrl,
     networkName: selectedNetwork,
@@ -203,6 +205,11 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
         <Button variant="outlined" color="error" disabled={!running || stopping} onClick={stop}>
           {stopping ? "Stopping..." : "Stop"}
         </Button>
+        {pollingStopped && (
+          <Button variant="outlined" onClick={retryPolling}>
+            Retry status
+          </Button>
+        )}
         {running && <CircularProgress size={24} />}
         {jobId && (
           <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
