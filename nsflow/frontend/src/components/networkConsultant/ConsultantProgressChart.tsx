@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import { Box, Typography, alpha, useTheme } from "@mui/material";
+import { useEffect, useRef, useState } from "react";
 
 import type { ConsultantProgressEntry } from "../../types/networkConsultant";
 
@@ -26,6 +27,8 @@ const LEFT_MARGIN = 42;
 const RIGHT_MARGIN = 20;
 const BAR_SLOT_WIDTH = 92;
 const BAR_WIDTH = 44;
+const MIN_CHART_WIDTH = 480;
+const SVG_HEIGHT = 270;
 
 const entryLabel = (entry: ConsultantProgressEntry, index: number): string => {
   if (entry.checkpoint === "before") return "Before";
@@ -47,10 +50,21 @@ const normalizedSegments = (entry: ConsultantProgressEntry): number[] => {
   return segments.length > 0 ? segments : [0];
 };
 
+const chartTicks = (maximum: number): number[] => {
+  if (maximum <= 8) return Array.from({ length: maximum + 1 }, (_, index) => index);
+  const interval = Math.ceil(maximum / 5);
+  const ticks = Array.from({ length: Math.ceil(maximum / interval) }, (_, index) => index * interval);
+  return ticks.at(-1) === maximum ? ticks : [...ticks, maximum];
+};
+
 const ConsultantProgressChart = ({ progress }: { progress: ConsultantProgressEntry[] }) => {
   const theme = useTheme();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const maxTotal = Math.max(...progress.flatMap((entry) => [entry.total, entry.passed]), 1);
-  const width = Math.max(480, LEFT_MARGIN + RIGHT_MARGIN + progress.length * BAR_SLOT_WIDTH);
+  const minimumContentWidth = LEFT_MARGIN + RIGHT_MARGIN + progress.length * BAR_SLOT_WIDTH;
+  const width = Math.max(MIN_CHART_WIDTH, containerWidth, minimumContentWidth);
+  const slotWidth = (width - LEFT_MARGIN - RIGHT_MARGIN) / Math.max(progress.length, 1);
   const chartColor = theme.palette.info.main;
   const iterationColors = [
     chartColor,
@@ -59,19 +73,37 @@ const ConsultantProgressChart = ({ progress }: { progress: ConsultantProgressEnt
     alpha(chartColor, 0.46),
   ];
   const yPosition = (value: number) => CHART_BOTTOM - (Math.max(value, 0) / maxTotal) * CHART_HEIGHT;
-  const tickValues = [...new Set([0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(maxTotal * ratio)))];
+  const tickValues = chartTicks(maxTotal);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const updateWidth = () => setContainerWidth(container.clientWidth);
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver((entries) => setContainerWidth(entries.at(0)?.contentRect.width ?? 0));
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <Box>
       <Typography variant="subtitle2" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1 }}>
         Tests Passing Per Iteration
       </Typography>
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Box ref={containerRef} sx={{ width: "100%", overflowX: "auto" }}>
         <svg
           role="img"
           aria-label="Tests passing per improvement iteration"
-          viewBox={`0 0 ${width} 270`}
-          style={{ display: "block", minWidth: Math.min(width, 640), width: "100%" }}
+          viewBox={`0 0 ${width} ${SVG_HEIGHT}`}
+          width={width}
+          height={SVG_HEIGHT}
+          style={{ display: "block" }}
         >
           {tickValues.map((value) => {
             const y = yPosition(value);
@@ -93,7 +125,7 @@ const ConsultantProgressChart = ({ progress }: { progress: ConsultantProgressEnt
           })}
 
           {progress.map((entry, index) => {
-            const x = LEFT_MARGIN + index * BAR_SLOT_WIDTH + (BAR_SLOT_WIDTH - BAR_WIDTH) / 2;
+            const x = LEFT_MARGIN + index * slotWidth + (slotWidth - BAR_WIDTH) / 2;
             const segments = normalizedSegments(entry);
             const checkpointColor =
               entry.total > 0 && entry.passed / entry.total >= PASS_THRESHOLD
