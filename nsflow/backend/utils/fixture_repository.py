@@ -67,6 +67,7 @@ class FixtureRepository:
     CLASS_REFERENCE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r'(?:(?:"class"\s*:)|(?:class\s*=))\s*"([^"]+)"')
     SLY_DATA_GET_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\.get\(\s*[\"']([^\"']+)[\"']")
     SLY_DATA_ITEM_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\[\s*[\"']([^\"']+)[\"']\s*\]")
+    NETWORK_NAME_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+(?:\.hocon)?")
 
     def __init__(self, project_root: str) -> None:
         """Create a repository rooted at a target project."""
@@ -208,12 +209,21 @@ class FixtureRepository:
     def _fixtures_directory(self, network_name: str) -> Path:
         """Return the contained fixture directory for a network."""
         root = self.project_root / "tests" / "fixtures"
-        return self._contained_path(root, network_name)
+        return self._contained_path(root, self._safe_network_name(network_name))
 
     def _registry_path(self, network_name: str) -> Path:
         """Return the contained registry path for a network."""
         root = self.project_root / "registries"
-        return self._contained_path(root, self.network_hocon_file(network_name))
+        safe_name = self._safe_network_name(network_name)
+        return self._contained_path(root, self.network_hocon_file(safe_name))
+
+    @classmethod
+    def _safe_network_name(cls, network_name: str) -> str:
+        """Accept only slash-separated network names with filename-safe components."""
+        match = cls.NETWORK_NAME_PATTERN.fullmatch(network_name)
+        if match is None:
+            raise InvalidNetworkNameError(network_name)
+        return match.group(0)
 
     @staticmethod
     def _contained_path(root: Path, relative_path: str) -> Path:
