@@ -17,11 +17,12 @@ limitations under the License.
 import { useState } from "react";
 import { Box, Chip, CircularProgress, Paper, Typography, alpha, useTheme } from "@mui/material";
 
-import type { FixtureResult } from "../../types/networkConsultant";
+import type { ConsultantProgressEntry, FixtureResult } from "../../types/networkConsultant";
+import ConsultantProgressChart from "./ConsultantProgressChart";
 
 interface NetworkConsultantOutputProps {
   failures: FixtureResult[];
-  progressChart: string | null;
+  progress: ConsultantProgressEntry[];
   running: boolean;
 }
 
@@ -32,7 +33,7 @@ const failureSummary = (message?: string | null): string => {
   return lines.find((line) => line && !/^False is not true/i.test(line)) ?? "";
 };
 
-const NetworkConsultantOutput = ({ failures, progressChart, running }: NetworkConsultantOutputProps) => {
+const NetworkConsultantOutput = ({ failures, progress, running }: NetworkConsultantOutputProps) => {
   const theme = useTheme();
   const [openFailure, setOpenFailure] = useState<string | null>(null);
   const soleFailure = failures.length === 1 ? failures[0].fixture : null;
@@ -125,13 +126,8 @@ const NetworkConsultantOutput = ({ failures, progressChart, running }: NetworkCo
           borderColor: alpha(theme.palette.info.main, 0.3),
         }}
       >
-        {progressChart ? (
-          <Box
-            component="img"
-            src={progressChart}
-            alt="Tests passing per improvement iteration"
-            sx={{ width: "100%", maxWidth: 900, display: "block", mx: "auto", borderRadius: 1 }}
-          />
+        {progress.length > 0 ? (
+          <ConsultantProgressChart progress={progress} />
         ) : (
           <>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: theme.palette.text.primary, mb: 1.5 }}>

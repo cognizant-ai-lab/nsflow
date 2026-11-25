@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ConsultantEndpoint,
   ConsultantJobOrigin,
+  ConsultantProgressEntry,
   ConsultantJobStatus,
   FixtureResult,
 } from "../types/networkConsultant";
@@ -38,7 +39,6 @@ interface UseNetworkConsultantJobOptions {
   apiUrl: string;
   networkName: string;
   sessionId: string;
-  themeMode: string;
   onFinished: (networkName: string) => void;
 }
 
@@ -54,7 +54,6 @@ export const useNetworkConsultantJob = ({
   apiUrl,
   networkName,
   sessionId,
-  themeMode,
   onFinished,
 }: UseNetworkConsultantJobOptions) => {
   const [jobId, setJobId] = useState<string | null>(null);
@@ -66,7 +65,7 @@ export const useNetworkConsultantJob = ({
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [toolIssues, setToolIssues] = useState<string[]>([]);
   const [ungrounded, setUngrounded] = useState<string[]>([]);
-  const [progressChart, setProgressChart] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ConsultantProgressEntry[]>([]);
   const [results, setResults] = useState<Record<string, FixtureResult>>({});
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -96,7 +95,7 @@ export const useNetworkConsultantJob = ({
     setToolIssues(status.tool_issues ?? []);
     setUngrounded(status.ungrounded ?? []);
     setResults(resultsByFixture(status.results ?? []));
-    setProgressChart(status.progress_chart ?? null);
+    setProgress(status.progress ?? []);
   }, []);
 
   const beginPolling = useCallback(
@@ -107,7 +106,7 @@ export const useNetworkConsultantJob = ({
 
       const pollOnce = async () => {
         try {
-          const status = await getConsultantJob(apiUrl, id, themeMode);
+          const status = await getConsultantJob(apiUrl, id);
           const isCurrentJob = generation === pollGenerationRef.current && jobNetwork === networkRef.current;
           if (!isCurrentJob) return;
           consecutiveFailures = 0;
@@ -135,7 +134,7 @@ export const useNetworkConsultantJob = ({
 
       pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
     },
-    [apiUrl, applyStatus, stopPolling, themeMode],
+    [apiUrl, applyStatus, stopPolling],
   );
 
   useEffect(() => {
@@ -151,7 +150,7 @@ export const useNetworkConsultantJob = ({
     setPendingQuestion(null);
     setToolIssues([]);
     setUngrounded([]);
-    setProgressChart(null);
+    setProgress([]);
     setResults({});
     setSubmittingAnswer(false);
     setStopping(false);
@@ -204,7 +203,7 @@ export const useNetworkConsultantJob = ({
     setToolIssues([]);
     setUngrounded([]);
     setResults({});
-    setProgressChart(null);
+    setProgress([]);
     setPollingStopped(false);
     try {
       const id = await startConsultantJob(apiUrl, endpoint, { ...body, session_id: sessionId });
@@ -280,7 +279,7 @@ export const useNetworkConsultantJob = ({
     pendingQuestion,
     toolIssues,
     ungrounded,
-    progressChart,
+    progress,
     results,
     submittingAnswer,
     stopping,

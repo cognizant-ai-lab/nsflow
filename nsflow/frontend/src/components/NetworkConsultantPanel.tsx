@@ -63,7 +63,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     pendingQuestion,
     toolIssues,
     ungrounded,
-    progressChart,
+    progress,
     results,
     submittingAnswer,
     stopping,
@@ -76,7 +76,6 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     apiUrl,
     networkName: selectedNetwork,
     sessionId,
-    themeMode: theme.palette.mode,
     onFinished: refreshFixtures,
   });
   const error = jobError ?? fixtureError;
@@ -125,7 +124,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     <NetworkConsultantOutput
       key={`${selectedNetwork}:${jobOrigin}:${jobId ?? "pending"}`}
       failures={failures}
-      progressChart={progressChart}
+      progress={progress}
       running={running}
     />
   );

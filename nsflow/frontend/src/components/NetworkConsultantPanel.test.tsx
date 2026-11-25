@@ -50,7 +50,7 @@ describe("NetworkConsultantPanel", () => {
       pendingQuestion: null,
       toolIssues: [],
       ungrounded: [],
-      progressChart: null,
+      progress: [],
       results: {},
       submittingAnswer: false,
       stopping: false,

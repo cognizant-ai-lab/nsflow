@@ -72,7 +72,6 @@ describe("useNetworkConsultantJob", () => {
         apiUrl: "http://api",
         networkName: "network-a",
         sessionId: "session",
-        themeMode: "light",
         onFinished: vi.fn(),
       }),
     );
@@ -85,7 +84,7 @@ describe("useNetworkConsultantJob", () => {
     expect(result.current.running).toBe(true);
 
     await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
-    expect(mockedGetJob).toHaveBeenCalledWith("http://api", "restored-job", "light");
+    expect(mockedGetJob).toHaveBeenCalledWith("http://api", "restored-job");
   });
 
   it("ignores an active-job response after the selected network changes", async () => {
@@ -97,7 +96,6 @@ describe("useNetworkConsultantJob", () => {
           apiUrl: "http://api",
           networkName,
           sessionId: "session",
-          themeMode: "light",
           onFinished: vi.fn(),
         }),
       { initialProps: { networkName: "network-a" } },
@@ -124,7 +122,6 @@ describe("useNetworkConsultantJob", () => {
           apiUrl: "http://api",
           networkName,
           sessionId: "session",
-          themeMode: "light",
           onFinished,
         }),
       { initialProps: { networkName: "network-a" } },
@@ -159,7 +156,6 @@ describe("useNetworkConsultantJob", () => {
         apiUrl: "http://api",
         networkName: "network-a",
         sessionId: "session",
-        themeMode: "light",
         onFinished,
       }),
     );
@@ -182,7 +178,6 @@ describe("useNetworkConsultantJob", () => {
         apiUrl: "http://api",
         networkName: "network-a",
         sessionId: "session",
-        themeMode: "light",
         onFinished,
       }),
     );
@@ -205,7 +200,6 @@ describe("useNetworkConsultantJob", () => {
           apiUrl: "http://api",
           networkName,
           sessionId: "session",
-          themeMode: "light",
           onFinished: vi.fn(),
         }),
       { initialProps: { networkName: "network-a" } },
@@ -220,7 +214,7 @@ describe("useNetworkConsultantJob", () => {
     expect(result.current.jobId).toBe("job-1");
     expect(result.current.running).toBe(true);
     await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
-    expect(mockedGetJob).toHaveBeenCalledWith("http://api", "job-1", "light");
+    expect(mockedGetJob).toHaveBeenCalledWith("http://api", "job-1");
   });
 
   it("offers a status retry after polling exhausts its retries", async () => {
@@ -230,7 +224,6 @@ describe("useNetworkConsultantJob", () => {
         apiUrl: "http://api",
         networkName: "network-a",
         sessionId: "session",
-        themeMode: "light",
         onFinished: vi.fn(),
       }),
     );
@@ -252,12 +245,12 @@ describe("useNetworkConsultantJob", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("clears the previous chart as soon as any new job starts", async () => {
+  it("clears previous progress as soon as any new job starts", async () => {
     mockedGetJob.mockResolvedValue({
       job_id: "job-1",
       running: false,
       returncode: 0,
-      progress_chart: "data:image/png;base64,old",
+      progress: [{ checkpoint: "before", passed: 1, total: 2 }],
       results: [],
     });
     const secondStart = deferred<string>();
@@ -267,20 +260,19 @@ describe("useNetworkConsultantJob", () => {
         apiUrl: "http://api",
         networkName: "network-a",
         sessionId: "session",
-        themeMode: "light",
         onFinished: vi.fn(),
       }),
     );
     await act(async () => result.current.start("run-tests", "tests", { network_name: "network-a" }));
     await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
-    expect(result.current.progressChart).toBe("data:image/png;base64,old");
+    expect(result.current.progress).toEqual([{ checkpoint: "before", passed: 1, total: 2 }]);
 
     let startPromise: Promise<boolean>;
     act(() => {
       startPromise = result.current.start("improve", "improve", { network_name: "network-a" });
     });
 
-    expect(result.current.progressChart).toBeNull();
+    expect(result.current.progress).toEqual([]);
     expect(result.current.starting).toBe(true);
     await act(async () => {
       secondStart.resolve("job-2");
@@ -296,7 +288,6 @@ describe("useNetworkConsultantJob", () => {
         apiUrl: "http://api",
         networkName: "network-a",
         sessionId: "session",
-        themeMode: "light",
         onFinished: vi.fn(),
       }),
     );
@@ -326,7 +317,6 @@ describe("useNetworkConsultantJob", () => {
           apiUrl: "http://api",
           networkName,
           sessionId: "session",
-          themeMode: "light",
           onFinished: vi.fn(),
         }),
       { initialProps: { networkName: "network-a" } },
@@ -360,7 +350,6 @@ describe("useNetworkConsultantJob", () => {
           apiUrl: "http://api",
           networkName,
           sessionId: "session",
-          themeMode: "light",
           onFinished: vi.fn(),
         }),
       { initialProps: { networkName: "network-a" } },
