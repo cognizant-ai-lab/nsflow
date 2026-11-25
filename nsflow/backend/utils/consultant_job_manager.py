@@ -17,7 +17,6 @@
 """Process management and status persistence for Network Consultant jobs."""
 
 import asyncio
-import base64
 import json
 import logging
 import os
@@ -25,9 +24,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
 from typing import ClassVar
-from typing import Literal
 
 from pydantic import ValidationError
 
@@ -39,7 +36,6 @@ from nsflow.backend.models.network_consultant.job_status_response import JobStat
 from nsflow.backend.utils.consultant_job import ConsultantJob
 from nsflow.backend.utils.job_not_found_error import JobNotFoundError
 from nsflow.backend.utils.job_state_error import JobStateError
-from nsflow.backend.utils.network_consultant_chart import NetworkConsultantChart
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +53,6 @@ class ConsultantJobManager:
         self._jobs: dict[str, ConsultantJob] = {}
         self._job_owners: dict[str, str] = {}
         self._job_origins: dict[str, ConsultantJobOrigin] = {}
-        self._chart_cache: dict[tuple[str, str], tuple[str, str]] = {}
         self._start_lock = asyncio.Lock()
 
     async def start(
@@ -124,12 +119,11 @@ class ConsultantJobManager:
             return None
         return ActiveJobResponse(job_id=job_id, origin=origin)
 
-    async def status(self, job_id: str, theme: Literal["light", "dark"] = "light") -> JobStatusResponse:
+    async def status(self, job_id: str) -> JobStatusResponse:
         """Build a status response from process state and its sidecar files."""
         job = self._job(job_id)
         log_path = job.log_path()
         progress = self._read_progress(job_id, log_path.parent)
-        progress_chart = await self._render_progress_chart(job_id, progress, theme)
         return JobStatusResponse(
             job_id=job_id,
             running=job.is_running(),
@@ -137,7 +131,7 @@ class ConsultantJobManager:
             pending_question=self._read_optional_text(job_id, log_path.parent, "question"),
             tool_issues=self._read_lines(job_id, log_path.parent, "tool_issues"),
             ungrounded=self._read_lines(job_id, log_path.parent, "ungrounded"),
-            progress_chart=progress_chart,
+            progress=progress,
             results=self._read_results(job_id, log_path.parent),
         )
 
@@ -177,7 +171,6 @@ class ConsultantJobManager:
         self._jobs.clear()
         self._job_owners.clear()
         self._job_origins.clear()
-        self._chart_cache.clear()
 
     def _job(self, job_id: str) -> ConsultantJob:
         """Return a registered job or report an unknown identifier."""
@@ -203,8 +196,6 @@ class ConsultantJobManager:
         self._job_owners = {
             owner: job_id for owner, job_id in self._job_owners.items() if job_id not in finished_job_ids
         }
-        self._chart_cache = {key: value for key, value in self._chart_cache.items() if key[0] not in finished_job_ids}
-
         for job_id in finished_job_ids:
             for path in log_directory.glob(f"{job_id}.*"):
                 try:
@@ -249,14 +240,14 @@ class ConsultantJobManager:
             logger.warning("Ignoring malformed results for job %s: %s", job_id, error)
             return []
 
-    def _read_progress(self, job_id: str, directory: Path) -> list[dict[str, Any]]:
+    def _read_progress(self, job_id: str, directory: Path) -> list[ConsultantProgressEntry]:
         """Read valid progress objects from a job's JSON-lines sidecar."""
         try:
             lines = self._sidecar_path(job_id, directory, "progress").read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeError):
             return []
 
-        progress: list[dict[str, Any]] = []
+        progress: list[ConsultantProgressEntry] = []
         for line in lines:
             try:
                 entry = json.loads(line)
@@ -271,28 +262,5 @@ class ConsultantJobManager:
             except ValidationError as error:
                 logger.warning("Ignoring malformed progress entry for job %s: %s", job_id, error)
                 continue
-            progress.append(validated.model_dump(exclude_none=True))
+            progress.append(validated)
         return progress
-
-    async def _render_progress_chart(
-        self,
-        job_id: str,
-        progress: list[dict[str, Any]],
-        theme: Literal["light", "dark"],
-    ) -> str | None:
-        """Render a chart for progress data when available."""
-        if not progress:
-            return None
-        progress_json = json.dumps(progress, sort_keys=True, separators=(",", ":"))
-        cache_key = (job_id, theme)
-        cached_chart = self._chart_cache.get(cache_key)
-        if cached_chart is not None and cached_chart[0] == progress_json:
-            return cached_chart[1]
-        try:
-            png_bytes = await asyncio.to_thread(NetworkConsultantChart.png_bytes, progress, theme)
-        except (RuntimeError, TypeError, ValueError) as error:
-            logger.warning("Could not render Network Consultant progress chart: %s", error)
-            return None
-        chart = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
-        self._chart_cache.update({cache_key: (progress_json, chart)})
-        return chart
