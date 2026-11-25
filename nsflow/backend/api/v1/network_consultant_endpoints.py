@@ -18,9 +18,11 @@
 
 import logging
 import os
+from typing import ClassVar
 
 from fastapi import APIRouter
 from fastapi import HTTPException
+from fastapi import Query
 
 from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
 from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
@@ -33,6 +35,7 @@ from nsflow.backend.models.network_consultant.fixtures_response import FixturesR
 from nsflow.backend.models.network_consultant.generate_tests_request import GenerateTestsRequest
 from nsflow.backend.models.network_consultant.improve_network_request import ImproveNetworkRequest
 from nsflow.backend.models.network_consultant.job_answer_response import JobAnswerResponse
+from nsflow.backend.models.network_consultant.job_log_response import JobLogResponse
 from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
 from nsflow.backend.models.network_consultant.job_stop_response import JobStopResponse
@@ -49,21 +52,53 @@ from nsflow.backend.utils.job_state_error import JobStateError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/network_consultant")
-consultant_repo_path = os.getenv("NSFLOW_NETWORK_CONSULTANT_REPO", os.getcwd())
-fixture_repository = FixtureRepository(consultant_repo_path)
-job_manager = ConsultantJobManager(consultant_repo_path)
 
 
 class NetworkConsultantEndpoints:
     """Expose fixture editing and consultant-job lifecycle operations."""
 
     DEFAULT_DIRECTION = "Fix any currently failing tests without changing the network's intended behavior."
+    _fixture_repository: ClassVar[FixtureRepository | None] = None
+    _job_manager: ClassVar[ConsultantJobManager | None] = None
+
+    @classmethod
+    def initialize(cls, project_root: str | None = None) -> None:
+        """Create request services from startup configuration."""
+        configured_root = project_root or os.getenv("NSFLOW_NETWORK_CONSULTANT_REPO", os.getcwd())
+        cls._fixture_repository = FixtureRepository(configured_root)
+        cls._job_manager = ConsultantJobManager(configured_root)
+
+    @classmethod
+    async def shutdown(cls) -> None:
+        """Stop jobs and release the startup-scoped services."""
+        if cls._job_manager is not None:
+            await cls._job_manager.shutdown()
+        cls._fixture_repository = None
+        cls._job_manager = None
+
+    @classmethod
+    def fixture_repository(cls) -> FixtureRepository:
+        """Return the configured fixture repository."""
+        if cls._fixture_repository is None:
+            cls.initialize()
+        if cls._fixture_repository is None:
+            raise RuntimeError("Network Consultant fixture repository is not initialized.")
+        return cls._fixture_repository
+
+    @classmethod
+    def job_manager(cls) -> ConsultantJobManager:
+        """Return the configured job manager."""
+        if cls._job_manager is None:
+            cls.initialize()
+        if cls._job_manager is None:
+            raise RuntimeError("Network Consultant job manager is not initialized.")
+        return cls._job_manager
 
     @staticmethod
     def _network_hocon_file(network_name: str) -> str:
         """Return an existing contained network HOCON reference or an actionable HTTP error."""
         try:
-            return fixture_repository.existing_network_hocon_file(network_name)
+            return NetworkConsultantEndpoints.fixture_repository().existing_network_hocon_file(network_name)
         except InvalidNetworkNameError as error:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
         except FileNotFoundError as error:
@@ -74,7 +109,7 @@ class NetworkConsultantEndpoints:
     async def list_fixtures(network_name: str) -> FixturesResponse:
         """List the test fixtures stored for a network."""
         try:
-            fixtures = fixture_repository.list(network_name)
+            fixtures = NetworkConsultantEndpoints.fixture_repository().list(network_name)
         except InvalidNetworkNameError as error:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
         return FixturesResponse(network_name=network_name, fixtures=fixtures)
@@ -84,7 +119,7 @@ class NetworkConsultantEndpoints:
     async def list_sly_data_keys(network_name: str) -> SlyDataKeysResponse:
         """Return literal sly_data keys referenced by a network's coded tools."""
         try:
-            keys = fixture_repository.sly_data_keys(network_name)
+            keys = NetworkConsultantEndpoints.fixture_repository().sly_data_keys(network_name)
         except InvalidNetworkNameError as error:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
         return SlyDataKeysResponse(network_name=network_name, keys=keys)
@@ -99,7 +134,7 @@ class NetworkConsultantEndpoints:
     ) -> FixtureSaveResponse:
         """Create or atomically replace a fixture."""
         try:
-            safe_name = fixture_repository.save(
+            safe_name = NetworkConsultantEndpoints.fixture_repository().save(
                 network_name,
                 fixture_name,
                 request.fixture,
@@ -120,7 +155,7 @@ class NetworkConsultantEndpoints:
     async def delete_fixture(network_name: str, fixture_name: str) -> FixtureDeleteResponse:
         """Delete one fixture from a network."""
         try:
-            safe_name = fixture_repository.delete(network_name, fixture_name)
+            safe_name = NetworkConsultantEndpoints.fixture_repository().delete(network_name, fixture_name)
         except InvalidNetworkNameError as error:
             raise HTTPException(status_code=400, detail="Invalid network_name.") from error
         except FixtureNotFoundError as error:
@@ -138,7 +173,7 @@ class NetworkConsultantEndpoints:
     ) -> JobStartResponse:
         """Start a consultant job and translate process startup failures to HTTP errors."""
         try:
-            job_id = await job_manager.start(args, agent_name, session_id, origin)
+            job_id = await NetworkConsultantEndpoints.job_manager().start(args, agent_name, session_id, origin)
         except JobStateError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
         except OSError as error:
@@ -214,13 +249,13 @@ class NetworkConsultantEndpoints:
     @router.get("/jobs/active", response_model=ActiveJobResponse | None)
     async def get_active_job(network_name: str) -> ActiveJobResponse | None:
         """Return the running consultant job for a network, if present."""
-        return job_manager.active_job(network_name)
+        return NetworkConsultantEndpoints.job_manager().active_job(network_name)
 
     @staticmethod
     @router.get("/jobs/latest", response_model=LatestJobResponse | None)
     async def get_latest_job(network_name: str) -> LatestJobResponse | None:
         """Return the latest persisted consultant job for a network, if present."""
-        return job_manager.latest_job(network_name)
+        return NetworkConsultantEndpoints.job_manager().latest_job(network_name)
 
     @staticmethod
     @router.get("/jobs/history", response_model=list[ConsultantJobMetadata])
@@ -229,23 +264,34 @@ class NetworkConsultantEndpoints:
         origin: ConsultantJobOrigin | None = None,
     ) -> list[ConsultantJobMetadata]:
         """Return retained consultant runs for a network, newest first."""
-        return job_manager.job_history(network_name, origin)
+        return NetworkConsultantEndpoints.job_manager().job_history(network_name, origin)
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
     async def get_job_status(job_id: str) -> JobStatusResponse:
         """Return current process state and output for a job."""
         try:
-            return await job_manager.status(job_id)
+            return await NetworkConsultantEndpoints.job_manager().status(job_id)
         except JobNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
+
+    @staticmethod
+    @router.get("/jobs/{job_id}/log", response_model=JobLogResponse)
+    async def get_job_log(job_id: str, offset: int = Query(default=0, ge=0)) -> JobLogResponse:
+        """Return persisted log content after the requested byte offset."""
+        try:
+            return NetworkConsultantEndpoints.job_manager().log(job_id, offset)
+        except JobNotFoundError as error:
+            raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
+        except OSError as error:
+            raise HTTPException(status_code=500, detail=f"Could not read job log: {error}") from error
 
     @staticmethod
     @router.post("/jobs/{job_id}/answer", response_model=JobAnswerResponse)
     async def answer_job(job_id: str, request: AnswerJobRequest) -> JobAnswerResponse:
         """Submit an answer to a job waiting for clarification."""
         try:
-            job_manager.answer(job_id, request.answer)
+            NetworkConsultantEndpoints.job_manager().answer(job_id, request.answer)
         except JobNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
         except JobStateError as error:
@@ -257,7 +303,7 @@ class NetworkConsultantEndpoints:
     async def stop_job(job_id: str) -> JobStopResponse:
         """Stop a running job."""
         try:
-            stopped = await job_manager.stop(job_id)
+            stopped = await NetworkConsultantEndpoints.job_manager().stop(job_id)
         except JobNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
         message = "Job stopped." if stopped else "Job had already finished."
