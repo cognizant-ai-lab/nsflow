@@ -18,6 +18,8 @@
 
 import asyncio
 import os
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
@@ -27,6 +29,7 @@ import pytest
 from pydantic import ValidationError
 
 from nsflow.backend.models.network_consultant.answer_job_request import AnswerJobRequest
+from nsflow.backend.models.network_consultant.consultant_job_metadata import ConsultantJobMetadata
 from nsflow.backend.utils import consultant_job_manager as consultant_job_manager_module
 from nsflow.backend.utils.consultant_job import ConsultantJob
 from nsflow.backend.utils.consultant_job_manager import ConsultantJobManager
@@ -228,6 +231,49 @@ class TestNetworkConsultantJobs:
         assert status.running is False
         assert status.results[0].fixture == "coffee.hocon"
         assert status.results[0].passed is True
+
+    @staticmethod
+    def test_job_history_is_newest_first_and_can_filter_by_origin(tmp_path: Path) -> None:
+        """List retained runs by timestamp and action for the run picker."""
+        directory = tmp_path / "logs" / "network_consultant_jobs"
+        directory.mkdir(parents=True)
+        records = [
+            ConsultantJobMetadata(
+                job_id="22222222222222222222222222222222",
+                network_name="basic/coffee",
+                origin="tests",
+                started_at=datetime(2026, 1, 1, tzinfo=UTC),
+                returncode=0,
+            ),
+            ConsultantJobMetadata(
+                job_id="33333333333333333333333333333333",
+                network_name="basic/coffee",
+                origin="improve",
+                started_at=datetime(2026, 1, 3, tzinfo=UTC),
+                returncode=0,
+            ),
+            ConsultantJobMetadata(
+                job_id="44444444444444444444444444444444",
+                network_name="basic/coffee",
+                origin="tests",
+                started_at=datetime(2026, 1, 2, tzinfo=UTC),
+                returncode=1,
+            ),
+        ]
+        for record in records:
+            (directory / f"{record.job_id}.metadata.json").write_text(record.model_dump_json(), encoding="utf-8")
+
+        manager = ConsultantJobManager(str(tmp_path))
+
+        assert [record.job_id for record in manager.job_history("basic/coffee")] == [
+            "33333333333333333333333333333333",
+            "44444444444444444444444444444444",
+            "22222222222222222222222222222222",
+        ]
+        assert [record.job_id for record in manager.job_history("basic/coffee", "tests")] == [
+            "44444444444444444444444444444444",
+            "22222222222222222222222222222222",
+        ]
 
     @staticmethod
     def test_shutdown_closes_jobs_and_clears_the_registry(tmp_path: Path) -> None:

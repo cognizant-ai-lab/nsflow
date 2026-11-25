@@ -25,6 +25,7 @@ from fastapi import HTTPException
 from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
 from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
 from nsflow.backend.models.network_consultant.answer_job_request import AnswerJobRequest
+from nsflow.backend.models.network_consultant.consultant_job_metadata import ConsultantJobMetadata
 from nsflow.backend.models.network_consultant.fixture_delete_response import FixtureDeleteResponse
 from nsflow.backend.models.network_consultant.fixture_save_request import FixtureSaveRequest
 from nsflow.backend.models.network_consultant.fixture_save_response import FixtureSaveResponse
@@ -220,6 +221,15 @@ class NetworkConsultantEndpoints:
     async def get_latest_job(network_name: str) -> LatestJobResponse | None:
         """Return the latest persisted consultant job for a network, if present."""
         return job_manager.latest_job(network_name)
+
+    @staticmethod
+    @router.get("/jobs/history", response_model=list[ConsultantJobMetadata])
+    async def get_job_history(
+        network_name: str,
+        origin: ConsultantJobOrigin | None = None,
+    ) -> list[ConsultantJobMetadata]:
+        """Return retained consultant runs for a network, newest first."""
+        return job_manager.job_history(network_name, origin)
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)

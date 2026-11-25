@@ -139,15 +139,26 @@ class ConsultantJobManager:
 
     def latest_job(self, agent_name: str) -> LatestJobResponse | None:
         """Return the latest persisted job for a network, if one exists."""
+        history = self.job_history(agent_name)
+        if not history:
+            return None
+        latest = history[0]
+        return LatestJobResponse(job_id=latest.job_id, origin=latest.origin)
+
+    def job_history(
+        self,
+        agent_name: str,
+        origin: ConsultantJobOrigin | None = None,
+    ) -> list[ConsultantJobMetadata]:
+        """Return persisted jobs for a network from newest to oldest."""
         metadata = [
             recorded
             for path in self._log_directory().glob("*.metadata.json")
-            if (recorded := self._read_metadata_path(path)) is not None and recorded.network_name == agent_name
+            if (recorded := self._read_metadata_path(path)) is not None
+            and recorded.network_name == agent_name
+            and (origin is None or recorded.origin == origin)
         ]
-        if not metadata:
-            return None
-        latest = max(metadata, key=lambda recorded: recorded.started_at)
-        return LatestJobResponse(job_id=latest.job_id, origin=latest.origin)
+        return sorted(metadata, key=lambda recorded: recorded.started_at, reverse=True)
 
     async def status(self, job_id: str) -> JobStatusResponse:
         """Build a status response from process state and its sidecar files."""
