@@ -151,6 +151,7 @@ class ConsultantJobManager:
 
     async def status(self, job_id: str) -> JobStatusResponse:
         """Build a status response from process state and its sidecar files."""
+        job_id = self._safe_job_id(job_id)
         job = self._jobs.get(job_id)
         metadata = self._read_metadata(job_id)
         if job is None and metadata is None:
@@ -173,6 +174,7 @@ class ConsultantJobManager:
 
     def answer(self, job_id: str, answer: str) -> None:
         """Write an answer for a job waiting on clarification."""
+        job_id = self._safe_job_id(job_id)
         job = self._job(job_id)
         if not job.is_running():
             raise JobStateError("Job has already finished.")
@@ -193,6 +195,7 @@ class ConsultantJobManager:
 
     async def stop(self, job_id: str) -> bool:
         """Stop a running job, returning False when it had already completed."""
+        job_id = self._safe_job_id(job_id)
         job = self._job(job_id)
         return await job.stop(self.STOP_GRACE_PERIOD_SECONDS)
 
@@ -215,6 +218,17 @@ class ConsultantJobManager:
         if job is None:
             raise JobNotFoundError(job_id)
         return job
+
+    @staticmethod
+    def _safe_job_id(job_id: str) -> str:
+        """Return a canonical generated job identifier or report it as unknown."""
+        try:
+            parsed_job_id = uuid.UUID(job_id).hex
+        except ValueError as error:
+            raise JobNotFoundError(job_id) from error
+        if parsed_job_id != job_id:
+            raise JobNotFoundError(job_id)
+        return parsed_job_id
 
     async def _release_finished_jobs(self) -> None:
         """Release completed in-memory jobs while retaining their artifacts."""

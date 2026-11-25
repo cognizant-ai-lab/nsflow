@@ -37,6 +37,8 @@ from nsflow.backend.utils.job_state_error import JobStateError
 class TestNetworkConsultantJobs:
     """Verify status sidecars, answers, stopping, and unknown identifiers."""
 
+    JOB_ID = "11111111111111111111111111111111"
+
     @staticmethod
     def configured_manager(
         tmp_path: Path,
@@ -46,7 +48,7 @@ class TestNetworkConsultantJobs:
         manager = ConsultantJobManager(str(tmp_path))
         log_directory = tmp_path / "logs" / "network_consultant_jobs"
         log_directory.mkdir(parents=True)
-        log_path = log_directory / "job-1.log"
+        log_path = log_directory / f"{TestNetworkConsultantJobs.JOB_ID}.log"
         log_path.write_text("first\nsecond\n", encoding="utf-8")
         job = Mock(spec=ConsultantJob)
         job.log_path.return_value = log_path
@@ -55,7 +57,7 @@ class TestNetworkConsultantJobs:
         job.wait = AsyncMock(return_value=0)
         job.stop = AsyncMock(return_value=returncode is None)
         job.close = AsyncMock()
-        manager.register("job-1", job, "basic/coffee", "improve")
+        manager.register(TestNetworkConsultantJobs.JOB_ID, job, "basic/coffee", "improve")
         return manager, job, log_directory
 
     @staticmethod
@@ -66,7 +68,7 @@ class TestNetworkConsultantJobs:
         active_job = manager.active_job("basic/coffee")
 
         assert active_job is not None
-        assert active_job.job_id == "job-1"
+        assert active_job.job_id == TestNetworkConsultantJobs.JOB_ID
         assert active_job.origin == "improve"
 
     @staticmethod
@@ -87,11 +89,11 @@ class TestNetworkConsultantJobs:
     def test_status_reads_results_and_sidecar_files(tmp_path: Path) -> None:
         """Read logs and fixture results into status."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
-        (directory / "job-1.results.json").write_text(
+        (directory / f"{TestNetworkConsultantJobs.JOB_ID}.results.json").write_text(
             '{"coffee.hocon": {"passed": false, "message": "missing coffee"}}',
             encoding="utf-8",
         )
-        status = asyncio.run(manager.status("job-1"))
+        status = asyncio.run(manager.status(TestNetworkConsultantJobs.JOB_ID))
 
         assert status.running is False
         assert status.results[0].fixture == "coffee.hocon"
@@ -101,12 +103,12 @@ class TestNetworkConsultantJobs:
     def test_status_returns_structured_progress(tmp_path: Path) -> None:
         """Return validated checkpoints for client-side chart rendering."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
-        (directory / "job-1.progress.jsonl").write_text(
+        (directory / f"{TestNetworkConsultantJobs.JOB_ID}.progress.jsonl").write_text(
             '{"check": 1, "checkpoint": "before", "passed": 1, "total": 2}\n',
             encoding="utf-8",
         )
 
-        status = asyncio.run(manager.status("job-1"))
+        status = asyncio.run(manager.status(TestNetworkConsultantJobs.JOB_ID))
 
         assert len(status.progress) == 1
         assert status.progress[0].checkpoint == "before"
@@ -118,23 +120,29 @@ class TestNetworkConsultantJobs:
         """Only accept an answer while a running job has a pending question."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path)
         with pytest.raises(JobStateError):
-            manager.answer("job-1", "answer")
+            manager.answer(TestNetworkConsultantJobs.JOB_ID, "answer")
 
-        (directory / "job-1.question.txt").write_text("Which behavior?", encoding="utf-8")
-        manager.answer("job-1", "Keep the current behavior")
+        (directory / f"{TestNetworkConsultantJobs.JOB_ID}.question.txt").write_text(
+            "Which behavior?", encoding="utf-8"
+        )
+        manager.answer(TestNetworkConsultantJobs.JOB_ID, "Keep the current behavior")
 
-        assert (directory / "job-1.answer.txt").read_text(encoding="utf-8") == "Keep the current behavior"
+        answer_path = directory / f"{TestNetworkConsultantJobs.JOB_ID}.answer.txt"
+        assert answer_path.read_text(encoding="utf-8") == "Keep the current behavior"
 
     @staticmethod
     def test_answer_is_published_atomically(tmp_path: Path) -> None:
         """Publish a complete clarification answer through an atomic replacement."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path)
-        (directory / "job-1.question.txt").write_text("Which behavior?", encoding="utf-8")
+        (directory / f"{TestNetworkConsultantJobs.JOB_ID}.question.txt").write_text(
+            "Which behavior?", encoding="utf-8"
+        )
         with patch("nsflow.backend.utils.consultant_job_manager.os.replace", wraps=os.replace) as replace:
-            manager.answer("job-1", "Keep the current behavior")
+            manager.answer(TestNetworkConsultantJobs.JOB_ID, "Keep the current behavior")
 
         replace.assert_called_once()
-        assert (directory / "job-1.answer.txt").read_text(encoding="utf-8") == "Keep the current behavior"
+        answer_path = directory / f"{TestNetworkConsultantJobs.JOB_ID}.answer.txt"
+        assert answer_path.read_text(encoding="utf-8") == "Keep the current behavior"
 
     @staticmethod
     def test_blank_answer_is_rejected() -> None:
@@ -147,19 +155,19 @@ class TestNetworkConsultantJobs:
         """Terminate a running job without killing it when it exits promptly."""
         manager, job, _ = TestNetworkConsultantJobs.configured_manager(tmp_path)
 
-        assert asyncio.run(manager.stop("job-1")) is True
+        assert asyncio.run(manager.stop(TestNetworkConsultantJobs.JOB_ID)) is True
         job.stop.assert_awaited_once_with(manager.STOP_GRACE_PERIOD_SECONDS)
 
     @staticmethod
     def test_malformed_progress_does_not_break_status(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Warn about malformed checkpoints and return the rest of the job status."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
-        (directory / "job-1.progress.jsonl").write_text(
+        (directory / f"{TestNetworkConsultantJobs.JOB_ID}.progress.jsonl").write_text(
             '{"passed": {}, "total": "broken", "segments": [1, null]}\nnot-json\n',
             encoding="utf-8",
         )
 
-        status = asyncio.run(manager.status("job-1"))
+        status = asyncio.run(manager.status(TestNetworkConsultantJobs.JOB_ID))
 
         assert status.running is False
         assert status.progress == []
@@ -169,9 +177,9 @@ class TestNetworkConsultantJobs:
     def test_malformed_results_are_reported(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Warn when a results sidecar cannot be decoded."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
-        (directory / "job-1.results.json").write_text("not-json", encoding="utf-8")
+        (directory / f"{TestNetworkConsultantJobs.JOB_ID}.results.json").write_text("not-json", encoding="utf-8")
 
-        status = asyncio.run(manager.status("job-1"))
+        status = asyncio.run(manager.status(TestNetworkConsultantJobs.JOB_ID))
 
         assert status.results == []
         assert "Ignoring malformed results" in caplog.text
@@ -184,9 +192,10 @@ class TestNetworkConsultantJobs:
         asyncio.run(manager._release_finished_jobs())  # pylint: disable=protected-access
 
         job.close.assert_awaited_once_with(manager.STOP_GRACE_PERIOD_SECONDS)
-        assert (directory / "job-1.log").read_text(encoding="utf-8") == "first\nsecond\n"
+        log_path = directory / f"{TestNetworkConsultantJobs.JOB_ID}.log"
+        assert log_path.read_text(encoding="utf-8") == "first\nsecond\n"
         with pytest.raises(JobNotFoundError):
-            asyncio.run(manager.status("job-1"))
+            asyncio.run(manager.status(TestNetworkConsultantJobs.JOB_ID))
 
     @staticmethod
     def test_latest_job_and_results_survive_manager_restart(
@@ -229,7 +238,7 @@ class TestNetworkConsultantJobs:
 
         job.close.assert_awaited_once_with(manager.STOP_GRACE_PERIOD_SECONDS)
         with pytest.raises(JobNotFoundError):
-            asyncio.run(manager.status("job-1"))
+            asyncio.run(manager.status(TestNetworkConsultantJobs.JOB_ID))
 
     @staticmethod
     def test_unknown_job_is_reported(tmp_path: Path) -> None:
