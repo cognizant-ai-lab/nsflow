@@ -18,7 +18,6 @@
 
 import logging
 import os
-from typing import Literal
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -217,10 +216,10 @@ class NetworkConsultantEndpoints:
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
-    async def get_job_status(job_id: str, theme: Literal["light", "dark"] = "light") -> JobStatusResponse:
+    async def get_job_status(job_id: str) -> JobStatusResponse:
         """Return current process state and output for a job."""
         try:
-            return await job_manager.status(job_id, theme)
+            return await job_manager.status(job_id)
         except JobNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
 

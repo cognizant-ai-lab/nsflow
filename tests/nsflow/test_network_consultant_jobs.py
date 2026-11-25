@@ -98,26 +98,20 @@ class TestNetworkConsultantJobs:
         assert status.results[0].passed is False
 
     @staticmethod
-    def test_status_returns_chart_without_writing_an_unused_snapshot(tmp_path: Path) -> None:
-        """Return the rendered chart directly without accumulating an unserved PNG file."""
+    def test_status_returns_structured_progress(tmp_path: Path) -> None:
+        """Return validated checkpoints for client-side chart rendering."""
         manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
         (directory / "job-1.progress.jsonl").write_text(
             '{"check": 1, "checkpoint": "before", "passed": 1, "total": 2}\n',
             encoding="utf-8",
         )
 
-        with patch.object(
-            consultant_job_manager_module.NetworkConsultantChart,
-            "png_bytes",
-            return_value=b"png",
-        ) as png_bytes:
-            status = asyncio.run(manager.status("job-1"))
-            cached_status = asyncio.run(manager.status("job-1"))
+        status = asyncio.run(manager.status("job-1"))
 
-        assert status.progress_chart == "data:image/png;base64,cG5n"
-        assert cached_status.progress_chart == status.progress_chart
-        png_bytes.assert_called_once()
-        assert not (tmp_path / "logs" / "network_consultant_charts").exists()
+        assert len(status.progress) == 1
+        assert status.progress[0].checkpoint == "before"
+        assert status.progress[0].passed == 1
+        assert status.progress[0].total == 2
 
     @staticmethod
     def test_answer_requires_a_running_job_with_a_question(tmp_path: Path) -> None:
@@ -168,7 +162,7 @@ class TestNetworkConsultantJobs:
         status = asyncio.run(manager.status("job-1"))
 
         assert status.running is False
-        assert status.progress_chart is None
+        assert status.progress == []
         assert "Ignoring malformed progress" in caplog.text
 
     @staticmethod
@@ -181,24 +175,6 @@ class TestNetworkConsultantJobs:
 
         assert status.results == []
         assert "Ignoring malformed results" in caplog.text
-
-    @staticmethod
-    def test_chart_failure_does_not_break_status(tmp_path: Path) -> None:
-        """Return status without a chart when the renderer rejects otherwise valid progress."""
-        manager, _, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
-        (directory / "job-1.progress.jsonl").write_text(
-            '{"checkpoint": "before", "passed": 1, "total": 2}\n',
-            encoding="utf-8",
-        )
-
-        with patch.object(
-            consultant_job_manager_module.NetworkConsultantChart,
-            "png_bytes",
-            side_effect=ValueError("bad chart"),
-        ):
-            status = asyncio.run(manager.status("job-1"))
-
-        assert status.progress_chart is None
 
     @staticmethod
     def test_pruning_removes_finished_files_and_job_record(tmp_path: Path) -> None:
