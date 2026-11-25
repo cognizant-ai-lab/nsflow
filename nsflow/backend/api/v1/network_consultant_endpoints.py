@@ -35,6 +35,7 @@ from nsflow.backend.models.network_consultant.job_answer_response import JobAnsw
 from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
 from nsflow.backend.models.network_consultant.job_stop_response import JobStopResponse
+from nsflow.backend.models.network_consultant.latest_job_response import LatestJobResponse
 from nsflow.backend.models.network_consultant.run_tests_request import RunTestsRequest
 from nsflow.backend.models.network_consultant.sly_data_keys_response import SlyDataKeysResponse
 from nsflow.backend.utils.consultant_job_manager import ConsultantJobManager
@@ -213,6 +214,12 @@ class NetworkConsultantEndpoints:
     async def get_active_job(network_name: str) -> ActiveJobResponse | None:
         """Return the running consultant job for a network, if present."""
         return job_manager.active_job(network_name)
+
+    @staticmethod
+    @router.get("/jobs/latest", response_model=LatestJobResponse | None)
+    async def get_latest_job(network_name: str) -> LatestJobResponse | None:
+        """Return the latest persisted consultant job for a network, if present."""
+        return job_manager.latest_job(network_name)
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)

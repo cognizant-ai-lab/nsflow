@@ -177,19 +177,48 @@ class TestNetworkConsultantJobs:
         assert "Ignoring malformed results" in caplog.text
 
     @staticmethod
-    def test_pruning_removes_finished_files_and_job_record(tmp_path: Path) -> None:
-        """Remove a completed job from storage and memory as one lifecycle operation."""
+    def test_releasing_finished_job_preserves_its_files(tmp_path: Path) -> None:
+        """Release a completed in-memory job without deleting its persisted output."""
         manager, job, directory = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
-        unrelated_path = directory / "other-instance.log"
-        unrelated_path.write_text("owned elsewhere", encoding="utf-8")
 
-        asyncio.run(manager._prune_finished_jobs(directory))  # pylint: disable=protected-access
+        asyncio.run(manager._release_finished_jobs())  # pylint: disable=protected-access
 
         job.close.assert_awaited_once_with(manager.STOP_GRACE_PERIOD_SECONDS)
-        assert not (directory / "job-1.log").exists()
-        assert unrelated_path.is_file()
+        assert (directory / "job-1.log").read_text(encoding="utf-8") == "first\nsecond\n"
         with pytest.raises(JobNotFoundError):
             asyncio.run(manager.status("job-1"))
+
+    @staticmethod
+    def test_latest_job_and_results_survive_manager_restart(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Discover the latest persisted run and its results in a new manager."""
+        process = Mock(pid=123)
+        create_process = AsyncMock(return_value=process)
+        job = Mock(spec=ConsultantJob)
+        job.is_running.return_value = True
+        monkeypatch.setattr(consultant_job_manager_module.asyncio, "create_subprocess_exec", create_process)
+        monkeypatch.setattr(consultant_job_manager_module, "ConsultantJob", Mock(return_value=job))
+        manager = ConsultantJobManager(str(tmp_path))
+
+        job_id = asyncio.run(manager.start([], "basic/coffee", "session", "tests"))
+        directory = tmp_path / "logs" / "network_consultant_jobs"
+        (directory / f"{job_id}.results.json").write_text(
+            '{"coffee.hocon": {"passed": true}}',
+            encoding="utf-8",
+        )
+
+        restored_manager = ConsultantJobManager(str(tmp_path))
+        latest = restored_manager.latest_job("basic/coffee")
+        status = asyncio.run(restored_manager.status(job_id))
+
+        assert latest is not None
+        assert latest.job_id == job_id
+        assert latest.origin == "tests"
+        assert status.running is False
+        assert status.results[0].fixture == "coffee.hocon"
+        assert status.results[0].passed is True
 
     @staticmethod
     def test_shutdown_closes_jobs_and_clears_the_registry(tmp_path: Path) -> None:
