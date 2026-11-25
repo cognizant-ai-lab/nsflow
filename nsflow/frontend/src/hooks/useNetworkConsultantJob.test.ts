@@ -20,16 +20,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../utils/networkConsultantApi", () => ({
   answerConsultantJob: vi.fn(),
   describeError: (error: unknown) => (error instanceof Error ? error.message : "Unexpected error"),
-  getActiveConsultantJob: vi.fn(),
   getConsultantJob: vi.fn(),
   startConsultantJob: vi.fn(),
   stopConsultantJob: vi.fn(),
 }));
+vi.mock("../utils/activeConsultantJobApi", () => ({ getActiveConsultantJob: vi.fn() }));
 
 import { CONSULTANT_POLL_INTERVAL_MS, useNetworkConsultantJob } from "./useNetworkConsultantJob";
+import { getActiveConsultantJob } from "../utils/activeConsultantJobApi";
 import {
   answerConsultantJob,
-  getActiveConsultantJob,
   getConsultantJob,
   startConsultantJob,
   stopConsultantJob,

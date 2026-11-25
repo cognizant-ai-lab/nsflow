@@ -22,10 +22,10 @@ import type {
   ConsultantJobStatus,
   FixtureResult,
 } from "../types/networkConsultant";
+import { getActiveConsultantJob } from "../utils/activeConsultantJobApi";
 import {
   answerConsultantJob,
   describeError,
-  getActiveConsultantJob,
   getConsultantJob,
   startConsultantJob,
   stopConsultantJob,
