@@ -21,6 +21,7 @@ vi.mock("../utils/networkConsultantApi", () => ({
   answerConsultantJob: vi.fn(),
   describeError: (error: unknown) => (error instanceof Error ? error.message : "Unexpected error"),
   getConsultantJob: vi.fn(),
+  getConsultantJobLog: vi.fn(),
   startConsultantJob: vi.fn(),
   stopConsultantJob: vi.fn(),
 }));
@@ -31,11 +32,13 @@ import { getConsultantJobHistory } from "../utils/consultantJobHistoryApi";
 import {
   answerConsultantJob,
   getConsultantJob,
+  getConsultantJobLog,
   startConsultantJob,
   stopConsultantJob,
 } from "../utils/networkConsultantApi";
 
 const mockedGetJob = vi.mocked(getConsultantJob);
+const mockedGetJobLog = vi.mocked(getConsultantJobLog);
 const mockedGetJobHistory = vi.mocked(getConsultantJobHistory);
 const mockedStartJob = vi.mocked(startConsultantJob);
 const mockedAnswerJob = vi.mocked(answerConsultantJob);
@@ -64,6 +67,12 @@ describe("useNetworkConsultantJob", () => {
     vi.useFakeTimers();
     mockedStartJob.mockResolvedValue("job-1");
     mockedGetJobHistory.mockResolvedValue([]);
+    mockedGetJobLog.mockResolvedValue({
+      job_id: "job-1",
+      content: "",
+      start_offset: 0,
+      next_offset: 0,
+    });
   });
 
   afterEach(() => {
@@ -95,6 +104,45 @@ describe("useNetworkConsultantJob", () => {
     expect(result.current.loadingRunHistory).toBe(false);
 
     expect(mockedGetJob).toHaveBeenCalledWith("http://api", "restored-job");
+  });
+
+  it("restores and incrementally updates a running job log", async () => {
+    mockedGetJobHistory.mockResolvedValue([
+      runRecord("restored-job", "tests", "2026-11-25T18:00:00Z"),
+    ]);
+    mockedGetJob.mockResolvedValue({ job_id: "restored-job", running: true, returncode: null, results: [] });
+    mockedGetJobLog
+      .mockResolvedValueOnce({
+        job_id: "restored-job",
+        content: "saved line\n",
+        start_offset: 0,
+        next_offset: 11,
+      })
+      .mockResolvedValueOnce({
+        job_id: "restored-job",
+        content: "live line\n",
+        start_offset: 11,
+        next_offset: 21,
+      });
+
+    const { result } = renderHook(() =>
+      useNetworkConsultantJob({
+        apiUrl: "http://api",
+        networkName: "network-a",
+        sessionId: "session",
+        onFinished: vi.fn(),
+      }),
+    );
+
+    await act(async () => Promise.resolve());
+    expect(result.current.runLog).toBe("saved line\n");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS);
+    });
+
+    expect(mockedGetJobLog).toHaveBeenLastCalledWith("http://api", "restored-job", 11);
+    expect(result.current.runLog).toBe("saved line\nlive line\n");
   });
 
   it("restores a completed test run when the panel mounts", async () => {

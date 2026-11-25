@@ -71,6 +71,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     pollingStopped,
     runHistory,
     loadingRunHistory,
+    runLog,
     start,
     submitAnswer,
     stop,
@@ -130,6 +131,7 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       failures={failures}
       progress={progress}
       running={running}
+      runLog={runLog}
     />
   );
 

@@ -29,6 +29,12 @@ vi.mock("../utils/networkConsultantApi", () => ({
   describeError: (error: unknown) => (error instanceof Error ? error.message : "Unexpected error"),
   describeErrors: (error: unknown) => [error instanceof Error ? error.message : "Unexpected error"],
   getConsultantJob: vi.fn(),
+  getConsultantJobLog: vi.fn().mockResolvedValue({
+    job_id: "job-1",
+    content: "",
+    start_offset: 0,
+    next_offset: 0,
+  }),
   listConsultantFixtures: vi.fn(),
   listSlyDataKeys: vi.fn(),
   saveConsultantFixture: vi.fn(),

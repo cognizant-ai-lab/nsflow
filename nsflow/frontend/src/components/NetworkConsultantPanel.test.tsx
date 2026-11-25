@@ -57,6 +57,7 @@ describe("NetworkConsultantPanel", () => {
       pollingStopped,
       runHistory: [],
       loadingRunHistory: false,
+      runLog: "",
       start,
       submitAnswer: vi.fn(),
       stop: vi.fn(),

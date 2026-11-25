@@ -19,11 +19,13 @@ import { Box, Chip, CircularProgress, Paper, Typography, alpha, useTheme } from 
 
 import type { ConsultantProgressEntry, FixtureResult } from "../../types/networkConsultant";
 import ConsultantProgressChart from "./ConsultantProgressChart";
+import ConsultantRunLog from "./ConsultantRunLog";
 
 interface NetworkConsultantOutputProps {
   failures: FixtureResult[];
   progress: ConsultantProgressEntry[];
   running: boolean;
+  runLog?: string;
 }
 
 const failureSummary = (message?: string | null): string => {
@@ -33,7 +35,7 @@ const failureSummary = (message?: string | null): string => {
   return lines.find((line) => line && !/^False is not true/i.test(line)) ?? "";
 };
 
-const NetworkConsultantOutput = ({ failures, progress, running }: NetworkConsultantOutputProps) => {
+const NetworkConsultantOutput = ({ failures, progress, running, runLog = "" }: NetworkConsultantOutputProps) => {
   const theme = useTheme();
   const [openFailure, setOpenFailure] = useState<string | null>(null);
   const soleFailure = failures.length === 1 ? failures[0].fixture : null;
@@ -153,6 +155,7 @@ const NetworkConsultantOutput = ({ failures, progress, running }: NetworkConsult
           </>
         )}
       </Paper>
+      <ConsultantRunLog content={runLog} />
     </>
   );
 };

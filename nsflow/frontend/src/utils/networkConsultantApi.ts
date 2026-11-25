@@ -32,6 +32,13 @@ export class ConsultantApiError extends Error {
   }
 }
 
+export interface ConsultantJobLogChunk {
+  job_id: string;
+  content: string;
+  start_offset: number;
+  next_offset: number;
+}
+
 export const describeErrors = (error: unknown): string[] =>
   error instanceof ConsultantApiError ? error.messages : [describeError(error)];
 
@@ -122,6 +129,19 @@ export const getConsultantJob = async (
 ): Promise<ConsultantJobStatus> => {
   const rawResponse = await fetch(consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}`));
   const response = await expectSuccess(rawResponse, `Status check failed (${rawResponse.status})`);
+  return response.json();
+};
+
+export const getConsultantJobLog = async (
+  apiUrl: string,
+  jobId: string,
+  offset = 0,
+): Promise<ConsultantJobLogChunk> => {
+  const query = new URLSearchParams({ offset: String(offset) });
+  const rawResponse = await fetch(
+    `${consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}/log`)}?${query}`,
+  );
+  const response = await expectSuccess(rawResponse, `Log check failed (${rawResponse.status})`);
   return response.json();
 };
 
