@@ -67,7 +67,6 @@ class FixtureRepository:
     CLASS_REFERENCE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r'(?:(?:"class"\s*:)|(?:class\s*=))\s*"([^"]+)"')
     SLY_DATA_GET_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\.get\(\s*[\"']([^\"']+)[\"']")
     SLY_DATA_ITEM_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\[\s*[\"']([^\"']+)[\"']\s*\]")
-    FIXTURE_NAME_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_.-]+\.hocon")
     NETWORK_NAME_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+(?:\.hocon)?")
 
     def __init__(self, project_root: str) -> None:
@@ -96,7 +95,7 @@ class FixtureRepository:
         fixture_directory = self._fixtures_directory(network_name)
         fixture_directory.mkdir(parents=True, exist_ok=True)
         safe_name = self.safe_fixture_file_name(fixture_name)
-        output_path = fixture_directory / safe_name
+        output_path = self._fixture_path(fixture_directory, safe_name)
         # A create or rename must never replace a different fixture that already has this name.
         if output_path.exists() and (
             not context
@@ -127,7 +126,7 @@ class FixtureRepository:
     def delete(self, network_name: str, fixture_name: str) -> str:
         """Delete a fixture and return its safe filename."""
         safe_name = self.safe_fixture_file_name(fixture_name)
-        path = self._fixtures_directory(network_name) / safe_name
+        path = self._fixture_path(self._fixtures_directory(network_name), safe_name)
         if not path.is_file():
             raise FixtureNotFoundError(safe_name)
         path.unlink()
@@ -164,14 +163,11 @@ class FixtureRepository:
             raise FileNotFoundError(self.network_hocon_file(network_name))
         return path.relative_to((self.project_root / "registries").resolve()).as_posix()
 
-    @classmethod
-    def safe_fixture_file_name(cls, fixture_name: str) -> str:
+    @staticmethod
+    def safe_fixture_file_name(fixture_name: str) -> str:
         """Return a fixture basename that cannot contain a path separator."""
         suffixed_name = fixture_name if fixture_name.endswith(".hocon") else f"{fixture_name}.hocon"
-        safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", suffixed_name)
-        if cls.FIXTURE_NAME_PATTERN.fullmatch(safe_name) is None:
-            raise ValueError(f"Invalid fixture name: {fixture_name}")
-        return safe_name
+        return "".join(character if character.isalnum() or character in "._-" else "_" for character in suffixed_name)
 
     @classmethod
     def validate_fixture(cls, fixture: dict[str, Any]) -> list[str]:
@@ -237,6 +233,15 @@ class FixtureRepository:
         if resolved_path != resolved_root and resolved_root not in resolved_path.parents:
             raise InvalidNetworkNameError(relative_path)
         return resolved_path
+
+    @staticmethod
+    def _fixture_path(fixture_directory: Path, fixture_name: str) -> Path:
+        """Return a normalized fixture path contained beneath its directory."""
+        safe_root = os.path.realpath(fixture_directory)
+        safe_path = os.path.realpath(os.path.join(safe_root, fixture_name))
+        if not safe_path.startswith(f"{safe_root}{os.sep}"):
+            raise InvalidNetworkNameError(fixture_name)
+        return Path(safe_path)
 
     @staticmethod
     def _load_fixture(path: Path) -> Fixture:
@@ -323,6 +328,6 @@ class FixtureRepository:
         if not original_fixture_name:
             return
         original_safe_name = cls.safe_fixture_file_name(original_fixture_name)
-        original_path = fixture_directory / original_safe_name
+        original_path = cls._fixture_path(fixture_directory, original_safe_name)
         if original_safe_name != current_safe_name and original_path.is_file():
             original_path.unlink()
