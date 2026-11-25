@@ -48,6 +48,15 @@ export interface ConsultantFixture {
   parse_error: string | null;
 }
 
+export interface ConsultantProgressEntry {
+  check?: number | null;
+  checkpoint: "before" | "after" | "generated" | "iteration";
+  improvement_iteration?: number | null;
+  passed: number;
+  total: number;
+  segments?: number[] | null;
+}
+
 export interface ConsultantJobStatus {
   job_id: string;
   running: boolean;
@@ -55,6 +64,6 @@ export interface ConsultantJobStatus {
   pending_question?: string | null;
   tool_issues?: string[];
   ungrounded?: string[];
-  progress_chart?: string | null;
+  progress?: ConsultantProgressEntry[];
   results?: FixtureResult[];
 }

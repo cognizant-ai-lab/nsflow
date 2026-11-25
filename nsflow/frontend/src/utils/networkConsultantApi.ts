@@ -119,10 +119,8 @@ export const startConsultantJob = async (
 export const getConsultantJob = async (
   apiUrl: string,
   jobId: string,
-  themeMode: string,
 ): Promise<ConsultantJobStatus> => {
-  const query = new URLSearchParams({ theme: themeMode });
-  const rawResponse = await fetch(`${consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}`)}?${query}`);
+  const rawResponse = await fetch(consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}`));
   const response = await expectSuccess(rawResponse, `Status check failed (${rawResponse.status})`);
   return response.json();
 };

@@ -19,6 +19,7 @@
 from pydantic import BaseModel
 from pydantic import Field
 
+from nsflow.backend.models.network_consultant.consultant_progress_entry import ConsultantProgressEntry
 from nsflow.backend.models.network_consultant.fixture_result import FixtureResult
 
 
@@ -44,10 +45,9 @@ class JobStatusResponse(BaseModel):
         "because something it depends on returns no data. Not an agent defect and not a broken tool -- "
         "no instruction rewrite can satisfy one, so they need a data source wired up or the criteria removed.",
     )
-    progress_chart: str | None = Field(
-        default=None,
-        description="A data:image/png;base64 URI for the tests-passing chart, or None before the first test "
-        "checkpoint completes.",
+    progress: list[ConsultantProgressEntry] = Field(
+        default_factory=list,
+        description="Validated test checkpoints used by the frontend to render live progress.",
     )
     results: list[FixtureResult] = Field(
         default_factory=list,
