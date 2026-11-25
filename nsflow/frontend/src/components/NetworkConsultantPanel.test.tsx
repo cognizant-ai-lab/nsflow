@@ -55,10 +55,13 @@ describe("NetworkConsultantPanel", () => {
       submittingAnswer: false,
       stopping: false,
       pollingStopped,
+      runHistory: [],
+      loadingRunHistory: false,
       start,
       submitAnswer: vi.fn(),
       stop: vi.fn(),
       retryPolling,
+      selectRun: vi.fn(),
     }));
   });
 

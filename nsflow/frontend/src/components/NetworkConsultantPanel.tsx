@@ -34,6 +34,7 @@ import type { ConsultantEndpoint, ConsultantJobOrigin, FixtureResult } from "../
 import ConsultantControls from "./networkConsultant/ConsultantControls";
 import type { TestLevel } from "./networkConsultant/ConsultantControls";
 import ConsultantJobMessages from "./networkConsultant/ConsultantJobMessages";
+import ConsultantRunSelector from "./networkConsultant/ConsultantRunSelector";
 import NetworkConsultantOutput from "./networkConsultant/NetworkConsultantOutput";
 import TestFixturesDialog from "./TestFixturesDialog";
 
@@ -68,10 +69,13 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
     submittingAnswer,
     stopping,
     pollingStopped,
+    runHistory,
+    loadingRunHistory,
     start,
     submitAnswer,
     stop,
     retryPolling,
+    selectRun,
   } = useNetworkConsultantJob({
     apiUrl,
     networkName: selectedNetwork,
@@ -162,6 +166,13 @@ const NetworkConsultantPanel = ({ selectedNetwork }: { selectedNetwork: string }
       )}
 
       <Box sx={{ overflowY: "auto", flexGrow: 1 }}>
+        <ConsultantRunSelector
+          runs={runHistory}
+          selectedJobId={jobId}
+          disabled={busy || loadingRunHistory}
+          onSelect={(selectedJobId) => void selectRun(selectedJobId)}
+        />
+
         <ConsultantJobMessages
           pendingQuestion={pendingQuestion}
           answerText={answerText}

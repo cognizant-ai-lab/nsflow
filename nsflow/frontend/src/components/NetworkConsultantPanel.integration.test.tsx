@@ -22,6 +22,7 @@ vi.mock("../context/ChatContext", () => ({ useChatContext: () => ({ sessionId: "
 vi.mock("../hooks/useConsultantFixtures", () => ({
   useConsultantFixtures: () => ({ fixtureNames: ["coffee.hocon"], fixtureError: null, refresh: vi.fn() }),
 }));
+vi.mock("../utils/consultantJobHistoryApi", () => ({ getConsultantJobHistory: vi.fn().mockResolvedValue([]) }));
 vi.mock("../utils/networkConsultantApi", () => ({
   answerConsultantJob: vi.fn(),
   deleteConsultantFixture: vi.fn(),
