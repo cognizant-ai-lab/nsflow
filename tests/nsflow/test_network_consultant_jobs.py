@@ -55,8 +55,33 @@ class TestNetworkConsultantJobs:
         job.wait = AsyncMock(return_value=0)
         job.stop = AsyncMock(return_value=returncode is None)
         job.close = AsyncMock()
-        manager.register("job-1", job)
+        manager.register("job-1", job, "basic/coffee", "improve")
         return manager, job, log_directory
+
+    @staticmethod
+    def test_active_job_returns_a_running_job(tmp_path: Path) -> None:
+        """Return the active job and the action that started it."""
+        manager, _, _ = TestNetworkConsultantJobs.configured_manager(tmp_path)
+
+        active_job = manager.active_job("basic/coffee")
+
+        assert active_job is not None
+        assert active_job.job_id == "job-1"
+        assert active_job.origin == "improve"
+
+    @staticmethod
+    def test_active_job_ignores_a_finished_job(tmp_path: Path) -> None:
+        """Do not restore a completed job that still owns its network entry."""
+        manager, _, _ = TestNetworkConsultantJobs.configured_manager(tmp_path, returncode=0)
+
+        assert manager.active_job("basic/coffee") is None
+
+    @staticmethod
+    def test_active_job_returns_none_for_an_unknown_network(tmp_path: Path) -> None:
+        """Return no job when a network has never started one."""
+        manager = ConsultantJobManager(str(tmp_path))
+
+        assert manager.active_job("basic/missing") is None
 
     @staticmethod
     def test_status_reads_results_and_sidecar_files(tmp_path: Path) -> None:
@@ -218,7 +243,14 @@ class TestNetworkConsultantJobs:
         monkeypatch.setattr(consultant_job_manager_module, "ConsultantJob", Mock())
 
         manager = ConsultantJobManager(str(tmp_path))
-        asyncio.run(manager.start(["--hocon-file", "basic/coffee.hocon"], "basic/coffee", "session"))
+        asyncio.run(
+            manager.start(
+                ["--hocon-file", "basic/coffee.hocon"],
+                "basic/coffee",
+                "session",
+                "tests",
+            )
+        )
 
         command = create_process.await_args.args
         options = create_process.await_args.kwargs
@@ -242,8 +274,8 @@ class TestNetworkConsultantJobs:
         monkeypatch.setattr(consultant_job_manager_module, "ConsultantJob", Mock(return_value=job))
         manager = ConsultantJobManager(str(tmp_path))
 
-        asyncio.run(manager.start([], "basic/coffee", "session"))
+        asyncio.run(manager.start([], "basic/coffee", "session", "improve"))
         with pytest.raises(JobStateError):
-            asyncio.run(manager.start([], "basic/coffee", "reloaded-session"))
+            asyncio.run(manager.start([], "basic/coffee", "reloaded-session", "improve"))
 
         assert create_process.await_count == 1

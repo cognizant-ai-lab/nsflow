@@ -23,6 +23,8 @@ from typing import Literal
 from fastapi import APIRouter
 from fastapi import HTTPException
 
+from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
+from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
 from nsflow.backend.models.network_consultant.answer_job_request import AnswerJobRequest
 from nsflow.backend.models.network_consultant.fixture_delete_response import FixtureDeleteResponse
 from nsflow.backend.models.network_consultant.fixture_save_request import FixtureSaveRequest
@@ -127,10 +129,15 @@ class NetworkConsultantEndpoints:
         return FixtureDeleteResponse(message=f"Deleted {safe_name}.")
 
     @staticmethod
-    async def _start_job(args: list[str], agent_name: str, session_id: str) -> JobStartResponse:
+    async def _start_job(
+        args: list[str],
+        agent_name: str,
+        session_id: str,
+        origin: ConsultantJobOrigin,
+    ) -> JobStartResponse:
         """Start a consultant job and translate process startup failures to HTTP errors."""
         try:
-            job_id = await job_manager.start(args, agent_name, session_id)
+            job_id = await job_manager.start(args, agent_name, session_id, origin)
         except JobStateError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
         except OSError as error:
@@ -157,6 +164,7 @@ class NetworkConsultantEndpoints:
             ],
             agent_name=request.network_name,
             session_id=request.session_id,
+            origin="generate",
         )
 
     @staticmethod
@@ -176,6 +184,7 @@ class NetworkConsultantEndpoints:
             ],
             agent_name=request.network_name,
             session_id=request.session_id,
+            origin="tests",
         )
 
     @staticmethod
@@ -197,7 +206,14 @@ class NetworkConsultantEndpoints:
             ],
             agent_name=request.network_name,
             session_id=request.session_id,
+            origin="improve",
         )
+
+    @staticmethod
+    @router.get("/jobs/active", response_model=ActiveJobResponse | None)
+    async def get_active_job(network_name: str) -> ActiveJobResponse | None:
+        """Return the running consultant job for a network, if present."""
+        return job_manager.active_job(network_name)
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
