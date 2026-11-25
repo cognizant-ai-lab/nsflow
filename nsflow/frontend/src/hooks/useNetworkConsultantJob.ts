@@ -25,6 +25,7 @@ import type {
 import {
   answerConsultantJob,
   describeError,
+  getActiveConsultantJob,
   getConsultantJob,
   startConsultantJob,
   stopConsultantJob,
@@ -155,8 +156,32 @@ export const useNetworkConsultantJob = ({
     setSubmittingAnswer(false);
     setStopping(false);
     setPollingStopped(false);
-    if (trackedJob) beginPolling(trackedJob.id, networkName);
-  }, [beginPolling, networkName, stopPolling]);
+    if (trackedJob) {
+      beginPolling(trackedJob.id, networkName);
+      return;
+    }
+
+    const restoreGeneration = pollGenerationRef.current;
+    const restoreActiveJob = async () => {
+      try {
+        const activeJob = await getActiveConsultantJob(apiUrl, networkName);
+        const isCurrentNetwork =
+          restoreGeneration === pollGenerationRef.current && networkName === networkRef.current;
+        if (!activeJob || !isCurrentNetwork) return;
+        jobsByNetworkRef.current.set(networkName, { id: activeJob.job_id, origin: activeJob.origin });
+        busyRef.current = true;
+        setJobId(activeJob.job_id);
+        setJobOrigin(activeJob.origin);
+        setRunning(true);
+        beginPolling(activeJob.job_id, networkName);
+      } catch (restoreError: unknown) {
+        if (restoreGeneration === pollGenerationRef.current && networkName === networkRef.current) {
+          setError(describeError(restoreError));
+        }
+      }
+    };
+    void restoreActiveJob();
+  }, [apiUrl, beginPolling, networkName, stopPolling]);
 
   useEffect(() => stopPolling, [stopPolling]);
 

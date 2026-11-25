@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../utils/networkConsultantApi", () => ({
   answerConsultantJob: vi.fn(),
   describeError: (error: unknown) => (error instanceof Error ? error.message : "Unexpected error"),
+  getActiveConsultantJob: vi.fn(),
   getConsultantJob: vi.fn(),
   startConsultantJob: vi.fn(),
   stopConsultantJob: vi.fn(),
@@ -28,12 +29,14 @@ vi.mock("../utils/networkConsultantApi", () => ({
 import { CONSULTANT_POLL_INTERVAL_MS, useNetworkConsultantJob } from "./useNetworkConsultantJob";
 import {
   answerConsultantJob,
+  getActiveConsultantJob,
   getConsultantJob,
   startConsultantJob,
   stopConsultantJob,
 } from "../utils/networkConsultantApi";
 
 const mockedGetJob = vi.mocked(getConsultantJob);
+const mockedGetActiveJob = vi.mocked(getActiveConsultantJob);
 const mockedStartJob = vi.mocked(startConsultantJob);
 const mockedAnswerJob = vi.mocked(answerConsultantJob);
 const mockedStopJob = vi.mocked(stopConsultantJob);
@@ -52,11 +55,63 @@ describe("useNetworkConsultantJob", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockedStartJob.mockResolvedValue("job-1");
+    mockedGetActiveJob.mockResolvedValue(null);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+  });
+
+  it("restores a running job when the panel mounts", async () => {
+    mockedGetActiveJob.mockResolvedValue({ job_id: "restored-job", origin: "improve" });
+    mockedGetJob.mockResolvedValue({ job_id: "restored-job", running: true, returncode: null, results: [] });
+
+    const { result } = renderHook(() =>
+      useNetworkConsultantJob({
+        apiUrl: "http://api",
+        networkName: "network-a",
+        sessionId: "session",
+        themeMode: "light",
+        onFinished: vi.fn(),
+      }),
+    );
+
+    await act(async () => Promise.resolve());
+
+    expect(mockedGetActiveJob).toHaveBeenCalledWith("http://api", "network-a");
+    expect(result.current.jobId).toBe("restored-job");
+    expect(result.current.jobOrigin).toBe("improve");
+    expect(result.current.running).toBe(true);
+
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
+    expect(mockedGetJob).toHaveBeenCalledWith("http://api", "restored-job", "light");
+  });
+
+  it("ignores an active-job response after the selected network changes", async () => {
+    const activeJob = deferred<Awaited<ReturnType<typeof getActiveConsultantJob>>>();
+    mockedGetActiveJob.mockReturnValueOnce(activeJob.promise).mockResolvedValueOnce(null);
+    const { result, rerender } = renderHook(
+      ({ networkName }) =>
+        useNetworkConsultantJob({
+          apiUrl: "http://api",
+          networkName,
+          sessionId: "session",
+          themeMode: "light",
+          onFinished: vi.fn(),
+        }),
+      { initialProps: { networkName: "network-a" } },
+    );
+
+    rerender({ networkName: "network-b" });
+    await act(async () => {
+      activeJob.resolve({ job_id: "old-job", origin: "tests" });
+      await Promise.resolve();
+    });
+
+    expect(result.current.jobId).toBeNull();
+    expect(result.current.running).toBe(false);
+    expect(mockedGetJob).not.toHaveBeenCalled();
   });
 
   it("ignores an old job response after the selected network changes", async () => {

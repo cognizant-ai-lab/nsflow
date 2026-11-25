@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import type {
+  ActiveConsultantJob,
   ConsultantEndpoint,
   ConsultantFixture,
   ConsultantJobStatus,
@@ -124,6 +125,15 @@ export const getConsultantJob = async (
   const query = new URLSearchParams({ theme: themeMode });
   const rawResponse = await fetch(`${consultantUrl(apiUrl, `jobs/${encodeURIComponent(jobId)}`)}?${query}`);
   const response = await expectSuccess(rawResponse, `Status check failed (${rawResponse.status})`);
+  return response.json();
+};
+
+export const getActiveConsultantJob = async (
+  apiUrl: string,
+  networkName: string,
+): Promise<ActiveConsultantJob | null> => {
+  const query = new URLSearchParams({ network_name: networkName });
+  const response = await expectSuccess(await fetch(`${consultantUrl(apiUrl, "jobs/active")}?${query}`));
   return response.json();
 };
 

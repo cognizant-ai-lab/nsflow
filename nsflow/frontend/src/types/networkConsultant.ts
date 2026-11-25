@@ -17,6 +17,11 @@ limitations under the License.
 export type ConsultantJobOrigin = "tests" | "generate" | "improve";
 export type ConsultantEndpoint = "run-tests" | "generate-tests" | "improve";
 
+export interface ActiveConsultantJob {
+  job_id: string;
+  origin: ConsultantJobOrigin;
+}
+
 export interface FixtureResult {
   fixture: string;
   passed: boolean;
