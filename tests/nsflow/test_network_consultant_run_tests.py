@@ -58,8 +58,9 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
 
         with (
             patch.object(NetworkConsultantEndpoints, "_start_job", fake_start_job),
-            patch(
-                "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.existing_network_hocon_file",
+            patch.object(
+                NetworkConsultantEndpoints.fixture_repository(),
+                "existing_network_hocon_file",
                 side_effect=FixtureRepository.network_hocon_file,
             ),
         ):
@@ -140,8 +141,9 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
 
     def test_duplicate_running_job_returns_conflict(self) -> None:
         """Translate the manager's single-owner guard into an HTTP conflict response."""
-        with patch(
-            "nsflow.backend.api.v1.network_consultant_endpoints.job_manager.start",
+        with patch.object(
+            NetworkConsultantEndpoints.job_manager(),
+            "start",
             side_effect=JobStateError("already running"),
         ):
             with self.assertRaises(HTTPException) as context:
@@ -155,8 +157,9 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
 
     def test_missing_network_returns_not_found(self) -> None:
         """Reject a job request when its registry HOCON does not exist."""
-        with patch(
-            "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.existing_network_hocon_file",
+        with patch.object(
+            NetworkConsultantEndpoints.fixture_repository(),
+            "existing_network_hocon_file",
             side_effect=FileNotFoundError("basic/missing.hocon"),
         ):
             with self.assertRaises(HTTPException) as context:
@@ -166,8 +169,9 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
 
     def test_unsafe_network_returns_bad_request(self) -> None:
         """Reject a job request whose network path escapes the registry directory."""
-        with patch(
-            "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.existing_network_hocon_file",
+        with patch.object(
+            NetworkConsultantEndpoints.fixture_repository(),
+            "existing_network_hocon_file",
             side_effect=InvalidNetworkNameError("../outside"),
         ):
             with self.assertRaises(HTTPException) as context:
@@ -177,8 +181,9 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
 
     def test_taken_fixture_name_returns_conflict(self) -> None:
         """Return an HTTP conflict instead of overwriting another fixture."""
-        with patch(
-            "nsflow.backend.api.v1.network_consultant_endpoints.fixture_repository.save",
+        with patch.object(
+            NetworkConsultantEndpoints.fixture_repository(),
+            "save",
             side_effect=FileExistsError("A test named existing.hocon already exists."),
         ):
             with self.assertRaises(HTTPException) as context:
