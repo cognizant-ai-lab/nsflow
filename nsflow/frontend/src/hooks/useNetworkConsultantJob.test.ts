@@ -21,18 +21,18 @@ vi.mock("../utils/networkConsultantApi", () => ({
   answerConsultantJob: vi.fn(),
   describeError: (error: unknown) => (error instanceof Error ? error.message : "Unexpected error"),
   getConsultantJob: vi.fn(),
-  getConsultantJobLog: vi.fn(),
   startConsultantJob: vi.fn(),
   stopConsultantJob: vi.fn(),
 }));
 vi.mock("../utils/consultantJobHistoryApi", () => ({ getConsultantJobHistory: vi.fn() }));
+vi.mock("../utils/consultantJobLogApi", () => ({ getConsultantJobLog: vi.fn() }));
 
 import { CONSULTANT_POLL_INTERVAL_MS, useNetworkConsultantJob } from "./useNetworkConsultantJob";
 import { getConsultantJobHistory } from "../utils/consultantJobHistoryApi";
+import { getConsultantJobLog } from "../utils/consultantJobLogApi";
 import {
   answerConsultantJob,
   getConsultantJob,
-  getConsultantJobLog,
   startConsultantJob,
   stopConsultantJob,
 } from "../utils/networkConsultantApi";

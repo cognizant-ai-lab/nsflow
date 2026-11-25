@@ -25,15 +25,15 @@ import type {
 } from "../types/networkConsultant";
 import { getConsultantJobHistory } from "../utils/consultantJobHistoryApi";
 import type { ConsultantJobRecord } from "../utils/consultantJobHistoryApi";
+import { getConsultantJobLog } from "../utils/consultantJobLogApi";
+import type { ConsultantJobLogChunk } from "../utils/consultantJobLogApi";
 import {
   answerConsultantJob,
   describeError,
   getConsultantJob,
-  getConsultantJobLog,
   startConsultantJob,
   stopConsultantJob,
 } from "../utils/networkConsultantApi";
-import type { ConsultantJobLogChunk } from "../utils/networkConsultantApi";
 
 export const CONSULTANT_POLL_INTERVAL_MS = 2000;
 export const CONSULTANT_POLL_MAX_CONSECUTIVE_FAILURES = 3;
