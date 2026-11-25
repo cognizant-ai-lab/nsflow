@@ -23,6 +23,8 @@ import os
 import sys
 import tempfile
 import uuid
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -30,9 +32,11 @@ from pydantic import ValidationError
 
 from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
 from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
+from nsflow.backend.models.network_consultant.consultant_job_metadata import ConsultantJobMetadata
 from nsflow.backend.models.network_consultant.consultant_progress_entry import ConsultantProgressEntry
 from nsflow.backend.models.network_consultant.fixture_result import FixtureResult
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
+from nsflow.backend.models.network_consultant.latest_job_response import LatestJobResponse
 from nsflow.backend.utils.consultant_job import ConsultantJob
 from nsflow.backend.utils.job_not_found_error import JobNotFoundError
 from nsflow.backend.utils.job_state_error import JobStateError
@@ -45,7 +49,11 @@ class ConsultantJobManager:
 
     STOP_GRACE_PERIOD_SECONDS = 5
     RESULT_FIELDS: ClassVar[set[str]] = {"passed", "message", "infrastructure_error"}
-    SIDECAR_EXTENSIONS: ClassVar[dict[str, str]] = {"progress": "jsonl", "results": "json"}
+    SIDECAR_EXTENSIONS: ClassVar[dict[str, str]] = {
+        "metadata": "json",
+        "progress": "jsonl",
+        "results": "json",
+    }
 
     def __init__(self, project_root: str) -> None:
         """Create a manager for consultant jobs in one target project."""
@@ -65,30 +73,40 @@ class ConsultantJobManager:
         """Start a job and return its generated identifier."""
         async with self._start_lock:
             job_id = uuid.uuid4().hex
-            log_directory = self._project_root / "logs" / "network_consultant_jobs"
+            log_directory = self._log_directory()
             log_directory.mkdir(parents=True, exist_ok=True)
-            await self._prune_finished_jobs(log_directory)
+            await self._release_finished_jobs()
             owner = agent_name
             active_job_id = self._job_owners.get(owner)
             if active_job_id is not None:
                 raise JobStateError(f"Job '{active_job_id}' is already running for this network.")
             log_path = log_directory / f"{job_id}.log"
-
-            with log_path.open("wb") as log_file:
-                process = await asyncio.create_subprocess_exec(
-                    sys.executable,
-                    "-u",
-                    "-m",
-                    "neuro_san_studio",
-                    "consultant",
-                    *args,
-                    cwd=self._project_root,
-                    stdout=log_file,
-                    stderr=asyncio.subprocess.STDOUT,
-                    env={**os.environ, "NSFLOW_JOB_ID": job_id, "NSFLOW_JOB_DIR": str(log_directory)},
-                    # Give the job its own process group, so Stop also reaches studio's worker process.
-                    start_new_session=True,
-                )
+            metadata = ConsultantJobMetadata(
+                job_id=job_id,
+                network_name=agent_name,
+                origin=origin,
+                started_at=datetime.now(UTC),
+            )
+            self._write_metadata(metadata)
+            try:
+                with log_path.open("wb") as log_file:
+                    process = await asyncio.create_subprocess_exec(
+                        sys.executable,
+                        "-u",
+                        "-m",
+                        "neuro_san_studio",
+                        "consultant",
+                        *args,
+                        cwd=self._project_root,
+                        stdout=log_file,
+                        stderr=asyncio.subprocess.STDOUT,
+                        env={**os.environ, "NSFLOW_JOB_ID": job_id, "NSFLOW_JOB_DIR": str(log_directory)},
+                        # Give the job its own process group, so Stop also reaches studio's worker process.
+                        start_new_session=True,
+                    )
+            except OSError:
+                self._remove_job_files(job_id)
+                raise
 
             self.register(job_id, ConsultantJob(process, log_path, agent_name, session_id), owner, origin)
         logger.info("Started network_consultant job %s (pid=%s): %s", job_id, process.pid, args)
@@ -119,20 +137,38 @@ class ConsultantJobManager:
             return None
         return ActiveJobResponse(job_id=job_id, origin=origin)
 
+    def latest_job(self, agent_name: str) -> LatestJobResponse | None:
+        """Return the latest persisted job for a network, if one exists."""
+        metadata = [
+            recorded
+            for path in self._log_directory().glob("*.metadata.json")
+            if (recorded := self._read_metadata_path(path)) is not None and recorded.network_name == agent_name
+        ]
+        if not metadata:
+            return None
+        latest = max(metadata, key=lambda recorded: recorded.started_at)
+        return LatestJobResponse(job_id=latest.job_id, origin=latest.origin)
+
     async def status(self, job_id: str) -> JobStatusResponse:
         """Build a status response from process state and its sidecar files."""
-        job = self._job(job_id)
-        log_path = job.log_path()
-        progress = self._read_progress(job_id, log_path.parent)
+        job = self._jobs.get(job_id)
+        metadata = self._read_metadata(job_id)
+        if job is None and metadata is None:
+            raise JobNotFoundError(job_id)
+        running = job.is_running() if job is not None else False
+        returncode = job.exit_code() if job is not None else metadata.returncode
+        if metadata is not None and returncode is not None and metadata.returncode != returncode:
+            self._write_metadata(metadata.model_copy(update={"returncode": returncode}))
+        log_directory = self._log_directory()
         return JobStatusResponse(
             job_id=job_id,
-            running=job.is_running(),
-            returncode=job.exit_code(),
-            pending_question=self._read_optional_text(job_id, log_path.parent, "question"),
-            tool_issues=self._read_lines(job_id, log_path.parent, "tool_issues"),
-            ungrounded=self._read_lines(job_id, log_path.parent, "ungrounded"),
-            progress=progress,
-            results=self._read_results(job_id, log_path.parent),
+            running=running,
+            returncode=returncode,
+            pending_question=self._read_optional_text(job_id, log_directory, "question"),
+            tool_issues=self._read_lines(job_id, log_directory, "tool_issues"),
+            ungrounded=self._read_lines(job_id, log_directory, "ungrounded"),
+            progress=self._read_progress(job_id, log_directory),
+            results=self._read_results(job_id, log_directory),
         )
 
     def answer(self, job_id: str, answer: str) -> None:
@@ -162,10 +198,11 @@ class ConsultantJobManager:
 
     async def shutdown(self) -> None:
         """Stop every registered job and release all manager-owned background work."""
-        jobs = list(self._jobs.values())
-        for job in jobs:
+        jobs = list(self._jobs.items())
+        for job_id, job in jobs:
             try:
                 await job.close(self.STOP_GRACE_PERIOD_SECONDS)
+                self._record_returncode(job_id, job)
             except (OSError, RuntimeError) as error:
                 logger.error("Could not close a Network Consultant job: %s", error)
         self._jobs.clear()
@@ -179,16 +216,16 @@ class ConsultantJobManager:
             raise JobNotFoundError(job_id)
         return job
 
-    async def _prune_finished_jobs(self, log_directory: Path) -> None:
-        """Remove completed records and artifacts owned by this manager."""
+    async def _release_finished_jobs(self) -> None:
+        """Release completed in-memory jobs while retaining their artifacts."""
         finished_job_ids: list[str] = []
         for job_id, job in self._jobs.items():
             if not job.is_running():
                 try:
                     await job.close(self.STOP_GRACE_PERIOD_SECONDS)
+                    self._record_returncode(job_id, job)
                 except (OSError, RuntimeError) as error:
-                    # Cleanup is a lifecycle boundary: one failed log task must not retain every completed job.
-                    logger.warning("Could not finish cleanup for Network Consultant job %s: %s", job_id, error)
+                    logger.warning("Could not release Network Consultant job %s: %s", job_id, error)
                 finished_job_ids.append(job_id)
         for job_id in finished_job_ids:
             self._jobs.pop(job_id, None)
@@ -196,12 +233,62 @@ class ConsultantJobManager:
         self._job_owners = {
             owner: job_id for owner, job_id in self._job_owners.items() if job_id not in finished_job_ids
         }
-        for job_id in finished_job_ids:
-            for path in log_directory.glob(f"{job_id}.*"):
-                try:
-                    path.unlink()
-                except OSError as error:
-                    logger.warning("Could not remove job file %s: %s", path.name, error)
+
+    def _record_returncode(self, job_id: str, job: ConsultantJob) -> None:
+        """Persist a completed job's return code when metadata is available."""
+        metadata = self._read_metadata(job_id)
+        returncode = job.exit_code()
+        if metadata is not None and returncode is not None and metadata.returncode != returncode:
+            self._write_metadata(metadata.model_copy(update={"returncode": returncode}))
+
+    def _log_directory(self) -> Path:
+        """Return the persistent Network Consultant job directory."""
+        return self._project_root / "logs" / "network_consultant_jobs"
+
+    def _write_metadata(self, metadata: ConsultantJobMetadata) -> None:
+        """Atomically persist metadata used to restore a job after restart."""
+        directory = self._log_directory()
+        directory.mkdir(parents=True, exist_ok=True)
+        self._write_text_atomically(
+            self._sidecar_path(metadata.job_id, directory, "metadata"),
+            metadata.model_dump_json(indent=2),
+        )
+
+    def _read_metadata(self, job_id: str) -> ConsultantJobMetadata | None:
+        """Read one persisted job record."""
+        return self._read_metadata_path(self._sidecar_path(job_id, self._log_directory(), "metadata"))
+
+    @staticmethod
+    def _read_metadata_path(path: Path) -> ConsultantJobMetadata | None:
+        """Read and validate a persisted job record without failing discovery."""
+        try:
+            return ConsultantJobMetadata.model_validate_json(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeError, ValidationError) as error:
+            logger.warning("Ignoring malformed Network Consultant metadata %s: %s", path.name, error)
+            return None
+
+    def _remove_job_files(self, job_id: str) -> None:
+        """Remove artifacts for a job whose process could not start."""
+        for path in self._log_directory().glob(f"{job_id}.*"):
+            try:
+                path.unlink()
+            except OSError as error:
+                logger.warning("Could not remove failed job file %s: %s", path.name, error)
+
+    @staticmethod
+    def _write_text_atomically(path: Path, value: str) -> None:
+        """Replace a text file only after its complete contents are on disk."""
+        descriptor, temporary_path = tempfile.mkstemp(dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as temporary_file:
+                temporary_file.write(value)
+            os.replace(temporary_path, path)
+        except OSError:
+            if os.path.exists(temporary_path):
+                os.remove(temporary_path)
+            raise
 
     @staticmethod
     def _sidecar_path(job_id: str, directory: Path, suffix: str) -> Path:
