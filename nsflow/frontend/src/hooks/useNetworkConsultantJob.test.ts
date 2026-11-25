@@ -24,10 +24,10 @@ vi.mock("../utils/networkConsultantApi", () => ({
   startConsultantJob: vi.fn(),
   stopConsultantJob: vi.fn(),
 }));
-vi.mock("../utils/activeConsultantJobApi", () => ({ getActiveConsultantJob: vi.fn() }));
+vi.mock("../utils/latestConsultantJobApi", () => ({ getLatestConsultantJob: vi.fn() }));
 
 import { CONSULTANT_POLL_INTERVAL_MS, useNetworkConsultantJob } from "./useNetworkConsultantJob";
-import { getActiveConsultantJob } from "../utils/activeConsultantJobApi";
+import { getLatestConsultantJob } from "../utils/latestConsultantJobApi";
 import {
   answerConsultantJob,
   getConsultantJob,
@@ -36,7 +36,7 @@ import {
 } from "../utils/networkConsultantApi";
 
 const mockedGetJob = vi.mocked(getConsultantJob);
-const mockedGetActiveJob = vi.mocked(getActiveConsultantJob);
+const mockedGetLatestJob = vi.mocked(getLatestConsultantJob);
 const mockedStartJob = vi.mocked(startConsultantJob);
 const mockedAnswerJob = vi.mocked(answerConsultantJob);
 const mockedStopJob = vi.mocked(stopConsultantJob);
@@ -55,7 +55,7 @@ describe("useNetworkConsultantJob", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockedStartJob.mockResolvedValue("job-1");
-    mockedGetActiveJob.mockResolvedValue(null);
+    mockedGetLatestJob.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -64,7 +64,7 @@ describe("useNetworkConsultantJob", () => {
   });
 
   it("restores a running job when the panel mounts", async () => {
-    mockedGetActiveJob.mockResolvedValue({ job_id: "restored-job", origin: "improve" });
+    mockedGetLatestJob.mockResolvedValue({ job_id: "restored-job", origin: "improve" });
     mockedGetJob.mockResolvedValue({ job_id: "restored-job", running: true, returncode: null, results: [] });
 
     const { result } = renderHook(() =>
@@ -78,18 +78,45 @@ describe("useNetworkConsultantJob", () => {
 
     await act(async () => Promise.resolve());
 
-    expect(mockedGetActiveJob).toHaveBeenCalledWith("http://api", "network-a");
+    expect(mockedGetLatestJob).toHaveBeenCalledWith("http://api", "network-a");
     expect(result.current.jobId).toBe("restored-job");
     expect(result.current.jobOrigin).toBe("improve");
     expect(result.current.running).toBe(true);
 
-    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
     expect(mockedGetJob).toHaveBeenCalledWith("http://api", "restored-job");
   });
 
-  it("ignores an active-job response after the selected network changes", async () => {
-    const activeJob = deferred<Awaited<ReturnType<typeof getActiveConsultantJob>>>();
-    mockedGetActiveJob.mockReturnValueOnce(activeJob.promise).mockResolvedValueOnce(null);
+  it("restores a completed test run when the panel mounts", async () => {
+    mockedGetLatestJob.mockResolvedValue({ job_id: "completed-job", origin: "tests" });
+    mockedGetJob.mockResolvedValue({
+      job_id: "completed-job",
+      running: false,
+      returncode: 0,
+      results: [{ fixture: "coffee.hocon", passed: true }],
+      progress: [{ checkpoint: "before", passed: 1, total: 1 }],
+    });
+
+    const { result } = renderHook(() =>
+      useNetworkConsultantJob({
+        apiUrl: "http://api",
+        networkName: "network-a",
+        sessionId: "session",
+        onFinished: vi.fn(),
+      }),
+    );
+
+    await act(async () => Promise.resolve());
+
+    expect(result.current.jobId).toBe("completed-job");
+    expect(result.current.jobOrigin).toBe("tests");
+    expect(result.current.running).toBe(false);
+    expect(result.current.results["coffee.hocon"]?.passed).toBe(true);
+    expect(result.current.progress).toEqual([{ checkpoint: "before", passed: 1, total: 1 }]);
+  });
+
+  it("ignores a latest-job response after the selected network changes", async () => {
+    const latestJob = deferred<Awaited<ReturnType<typeof getLatestConsultantJob>>>();
+    mockedGetLatestJob.mockReturnValueOnce(latestJob.promise).mockResolvedValueOnce(null);
     const { result, rerender } = renderHook(
       ({ networkName }) =>
         useNetworkConsultantJob({
@@ -103,7 +130,7 @@ describe("useNetworkConsultantJob", () => {
 
     rerender({ networkName: "network-b" });
     await act(async () => {
-      activeJob.resolve({ job_id: "old-job", origin: "tests" });
+      latestJob.resolve({ job_id: "old-job", origin: "tests" });
       await Promise.resolve();
     });
 

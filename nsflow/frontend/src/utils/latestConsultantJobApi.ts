@@ -17,17 +17,17 @@ limitations under the License.
 import type { ConsultantJobOrigin } from "../types/networkConsultant";
 import { ConsultantApiError } from "./networkConsultantApi";
 
-interface ActiveConsultantJob {
+interface LatestConsultantJob {
   job_id: string;
   origin: ConsultantJobOrigin;
 }
 
-export const getActiveConsultantJob = async (
+export const getLatestConsultantJob = async (
   apiUrl: string,
   networkName: string,
-): Promise<ActiveConsultantJob | null> => {
+): Promise<LatestConsultantJob | null> => {
   const query = new URLSearchParams({ network_name: networkName });
-  const response = await fetch(`${apiUrl}/api/v1/network_consultant/jobs/active?${query}`);
-  if (!response.ok) throw new ConsultantApiError([`Active job check failed (${response.status})`]);
+  const response = await fetch(`${apiUrl}/api/v1/network_consultant/jobs/latest?${query}`);
+  if (!response.ok) throw new ConsultantApiError([`Latest job check failed (${response.status})`]);
   return response.json();
 };
