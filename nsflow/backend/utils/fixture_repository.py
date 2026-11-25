@@ -67,6 +67,7 @@ class FixtureRepository:
     CLASS_REFERENCE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r'(?:(?:"class"\s*:)|(?:class\s*=))\s*"([^"]+)"')
     SLY_DATA_GET_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\.get\(\s*[\"']([^\"']+)[\"']")
     SLY_DATA_ITEM_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"sly_data\[\s*[\"']([^\"']+)[\"']\s*\]")
+    FIXTURE_NAME_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_.-]+\.hocon")
     NETWORK_NAME_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+(?:\.hocon)?")
 
     def __init__(self, project_root: str) -> None:
@@ -163,11 +164,14 @@ class FixtureRepository:
             raise FileNotFoundError(self.network_hocon_file(network_name))
         return path.relative_to((self.project_root / "registries").resolve()).as_posix()
 
-    @staticmethod
-    def safe_fixture_file_name(fixture_name: str) -> str:
+    @classmethod
+    def safe_fixture_file_name(cls, fixture_name: str) -> str:
         """Return a fixture basename that cannot contain a path separator."""
         suffixed_name = fixture_name if fixture_name.endswith(".hocon") else f"{fixture_name}.hocon"
-        return re.sub(r"[^\w.\-]", "_", suffixed_name)
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", suffixed_name)
+        if cls.FIXTURE_NAME_PATTERN.fullmatch(safe_name) is None:
+            raise ValueError(f"Invalid fixture name: {fixture_name}")
+        return safe_name
 
     @classmethod
     def validate_fixture(cls, fixture: dict[str, Any]) -> list[str]:
