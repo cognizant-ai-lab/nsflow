@@ -25,4 +25,5 @@ export NSFLOW_NETWORK_CONSULTANT_REPO=/path/to/neuro-san-studio
 
 The configured directory must contain the target network under `registries/` and its fixtures under
 `tests/fixtures/`. Job logs and progress sidecars are written beneath `logs/network_consultant_jobs/` in that same
-directory while the job remains available in the current nsflow process.
+directory while the job remains available in the current nsflow process. A running job resumes polling after a
+browser refresh, but completed runs are not retained for later viewing.

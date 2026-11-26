@@ -27,6 +27,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 from nsflow.backend.api.v1.network_consultant_endpoints import NetworkConsultantEndpoints
+from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
 from nsflow.backend.models.network_consultant.fixture_save_request import FixtureSaveRequest
 from nsflow.backend.models.network_consultant.generate_tests_request import GenerateTestsRequest
 from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
@@ -49,9 +50,10 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
             args: list[str],
             agent_name: str,
             session_id: str,
+            origin: ConsultantJobOrigin,
         ) -> JobStartResponse:
             """Capture the endpoint's job-start arguments."""
-            captured.update({"args": args, "agent_name": agent_name, "session_id": session_id})
+            captured.update({"args": args, "agent_name": agent_name, "session_id": session_id, "origin": origin})
             return JobStartResponse(job_id="jid", message="Job started.")
 
         with (
@@ -77,6 +79,7 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
         self.assertNotIn("--only-fixtures", args)
         self.assertNotIn("--force-generate", args)
         self.assertEqual(captured.get("agent_name"), "industry/cpg_agents")
+        self.assertEqual(captured.get("origin"), "tests")
 
     def test_single_fixture_is_passed_as_only_fixtures(self) -> None:
         """Pass a selected fixture to the CLI's exact-basename filter."""
@@ -145,7 +148,9 @@ class TestNetworkConsultantRunTests(unittest.TestCase):
         ):
             with self.assertRaises(HTTPException) as context:
                 asyncio.run(
-                    NetworkConsultantEndpoints._start_job([], "basic/coffee", "session")  # pylint: disable=protected-access
+                    NetworkConsultantEndpoints._start_job(  # pylint: disable=protected-access
+                        [], "basic/coffee", "session", "tests"
+                    )
                 )
 
         self.assertEqual(context.exception.status_code, 409)
