@@ -24,10 +24,10 @@ vi.mock("../utils/networkConsultantApi", () => ({
   startConsultantJob: vi.fn(),
   stopConsultantJob: vi.fn(),
 }));
-vi.mock("../utils/consultantJobHistoryApi", () => ({ getConsultantJobHistory: vi.fn() }));
+vi.mock("../utils/activeConsultantJobApi", () => ({ getActiveConsultantJob: vi.fn() }));
 
 import { CONSULTANT_POLL_INTERVAL_MS, useNetworkConsultantJob } from "./useNetworkConsultantJob";
-import { getConsultantJobHistory } from "../utils/consultantJobHistoryApi";
+import { getActiveConsultantJob } from "../utils/activeConsultantJobApi";
 import {
   answerConsultantJob,
   getConsultantJob,
@@ -36,18 +36,10 @@ import {
 } from "../utils/networkConsultantApi";
 
 const mockedGetJob = vi.mocked(getConsultantJob);
-const mockedGetJobHistory = vi.mocked(getConsultantJobHistory);
+const mockedGetActiveJob = vi.mocked(getActiveConsultantJob);
 const mockedStartJob = vi.mocked(startConsultantJob);
 const mockedAnswerJob = vi.mocked(answerConsultantJob);
 const mockedStopJob = vi.mocked(stopConsultantJob);
-
-const runRecord = (jobId: string, origin: "tests" | "generate" | "improve", startedAt: string) => ({
-  job_id: jobId,
-  network_name: "network-a",
-  origin,
-  started_at: startedAt,
-  returncode: null,
-});
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -63,7 +55,7 @@ describe("useNetworkConsultantJob", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockedStartJob.mockResolvedValue("job-1");
-    mockedGetJobHistory.mockResolvedValue([]);
+    mockedGetActiveJob.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -72,9 +64,7 @@ describe("useNetworkConsultantJob", () => {
   });
 
   it("restores a running job when the panel mounts", async () => {
-    mockedGetJobHistory.mockResolvedValue([
-      runRecord("restored-job", "improve", "2026-11-25T18:00:00Z"),
-    ]);
+    mockedGetActiveJob.mockResolvedValue({ job_id: "restored-job", origin: "improve" });
     mockedGetJob.mockResolvedValue({ job_id: "restored-job", running: true, returncode: null, results: [] });
 
     const { result } = renderHook(() =>
@@ -88,76 +78,18 @@ describe("useNetworkConsultantJob", () => {
 
     await act(async () => Promise.resolve());
 
-    expect(mockedGetJobHistory).toHaveBeenCalledWith("http://api", "network-a");
+    expect(mockedGetActiveJob).toHaveBeenCalledWith("http://api", "network-a");
     expect(result.current.jobId).toBe("restored-job");
     expect(result.current.jobOrigin).toBe("improve");
     expect(result.current.running).toBe(true);
 
+    await act(async () => vi.advanceTimersByTimeAsync(CONSULTANT_POLL_INTERVAL_MS));
     expect(mockedGetJob).toHaveBeenCalledWith("http://api", "restored-job");
   });
 
-  it("restores a completed test run when the panel mounts", async () => {
-    mockedGetJobHistory.mockResolvedValue([
-      { ...runRecord("completed-job", "tests", "2026-11-25T18:00:00Z"), returncode: 0 },
-    ]);
-    mockedGetJob.mockResolvedValue({
-      job_id: "completed-job",
-      running: false,
-      returncode: 0,
-      results: [{ fixture: "coffee.hocon", passed: true }],
-      progress: [{ checkpoint: "before", passed: 1, total: 1 }],
-    });
-
-    const { result } = renderHook(() =>
-      useNetworkConsultantJob({
-        apiUrl: "http://api",
-        networkName: "network-a",
-        sessionId: "session",
-        onFinished: vi.fn(),
-      }),
-    );
-
-    await act(async () => Promise.resolve());
-
-    expect(result.current.jobId).toBe("completed-job");
-    expect(result.current.jobOrigin).toBe("tests");
-    expect(result.current.running).toBe(false);
-    expect(result.current.results["coffee.hocon"]?.passed).toBe(true);
-    expect(result.current.progress).toEqual([{ checkpoint: "before", passed: 1, total: 1 }]);
-  });
-
-  it("restores the latest test result instead of a newer completed improvement", async () => {
-    mockedGetJobHistory.mockResolvedValue([
-      { ...runRecord("new-improve-job", "improve", "2026-11-26T18:00:00Z"), returncode: 0 },
-      { ...runRecord("latest-test-job", "tests", "2026-11-25T18:00:00Z"), returncode: 1 },
-    ]);
-    mockedGetJob.mockImplementation(async (_apiUrl, jobId) => ({
-      job_id: jobId,
-      running: false,
-      returncode: jobId === "new-improve-job" ? 0 : 1,
-      results: [{ fixture: "coffee.hocon", passed: false }],
-    }));
-    const { result } = renderHook(() =>
-      useNetworkConsultantJob({
-        apiUrl: "http://api",
-        networkName: "network-a",
-        sessionId: "session",
-        onFinished: vi.fn(),
-      }),
-    );
-    await act(async () => Promise.resolve());
-
-    expect(mockedGetJob).toHaveBeenNthCalledWith(1, "http://api", "new-improve-job");
-    expect(mockedGetJob).toHaveBeenNthCalledWith(2, "http://api", "latest-test-job");
-    expect(result.current.jobId).toBe("latest-test-job");
-    expect(result.current.jobOrigin).toBe("tests");
-    expect(result.current.returncode).toBe(1);
-    expect(result.current.results["coffee.hocon"]?.passed).toBe(false);
-  });
-
-  it("ignores a run-history response after the selected network changes", async () => {
-    const runHistory = deferred<Awaited<ReturnType<typeof getConsultantJobHistory>>>();
-    mockedGetJobHistory.mockReturnValueOnce(runHistory.promise).mockResolvedValueOnce([]);
+  it("ignores an active-job response after the selected network changes", async () => {
+    const activeJob = deferred<Awaited<ReturnType<typeof getActiveConsultantJob>>>();
+    mockedGetActiveJob.mockReturnValueOnce(activeJob.promise).mockResolvedValueOnce(null);
     const { result, rerender } = renderHook(
       ({ networkName }) =>
         useNetworkConsultantJob({
@@ -171,7 +103,7 @@ describe("useNetworkConsultantJob", () => {
 
     rerender({ networkName: "network-b" });
     await act(async () => {
-      runHistory.resolve([runRecord("old-job", "tests", "2026-11-25T18:00:00Z")]);
+      activeJob.resolve({ job_id: "old-job", origin: "tests" });
       await Promise.resolve();
     });
 

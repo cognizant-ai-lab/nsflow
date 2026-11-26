@@ -23,7 +23,7 @@ import type {
   ConsultantJobStatus,
   FixtureResult,
 } from "../types/networkConsultant";
-import { getConsultantJobHistory } from "../utils/consultantJobHistoryApi";
+import { getActiveConsultantJob } from "../utils/activeConsultantJobApi";
 import {
   answerConsultantJob,
   describeError,
@@ -161,41 +161,26 @@ export const useNetworkConsultantJob = ({
     }
 
     const restoreGeneration = pollGenerationRef.current;
-    const restoreLatestRun = async () => {
+    const restoreActiveJob = async () => {
       try {
-        const history = await getConsultantJobHistory(apiUrl, networkName);
+        const activeJob = await getActiveConsultantJob(apiUrl, networkName);
         const isCurrentNetwork =
           restoreGeneration === pollGenerationRef.current && networkName === networkRef.current;
-        if (!isCurrentNetwork) return;
-        const newestJob = history.at(0);
-        if (!newestJob) return;
-        let restoredJob = newestJob;
-        let status = await getConsultantJob(apiUrl, newestJob.job_id);
-        if (!status.running) {
-          const latestTestJob = history.find((record) => record.origin === "tests");
-          if (latestTestJob && latestTestJob.job_id !== newestJob.job_id) {
-            restoredJob = latestTestJob;
-            status = await getConsultantJob(apiUrl, latestTestJob.job_id);
-          }
-        }
-        const statusIsCurrent =
-          restoreGeneration === pollGenerationRef.current && networkName === networkRef.current;
-        if (!statusIsCurrent) return;
-        setJobId(restoredJob.job_id);
-        setJobOrigin(restoredJob.origin);
-        applyStatus(status);
-        if (status.running) {
-          jobsByNetworkRef.current.set(networkName, { id: restoredJob.job_id, origin: restoredJob.origin });
-          beginPolling(restoredJob.job_id, networkName);
-        }
+        if (!activeJob || !isCurrentNetwork) return;
+        jobsByNetworkRef.current.set(networkName, { id: activeJob.job_id, origin: activeJob.origin });
+        busyRef.current = true;
+        setJobId(activeJob.job_id);
+        setJobOrigin(activeJob.origin);
+        setRunning(true);
+        beginPolling(activeJob.job_id, networkName);
       } catch (restoreError: unknown) {
         if (restoreGeneration === pollGenerationRef.current && networkName === networkRef.current) {
           setError(describeError(restoreError));
         }
       }
     };
-    void restoreLatestRun();
-  }, [apiUrl, applyStatus, beginPolling, networkName, stopPolling]);
+    void restoreActiveJob();
+  }, [apiUrl, beginPolling, networkName, stopPolling]);
 
   useEffect(() => stopPolling, [stopPolling]);
 
