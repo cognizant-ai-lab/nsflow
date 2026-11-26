@@ -23,14 +23,6 @@ vi.mock("../hooks/useConsultantFixtures", () => ({
   useConsultantFixtures: () => ({ fixtureNames: ["coffee.hocon"], fixtureError: null, refresh: vi.fn() }),
 }));
 vi.mock("../utils/consultantJobHistoryApi", () => ({ getConsultantJobHistory: vi.fn().mockResolvedValue([]) }));
-vi.mock("../utils/consultantJobLogApi", () => ({
-  getConsultantJobLog: vi.fn().mockResolvedValue({
-    job_id: "job-1",
-    content: "",
-    start_offset: 0,
-    next_offset: 0,
-  }),
-}));
 vi.mock("../utils/networkConsultantApi", () => ({
   answerConsultantJob: vi.fn(),
   deleteConsultantFixture: vi.fn(),

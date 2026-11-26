@@ -24,9 +24,6 @@ import type {
   FixtureResult,
 } from "../types/networkConsultant";
 import { getConsultantJobHistory } from "../utils/consultantJobHistoryApi";
-import type { ConsultantJobRecord } from "../utils/consultantJobHistoryApi";
-import { getConsultantJobLog } from "../utils/consultantJobLogApi";
-import type { ConsultantJobLogChunk } from "../utils/consultantJobLogApi";
 import {
   answerConsultantJob,
   describeError,
@@ -73,13 +70,9 @@ export const useNetworkConsultantJob = ({
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [pollingStopped, setPollingStopped] = useState(false);
-  const [runHistory, setRunHistory] = useState<ConsultantJobRecord[]>([]);
-  const [loadingRunHistory, setLoadingRunHistory] = useState(false);
-  const [runLog, setRunLog] = useState("");
 
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollGenerationRef = useRef(0);
-  const logOffsetRef = useRef(0);
   const busyRef = useRef(false);
   const jobsByNetworkRef = useRef(new Map<string, TrackedConsultantJob>());
   const networkRef = useRef(networkName);
@@ -105,11 +98,6 @@ export const useNetworkConsultantJob = ({
     setProgress(status.progress ?? []);
   }, []);
 
-  const applyLogChunk = useCallback((chunk: ConsultantJobLogChunk) => {
-    setRunLog((current) => (chunk.start_offset === 0 ? chunk.content : `${current}${chunk.content}`));
-    logOffsetRef.current = chunk.next_offset;
-  }, []);
-
   const beginPolling = useCallback(
     (id: string, jobNetwork: string) => {
       stopPolling();
@@ -124,32 +112,12 @@ export const useNetworkConsultantJob = ({
           consecutiveFailures = 0;
           setError(null);
           applyStatus(status);
-          try {
-            const logChunk = await getConsultantJobLog(apiUrl, id, logOffsetRef.current);
-            if (generation !== pollGenerationRef.current || jobNetwork !== networkRef.current) return;
-            applyLogChunk(logChunk);
-          } catch (logError: unknown) {
-            if (generation === pollGenerationRef.current && jobNetwork === networkRef.current) {
-              setError(describeError(logError));
-            }
-          }
           if (status.running) {
             pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
           } else {
             pollTimerRef.current = null;
             jobsByNetworkRef.current.delete(jobNetwork);
             onFinishedRef.current(jobNetwork);
-            void getConsultantJobHistory(apiUrl, jobNetwork)
-              .then((history) => {
-                if (generation === pollGenerationRef.current && jobNetwork === networkRef.current) {
-                  setRunHistory(history);
-                }
-              })
-              .catch((historyError: unknown) => {
-                if (generation === pollGenerationRef.current && jobNetwork === networkRef.current) {
-                  setError(describeError(historyError));
-                }
-              });
           }
         } catch (pollError: unknown) {
           if (generation !== pollGenerationRef.current || jobNetwork !== networkRef.current) return;
@@ -166,7 +134,7 @@ export const useNetworkConsultantJob = ({
 
       pollTimerRef.current = setTimeout(pollOnce, CONSULTANT_POLL_INTERVAL_MS);
     },
-    [apiUrl, applyLogChunk, applyStatus, stopPolling],
+    [apiUrl, applyStatus, stopPolling],
   );
 
   useEffect(() => {
@@ -187,77 +155,47 @@ export const useNetworkConsultantJob = ({
     setSubmittingAnswer(false);
     setStopping(false);
     setPollingStopped(false);
-    setRunHistory([]);
-    setLoadingRunHistory(true);
-    setRunLog("");
-    logOffsetRef.current = 0;
     if (trackedJob) {
       beginPolling(trackedJob.id, networkName);
-      const historyGeneration = pollGenerationRef.current;
-      void getConsultantJobHistory(apiUrl, networkName)
-        .then((history) => {
-          if (historyGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-            setRunHistory(history);
-          }
-        })
-        .catch((historyError: unknown) => {
-          if (historyGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-            setError(describeError(historyError));
-          }
-        })
-        .finally(() => {
-          if (historyGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-            setLoadingRunHistory(false);
-          }
-        });
       return;
     }
 
     const restoreGeneration = pollGenerationRef.current;
-    const restoreRunHistory = async () => {
+    const restoreLatestRun = async () => {
       try {
         const history = await getConsultantJobHistory(apiUrl, networkName);
         const isCurrentNetwork =
           restoreGeneration === pollGenerationRef.current && networkName === networkRef.current;
         if (!isCurrentNetwork) return;
-        setRunHistory(history);
-        const latestJob = history.at(0);
-        if (!latestJob) return;
-        const status = await getConsultantJob(apiUrl, latestJob.job_id);
+        const newestJob = history.at(0);
+        if (!newestJob) return;
+        let restoredJob = newestJob;
+        let status = await getConsultantJob(apiUrl, newestJob.job_id);
+        if (!status.running) {
+          const latestTestJob = history.find((record) => record.origin === "tests");
+          if (latestTestJob && latestTestJob.job_id !== newestJob.job_id) {
+            restoredJob = latestTestJob;
+            status = await getConsultantJob(apiUrl, latestTestJob.job_id);
+          }
+        }
         const statusIsCurrent =
           restoreGeneration === pollGenerationRef.current && networkName === networkRef.current;
         if (!statusIsCurrent) return;
-        setJobId(latestJob.job_id);
-        setJobOrigin(latestJob.origin);
-        setLoadingRunHistory(false);
+        setJobId(restoredJob.job_id);
+        setJobOrigin(restoredJob.origin);
         applyStatus(status);
-        try {
-          const logChunk = await getConsultantJobLog(apiUrl, latestJob.job_id);
-          const logIsCurrent =
-            restoreGeneration === pollGenerationRef.current && networkName === networkRef.current;
-          if (!logIsCurrent) return;
-          applyLogChunk(logChunk);
-        } catch (logError: unknown) {
-          if (restoreGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-            setError(describeError(logError));
-          }
-        }
         if (status.running) {
-          jobsByNetworkRef.current.set(networkName, { id: latestJob.job_id, origin: latestJob.origin });
-          beginPolling(latestJob.job_id, networkName);
+          jobsByNetworkRef.current.set(networkName, { id: restoredJob.job_id, origin: restoredJob.origin });
+          beginPolling(restoredJob.job_id, networkName);
         }
       } catch (restoreError: unknown) {
         if (restoreGeneration === pollGenerationRef.current && networkName === networkRef.current) {
           setError(describeError(restoreError));
         }
-      } finally {
-        if (restoreGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-          setLoadingRunHistory(false);
-        }
       }
     };
-    void restoreRunHistory();
-  }, [apiUrl, applyLogChunk, applyStatus, beginPolling, networkName, stopPolling]);
+    void restoreLatestRun();
+  }, [apiUrl, applyStatus, beginPolling, networkName, stopPolling]);
 
   useEffect(() => stopPolling, [stopPolling]);
 
@@ -281,8 +219,6 @@ export const useNetworkConsultantJob = ({
     setUngrounded([]);
     setResults({});
     setProgress([]);
-    setRunLog("");
-    logOffsetRef.current = 0;
     setPollingStopped(false);
     try {
       const id = await startConsultantJob(apiUrl, endpoint, { ...body, session_id: sessionId });
@@ -298,18 +234,6 @@ export const useNetworkConsultantJob = ({
       setJobId(id);
       setRunning(true);
       beginPolling(id, jobNetwork);
-      const historyGeneration = pollGenerationRef.current;
-      void getConsultantJobHistory(apiUrl, jobNetwork)
-        .then((history) => {
-          if (historyGeneration === pollGenerationRef.current && jobNetwork === networkRef.current) {
-            setRunHistory(history);
-          }
-        })
-        .catch((historyError: unknown) => {
-          if (historyGeneration === pollGenerationRef.current && jobNetwork === networkRef.current) {
-            setError(describeError(historyError));
-          }
-        });
       return true;
     } catch (startError: unknown) {
       if (jobNetwork === networkRef.current) {
@@ -358,39 +282,6 @@ export const useNetworkConsultantJob = ({
     beginPolling(jobId, networkName);
   };
 
-  const selectRun = async (selectedJobId: string) => {
-    if (busyRef.current || selectedJobId === jobId) return;
-    const selectedRun = runHistory.find((run) => run.job_id === selectedJobId);
-    if (!selectedRun) return;
-    stopPolling();
-    const operationGeneration = pollGenerationRef.current;
-    setError(null);
-    try {
-      const status = await getConsultantJob(apiUrl, selectedRun.job_id);
-      if (operationGeneration !== pollGenerationRef.current || networkName !== networkRef.current) return;
-      setJobId(selectedRun.job_id);
-      setJobOrigin(selectedRun.origin);
-      applyStatus(status);
-      try {
-        const logChunk = await getConsultantJobLog(apiUrl, selectedRun.job_id);
-        if (operationGeneration !== pollGenerationRef.current || networkName !== networkRef.current) return;
-        applyLogChunk(logChunk);
-      } catch (logError: unknown) {
-        if (operationGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-          setError(describeError(logError));
-        }
-      }
-      if (status.running) {
-        jobsByNetworkRef.current.set(networkName, { id: selectedRun.job_id, origin: selectedRun.origin });
-        beginPolling(selectedRun.job_id, networkName);
-      }
-    } catch (selectionError: unknown) {
-      if (operationGeneration === pollGenerationRef.current && networkName === networkRef.current) {
-        setError(describeError(selectionError));
-      }
-    }
-  };
-
   return {
     jobId,
     jobOrigin,
@@ -408,13 +299,9 @@ export const useNetworkConsultantJob = ({
     submittingAnswer,
     stopping,
     pollingStopped,
-    runHistory,
-    loadingRunHistory,
-    runLog,
     start,
     submitAnswer,
     stop,
     retryPolling,
-    selectRun,
   };
 };
