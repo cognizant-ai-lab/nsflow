@@ -22,7 +22,6 @@ from typing import ClassVar
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Query
 
 from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
 from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
@@ -35,7 +34,6 @@ from nsflow.backend.models.network_consultant.fixtures_response import FixturesR
 from nsflow.backend.models.network_consultant.generate_tests_request import GenerateTestsRequest
 from nsflow.backend.models.network_consultant.improve_network_request import ImproveNetworkRequest
 from nsflow.backend.models.network_consultant.job_answer_response import JobAnswerResponse
-from nsflow.backend.models.network_consultant.job_log_response import JobLogResponse
 from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
 from nsflow.backend.models.network_consultant.job_stop_response import JobStopResponse
@@ -274,17 +272,6 @@ class NetworkConsultantEndpoints:
             return await NetworkConsultantEndpoints.job_manager().status(job_id)
         except JobNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
-
-    @staticmethod
-    @router.get("/jobs/{job_id}/log", response_model=JobLogResponse)
-    async def get_job_log(job_id: str, offset: int = Query(default=0, ge=0)) -> JobLogResponse:
-        """Return persisted log content after the requested byte offset."""
-        try:
-            return NetworkConsultantEndpoints.job_manager().log(job_id, offset)
-        except JobNotFoundError as error:
-            raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.") from error
-        except OSError as error:
-            raise HTTPException(status_code=500, detail=f"Could not read job log: {error}") from error
 
     @staticmethod
     @router.post("/jobs/{job_id}/answer", response_model=JobAnswerResponse)

@@ -25,7 +25,5 @@ export NSFLOW_NETWORK_CONSULTANT_REPO=/path/to/neuro-san-studio
 
 The configured directory must contain the target network under `registries/` and its fixtures under
 `tests/fixtures/`. Job logs and progress sidecars are written beneath `logs/network_consultant_jobs/` in that same
-directory. Completed job files are retained so nsflow can restore the latest run after a browser or server restart.
-The Self-Improvement panel lists timestamped runs for the selected network, opens the newest run by default and lets
-you expand the retained output log for any selected run. While a restored job is still running, nsflow continues to
-load new log content and status updates.
+directory. Completed job files are retained so nsflow can restore the latest test result after a browser or server
+restart. If a job is still running, the Self-Improvement panel resumes its status updates after refresh.
