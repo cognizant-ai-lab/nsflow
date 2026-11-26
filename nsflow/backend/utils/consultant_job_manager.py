@@ -28,6 +28,8 @@ from typing import ClassVar
 
 from pydantic import ValidationError
 
+from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
+from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
 from nsflow.backend.models.network_consultant.consultant_progress_entry import ConsultantProgressEntry
 from nsflow.backend.models.network_consultant.fixture_result import FixtureResult
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
@@ -50,9 +52,16 @@ class ConsultantJobManager:
         self._project_root = Path(project_root).resolve()
         self._jobs: dict[str, ConsultantJob] = {}
         self._job_owners: dict[str, str] = {}
+        self._job_origins: dict[str, ConsultantJobOrigin] = {}
         self._start_lock = asyncio.Lock()
 
-    async def start(self, args: list[str], agent_name: str, session_id: str) -> str:
+    async def start(
+        self,
+        args: list[str],
+        agent_name: str,
+        session_id: str,
+        origin: ConsultantJobOrigin,
+    ) -> str:
         """Start a job and return its generated identifier."""
         async with self._start_lock:
             job_id = uuid.uuid4().hex
@@ -84,14 +93,34 @@ class ConsultantJobManager:
                 self._remove_job_files(job_id)
                 raise
 
-            self.register(job_id, ConsultantJob(process, log_path, agent_name, session_id))
-            self._job_owners.update({owner: job_id})
+            self.register(job_id, ConsultantJob(process, log_path, agent_name, session_id), owner, origin)
         logger.info("Started network_consultant job %s (pid=%s): %s", job_id, process.pid, args)
         return job_id
 
-    def register(self, job_id: str, job: ConsultantJob) -> None:
+    def register(
+        self,
+        job_id: str,
+        job: ConsultantJob,
+        owner: str | None = None,
+        origin: ConsultantJobOrigin | None = None,
+    ) -> None:
         """Register a job for lifecycle and status operations."""
         self._jobs.update({job_id: job})
+        if owner is not None:
+            self._job_owners.update({owner: job_id})
+        if origin is not None:
+            self._job_origins.update({job_id: origin})
+
+    def active_job(self, agent_name: str) -> ActiveJobResponse | None:
+        """Return a network's running job and its origin, if present."""
+        job_id = self._job_owners.get(agent_name)
+        if job_id is None:
+            return None
+        job = self._jobs.get(job_id)
+        origin = self._job_origins.get(job_id)
+        if job is None or origin is None or not job.is_running():
+            return None
+        return ActiveJobResponse(job_id=job_id, origin=origin)
 
     async def status(self, job_id: str) -> JobStatusResponse:
         """Build a status response from process state and its sidecar files."""
@@ -146,6 +175,7 @@ class ConsultantJobManager:
                 logger.error("Could not close a Network Consultant job: %s", error)
         self._jobs.clear()
         self._job_owners.clear()
+        self._job_origins.clear()
 
     def _job(self, job_id: str) -> ConsultantJob:
         """Return a registered job or report an unknown identifier."""
@@ -177,6 +207,7 @@ class ConsultantJobManager:
                 finished_job_ids.append(job_id)
         for job_id in finished_job_ids:
             self._jobs.pop(job_id, None)
+            self._job_origins.pop(job_id, None)
         self._job_owners = {
             owner: job_id for owner, job_id in self._job_owners.items() if job_id not in finished_job_ids
         }
