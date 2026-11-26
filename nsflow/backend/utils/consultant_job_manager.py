@@ -35,7 +35,6 @@ from nsflow.backend.models.network_consultant.active_job_response import Consult
 from nsflow.backend.models.network_consultant.consultant_job_metadata import ConsultantJobMetadata
 from nsflow.backend.models.network_consultant.consultant_progress_entry import ConsultantProgressEntry
 from nsflow.backend.models.network_consultant.fixture_result import FixtureResult
-from nsflow.backend.models.network_consultant.job_log_response import JobLogResponse
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
 from nsflow.backend.models.network_consultant.latest_job_response import LatestJobResponse
 from nsflow.backend.utils.consultant_job import ConsultantJob
@@ -182,34 +181,6 @@ class ConsultantJobManager:
             ungrounded=self._read_lines(job_id, log_directory, "ungrounded"),
             progress=self._read_progress(job_id, log_directory),
             results=self._read_results(job_id, log_directory),
-        )
-
-    def log(self, job_id: str, offset: int = 0) -> JobLogResponse:
-        """Return persisted log content from a byte offset."""
-        job_id = self._safe_job_id(job_id)
-        if self._jobs.get(job_id) is None and self._read_metadata(job_id) is None:
-            raise JobNotFoundError(job_id)
-
-        log_path = self._log_directory() / f"{job_id}.log"
-        try:
-            with log_path.open("rb") as log_file:
-                log_file.seek(0, os.SEEK_END)
-                file_size = log_file.tell()
-                start_offset = offset if offset <= file_size else 0
-                log_file.seek(start_offset)
-                content = log_file.read().decode("utf-8", errors="replace")
-                next_offset = log_file.tell()
-        except FileNotFoundError:
-            logger.warning("Log file is missing for Network Consultant job %s: %s", job_id, log_path)
-            return JobLogResponse(job_id=job_id, content="", start_offset=0, next_offset=0)
-        except OSError as error:
-            logger.error("Cannot read log for Network Consultant job %s: %s", job_id, error)
-            raise
-        return JobLogResponse(
-            job_id=job_id,
-            content=content,
-            start_offset=start_offset,
-            next_offset=next_offset,
         )
 
     def answer(self, job_id: str, answer: str) -> None:
