@@ -23,10 +23,7 @@ from typing import ClassVar
 from fastapi import APIRouter
 from fastapi import HTTPException
 
-from nsflow.backend.models.network_consultant.active_job_response import ActiveJobResponse
-from nsflow.backend.models.network_consultant.active_job_response import ConsultantJobOrigin
 from nsflow.backend.models.network_consultant.answer_job_request import AnswerJobRequest
-from nsflow.backend.models.network_consultant.consultant_job_metadata import ConsultantJobMetadata
 from nsflow.backend.models.network_consultant.fixture_delete_response import FixtureDeleteResponse
 from nsflow.backend.models.network_consultant.fixture_save_request import FixtureSaveRequest
 from nsflow.backend.models.network_consultant.fixture_save_response import FixtureSaveResponse
@@ -37,7 +34,6 @@ from nsflow.backend.models.network_consultant.job_answer_response import JobAnsw
 from nsflow.backend.models.network_consultant.job_start_response import JobStartResponse
 from nsflow.backend.models.network_consultant.job_status_response import JobStatusResponse
 from nsflow.backend.models.network_consultant.job_stop_response import JobStopResponse
-from nsflow.backend.models.network_consultant.latest_job_response import LatestJobResponse
 from nsflow.backend.models.network_consultant.run_tests_request import RunTestsRequest
 from nsflow.backend.models.network_consultant.sly_data_keys_response import SlyDataKeysResponse
 from nsflow.backend.utils.consultant_job_manager import ConsultantJobManager
@@ -167,11 +163,10 @@ class NetworkConsultantEndpoints:
         args: list[str],
         agent_name: str,
         session_id: str,
-        origin: ConsultantJobOrigin,
     ) -> JobStartResponse:
         """Start a consultant job and translate process startup failures to HTTP errors."""
         try:
-            job_id = await NetworkConsultantEndpoints.job_manager().start(args, agent_name, session_id, origin)
+            job_id = await NetworkConsultantEndpoints.job_manager().start(args, agent_name, session_id)
         except JobStateError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
         except OSError as error:
@@ -198,7 +193,6 @@ class NetworkConsultantEndpoints:
             ],
             agent_name=request.network_name,
             session_id=request.session_id,
-            origin="generate",
         )
 
     @staticmethod
@@ -218,7 +212,6 @@ class NetworkConsultantEndpoints:
             ],
             agent_name=request.network_name,
             session_id=request.session_id,
-            origin="tests",
         )
 
     @staticmethod
@@ -240,29 +233,7 @@ class NetworkConsultantEndpoints:
             ],
             agent_name=request.network_name,
             session_id=request.session_id,
-            origin="improve",
         )
-
-    @staticmethod
-    @router.get("/jobs/active", response_model=ActiveJobResponse | None)
-    async def get_active_job(network_name: str) -> ActiveJobResponse | None:
-        """Return the running consultant job for a network, if present."""
-        return NetworkConsultantEndpoints.job_manager().active_job(network_name)
-
-    @staticmethod
-    @router.get("/jobs/latest", response_model=LatestJobResponse | None)
-    async def get_latest_job(network_name: str) -> LatestJobResponse | None:
-        """Return the latest persisted consultant job for a network, if present."""
-        return NetworkConsultantEndpoints.job_manager().latest_job(network_name)
-
-    @staticmethod
-    @router.get("/jobs/history", response_model=list[ConsultantJobMetadata])
-    async def get_job_history(
-        network_name: str,
-        origin: ConsultantJobOrigin | None = None,
-    ) -> list[ConsultantJobMetadata]:
-        """Return retained consultant runs for a network, newest first."""
-        return NetworkConsultantEndpoints.job_manager().job_history(network_name, origin)
 
     @staticmethod
     @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
