@@ -27,6 +27,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from nsflow.backend.api.router import router
+from nsflow.backend.api.v1.network_consultant_endpoints import NetworkConsultantEndpoints
 from nsflow.backend.db.database import init_nss_db
 from nsflow.backend.utils.tools.ns_configs_registry import NsConfigsRegistry
 
@@ -73,9 +74,11 @@ async def lifespan(_app: FastAPI):
     logging.info("Initializing local database 'nss_local.db'...")
     init_nss_db()
     logging.info("Local database 'nss_local.db' initialized")
+    NetworkConsultantEndpoints.initialize()
     try:
         yield
     finally:
+        await NetworkConsultantEndpoints.shutdown()
         logging.info("FastAPI is shutting down...")
 
 
